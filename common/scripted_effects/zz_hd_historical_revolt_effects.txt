@@ -1,0 +1,1129 @@
+﻿# Shared machinery and the nine 184-196 historical regional revolt war effects (phase 1).
+#
+# Execution order per plan: leader -> defender -> war -> war scope -> war-bound event troops.
+# The fired flag is set only after the war scope actually exists, so a failed declaration
+# is retried on the next monthly pulse until the window closes.
+#
+# All revolt leaders start as landless adventurers; on victory the CB converts the leader
+# to the mod's kuzhu_warlord_government and carves out the designated duchies as an
+# independent warlord realm.
+
+### Save the spawn county's culture/faith for leader creation. Falls back to han/jingxue
+# so a county without valid culture or faith can never produce a cultureless leader
+# (cultureless leaders triggered the runtime obedience/legitimacy error spam).
+hd_historical_revolt_save_culture_faith_effect = {
+	if = {
+		limit = { exists = scope:hd_revolt_spawn_province.county.culture }
+		scope:hd_revolt_spawn_province = {
+			county = {
+				culture = { save_temporary_scope_as = hd_revolt_culture }
+			}
+		}
+	}
+	else = {
+		culture:han = { save_temporary_scope_as = hd_revolt_culture }
+	}
+	if = {
+		limit = { exists = scope:hd_revolt_spawn_province.county.faith }
+		scope:hd_revolt_spawn_province = {
+			county = {
+				faith = { save_temporary_scope_as = hd_revolt_faith }
+			}
+		}
+	}
+	else = {
+		faith:jingxue = { save_temporary_scope_as = hd_revolt_faith }
+	}
+}
+
+### Make sure the revolt leader operates from a landless adventurer camp at the spawn point.
+hd_historical_revolt_ensure_adventurer_effect = {
+	if = {
+		limit = {
+			NOT = { has_government = landless_adventurer_government }
+		}
+		set_location = $LOCATION$
+		create_landless_adventurer_title_effect = {
+			REASON = flag:historical
+			FLAVOR_CHAR = scope:hd_revolt_leader
+		}
+	}
+}
+
+### Reuse a living historical leader; otherwise create one lowborn stand-in before firing.
+# This fallback is only available before the uprising's permanent fired flag is set.
+hd_historical_revolt_save_or_create_named_leader_effect = {
+	if = {
+		limit = { $CHARACTER$ = { is_alive = yes } }
+		$CHARACTER$ = { save_scope_as = hd_revolt_leader }
+	}
+	else = {
+		scope:hd_revolt_spawn_province = {
+			create_character = {
+				location = scope:hd_revolt_spawn_province
+				template = new_commander_character
+				name = $NAME$
+				age = $AGE$
+				gender_female_chance = 0
+				random_traits = no
+				dynasty = none
+				culture = $CULTURE$
+				faith = $FAITH$
+				trait = brave
+				diplomacy = { $DIPLOMACY$ $DIPLOMACY$ }
+				martial = { $MARTIAL$ $MARTIAL$ }
+				stewardship = { $STEWARDSHIP$ $STEWARDSHIP$ }
+				intrigue = { $INTRIGUE$ $INTRIGUE$ }
+				learning = { $LEARNING$ $LEARNING$ }
+				prowess = { $PROWESS$ $PROWESS$ }
+				save_scope_as = hd_revolt_leader
+			}
+		}
+	}
+}
+
+### Pick the defender among the direct holders of the candidate duchies.
+# ROOT must be the revolt leader. The revolt always declares on the character actually
+# holding the candidate titles (e.g. the Jiaozhi duke for the Zhutian general), never on
+# their top liege - the CB's target_top_liege_if_outside_realm = no keeps the holder as
+# the war defender. The direct holder of the most candidates becomes scope:hd_revolt_defender;
+# ties resolve to the first candidate in LIST1 (design order).
+# LIST1/LIST2 are per-revolt temporary list names so two revolts firing in the same
+# monthly pulse can never pollute each other's candidate pools.
+hd_historical_revolt_pick_defender_effect = {
+
+	# Collect the distinct living direct holders of the candidate duchies.
+	every_in_list = {
+		list = $LIST1$
+		if = {
+			limit = {
+				exists = holder
+				holder = { is_alive = yes }
+			}
+			holder = {
+				if = {
+					limit = { NOT = { is_in_list = $LIST2$ } }
+					add_to_list = $LIST2$
+				}
+			}
+		}
+	}
+
+	every_in_list = {
+		list = $LIST2$
+		set_variable = {
+			name = hd_revolt_hold_count
+			value = 0
+		}
+	}
+	every_in_list = {
+		list = $LIST1$
+		if = {
+			limit = {
+				exists = holder
+				holder = { is_in_list = $LIST2$ }
+			}
+			holder = {
+				change_variable = {
+					name = hd_revolt_hold_count
+					add = 1
+				}
+			}
+		}
+	}
+
+	ordered_in_list = {
+		list = $LIST2$
+		order_by = var:hd_revolt_hold_count
+		max = 1
+		check_range_bounds = no
+		save_scope_as = hd_revolt_defender
+	}
+	every_in_list = {
+		list = $LIST2$
+		remove_variable = hd_revolt_hold_count
+	}
+
+	# Save the first formal target held by the chosen defender. Per-revolt launch
+	# branches add every other defender-held title formally.
+	every_in_list = {
+		list = $LIST1$
+		limit = {
+			exists = holder
+			holder = scope:hd_revolt_defender
+		}
+		if = {
+			limit = {
+				NOT = { exists = scope:hd_revolt_primary_target }
+			}
+			save_scope_as = hd_revolt_primary_target
+		}
+	}
+}
+
+### CB victory: carve out the designated duchies, leave the old realm, become a warlord.
+hd_historical_revolt_victory_effect = {
+	create_title_and_vassal_change = {
+		type = conquest
+		save_scope_as = hd_hist_revolt_conquest_change
+		add_claim_on_loss = no
+	}
+
+	# Transfer only the formal target titles stored by the war itself.
+	every_in_list = {
+		list = target_titles
+		conquest_cb_title_transfer = {
+			RELIGIOUS_WAR = no
+		}
+	}
+	if = {
+		limit = { scope:war ?= { has_variable = hd_revolt_wangguo_joined } }
+		title:d_fufeng = {
+			conquest_cb_title_transfer = { RELIGIOUS_WAR = no }
+		}
+	}
+
+	every_in_list = {
+		list = vassals_taken
+		change_liege = {
+			liege = scope:attacker
+			change = scope:hd_hist_revolt_conquest_change
+		}
+	}
+	every_in_list = {
+		list = titles_taken
+		change_title_holder = {
+			holder = scope:attacker
+			change = scope:hd_hist_revolt_conquest_change
+			take_baronies = yes
+		}
+	}
+	resolve_title_and_vassal_change = scope:hd_hist_revolt_conquest_change
+
+	# Leave the defeated realm and set a five-year truce.
+	hd_uprising_grant_independence_effect = {
+		WAR = root.war
+	}
+
+	# The new carve-out realm always uses the mod's warlord government.
+	scope:attacker = {
+		every_held_title = {
+			limit = {
+				is_noble_family_title = yes
+			}
+			prev = { destroy_title = prev }
+		}
+		change_government = kuzhu_warlord_government
+		kuzhu_warlord_trait_xp_initialize_effect = yes
+		kuzhu_warlord_succession_law_setup_effect = yes
+	}
+}
+
+### Shared cleanup for every non-victory war end (white peace, defeat, invalidation).
+hd_historical_revolt_war_ended_cleanup_effect = {
+	# Event armies are war-bound and disappear with the war. No historical character is deleted.
+}
+
+### Start one war with one, two, or three formal target titles.
+# ROOT is the revolt leader. These helpers are deliberately separate because start_war
+# accepts repeated target_title fields, not a post-declaration title list.
+hd_historical_revolt_start_one_target_war_effect = {
+	start_war = {
+		cb = hd_historical_revolt_cb
+		target = scope:hd_revolt_defender
+		target_title = $TARGET1$
+	}
+	random_character_war = {
+		limit = {
+			primary_attacker = scope:hd_revolt_leader
+			using_cb = hd_historical_revolt_cb
+		}
+		save_scope_as = hd_revolt_war
+	}
+}
+
+hd_historical_revolt_start_two_target_war_effect = {
+	start_war = {
+		cb = hd_historical_revolt_cb
+		target = scope:hd_revolt_defender
+		target_title = $TARGET1$
+		target_title = $TARGET2$
+	}
+	random_character_war = {
+		limit = {
+			primary_attacker = scope:hd_revolt_leader
+			using_cb = hd_historical_revolt_cb
+		}
+		save_scope_as = hd_revolt_war
+	}
+}
+
+hd_historical_revolt_start_three_target_war_effect = {
+	start_war = {
+		cb = hd_historical_revolt_cb
+		target = scope:hd_revolt_defender
+		target_title = $TARGET1$
+		target_title = $TARGET2$
+		target_title = $TARGET3$
+	}
+	random_character_war = {
+		limit = {
+			primary_attacker = scope:hd_revolt_leader
+			using_cb = hd_historical_revolt_cb
+		}
+		save_scope_as = hd_revolt_war
+	}
+}
+
+############################
+# REV-01 184.6 Jiaozhi - the nameless Zhutian ("Pillar of Heaven") general
+############################
+
+hd_historical_revolt_jiaozhi_effect = {
+	set_global_variable = hd_revolt_jiaozhi_committed
+	province:6569 = { save_scope_as = hd_revolt_spawn_province }
+	hd_historical_revolt_save_culture_faith_effect = yes
+	scope:hd_revolt_spawn_province = {
+		create_character = {
+			location = scope:hd_revolt_spawn_province
+			template = new_commander_character
+			name = hd_jiaozhi_garrison_leader
+			age = 35
+			gender_female_chance = 0
+			random_traits = no
+			dynasty = none
+			culture = scope:hd_revolt_culture
+			faith = scope:hd_revolt_faith
+			trait = brave
+			trait = wrathful
+			martial = { 13 13 }
+			diplomacy = { 7 7 }
+			stewardship = { 7 7 }
+			intrigue = { 10 10 }
+			learning = { 5 5 }
+			prowess = { 11 11 }
+			save_scope_as = hd_revolt_leader
+		}
+	}
+	scope:hd_revolt_leader = {
+		give_nickname = nick_hd_zhutian_general
+		hd_historical_revolt_ensure_adventurer_effect = { LOCATION = scope:hd_revolt_spawn_province }
+		title:d_jiaozhi = { add_to_list = hd_revolt_candidates_jiaozhi }
+		hd_historical_revolt_pick_defender_effect = {
+			LIST1 = hd_revolt_candidates_jiaozhi
+			LIST2 = hd_revolt_lieges_jiaozhi
+		}
+	}
+	if = {
+		limit = {
+			exists = scope:hd_revolt_defender
+			exists = scope:hd_revolt_primary_target
+			NOT = { scope:hd_revolt_leader = scope:hd_revolt_defender }
+		}
+		scope:hd_revolt_leader = {
+			hd_historical_revolt_start_one_target_war_effect = { TARGET1 = scope:hd_revolt_primary_target }
+		}
+		if = {
+			limit = { exists = scope:hd_revolt_war }
+			scope:hd_revolt_leader = {
+			spawn_army = {
+				# TOTAL = 6000
+					name = hd_revolt_army_jiaozhi
+					levies = 4500
+					men_at_arms = { type = light_footmen men = 800 }
+					men_at_arms = { type = bowmen men = 500 }
+					men_at_arms = { type = light_horsemen men = 200 }
+					location = scope:hd_revolt_spawn_province
+					origin = scope:hd_revolt_spawn_province
+					uses_supply = yes
+					inheritable = no
+					war = scope:hd_revolt_war
+					save_temporary_scope_as = hd_revolt_spawned_army
+				}
+			}
+			scope:hd_revolt_spawned_army = { assign_commander = scope:hd_revolt_leader }
+			scope:hd_revolt_leader = { add_character_flag = hd_revolt_leader_jiaozhi }
+			set_global_variable = hd_revolt_jiaozhi_fired
+			scope:hd_revolt_defender = {
+				if = {
+					limit = { is_ai = no }
+					trigger_event = hd_historical_revolts.0001
+				}
+			}
+		}
+		else = {
+		}
+	}
+	else = {
+	}
+}
+
+############################
+# REV-02 184.10 Beigong Boyu (project character bei_gong_yu) - Liangzhou Qiang revolt
+############################
+
+hd_historical_revolt_beigong_effect = {
+	set_global_variable = hd_revolt_beigong_committed
+	province:1548 = { save_scope_as = hd_revolt_spawn_province } # Huangzhong core; Heguan is province 1542
+	hd_historical_revolt_save_culture_faith_effect = yes
+	hd_historical_revolt_save_or_create_named_leader_effect = {
+		CHARACTER = character:bei_gong_yu NAME = uuii_book_bei_gong_yu_name AGE = 35
+		CULTURE = culture:qiang FAITH = scope:hd_revolt_faith
+		DIPLOMACY = 9 MARTIAL = 16 STEWARDSHIP = 7 INTRIGUE = 11 LEARNING = 5 PROWESS = 14
+	}
+	scope:hd_revolt_leader = {
+		hd_historical_revolt_ensure_adventurer_effect = { LOCATION = scope:hd_revolt_spawn_province }
+		title:d_jincheng = { add_to_list = hd_revolt_candidates_beigong }
+		title:d_guangwei = { add_to_list = hd_revolt_candidates_beigong }
+		hd_historical_revolt_pick_defender_effect = {
+			LIST1 = hd_revolt_candidates_beigong
+			LIST2 = hd_revolt_lieges_beigong
+		}
+	}
+	if = {
+		limit = {
+			exists = scope:hd_revolt_defender
+			exists = scope:hd_revolt_primary_target
+			NOT = { scope:hd_revolt_leader = scope:hd_revolt_defender }
+		}
+		if = {
+			limit = {
+				title:d_jincheng.holder = scope:hd_revolt_defender
+				title:d_guangwei.holder = scope:hd_revolt_defender
+			}
+			scope:hd_revolt_leader = {
+				hd_historical_revolt_start_two_target_war_effect = {
+					TARGET1 = title:d_jincheng
+					TARGET2 = title:d_guangwei
+				}
+			}
+		}
+		else = {
+			scope:hd_revolt_leader = {
+				hd_historical_revolt_start_one_target_war_effect = { TARGET1 = scope:hd_revolt_primary_target }
+			}
+		}
+		if = {
+			limit = { exists = scope:hd_revolt_war }
+			scope:hd_revolt_leader = {
+				spawn_army = {
+					# TOTAL = 18000
+					name = hd_revolt_army_beigong
+					levies = 4000
+					men_at_arms = { type = light_footmen men = 3000 }
+					men_at_arms = { type = light_horsemen men = 6000 }
+					men_at_arms = { type = horse_archers men = 5000 }
+					location = scope:hd_revolt_spawn_province
+					origin = scope:hd_revolt_spawn_province
+					uses_supply = yes
+					inheritable = no
+					war = scope:hd_revolt_war
+					save_temporary_scope_as = hd_revolt_spawned_army
+				}
+			}
+			scope:hd_revolt_spawned_army = { assign_commander = scope:hd_revolt_leader }
+			scope:hd_revolt_leader = { add_character_flag = hd_revolt_leader_beigong }
+			set_global_variable = hd_revolt_beigong_fired
+			scope:hd_revolt_defender = {
+				if = {
+					limit = { is_ai = no }
+					trigger_event = hd_historical_revolts.0002
+				}
+			}
+		}
+		else = {
+		}
+	}
+	else = {
+	}
+}
+
+############################
+# REV-03 185.2 Black Mountain bandits - Zhang Yan (project character chu_yan),
+# Zhang Niujiao as his second-in-command knight
+############################
+
+hd_historical_revolt_heishan_effect = {
+	set_global_variable = hd_revolt_heishan_committed
+	province:2942 = { save_scope_as = hd_revolt_spawn_province }
+	hd_historical_revolt_save_culture_faith_effect = yes
+	hd_historical_revolt_save_or_create_named_leader_effect = {
+		CHARACTER = character:chu_yan NAME = uuii_book_chu_yan_name AGE = 28
+		CULTURE = culture:han FAITH = scope:hd_revolt_faith
+		DIPLOMACY = 8 MARTIAL = 17 STEWARDSHIP = 8 INTRIGUE = 12 LEARNING = 5 PROWESS = 16
+	}
+	character:zhang_niu_jiao ?= {
+		if = {
+			limit = { is_alive = yes }
+			set_employer = scope:hd_revolt_leader
+			set_knight_status = force
+		}
+	}
+	scope:hd_revolt_leader = {
+		hd_historical_revolt_ensure_adventurer_effect = { LOCATION = scope:hd_revolt_spawn_province }
+		title:d_changshan = { add_to_list = hd_revolt_candidates_heishan }
+		title:d_zhaoguo = { add_to_list = hd_revolt_candidates_heishan }
+		hd_historical_revolt_pick_defender_effect = {
+			LIST1 = hd_revolt_candidates_heishan
+			LIST2 = hd_revolt_lieges_heishan
+		}
+	}
+	if = {
+		limit = {
+			exists = scope:hd_revolt_defender
+			exists = scope:hd_revolt_primary_target
+			NOT = { scope:hd_revolt_leader = scope:hd_revolt_defender }
+		}
+		if = {
+			limit = {
+				title:d_changshan.holder = scope:hd_revolt_defender
+				title:d_zhaoguo.holder = scope:hd_revolt_defender
+			}
+			scope:hd_revolt_leader = {
+				hd_historical_revolt_start_two_target_war_effect = {
+					TARGET1 = title:d_changshan
+					TARGET2 = title:d_zhaoguo
+				}
+			}
+		}
+		else = {
+			scope:hd_revolt_leader = {
+				hd_historical_revolt_start_one_target_war_effect = { TARGET1 = scope:hd_revolt_primary_target }
+			}
+		}
+		if = {
+			limit = { exists = scope:hd_revolt_war }
+			scope:hd_revolt_leader = {
+				spawn_army = {
+					# TOTAL = 16000
+					name = hd_revolt_army_heishan
+					levies = 10000
+					men_at_arms = { type = light_footmen men = 3000 }
+					men_at_arms = { type = bowmen men = 2000 }
+					men_at_arms = { type = light_horsemen men = 1000 }
+					location = scope:hd_revolt_spawn_province
+					origin = scope:hd_revolt_spawn_province
+					uses_supply = yes
+					inheritable = no
+					war = scope:hd_revolt_war
+					save_temporary_scope_as = hd_revolt_spawned_army
+				}
+			}
+			scope:hd_revolt_spawned_army = { assign_commander = scope:hd_revolt_leader }
+			scope:hd_revolt_leader = { add_character_flag = hd_revolt_leader_heishan }
+			set_global_variable = hd_revolt_heishan_fired
+			scope:hd_revolt_defender = {
+				if = {
+					limit = { is_ai = no }
+					trigger_event = hd_historical_revolts.0003
+				}
+			}
+		}
+		else = {
+		}
+	}
+	else = {
+	}
+}
+
+############################
+# REV-04 185.4 Jiangxia Man revolt (DESIGN_DATE_SHIFT: the main historical
+# Jiangxia Man uprising was ~180; this date is a phase-1 gameplay shift) - anonymous chief
+############################
+
+hd_historical_revolt_jiangxia_effect = {
+	set_global_variable = hd_revolt_jiangxia_committed
+	province:1867 = { save_scope_as = hd_revolt_spawn_province }
+	hd_historical_revolt_save_culture_faith_effect = yes
+	scope:hd_revolt_spawn_province = {
+		create_character = {
+			location = scope:hd_revolt_spawn_province
+			template = new_commander_character
+			name = hd_jiangxia_manshuai
+			age = 35
+			gender_female_chance = 0
+			random_traits = no
+			dynasty = none
+			culture = scope:hd_revolt_culture
+			faith = scope:hd_revolt_faith
+			trait = brave
+			trait = wrathful
+			martial = { 14 14 }
+			diplomacy = { 6 6 }
+			stewardship = { 6 6 }
+			intrigue = { 9 9 }
+			learning = { 4 4 }
+			prowess = { 13 13 }
+			save_scope_as = hd_revolt_leader
+		}
+	}
+	scope:hd_revolt_leader = {
+		hd_historical_revolt_ensure_adventurer_effect = { LOCATION = scope:hd_revolt_spawn_province }
+		title:d_jiangxia = { add_to_list = hd_revolt_candidates_jiangxia }
+		hd_historical_revolt_pick_defender_effect = {
+			LIST1 = hd_revolt_candidates_jiangxia
+			LIST2 = hd_revolt_lieges_jiangxia
+		}
+	}
+	if = {
+		limit = {
+			exists = scope:hd_revolt_defender
+			exists = scope:hd_revolt_primary_target
+			NOT = { scope:hd_revolt_leader = scope:hd_revolt_defender }
+		}
+		scope:hd_revolt_leader = {
+			hd_historical_revolt_start_one_target_war_effect = { TARGET1 = scope:hd_revolt_primary_target }
+		}
+		if = {
+			limit = { exists = scope:hd_revolt_war }
+			scope:hd_revolt_leader = {
+				spawn_army = {
+					# TOTAL = 12000
+					name = hd_revolt_army_jiangxia
+					levies = 8000
+					men_at_arms = { type = light_footmen men = 2500 }
+					men_at_arms = { type = bowmen men = 1500 }
+					location = scope:hd_revolt_spawn_province
+					origin = scope:hd_revolt_spawn_province
+					uses_supply = yes
+					inheritable = no
+					war = scope:hd_revolt_war
+					save_temporary_scope_as = hd_revolt_spawned_army
+				}
+			}
+			scope:hd_revolt_spawned_army = { assign_commander = scope:hd_revolt_leader }
+			scope:hd_revolt_leader = { add_character_flag = hd_revolt_leader_jiangxia }
+			set_global_variable = hd_revolt_jiangxia_fired
+			scope:hd_revolt_defender = {
+				if = {
+					limit = { is_ai = no }
+					trigger_event = hd_historical_revolts.0004
+				}
+			}
+		}
+		else = {
+		}
+	}
+	else = {
+	}
+}
+
+############################
+# REV-05 187.4 Wang Guo of Liangzhou - merges into the ongoing Beigong Boyu war
+# when both face the same defender, otherwise starts its own war for Fufeng
+############################
+
+hd_historical_revolt_wangguo_effect = {
+	set_global_variable = hd_revolt_wangguo_committed
+	province:1520 = { save_scope_as = hd_revolt_spawn_province }
+	hd_historical_revolt_save_culture_faith_effect = yes
+	hd_historical_revolt_save_or_create_named_leader_effect = {
+		CHARACTER = character:wang_guo NAME = uuii_book_wang_guo_name AGE = 30
+		CULTURE = scope:hd_revolt_culture FAITH = scope:hd_revolt_faith
+		DIPLOMACY = 7 MARTIAL = 7 STEWARDSHIP = 7 INTRIGUE = 7 LEARNING = 6 PROWESS = 6
+	}
+	scope:hd_revolt_leader = {
+		hd_historical_revolt_ensure_adventurer_effect = { LOCATION = scope:hd_revolt_spawn_province }
+		title:d_fufeng = { add_to_list = hd_revolt_candidates_wangguo }
+		hd_historical_revolt_pick_defender_effect = {
+			LIST1 = hd_revolt_candidates_wangguo
+			LIST2 = hd_revolt_lieges_wangguo
+		}
+	}
+	if = {
+		limit = {
+			exists = scope:hd_revolt_defender
+			exists = scope:hd_revolt_primary_target
+			NOT = { scope:hd_revolt_leader = scope:hd_revolt_defender }
+		}
+		# Merge check: the Beigong Boyu revolt war (possibly inherited) is still running
+		# against the very same defender.
+		scope:hd_revolt_defender = {
+			random_character_war = {
+				limit = {
+					using_cb = hd_historical_revolt_cb
+					any_war_attacker = {
+						has_character_flag = hd_revolt_leader_beigong
+					}
+				}
+				save_scope_as = hd_revolt_beigong_war
+			}
+		}
+		if = {
+			limit = { exists = scope:hd_revolt_beigong_war }
+			scope:hd_revolt_beigong_war = {
+				add_attacker = scope:hd_revolt_leader
+				set_variable = hd_revolt_wangguo_joined
+			}
+			scope:hd_revolt_leader = {
+				spawn_army = {
+					# TOTAL = 16000
+					name = hd_revolt_army_wangguo
+					levies = 4000
+					men_at_arms = { type = light_footmen men = 3000 }
+					men_at_arms = { type = light_horsemen men = 5000 }
+					men_at_arms = { type = horse_archers men = 4000 }
+					location = scope:hd_revolt_spawn_province
+					origin = scope:hd_revolt_spawn_province
+					uses_supply = yes
+					inheritable = no
+					war = scope:hd_revolt_beigong_war
+					save_temporary_scope_as = hd_revolt_spawned_army
+				}
+			}
+			scope:hd_revolt_spawned_army = { assign_commander = scope:hd_revolt_leader }
+			scope:hd_revolt_leader = {
+				add_character_flag = hd_revolt_leader_wangguo
+			}
+			set_global_variable = hd_revolt_wangguo_fired
+			scope:hd_revolt_defender = {
+				if = {
+					limit = { is_ai = no }
+					trigger_event = hd_historical_revolts.0005
+				}
+			}
+		}
+		else = {
+			scope:hd_revolt_leader = {
+				hd_historical_revolt_start_one_target_war_effect = { TARGET1 = scope:hd_revolt_primary_target }
+			}
+			if = {
+				limit = { exists = scope:hd_revolt_war }
+				scope:hd_revolt_leader = {
+					spawn_army = {
+						# TOTAL = 16000
+						name = hd_revolt_army_wangguo
+						levies = 4000
+						men_at_arms = { type = light_footmen men = 3000 }
+						men_at_arms = { type = light_horsemen men = 5000 }
+						men_at_arms = { type = horse_archers men = 4000 }
+						location = scope:hd_revolt_spawn_province
+						origin = scope:hd_revolt_spawn_province
+						uses_supply = yes
+						inheritable = no
+						war = scope:hd_revolt_war
+						save_temporary_scope_as = hd_revolt_spawned_army
+					}
+				}
+				scope:hd_revolt_spawned_army = { assign_commander = scope:hd_revolt_leader }
+				scope:hd_revolt_leader = { add_character_flag = hd_revolt_leader_wangguo }
+				set_global_variable = hd_revolt_wangguo_fired
+				scope:hd_revolt_defender = {
+					if = {
+						limit = { is_ai = no }
+						trigger_event = hd_historical_revolts.0005
+					}
+				}
+			}
+			else = {
+			}
+		}
+	}
+	else = {
+	}
+}
+
+############################
+# REV-06 187.6 Zhang Ju (political leader) and Zhang Chun (military commander)
+############################
+
+hd_historical_revolt_zhangchun_effect = {
+	set_global_variable = hd_revolt_zhangchun_committed
+	province:3506 = { save_scope_as = hd_revolt_spawn_province }
+	hd_historical_revolt_save_culture_faith_effect = yes
+	hd_historical_revolt_save_or_create_named_leader_effect = {
+		CHARACTER = character:zhang_ju NAME = uuii_book_zhang_ju_name AGE = 40
+		CULTURE = culture:han FAITH = scope:hd_revolt_faith
+		DIPLOMACY = 11 MARTIAL = 12 STEWARDSHIP = 8 INTRIGUE = 12 LEARNING = 7 PROWESS = 9
+	}
+	character:zhang_chun ?= {
+		if = {
+			limit = { is_alive = yes }
+			set_employer = scope:hd_revolt_leader
+			set_knight_status = force
+		}
+	}
+	scope:hd_revolt_leader = {
+		hd_historical_revolt_ensure_adventurer_effect = { LOCATION = scope:hd_revolt_spawn_province }
+		title:d_youbeiping = { add_to_list = hd_revolt_candidates_zhangchun }
+		title:d_liaoxi = { add_to_list = hd_revolt_candidates_zhangchun }
+		title:d_yuyang = { add_to_list = hd_revolt_candidates_zhangchun }
+		hd_historical_revolt_pick_defender_effect = {
+			LIST1 = hd_revolt_candidates_zhangchun
+			LIST2 = hd_revolt_lieges_zhangchun
+		}
+	}
+	if = {
+		limit = {
+			exists = scope:hd_revolt_defender
+			exists = scope:hd_revolt_primary_target
+			NOT = { scope:hd_revolt_leader = scope:hd_revolt_defender }
+		}
+		if = {
+			limit = {
+				title:d_youbeiping.holder = scope:hd_revolt_defender
+				title:d_liaoxi.holder = scope:hd_revolt_defender
+				title:d_yuyang.holder = scope:hd_revolt_defender
+			}
+			scope:hd_revolt_leader = {
+				hd_historical_revolt_start_three_target_war_effect = {
+					TARGET1 = title:d_youbeiping
+					TARGET2 = title:d_liaoxi
+					TARGET3 = title:d_yuyang
+				}
+			}
+		}
+		else_if = {
+			limit = {
+				title:d_youbeiping.holder = scope:hd_revolt_defender
+				title:d_liaoxi.holder = scope:hd_revolt_defender
+			}
+			scope:hd_revolt_leader = {
+				hd_historical_revolt_start_two_target_war_effect = {
+					TARGET1 = title:d_youbeiping
+					TARGET2 = title:d_liaoxi
+				}
+			}
+		}
+		else_if = {
+			limit = {
+				title:d_youbeiping.holder = scope:hd_revolt_defender
+				title:d_yuyang.holder = scope:hd_revolt_defender
+			}
+			scope:hd_revolt_leader = {
+				hd_historical_revolt_start_two_target_war_effect = {
+					TARGET1 = title:d_youbeiping
+					TARGET2 = title:d_yuyang
+				}
+			}
+		}
+		else_if = {
+			limit = {
+				title:d_liaoxi.holder = scope:hd_revolt_defender
+				title:d_yuyang.holder = scope:hd_revolt_defender
+			}
+			scope:hd_revolt_leader = {
+				hd_historical_revolt_start_two_target_war_effect = {
+					TARGET1 = title:d_liaoxi
+					TARGET2 = title:d_yuyang
+				}
+			}
+		}
+		else = {
+			scope:hd_revolt_leader = {
+				hd_historical_revolt_start_one_target_war_effect = { TARGET1 = scope:hd_revolt_primary_target }
+			}
+		}
+		if = {
+			limit = { exists = scope:hd_revolt_war }
+			scope:hd_revolt_leader = {
+				spawn_army = {
+					# TOTAL = 18000
+					name = hd_revolt_army_zhangchun
+					levies = 4000
+					men_at_arms = { type = light_footmen men = 3000 }
+					men_at_arms = { type = light_horsemen men = 6000 }
+					men_at_arms = { type = horse_archers men = 5000 }
+					location = scope:hd_revolt_spawn_province
+					origin = scope:hd_revolt_spawn_province
+					uses_supply = yes
+					inheritable = no
+					war = scope:hd_revolt_war
+					save_temporary_scope_as = hd_revolt_spawned_army
+				}
+			}
+			if = {
+				limit = {
+					character:zhang_chun ?= { is_alive = yes }
+				}
+				scope:hd_revolt_spawned_army = { assign_commander = character:zhang_chun }
+			}
+			else = {
+				scope:hd_revolt_spawned_army = { assign_commander = scope:hd_revolt_leader }
+			}
+			scope:hd_revolt_leader = { add_character_flag = hd_revolt_leader_zhangchun }
+			set_global_variable = hd_revolt_zhangchun_fired
+			scope:hd_revolt_defender = {
+				if = {
+					limit = { is_ai = no }
+					trigger_event = hd_historical_revolts.0006
+				}
+			}
+		}
+		else = {
+		}
+	}
+	else = {
+	}
+}
+
+############################
+# REV-07 188.3 Bingzhou Xiutu Ge revolt - Baimatong
+############################
+
+hd_historical_revolt_bingzhou_hu_effect = {
+	set_global_variable = hd_revolt_bingzhou_hu_committed
+	province:1589 = { save_scope_as = hd_revolt_spawn_province }
+	hd_historical_revolt_save_culture_faith_effect = yes
+	hd_historical_revolt_save_or_create_named_leader_effect = {
+		CHARACTER = character:bai_ma_tong NAME = uuii_book_bai_ma_tong_name AGE = 36
+		CULTURE = culture:xiongnu FAITH = faith:tengri_pagan
+		DIPLOMACY = 7 MARTIAL = 16 STEWARDSHIP = 6 INTRIGUE = 10 LEARNING = 4 PROWESS = 15
+	}
+	scope:hd_revolt_leader = {
+		hd_historical_revolt_ensure_adventurer_effect = { LOCATION = scope:hd_revolt_spawn_province }
+		title:d_xihe = { add_to_list = hd_revolt_candidates_bingzhou_hu }
+		title:d_hexi = { add_to_list = hd_revolt_candidates_bingzhou_hu }
+		if = {
+			limit = {
+				character:luan_ti_qiang_qu = { is_alive = yes }
+				OR = {
+					title:d_xihe.holder = character:luan_ti_qiang_qu
+					title:d_hexi.holder = character:luan_ti_qiang_qu
+				}
+			}
+			character:luan_ti_qiang_qu = { save_scope_as = hd_revolt_defender }
+			if = {
+				limit = { title:d_xihe.holder = scope:hd_revolt_defender }
+				title:d_xihe = { save_scope_as = hd_revolt_primary_target }
+			}
+			else = { title:d_hexi = { save_scope_as = hd_revolt_primary_target } }
+		}
+		else = {
+			hd_historical_revolt_pick_defender_effect = {
+				LIST1 = hd_revolt_candidates_bingzhou_hu
+				LIST2 = hd_revolt_lieges_bingzhou_hu
+			}
+		}
+	}
+	if = {
+		limit = {
+			exists = scope:hd_revolt_defender
+			exists = scope:hd_revolt_primary_target
+			NOT = { scope:hd_revolt_leader = scope:hd_revolt_defender }
+		}
+		if = {
+			limit = {
+				title:d_xihe.holder = scope:hd_revolt_defender
+				title:d_hexi.holder = scope:hd_revolt_defender
+			}
+			scope:hd_revolt_leader = {
+				hd_historical_revolt_start_two_target_war_effect = {
+					TARGET1 = title:d_xihe
+					TARGET2 = title:d_hexi
+				}
+			}
+		}
+		else = {
+			scope:hd_revolt_leader = {
+				hd_historical_revolt_start_one_target_war_effect = { TARGET1 = scope:hd_revolt_primary_target }
+			}
+		}
+		if = {
+			limit = { exists = scope:hd_revolt_war }
+			scope:hd_revolt_leader = {
+				spawn_army = {
+					# TOTAL = 18000
+					name = hd_revolt_army_bingzhou_hu
+					levies = 3000
+					men_at_arms = { type = light_footmen men = 2000 }
+					men_at_arms = { type = light_horsemen men = 7000 }
+					men_at_arms = { type = horse_archers men = 6000 }
+					location = scope:hd_revolt_spawn_province
+					origin = scope:hd_revolt_spawn_province
+					uses_supply = yes
+					inheritable = no
+					war = scope:hd_revolt_war
+					save_temporary_scope_as = hd_revolt_spawned_army
+				}
+			}
+			scope:hd_revolt_spawned_army = { assign_commander = scope:hd_revolt_leader }
+			scope:hd_revolt_leader = { add_character_flag = hd_revolt_leader_bingzhou_hu }
+			set_global_variable = hd_revolt_bingzhou_hu_fired
+			scope:hd_revolt_defender = {
+				if = {
+					limit = { is_ai = no }
+					trigger_event = hd_historical_revolts.0007
+				}
+			}
+		}
+		else = {
+		}
+	}
+	else = {
+	}
+}
+
+############################
+# REV-08 188.6 Ma Xiang's Yellow Turban revival in Yizhou
+############################
+
+hd_historical_revolt_maxiang_effect = {
+	set_global_variable = hd_revolt_maxiang_committed
+	province:3295 = { save_scope_as = hd_revolt_spawn_province }
+	hd_historical_revolt_save_culture_faith_effect = yes
+	hd_historical_revolt_save_or_create_named_leader_effect = {
+		CHARACTER = character:ma_xiang NAME = uuii_book_ma_xiang_name AGE = 34
+		CULTURE = scope:hd_revolt_culture FAITH = scope:hd_revolt_faith
+		DIPLOMACY = 10 MARTIAL = 14 STEWARDSHIP = 7 INTRIGUE = 12 LEARNING = 5 PROWESS = 12
+	}
+	scope:hd_revolt_leader = {
+		hd_historical_revolt_ensure_adventurer_effect = { LOCATION = scope:hd_revolt_spawn_province }
+		title:d_guanghan = { add_to_list = hd_revolt_candidates_maxiang }
+		title:d_shujun = { add_to_list = hd_revolt_candidates_maxiang }
+		title:d_qianwei = { add_to_list = hd_revolt_candidates_maxiang }
+		hd_historical_revolt_pick_defender_effect = {
+			LIST1 = hd_revolt_candidates_maxiang
+			LIST2 = hd_revolt_lieges_maxiang
+		}
+	}
+	if = {
+		limit = {
+			exists = scope:hd_revolt_defender
+			exists = scope:hd_revolt_primary_target
+			NOT = { scope:hd_revolt_leader = scope:hd_revolt_defender }
+		}
+		if = {
+			limit = {
+				title:d_guanghan.holder = scope:hd_revolt_defender
+				title:d_shujun.holder = scope:hd_revolt_defender
+				title:d_qianwei.holder = scope:hd_revolt_defender
+			}
+			scope:hd_revolt_leader = {
+				hd_historical_revolt_start_three_target_war_effect = {
+					TARGET1 = title:d_guanghan
+					TARGET2 = title:d_shujun
+					TARGET3 = title:d_qianwei
+				}
+			}
+		}
+		else_if = {
+			limit = {
+				title:d_guanghan.holder = scope:hd_revolt_defender
+				title:d_shujun.holder = scope:hd_revolt_defender
+			}
+			scope:hd_revolt_leader = {
+				hd_historical_revolt_start_two_target_war_effect = { TARGET1 = title:d_guanghan TARGET2 = title:d_shujun }
+			}
+		}
+		else_if = {
+			limit = {
+				title:d_guanghan.holder = scope:hd_revolt_defender
+				title:d_qianwei.holder = scope:hd_revolt_defender
+			}
+			scope:hd_revolt_leader = {
+				hd_historical_revolt_start_two_target_war_effect = { TARGET1 = title:d_guanghan TARGET2 = title:d_qianwei }
+			}
+		}
+		else_if = {
+			limit = {
+				title:d_shujun.holder = scope:hd_revolt_defender
+				title:d_qianwei.holder = scope:hd_revolt_defender
+			}
+			scope:hd_revolt_leader = {
+				hd_historical_revolt_start_two_target_war_effect = { TARGET1 = title:d_shujun TARGET2 = title:d_qianwei }
+			}
+		}
+		else = {
+			scope:hd_revolt_leader = {
+				hd_historical_revolt_start_one_target_war_effect = { TARGET1 = scope:hd_revolt_primary_target }
+			}
+		}
+		if = {
+			limit = { exists = scope:hd_revolt_war }
+			scope:hd_revolt_leader = {
+				spawn_army = {
+					# TOTAL = 15000
+					name = hd_revolt_army_maxiang
+					levies = 10000
+					men_at_arms = { type = light_footmen men = 3000 }
+					men_at_arms = { type = bowmen men = 2000 }
+					location = scope:hd_revolt_spawn_province
+					origin = scope:hd_revolt_spawn_province
+					uses_supply = yes
+					inheritable = no
+					war = scope:hd_revolt_war
+					save_temporary_scope_as = hd_revolt_spawned_army
+				}
+			}
+			scope:hd_revolt_spawned_army = { assign_commander = scope:hd_revolt_leader }
+			scope:hd_revolt_leader = { add_character_flag = hd_revolt_leader_maxiang }
+			set_global_variable = hd_revolt_maxiang_fired
+			scope:hd_revolt_defender = {
+				if = {
+					limit = { is_ai = no }
+					trigger_event = hd_historical_revolts.0008
+				}
+			}
+		}
+		else = {
+		}
+	}
+	else = {
+	}
+}
+
+############################
+# REV-09 196.1 Yan Baihu of Wu commandery
+############################
+
+hd_historical_revolt_yanbaihu_effect = {
+	set_global_variable = hd_revolt_yanbaihu_committed
+	province:2142 = { save_scope_as = hd_revolt_spawn_province }
+	hd_historical_revolt_save_culture_faith_effect = yes
+	hd_historical_revolt_save_or_create_named_leader_effect = {
+		CHARACTER = character:yan_bai_hu NAME = uuii_book_yan_bai_hu_name AGE = 38
+		CULTURE = scope:hd_revolt_culture FAITH = scope:hd_revolt_faith
+		DIPLOMACY = 8 MARTIAL = 15 STEWARDSHIP = 7 INTRIGUE = 11 LEARNING = 5 PROWESS = 15
+	}
+	scope:hd_revolt_leader = {
+		hd_historical_revolt_ensure_adventurer_effect = { LOCATION = scope:hd_revolt_spawn_province }
+		title:d_wujun = { add_to_list = hd_revolt_candidates_yanbaihu }
+		hd_historical_revolt_pick_defender_effect = {
+			LIST1 = hd_revolt_candidates_yanbaihu
+			LIST2 = hd_revolt_lieges_yanbaihu
+		}
+	}
+	if = {
+		limit = {
+			exists = scope:hd_revolt_defender
+			exists = scope:hd_revolt_primary_target
+			NOT = { scope:hd_revolt_leader = scope:hd_revolt_defender }
+		}
+		scope:hd_revolt_leader = {
+			hd_historical_revolt_start_one_target_war_effect = { TARGET1 = scope:hd_revolt_primary_target }
+		}
+		if = {
+			limit = { exists = scope:hd_revolt_war }
+			scope:hd_revolt_leader = {
+				spawn_army = {
+					# TOTAL = 12000
+					name = hd_revolt_army_yanbaihu
+					levies = 7000
+					men_at_arms = { type = light_footmen men = 2500 }
+					men_at_arms = { type = bowmen men = 1500 }
+					men_at_arms = { type = light_horsemen men = 1000 }
+					location = scope:hd_revolt_spawn_province
+					origin = scope:hd_revolt_spawn_province
+					uses_supply = yes
+					inheritable = no
+					war = scope:hd_revolt_war
+					save_temporary_scope_as = hd_revolt_spawned_army
+				}
+			}
+			scope:hd_revolt_spawned_army = { assign_commander = scope:hd_revolt_leader }
+			scope:hd_revolt_leader = { add_character_flag = hd_revolt_leader_yanbaihu }
+			set_global_variable = hd_revolt_yanbaihu_fired
+			scope:hd_revolt_defender = {
+				if = {
+					limit = { is_ai = no }
+					trigger_event = hd_historical_revolts.0009
+				}
+			}
+		}
+		else = {
+		}
+	}
+	else = {
+	}
+}

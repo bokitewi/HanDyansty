@@ -1,0 +1,558 @@
+﻿# ============================================================================
+# WJ 称谓显示顺序机制 —— 自定义本地化链(重写版)
+# xinsanguo-MOD 2026-08-17
+#
+# 机制原理(与原版/参考mod完全一致的接线方式):
+#   原版链路: GUI文本 "CHARACTER_VIEW_NAME" → 本地化键值 [Character.GetUINameNotMeNoTooltip]
+#            (GetUINameNotMeNoTooltip 是引擎内置数据函数, 无法被同名custom loc覆盖)
+#   本mod链路: GUI文件不动 → 由 localization\simp_chinese\gui\WJ_name_view_l_simp_chinese.yml
+#            覆盖 CHARACTER_VIEW_NAME 等键值 → [Character.Custom('WJ_GetUIName')]
+#            → 本文件的 WJ_GetUIName 分支链 → 各分支 localization_key → 模板yml
+#
+# 参考依据:
+#   - 游戏本体: localization\simp_chinese\gui\character_window_l_simp_chinese.yml
+#   - 三公mod(3684849062): SanGong_view_name 链 + replace yml 覆盖同名GUI键(同法)
+#   - jiaohu-mod: OE_GetUINameNotMeNoTooltip 链 + 00_oe_gui yml(同法, 无同名覆盖)
+#   结论: "自定义链 + GUI本地化键覆盖"是原版验证过的唯一生效路径。
+# ============================================================================
+
+# ============ 主称谓链: WJ_GetUIName(人物窗口主名等所有 GetUIName 显示点) ============
+WJ_GetUIName = {
+	type = character
+
+	# ---------- 1. 死亡称谓 ----------
+	text = { # 天朝王国级 死亡+有谥号/庙号(武官式: 谥号+地名+称谓+大都督+名)
+		trigger = {
+			WJ_han_name_style_trigger = yes
+			is_alive = no
+			has_any_nickname = yes
+			is_independent_ruler = no
+			has_government = celestial_government
+			exists = primary_title
+			primary_title.tier = tier_kingdom
+		}
+		localization_key = WJ_siwang_wuguan_k
+	}
+	text = { # 天朝王国级 死亡+无谥号(文官式: 地名+称谓+名)
+		trigger = {
+			WJ_han_name_style_trigger = yes
+			is_alive = no
+			has_any_nickname = no
+			is_independent_ruler = no
+			has_government = celestial_government
+			exists = primary_title
+			primary_title.tier = tier_kingdom
+		}
+		localization_key = WJ_siwang_wenguan_k
+	}
+	text = { # 死亡+有谥号/庙号(通用): 谥号+名
+		trigger = {
+			WJ_han_name_style_trigger = yes
+			is_alive = no
+			has_any_nickname = yes
+		}
+		localization_key = WJ_siwang_nickname
+	}
+
+	# ---------- 2. 摄政(权臣) ----------
+	text = { # 摄政: 摄政称谓+名
+		trigger = {
+			WJ_han_name_style_trigger = yes
+			is_alive = yes
+			AND = {
+				exists = top_liege
+				is_diarch_of_target = top_liege
+			}
+		}
+		localization_key = WJ_shezheng_name
+	}
+
+	# ---------- 3. 九卿/三公(持 e_minister_* 头衔者) ----------
+	text = { # 九卿 有绰号
+		trigger = {
+			WJ_han_name_style_trigger = yes
+			is_alive = yes
+			has_any_nickname = yes
+			OR = {
+				has_title = title:e_minister_grand_marshal
+				has_title = title:e_minister_chancellor
+				has_title = title:e_minister_censor
+				has_title = title:e_minister_of_personnel
+				has_title = title:e_minister_of_revenue
+				has_title = title:e_minister_of_rites
+				has_title = title:e_minister_of_war
+				has_title = title:e_minister_of_justice
+				has_title = title:e_minister_of_works
+			}
+		}
+		localization_key = WJ_minister_name_nick
+	}
+	text = { # 九卿 无绰号
+		trigger = {
+			WJ_han_name_style_trigger = yes
+			is_alive = yes
+			has_any_nickname = no
+			OR = {
+				has_title = title:e_minister_grand_marshal
+				has_title = title:e_minister_chancellor
+				has_title = title:e_minister_censor
+				has_title = title:e_minister_of_personnel
+				has_title = title:e_minister_of_revenue
+				has_title = title:e_minister_of_rites
+				has_title = title:e_minister_of_war
+				has_title = title:e_minister_of_justice
+				has_title = title:e_minister_of_works
+			}
+		}
+		localization_key = WJ_minister_name
+	}
+
+	# ---------- 4. 内阁(朝臣) ----------
+	text = { # 天朝内阁 有绰号
+		trigger = {
+			WJ_han_name_style_trigger = yes
+			is_alive = yes
+			is_councillor = yes
+			has_any_nickname = yes
+			liege ?= { has_title = title:h_china }
+			NOT = { has_council_position = councillor_spouse }
+		}
+		localization_key = WJ_councillor_name_nick
+	}
+	text = { # 天朝内阁 无绰号
+		trigger = {
+			WJ_han_name_style_trigger = yes
+			is_alive = yes
+			is_councillor = yes
+			has_any_nickname = no
+			liege ?= { has_title = title:h_china }
+			NOT = { has_council_position = councillor_spouse }
+		}
+		localization_key = WJ_councillor_name
+	}
+
+	# 【2026-08-17 删除"4.9 王国文官"块】原块两处错误:
+	# 1) 文官分支误用武官模板键(WJ_wuguan_k*);
+	# 2) 不带契约旗标判定且排在武官块之前, 会先命中, 使王国级武官块成为死代码。
+	# 现分工: 王国级文官 → 下方"8. 普通汉文化角色"分支(WJ_common_name: 称谓+名);
+	#         王国级武官(军事/都护契约) → 下方"5. 武官封臣"块(WJ_wuguan_k*)。
+
+	# ---------- 5. 武官封臣(军事/都护契约) ----------
+	text = { # 王国武官 有绰号
+		trigger = {
+			WJ_han_name_style_trigger = yes
+			is_alive = yes
+			OR = {
+				vassal_contract_has_flag = celestial_province_military
+				vassal_contract_has_flag = celestial_province_protectorate
+			}
+			is_councillor = no
+			has_any_nickname = yes
+			top_liege ?= { has_title = title:h_china }
+			exists = primary_title
+			primary_title.tier = tier_kingdom
+		}
+		localization_key = WJ_wuguan_k_nick
+	}
+	text = { # 王国武官 无绰号
+		trigger = {
+			WJ_han_name_style_trigger = yes
+			is_alive = yes
+			OR = {
+				vassal_contract_has_flag = celestial_province_military
+				vassal_contract_has_flag = celestial_province_protectorate
+			}
+			is_councillor = no
+			has_any_nickname = no
+			top_liege ?= { has_title = title:h_china }
+			exists = primary_title
+			primary_title.tier = tier_kingdom
+		}
+		localization_key = WJ_wuguan_k
+	}
+	text = { # 公国武官 有绰号
+		trigger = {
+			WJ_han_name_style_trigger = yes
+			is_alive = yes
+			OR = {
+				vassal_contract_has_flag = celestial_province_military
+				vassal_contract_has_flag = celestial_province_protectorate
+			}
+			is_councillor = no
+			has_any_nickname = yes
+			top_liege ?= { has_title = title:h_china }
+			exists = primary_title
+			primary_title.tier = tier_duchy
+		}
+		localization_key = WJ_wuguan_d_nick
+	}
+	text = { # 公国武官 无绰号
+		trigger = {
+			WJ_han_name_style_trigger = yes
+			is_alive = yes
+			OR = {
+				vassal_contract_has_flag = celestial_province_military
+				vassal_contract_has_flag = celestial_province_protectorate
+			}
+			is_councillor = no
+			has_any_nickname = no
+			top_liege ?= { has_title = title:h_china }
+			exists = primary_title
+			primary_title.tier = tier_duchy
+		}
+		localization_key = WJ_wuguan_d
+	}
+	text = { # 伯爵武官 有绰号
+		trigger = {
+			WJ_han_name_style_trigger = yes
+			is_alive = yes
+			OR = {
+				vassal_contract_has_flag = celestial_province_military
+				vassal_contract_has_flag = celestial_province_protectorate
+			}
+			is_councillor = no
+			has_any_nickname = yes
+			top_liege ?= { has_title = title:h_china }
+			exists = primary_title
+			primary_title.tier = tier_county
+		}
+		localization_key = WJ_wuguan_c_nick
+	}
+	text = { # 伯爵武官 无绰号
+		trigger = {
+			WJ_han_name_style_trigger = yes
+			is_alive = yes
+			OR = {
+				vassal_contract_has_flag = celestial_province_military
+				vassal_contract_has_flag = celestial_province_protectorate
+			}
+			is_councillor = no
+			has_any_nickname = no
+			top_liege ?= { has_title = title:h_china }
+			exists = primary_title
+			primary_title.tier = tier_county
+		}
+		localization_key = WJ_wuguan_c
+	}
+
+	# 扩展点: 军号/官职特质分支占位(待特质系统就位后, 在此上方插入 text 块,
+	# 判定 has_trait = <特质key>, 模板同现有 WJ_* 拼装法, 见索引库《风味化代码库_01》)。
+
+	# ---------- 6. 皇室亲属 ----------
+	text = { # 皇亲国戚(皇子/皇女/皇后/太后/太子等)
+		trigger = {
+			WJ_han_name_style_trigger = yes
+			is_alive = yes
+			WJ_royal_relation_trigger = yes
+		}
+		localization_key = WJ_royal_name
+	}
+
+	# ---------- 7. 独立领主 ----------
+	text = { # 独立(王/皇帝/天子)
+		trigger = {
+			WJ_han_name_style_trigger = yes
+			is_alive = yes
+			is_independent_ruler = yes
+			exists = primary_title
+		}
+		localization_key = WJ_independent_name
+	}
+
+	# ---------- 8. 普通汉文化角色(封臣/无地) ----------
+	text = { # 普通封臣: 头衔称谓+名
+		trigger = {
+			WJ_han_name_style_trigger = yes
+			is_alive = yes
+			exists = primary_title
+		}
+		localization_key = WJ_common_name
+	}
+	text = { # 无地但有配偶(皇后/王妃等): 配偶称号+名
+		trigger = {
+			WJ_han_name_style_trigger = yes
+			is_alive = yes
+			NOT = { exists = primary_title }
+			exists = primary_spouse
+		}
+		localization_key = WJ_common_spouse_name
+	}
+	text = { # 无地(在野/未仕): 仅名
+		trigger = {
+			WJ_han_name_style_trigger = yes
+			is_alive = yes
+			NOT = { exists = primary_title }
+			NOT = { exists = primary_spouse }
+		}
+		localization_key = WJ_common_unlanded_name
+	}
+
+	# ---------- 9. fallback(非汉文化/无匹配): 原版引擎链 ----------
+	text = {
+		fallback = yes
+		localization_key = WJ_default_name
+	}
+}
+
+# ============ 短名(列表/家谱): WJ_GetShortUIName ============
+WJ_GetShortUIName = {
+	type = character
+	text = { # 汉文化: 姓+名
+		trigger = {
+			WJ_han_name_style_trigger = yes
+		}
+		localization_key = WJ_short_name
+	}
+	text = {
+		fallback = yes
+		localization_key = WJ_short_name_default
+	}
+}
+
+# ============ 有衔名: WJ_GetTitledFirstName ============
+WJ_GetTitledFirstName = {
+	type = character
+	text = { # 汉文化: 头衔称谓+名
+		trigger = {
+			WJ_han_name_style_trigger = yes
+		}
+		localization_key = WJ_titled_first_name
+	}
+	text = {
+		fallback = yes
+		localization_key = WJ_titled_first_name_default
+	}
+}
+
+# ============ 皇室称谓链(移植自 GetRulerRelationFrom/Name, 适配主mod) ============
+WJ_GetRulerRelationFrom = {
+	type = character
+	text = { # 太后/皇后: 有王级以上子女且有配偶
+		trigger = {
+			WJ_han_name_style_trigger = yes
+			is_female = yes
+			any_child = {
+				primary_title.tier >= tier_kingdom
+			}
+			exists = primary_spouse
+		}
+		localization_key = WJ_relation_from_spouse
+	}
+	text = { # 有王级以上子女(无配偶): 用领主头衔
+		trigger = {
+			WJ_han_name_style_trigger = yes
+			is_female = yes
+			any_child = {
+				primary_title.tier >= tier_kingdom
+			}
+			NOT = { exists = primary_spouse }
+		}
+		localization_key = WJ_relation_from_liege
+	}
+	text = { # 父为汉帝: 用父之国号
+		trigger = {
+			exists = father
+			father = { primary_title = title:h_china }
+		}
+		localization_key = WJ_relation_from_father_guohao
+	}
+	text = { # 母为汉帝: 用母之国号
+		trigger = {
+			exists = mother
+			mother = { primary_title = title:h_china }
+		}
+		localization_key = WJ_relation_from_mother_guohao
+	}
+	text = { # 父为王级以上
+		trigger = {
+			exists = father
+			father = { primary_title.tier >= tier_kingdom }
+		}
+		localization_key = WJ_relation_from_father
+	}
+	text = { # 母为帝国级以上
+		trigger = {
+			exists = mother
+			mother = { primary_title.tier > tier_kingdom }
+		}
+		localization_key = WJ_relation_from_mother
+	}
+	text = {
+		fallback = yes
+		localization_key = WJ_relation_from_fallback
+	}
+}
+
+WJ_GetRulerRelationName = {
+	type = character
+	log_loc_errors = no
+	text = { # 王后(有王国级子女)
+		trigger = {
+			WJ_han_name_style_trigger = yes
+			is_female = yes
+			any_child = { primary_title.tier = tier_kingdom }
+			primary_title.tier < tier_kingdom
+		}
+		localization_key = WJ_relation_name_queen_mother
+	}
+	text = { # 太后(有帝国级以上子女)
+		trigger = {
+			WJ_han_name_style_trigger = yes
+			is_female = yes
+			any_child = { primary_title.tier >= tier_empire }
+			primary_title.tier < tier_empire
+		}
+		localization_key = WJ_relation_name_empress_mother
+	}
+	text = { # 太子(帝国级继承)
+		trigger = {
+			is_female = no
+			exists = top_liege
+			is_primary_heir_of = top_liege
+			OR = {
+				is_ruler = no
+				primary_title.tier < tier_kingdom
+			}
+			any_parent = {
+				even_if_dead = yes
+				primary_title.tier > tier_kingdom
+			}
+		}
+		localization_key = WJ_relation_name_crown_prince_empire
+	}
+	text = { # 太女(帝国级继承)
+		trigger = {
+			is_female = yes
+			exists = top_liege
+			is_primary_heir_of = top_liege
+			OR = {
+				is_ruler = no
+				primary_title.tier < tier_kingdom
+			}
+			any_parent = {
+				even_if_dead = yes
+				primary_title.tier >= tier_kingdom
+			}
+		}
+		localization_key = WJ_relation_name_crown_princess_empire
+	}
+	text = { # 王子(王国级继承)
+		trigger = {
+			is_female = no
+			exists = top_liege
+			is_primary_heir_of = top_liege
+			OR = {
+				is_ruler = no
+				primary_title.tier < tier_kingdom
+			}
+			any_parent = {
+				even_if_dead = yes
+				primary_title.tier = tier_kingdom
+			}
+		}
+		localization_key = WJ_relation_name_crown_prince
+	}
+	text = { # 王女(王国级继承)
+		trigger = {
+			is_female = yes
+			exists = top_liege
+			is_primary_heir_of = top_liege
+			OR = {
+				is_ruler = no
+				primary_title.tier < tier_kingdom
+			}
+			any_parent = {
+				even_if_dead = yes
+				primary_title.tier = tier_kingdom
+			}
+		}
+		localization_key = WJ_relation_name_crown_princess
+	}
+	text = { # 皇子(父为帝国级以上)
+		trigger = {
+			is_female = no
+			OR = {
+				is_ruler = no
+				primary_title.tier < tier_kingdom
+			}
+			any_parent = {
+				primary_title.tier > tier_kingdom
+			}
+		}
+		localization_key = WJ_relation_name_prince
+	}
+	text = { # 皇女(父为帝国级以上)
+		trigger = {
+			is_female = yes
+			OR = {
+				is_ruler = no
+				primary_title.tier < tier_kingdom
+			}
+			any_parent = {
+				even_if_dead = yes
+				primary_title.tier > tier_kingdom
+			}
+		}
+		localization_key = WJ_relation_name_princess
+	}
+	text = { # 长公主(姊妹为帝国级)
+		trigger = {
+			is_female = yes
+			OR = {
+				holds_landed_title = no
+				primary_title.tier < tier_kingdom
+			}
+			any_sibling = {
+				primary_title.tier >= tier_empire
+			}
+		}
+		localization_key = WJ_relation_name_princess_elder
+	}
+	text = { # 大长公主(姊妹之子为帝国级)
+		trigger = {
+			is_female = yes
+			OR = {
+				holds_landed_title = no
+				primary_title.tier < tier_kingdom
+			}
+			any_sibling = {
+				even_if_dead = yes
+				any_child = {
+					primary_title.tier >= tier_empire
+				}
+			}
+		}
+		localization_key = WJ_relation_name_princess_eldest
+	}
+	text = { # 公子(父为王国级)
+		trigger = {
+			is_female = no
+			OR = {
+				is_ruler = no
+				primary_title.tier < tier_kingdom
+			}
+			any_parent = {
+				primary_title.tier = tier_kingdom
+			}
+		}
+		localization_key = WJ_relation_name_gongzi
+	}
+	text = { # 公女(父为王国级)
+		trigger = {
+			is_female = yes
+			OR = {
+				holds_landed_title = no
+				primary_title.tier < tier_kingdom
+			}
+			any_parent = {
+				even_if_dead = yes
+				primary_title.tier = tier_kingdom
+			}
+		}
+		localization_key = WJ_relation_name_gongnv
+	}
+	text = {
+		fallback = yes
+		localization_key = WJ_relation_name_fallback
+	}
+}

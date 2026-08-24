@@ -1,0 +1,274 @@
+﻿#危世效果
+kuzhu_entering_instability_effect = {
+	#苦竹：不是开局
+	if = {
+		limit = {
+			current_date_is_start_date_trigger = no
+		}
+		#苦竹：封臣独立条件	
+		every_vassal = {
+			limit = {
+				is_landed = yes
+				OR = {
+					#非法理封臣
+					primary_title = {
+						NOT = { hegemony = title:h_china }
+					}
+					#非天朝制封臣
+					NOT = { government_has_flag = government_is_celestial }				
+				} 
+			}
+			#封臣独立
+			create_title_and_vassal_change = {
+				type = independency
+				save_scope_as = change
+				add_claim_on_loss = yes
+			}
+			becomes_independent = {
+				change = scope:change
+			}
+			resolve_title_and_vassal_change = scope:change
+			break_subject_contract_and_establish_tributary_effect = { SUZERAIN = title:h_china.holder TRIBUTARY = this }
+		}
+		#苦竹：封臣变军阀条件		
+		every_vassal = {
+			limit = {
+				is_ai = yes
+				is_landed = yes
+				NOT = { has_character_flag = flag_kuzhu_new_governor }
+				#忠诚相关
+				OR = { 
+					has_trait = ambitious
+					has_trait = disloyal
+					has_trait = arrogant
+					has_trait = arbitrary
+					has_trait = greedy
+					has_trait = deceitful
+				}
+				OR = {
+					#不满的守旧派封臣
+					AND = {
+						opinion = {
+							target = liege
+							value <= -20
+						}
+						top_participant_group:dynastic_cycle ?= { participant_group_type = conservative_movement }
+					}					
+					#不满的野心封臣
+					AND = {
+						opinion = {
+							target = liege
+							value <= -40
+						}
+						has_trait = ambitious
+					}
+					#非常不满的封臣
+					opinion = {
+						target = liege
+						value <= -60
+					}
+				}
+			}
+			kuzhu_convert_to_warlord_from_admin_effect = yes
+			add_character_flag = {
+				flag = flag_kuzhu_new_warlord
+				years = 10
+			}
+		}		
+	}
+}
+
+#乱世效果(2026-08重写:天子保位+霸权不灭版本)
+#第一层:绝对禁止销毁霸权——不执行任何destroy_title,天子保留h_china与自己的领地,君权降2级、正统性降2级
+#第二层:非天朝制直属封臣(仅every_vassal,不碰every_vassal_or_below)全部立刻独立,其封臣随整个realm一起离开
+#第三层:所有拥有辖区忠诚度(obedience)的封臣一次性判定——独立线/朝贡线按直属领主君权等级整体偏移:
+#     一级君权为基准(独立<-30,朝贡-30~0),每高一级放宽10点(二级-40/-10,三级-50/-20,四级-60/-30),零级收紧为-20/+10
+#     忠顺角色(is_obedient,对领主忠顺)无论忠诚度多少都保持封臣身份,不参与判定
+#判定范围含皇帝封臣链上任意层级(如王国封臣手下的公爵),仅在进入群雄割据时判定这一次
+kuzhu_chaos_shattering_effect = {
+	hidden_effect = {
+		title:h_china = {
+			holder = { save_temporary_scope_as = old_emperor_temp }
+			# Reset imperial examination activity
+			set_variable = {
+				name = years_since_imperial_examination
+				value = 0
+			}
+		}
+
+		############ 第一层:天子保住霸权与领地 ############
+		scope:old_emperor_temp = {
+			#君权降2级(天朝官僚制0-3级;非天朝政体时回落到王权法0-4级),已经很低则降到最低
+			if = {
+				limit = { has_realm_law = celestial_bureaucracy_3 }
+				add_realm_law_skip_effects = celestial_bureaucracy_1
+			}
+			else_if = {
+				limit = { has_realm_law = celestial_bureaucracy_2 }
+				add_realm_law_skip_effects = celestial_bureaucracy_0
+			}
+			else_if = {
+				limit = { has_realm_law = celestial_bureaucracy_1 }
+				add_realm_law_skip_effects = celestial_bureaucracy_0
+			}
+			else_if = {
+				limit = { has_realm_law = crown_authority_4 }
+				add_realm_law_skip_effects = crown_authority_2
+			}
+			else_if = {
+				limit = { has_realm_law = crown_authority_3 }
+				add_realm_law_skip_effects = crown_authority_1
+			}
+			else_if = {
+				limit = { has_realm_law = crown_authority_2 }
+				add_realm_law_skip_effects = crown_authority_0
+			}
+			else_if = {
+				limit = { has_realm_law = crown_authority_1 }
+				add_realm_law_skip_effects = crown_authority_0
+			}
+			#正统性直降2级
+			add_legitimacy = hd_legitimacy_drop_two_levels_loss_value
+		}
+
+		############ 第二层:非天朝制直属封臣全部立刻独立 ############
+		#只检查直属封臣;独立后其麾下封臣随整个realm离开,不产生越级脱离
+		scope:old_emperor_temp = {
+			create_title_and_vassal_change = {
+				type = independency
+				save_scope_as = chaos_change
+				add_claim_on_loss = yes
+			}
+			every_vassal = {
+				limit = {
+					is_landed = yes
+					NOT = { government_has_flag = government_is_celestial }
+				}
+				becomes_independent = {
+					change = scope:chaos_change
+				}
+			}
+			resolve_title_and_vassal_change = scope:chaos_change
+		}
+
+		############ 第三层:辖区忠诚度一次性判定(君权等级偏移+忠顺豁免) ############
+		#遍历剩余封臣链上所有拥有辖区忠诚度的封臣(含王国封臣下的公爵等中间层级)
+		scope:old_emperor_temp = {
+			create_title_and_vassal_change = {
+				type = independency
+				save_scope_as = hd_chaos_obedience_change
+				add_claim_on_loss = yes
+			}
+			every_vassal_or_below = {
+				limit = {
+					is_landed = yes
+					highest_held_title_tier >= tier_county
+					exists = obedience_target
+					#忠顺角色豁免:对领主is_obedient者无论辖区忠诚度多少都保持封臣状态,不参与判定
+					is_obedient = no
+				}
+				set_variable = {
+					name = hd_chaos_obedience_temp
+					value = obedience_value
+				}
+				#君权等级整体偏移:以直属领主一级君权为基准,判定值每高一级+10(等价于独立线/朝贡线整体下移10点)
+				#天朝官僚制0-3级;非天朝政体按王权法0-4级;一级为基准不偏移
+				if = {
+					limit = { liege = { has_realm_law = celestial_bureaucracy_3 } }
+					change_variable = { name = hd_chaos_obedience_temp add = 20 }
+				}
+				else_if = {
+					limit = { liege = { has_realm_law = celestial_bureaucracy_2 } }
+					change_variable = { name = hd_chaos_obedience_temp add = 10 }
+				}
+				else_if = {
+					limit = { liege = { has_realm_law = celestial_bureaucracy_0 } }
+					change_variable = { name = hd_chaos_obedience_temp add = -10 }
+				}
+				else_if = {
+					limit = { liege = { has_realm_law = crown_authority_4 } }
+					change_variable = { name = hd_chaos_obedience_temp add = 30 }
+				}
+				else_if = {
+					limit = { liege = { has_realm_law = crown_authority_3 } }
+					change_variable = { name = hd_chaos_obedience_temp add = 20 }
+				}
+				else_if = {
+					limit = { liege = { has_realm_law = crown_authority_2 } }
+					change_variable = { name = hd_chaos_obedience_temp add = 10 }
+				}
+				else_if = {
+					limit = { liege = { has_realm_law = crown_authority_0 } }
+					change_variable = { name = hd_chaos_obedience_temp add = -10 }
+				}
+				#偏移后判定值低于-30:直接成为独立统治者
+				if = {
+					limit = {
+						var:hd_chaos_obedience_temp < -30
+					}
+					becomes_independent = {
+						change = scope:hd_chaos_obedience_change
+					}
+				}
+				#偏移后判定值在-30到0之间:脱离封臣关系,转当天子朝贡(天朝契约会自动选出)
+				else_if = {
+					limit = {
+						var:hd_chaos_obedience_temp <= 0
+					}
+					break_subject_contract_and_establish_tributary_effect = {
+						SUZERAIN = scope:old_emperor_temp
+						TRIBUTARY = this
+					}
+				}
+				#偏移后判定值大于0:仍然为封臣,不做任何处理
+				remove_variable = hd_chaos_obedience_temp
+			}
+			resolve_title_and_vassal_change = scope:hd_chaos_obedience_change
+		}
+
+		#独立/转朝贡的封臣立即重算派系归属(留任者凭movement_member变量保持原派系)
+		situation:dynastic_cycle = {
+			every_situation_participant = {
+				recalculate_participant_group = situation:dynastic_cycle
+			}
+		}
+
+		############ 给有实力的诸侯发夺天命story,驱动AI争夺天命 ############
+		situation:dynastic_cycle = {
+			every_situation_participant = {
+				if = {
+					limit = {
+						NOR = {
+							has_trait = conqueror
+							any_owned_story = {
+								story_type = story_conqueror
+							}
+							any_owned_story = {
+								story_type = story_greatest_of_khans
+							}
+							any_owned_story = {
+								story_type = story_mongol_invasion
+							}
+							any_owned_story = {
+								story_type = story_take_mandate_of_heaven
+							}
+						}
+						is_landed = yes
+						highest_held_title_tier >= tier_duchy
+						is_tributary = no
+						is_adult = yes
+						is_incapable = no
+						this != scope:old_emperor_temp
+						trigger_if = {
+							limit = { is_ai = yes }
+							ai_has_cautious_personality = no
+							ai_boldness >= 0
+							ai_greed >= 0
+						}
+					}
+					create_story = story_take_mandate_of_heaven
+				}
+			}
+		}
+	}
+}

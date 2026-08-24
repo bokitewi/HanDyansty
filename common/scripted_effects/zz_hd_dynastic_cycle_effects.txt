@@ -1,0 +1,213 @@
+﻿# HD:天命转移核心效果(root=天命宣称者)
+# 只做最小限度的政权交接:脱离旧主从关系→h_china转移给宣称者→旧天子退位并强制臣服新朝(保留领地,成为新天子封臣)→
+# 必要时转天朝政体→夺取法理首都并迁都。
+# 不吞并剩余诸侯、不销毁头衔、不重建封臣、不动地方政治边界、不改situation阶段。
+# 被"夺取天命决议"(hd_claim_mandate_from_chaos_effect)与武力路线(claim_the_mandate_cb)共用,
+# 替代原版 tgp_claim_mandate_of_heaven_effect 的全面重组
+hd_transfer_mandate_to_claimant_effect = {
+	title:h_china.holder ?= { save_scope_as = hd_old_son_of_heaven }
+	#宣称者若仍是他人封臣(如名义上的天朝封臣),先脱离封臣关系
+	if = {
+		limit = {
+			exists = liege
+		}
+		create_title_and_vassal_change = {
+			type = independency
+			save_scope_as = hd_mandate_independence_change
+			add_claim_on_loss = no
+		}
+		becomes_independent = {
+			change = scope:hd_mandate_independence_change
+		}
+		resolve_title_and_vassal_change = scope:hd_mandate_independence_change
+	}
+	#解除与旧天子之间可能存在的朝贡关系(朝贡者出身的宣称者)
+	if = {
+		limit = {
+			exists = scope:hd_old_son_of_heaven
+			is_tributary_of = scope:hd_old_son_of_heaven
+		}
+		hidden_effect = { end_tributary = yes }
+	}
+	#天命霸权转移给宣称者,旧天子失去霸权(保留自身其余头衔与领地)
+	create_title_and_vassal_change = {
+		type = created
+		save_scope_as = mandate_change
+		add_claim_on_loss = no
+	}
+	title:h_china = {
+		change_title_holder = {
+			holder = root
+			change = scope:mandate_change
+		}
+	}
+	resolve_title_and_vassal_change = scope:mandate_change
+	#旧天子退位:保留自身领地,但禁止独立——强制臣服于新朝,整体转为新天子封臣(山阳公受封于新朝)
+	#无领地但仍有世族头衔时,世族一并转入新天子麾下
+	scope:hd_old_son_of_heaven ?= {
+		add_trait = former_emperor
+		if = {
+			limit = {
+				OR = {
+					is_landed = yes
+					any_held_title = { is_noble_family_title = yes }
+				}
+			}
+			create_title_and_vassal_change = {
+				type = swear_fealty
+				save_scope_as = hd_old_emperor_submission_change
+				add_claim_on_loss = no
+			}
+			change_liege = {
+				liege = root
+				change = scope:hd_old_emperor_submission_change
+			}
+			resolve_title_and_vassal_change = scope:hd_old_emperor_submission_change
+		}
+	}
+	#持有中国天朝霸权而仍是普通政体会与大量原版中国机制冲突,保留原版政体转换
+	if = {
+		limit = {
+			NOT = { has_government = celestial_government }
+		}
+		tgp_domicile_conversion_when_changing_government_type = {
+			NEW_DOMICILE_TYPE = east_asian_estate
+			NEW_GOVERNMENT_TYPE = celestial_government
+		}
+		change_government = celestial_government
+	}
+	#从游牧住所退回资金(原版逻辑)
+	nomad_domicile_refund_effect = yes
+	#法理首都若在宣称者势力范围内则夺取并迁都(原版逻辑)
+	if = {
+		limit = {
+			title:h_china.title_capital_county.holder ?= {
+				OR = {
+					any_liege_or_above = { this = root }
+					this = root
+				}
+			}
+		}
+		if = {
+			limit = {
+				title:h_china.title_capital_county.holder = {
+					this != root
+				}
+			}
+			create_title_and_vassal_change = {
+				type = revoked
+				save_scope_as = mandate_capital_change
+				add_claim_on_loss = no
+			}
+			title:h_china.title_capital_county = {
+				change_title_holder = {
+					holder = root
+					change = scope:mandate_capital_change
+				}
+			}
+			resolve_title_and_vassal_change = scope:mandate_capital_change
+		}
+		set_realm_capital = title:h_china.title_capital_county
+	}
+}
+
+# HD:群雄割据期间"夺取天命"决议专用窄版效果(root=决议者)
+# 情况A(决议者已持有h_china,如汉帝重新控制80%):不动霸权持有、不重建封臣、不吞并剩余独立诸侯、
+#   不销毁任何头衔、不改地方政治边界,只发新天命奖励、重算政治派系、结束群雄割据
+# 情况B(决议者未持有h_china,如曹操/刘备/袁绍最终控制80%):调用hd_transfer_mandate_to_claimant_effect
+#   完成天命易主;剩余未臣服诸侯保持独立,绝不自动吞并
+# 共通:结束所有夺天命story,按 hegemon_favored_stability_phase_value 进入青睐时代
+#   (>=0 尚文发展 Stability Advancement / <0 扩张 Stability Expansion)
+hd_claim_mandate_from_chaos_effect = {
+	save_scope_as = new_son_of_heaven
+	set_variable = {
+		name = new_son_of_heaven
+		value = scope:new_son_of_heaven
+		days = 2
+	}
+	set_variable = {
+		name = claimed_mandate_var
+		value = yes
+		days = 30
+	}
+
+	##### 情况B:天命易主 #####
+	if = {
+		limit = {
+			NOT = { has_title = title:h_china }
+		}
+		hd_transfer_mandate_to_claimant_effect = yes
+	}
+
+	##### 共通:新天命奖励(原版保留部分) #####
+	hidden_effect = {
+		add_treasury = {
+			value = gold
+			min = 1000
+		}
+		change_influence = {
+			value = monumental_influence_gain
+			multiply = 4
+		}
+		add_legitimacy = mandate_legitimacy_max
+	}
+	dynasty = {
+		add_dynasty_prestige = excessive_dynasty_prestige_value
+	}
+	add_character_modifier = claim_mandate_decision_modifier
+	#提高自己中国境内郡县的控制度
+	hidden_effect = {
+		every_realm_county = {
+			custom = custom_every_realm_county
+			limit = {
+				target_is_de_jure_liege_or_above = title:h_china
+			}
+			change_county_control = 25
+		}
+	}
+	show_as_tooltip = {
+		title:h_china = { change_county_control = 25 }
+	}
+
+	##### 共通:结束所有夺天命story,按新格局重算政治派系 #####
+	hidden_effect = {
+		situation:dynastic_cycle = {
+			every_situation_participant = {
+				every_owned_story = {
+					limit = {
+						story_type = story_take_mandate_of_heaven
+					}
+					end_story = yes
+				}
+			}
+			every_situation_participant = {
+				recalculate_participant_group = situation:dynastic_cycle
+			}
+		}
+	}
+
+	##### 共通:结束群雄割据,按青睐判定进入尚文发展/扩张时代 #####
+	scope:new_son_of_heaven = {
+		if = {
+			limit = {
+				hegemon_favored_stability_phase_value >= 0
+			}
+			situation:dynastic_cycle = {
+				situation_top_sub_region = {
+					change_phase = {
+						phase = situation_dynastic_cycle_phase_stability_advancement
+					}
+				}
+			}
+		}
+		else = {
+			situation:dynastic_cycle = {
+				situation_top_sub_region = {
+					change_phase = {
+						phase = situation_dynastic_cycle_phase_stability_expansion
+					}
+				}
+			}
+		}
+	}
+}
