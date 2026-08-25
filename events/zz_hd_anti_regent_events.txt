@@ -162,6 +162,13 @@ hd_anti_regent.0001 = {
 			scope:new_confederation = {
 				set_variable = { name = hd_anti_regent_target value = scope:hd_anti_regent_target }
 			}
+			set_global_variable = { name = hd_anti_regent_league_leader value = this }
+			character:cao_cao ?= {
+				if = {
+					limit = { title:d_chenliu.holder ?= { this = character:cao_cao } }
+					hd_anti_regent_add_cao_effect = yes
+				}
+			}
 		}
 	}
 
@@ -184,21 +191,30 @@ hd_anti_regent.0002 = {
 		is_alive = yes
 		has_character_flag = hd_anti_regent_league_leader
 		exists = confederation
+		NOT = { has_character_flag = hd_anti_regent_invitations_dispatched }
 	}
 	on_trigger_fail = { hd_anti_regent_failure_effect = yes }
 	immediate = {
 		save_scope_as = hd_inviting_leader
 		var:hd_anti_regent_target = { save_scope_as = hd_anti_regent_target_scope }
+		set_variable = { name = hd_anti_regent_pending_invites value = 0 }
+		add_character_flag = hd_anti_regent_invitations_dispatched
 		title:e_han.holder = {
 			every_vassal_or_below = {
 				limit = {
 					is_alive = yes
 					is_landed = yes
 					highest_held_title_tier >= tier_duchy
+					capital_province = { geographical_region = uuii_empire_han_region }
 					NOT = { this = scope:hd_inviting_leader }
 					NOT = { this = scope:hd_anti_regent_target_scope }
+					NOT = { this = character:cao_cao }
+					NOT = { has_title = title:h_china }
+					NOT = { has_title = title:e_han }
+					NOT = { is_vassal_or_below_of = scope:hd_anti_regent_target_scope }
 					NOT = { is_confederation_member = yes }
 				}
+				scope:hd_inviting_leader = { change_variable = { name = hd_anti_regent_pending_invites add = 1 } }
 				set_variable = { name = hd_anti_regent_inviter value = scope:hd_inviting_leader }
 				trigger_event = { id = hd_anti_regent.0003 days = { 1 3 } }
 			}
@@ -208,14 +224,20 @@ hd_anti_regent.0002 = {
 				is_alive = yes
 				is_landed = yes
 				highest_held_title_tier >= tier_duchy
+				capital_province = { geographical_region = uuii_empire_han_region }
 				NOT = { this = scope:hd_inviting_leader }
 				NOT = { this = scope:hd_anti_regent_target_scope }
+				NOT = { this = character:cao_cao }
+				NOT = { has_title = title:h_china }
+				NOT = { has_title = title:e_han }
+				NOT = { is_vassal_or_below_of = scope:hd_anti_regent_target_scope }
 				NOT = { is_confederation_member = yes }
 			}
+			scope:hd_inviting_leader = { change_variable = { name = hd_anti_regent_pending_invites add = 1 } }
 			set_variable = { name = hd_anti_regent_inviter value = scope:hd_inviting_leader }
 			trigger_event = { id = hd_anti_regent.0003 days = { 1 3 } }
 		}
-		trigger_event = { id = hd_anti_regent.0004 years = 1 }
+		hd_anti_regent_try_finish_invites_effect = yes
 	}
 }
 
@@ -231,7 +253,7 @@ hd_anti_regent.0003 = {
 		has_variable = hd_anti_regent_inviter
 		var:hd_anti_regent_inviter = { is_alive = yes has_character_flag = hd_anti_regent_league_leader }
 	}
-	on_trigger_fail = { remove_variable = hd_anti_regent_inviter }
+	on_trigger_fail = { hd_anti_regent_invitation_resolved_effect = yes }
 
 	immediate = {
 		var:hd_anti_regent_inviter = { save_scope_as = hd_anti_regent_inviter_scope }
@@ -243,7 +265,7 @@ hd_anti_regent.0003 = {
 			confederation = { add_confederation_member = root }
 		}
 		add_character_flag = hd_anti_regent_league_member
-		remove_variable = hd_anti_regent_inviter
+		hd_anti_regent_invitation_resolved_effect = yes
 		ai_chance = {
 			base = 40
 			modifier = { add = 45 opinion = { target = scope:hd_anti_regent_inviter_scope value >= 50 } }
@@ -256,7 +278,7 @@ hd_anti_regent.0003 = {
 
 	option = {
 		name = hd_anti_regent.0003.b
-		remove_variable = hd_anti_regent_inviter
+		hd_anti_regent_invitation_resolved_effect = yes
 		ai_chance = { base = 60 }
 	}
 }
@@ -270,9 +292,11 @@ hd_anti_regent.0004 = {
 		is_alive = yes
 		has_character_flag = hd_anti_regent_league_leader
 		exists = confederation
+		has_character_flag = hd_anti_regent_war_ready
 	}
 	on_trigger_fail = { hd_anti_regent_failure_effect = yes }
 	immediate = {
+		remove_character_flag = hd_anti_regent_war_ready
 		if = {
 			limit = { var:hd_anti_regent_target = { is_alive = yes } }
 			start_war = {
@@ -312,8 +336,7 @@ hd_anti_regent.0100 = {
 	}
 	option = {
 		name = hd_anti_regent.0100.b
-		hd_anti_regent_cleanup_effect = yes
-		hd_enter_dynastic_chaos_effect = yes
+		hd_anti_regent_failure_effect = yes
 		ai_chance = { base = 65 }
 	}
 }
@@ -325,8 +348,7 @@ hd_anti_regent.0101 = {
 	# available lets the cleanup/disband effect close the chain in that case.
 	trigger = { always = yes }
 	immediate = {
-		hd_anti_regent_cleanup_effect = yes
-		hd_enter_dynastic_chaos_effect = yes
+		hd_anti_regent_failure_effect = yes
 	}
 }
 
@@ -459,8 +481,8 @@ hd_anti_regent.0200 = {
 				remove_character_flag = hd_anti_regent_spoils_round
 			}
 		}
+		hd_restore_han_after_anti_regent_victory_effect = yes
 		hd_anti_regent_cleanup_effect = yes
-		hd_enter_dynastic_chaos_effect = yes
 	}
 
 	option = { name = hd_anti_regent.0200.a ai_chance = { base = 100 } }
@@ -471,7 +493,6 @@ hd_anti_regent.0201 = {
 	hidden = yes
 	trigger = { always = yes }
 	immediate = {
-		hd_anti_regent_cleanup_effect = yes
-		hd_enter_dynastic_chaos_effect = yes
+		hd_anti_regent_failure_effect = yes
 	}
 }
