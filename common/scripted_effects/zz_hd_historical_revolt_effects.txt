@@ -161,43 +161,106 @@ hd_historical_revolt_pick_defender_effect = {
 	}
 }
 
-### CB victory: carve out the designated duchies, leave the old realm, become a warlord.
+### CB victory: take the designated titles and every county occupied by a war attacker.
 hd_historical_revolt_victory_effect = {
+	$WAR$ = {
+		save_scope_as = hd_hist_revolt_settlement_war
+	}
+
+	# Freeze the target counties before any title changes. Occupied target
+	# counties are granted by the shared effect; the holder check below then
+	# skips them instead of reassigning them to the primary attacker.
+	every_in_list = {
+		list = target_titles
+		every_in_de_jure_hierarchy = {
+			limit = {
+				tier = tier_county
+				is_landless_type_title = no
+				holder ?= { target_is_liege_or_above = scope:defender }
+				NOT = { is_in_list = hd_hist_revolt_target_counties }
+			}
+			add_to_temporary_list = hd_hist_revolt_target_counties
+		}
+	}
+	if = {
+		limit = {
+			scope:hd_hist_revolt_settlement_war ?= {
+				has_variable = hd_revolt_wangguo_joined
+			}
+		}
+		title:d_fufeng = {
+			every_in_de_jure_hierarchy = {
+				limit = {
+					tier = tier_county
+					is_landless_type_title = no
+					holder ?= { target_is_liege_or_above = scope:defender }
+					NOT = { is_in_list = hd_hist_revolt_target_counties }
+				}
+				add_to_temporary_list = hd_hist_revolt_target_counties
+			}
+		}
+	}
+
+	# The shared effect freezes actual county controllers and grants every
+	# occupied county directly, including counties outside the formal targets.
+	hd_uprising_settle_occupied_counties_on_victory_effect = {
+		WAR = $WAR$
+	}
+
 	create_title_and_vassal_change = {
 		type = conquest
 		save_scope_as = hd_hist_revolt_conquest_change
 		add_claim_on_loss = no
 	}
 
-	# Transfer only the formal target titles stored by the war itself.
+	# Any target county not already granted to an actual occupier goes directly
+	# to the primary attacker, including all of its baronies.
 	every_in_list = {
-		list = target_titles
-		conquest_cb_title_transfer = {
-			RELIGIOUS_WAR = no
+		list = hd_hist_revolt_target_counties
+		limit = {
+			holder ?= { target_is_liege_or_above = scope:defender }
 		}
-	}
-	if = {
-		limit = { scope:war ?= { has_variable = hd_revolt_wangguo_joined } }
-		title:d_fufeng = {
-			conquest_cb_title_transfer = { RELIGIOUS_WAR = no }
+		change_title_holder = {
+			holder = scope:attacker
+			change = scope:hd_hist_revolt_conquest_change
+			take_baronies = yes
 		}
+		remove_from_list = hd_hist_revolt_target_counties
 	}
 
+	# Transfer the formal target titles directly. The vanilla conquest helper
+	# preserves eligible holders as vassals, so it is intentionally not used.
 	every_in_list = {
-		list = vassals_taken
-		change_liege = {
-			liege = scope:attacker
-			change = scope:hd_hist_revolt_conquest_change
+		list = target_titles
+		limit = {
+			holder ?= { target_is_liege_or_above = scope:defender }
 		}
-	}
-	every_in_list = {
-		list = titles_taken
 		change_title_holder = {
 			holder = scope:attacker
 			change = scope:hd_hist_revolt_conquest_change
 			take_baronies = yes
 		}
 	}
+	if = {
+		limit = {
+			scope:hd_hist_revolt_settlement_war ?= {
+				has_variable = hd_revolt_wangguo_joined
+			}
+		}
+		title:d_fufeng = {
+			if = {
+				limit = {
+					holder ?= { target_is_liege_or_above = scope:defender }
+				}
+				change_title_holder = {
+					holder = scope:attacker
+					change = scope:hd_hist_revolt_conquest_change
+					take_baronies = yes
+				}
+			}
+		}
+	}
+
 	resolve_title_and_vassal_change = scope:hd_hist_revolt_conquest_change
 
 	# Leave the defeated realm and set a five-year truce.

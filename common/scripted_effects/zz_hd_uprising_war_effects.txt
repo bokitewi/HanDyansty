@@ -41,24 +41,17 @@ hd_uprising_transfer_occupied_county_effect = {
 }
 
 hd_uprising_settle_occupied_counties_on_victory_effect = {
-	# Freeze every eligible county before changing any title. This prevents
-	# overlapping defender realms from causing duplicate transfers or changing
-	# the collection while it is being iterated.
+	# Freeze every eligible county before changing any title. The second pass
+	# groups the frozen titles by their original controller, so changing one
+	# county cannot make later counties fail a live county_controller check.
 	$WAR$ = {
 		save_scope_as = hd_uprising_settlement_war
 		every_war_defender = {
-			save_temporary_scope_as = hd_uprising_current_defender
 			every_sub_realm_county = {
 				limit = {
 					tier = tier_county
 					is_landless_type_title = no
 					NOT = { is_in_list = hd_uprising_victory_counties }
-					holder ?= {
-						OR = {
-							this = scope:hd_uprising_current_defender
-							is_vassal_or_below_of = scope:hd_uprising_current_defender
-						}
-					}
 					county_controller ?= {
 						is_alive = yes
 						is_attacker_in_war = scope:hd_uprising_settlement_war
@@ -83,23 +76,26 @@ hd_uprising_settle_occupied_counties_on_victory_effect = {
 			add_claim_on_loss = no
 		}
 
-		every_in_list = {
-			list = hd_uprising_victory_counties
-			limit = {
-				tier = tier_county
-				is_landless_type_title = no
-				county_controller ?= {
-					is_alive = yes
-					is_attacker_in_war = scope:hd_uprising_settlement_war
+		scope:hd_uprising_settlement_war = {
+			every_war_attacker = {
+				save_temporary_scope_as = hd_uprising_current_attacker
+				every_in_list = {
+					list = hd_uprising_victory_counties
+					limit = {
+						county_controller = scope:hd_uprising_current_attacker
+					}
+					add_to_temporary_list = hd_uprising_current_attacker_counties
 				}
-			}
-			county_controller ?= {
-				save_temporary_scope_as = hd_uprising_victory_recipient
-			}
-			change_title_holder = {
-				holder = scope:hd_uprising_victory_recipient
-				change = scope:hd_uprising_victory_change
-				take_baronies = yes
+				every_in_list = {
+					list = hd_uprising_current_attacker_counties
+					change_title_holder = {
+						holder = scope:hd_uprising_current_attacker
+						change = scope:hd_uprising_victory_change
+						take_baronies = yes
+					}
+					remove_from_list = hd_uprising_current_attacker_counties
+					remove_from_list = hd_uprising_victory_counties
+				}
 			}
 		}
 

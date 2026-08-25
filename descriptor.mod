@@ -18,7 +18,6 @@ replace_path="history/province_mappings"
 replace_path="history/titles"
 replace_path="history/wars"
 replace_path="gfx/map/map_object_data"
-
 replace_path="map_data"
 picture="thumbnail.png"
 supported_version="1.19.0.6"

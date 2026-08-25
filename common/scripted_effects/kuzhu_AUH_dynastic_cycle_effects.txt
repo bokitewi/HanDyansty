@@ -81,9 +81,10 @@ kuzhu_entering_instability_effect = {
 #乱世效果(2026-08重写:天子保位+霸权不灭版本)
 #第一层:绝对禁止销毁霸权——不执行任何destroy_title,天子保留h_china与自己的领地,君权降2级、正统性降2级
 #第二层:非天朝制直属封臣(仅every_vassal,不碰every_vassal_or_below)全部立刻独立,其封臣随整个realm一起离开
-#第三层:所有拥有辖区忠诚度(obedience)的封臣一次性判定——独立线/朝贡线按直属领主君权等级整体偏移:
-#     一级君权为基准(独立<-30,朝贡-30~0),每高一级放宽10点(二级-40/-10,三级-50/-20,四级-60/-30),零级收紧为-20/+10
-#     忠顺角色(is_obedient,对领主忠顺)无论忠诚度多少都保持封臣身份,不参与判定
+#第三层:剩余天朝制封臣按辖区叛乱度一次性判定
+#     帝国级: <=20保持封臣, 21-39转为朝贡者, >=40独立
+#     每降低一级头衔,两个阈值都上移5点;只处理伯爵及以上,霸权级不处理
+#     忠顺角色只通过辖区叛乱度的-60因素影响,不再获得硬性豁免
 #判定范围含皇帝封臣链上任意层级(如王国封臣手下的公爵),仅在进入群雄割据时判定这一次
 kuzhu_chaos_shattering_effect = {
 	hidden_effect = {
@@ -151,79 +152,101 @@ kuzhu_chaos_shattering_effect = {
 			resolve_title_and_vassal_change = scope:chaos_change
 		}
 
-		############ 第三层:辖区忠诚度一次性判定(君权等级偏移+忠顺豁免) ############
-		#遍历剩余封臣链上所有拥有辖区忠诚度的封臣(含王国封臣下的公爵等中间层级)
+		############ 第三层:辖区叛乱度一次性判定(按最高持有头衔分层) ############
+		#遍历剩余封臣链上的伯爵至帝国级封臣;霸权级不参与本层判定
 		scope:old_emperor_temp = {
 			create_title_and_vassal_change = {
 				type = independency
-				save_scope_as = hd_chaos_obedience_change
+				save_scope_as = hd_chaos_rebellion_change
 				add_claim_on_loss = yes
 			}
 			every_vassal_or_below = {
 				limit = {
 					is_landed = yes
 					highest_held_title_tier >= tier_county
-					exists = obedience_target
-					#忠顺角色豁免:对领主is_obedient者无论辖区忠诚度多少都保持封臣状态,不参与判定
-					is_obedient = no
+					highest_held_title_tier <= tier_empire
 				}
 				set_variable = {
-					name = hd_chaos_obedience_temp
-					value = obedience_value
+					name = hd_chaos_rebellion_temp
+					value = kuzhu_governor_political_power
 				}
-				#君权等级整体偏移:以直属领主一级君权为基准,判定值每高一级+10(等价于独立线/朝贡线整体下移10点)
-				#天朝官僚制0-3级;非天朝政体按王权法0-4级;一级为基准不偏移
-				if = {
-					limit = { liege = { has_realm_law = celestial_bureaucracy_3 } }
-					change_variable = { name = hd_chaos_obedience_temp add = 20 }
-				}
-				else_if = {
-					limit = { liege = { has_realm_law = celestial_bureaucracy_2 } }
-					change_variable = { name = hd_chaos_obedience_temp add = 10 }
-				}
-				else_if = {
-					limit = { liege = { has_realm_law = celestial_bureaucracy_0 } }
-					change_variable = { name = hd_chaos_obedience_temp add = -10 }
-				}
-				else_if = {
-					limit = { liege = { has_realm_law = crown_authority_4 } }
-					change_variable = { name = hd_chaos_obedience_temp add = 30 }
-				}
-				else_if = {
-					limit = { liege = { has_realm_law = crown_authority_3 } }
-					change_variable = { name = hd_chaos_obedience_temp add = 20 }
-				}
-				else_if = {
-					limit = { liege = { has_realm_law = crown_authority_2 } }
-					change_variable = { name = hd_chaos_obedience_temp add = 10 }
-				}
-				else_if = {
-					limit = { liege = { has_realm_law = crown_authority_0 } }
-					change_variable = { name = hd_chaos_obedience_temp add = -10 }
-				}
-				#偏移后判定值低于-30:直接成为独立统治者
+				# 帝国级: <=20保持封臣, 21-39朝贡, >=40独立
 				if = {
 					limit = {
-						var:hd_chaos_obedience_temp < -30
+						highest_held_title_tier = tier_empire
+						var:hd_chaos_rebellion_temp >= 40
 					}
 					becomes_independent = {
-						change = scope:hd_chaos_obedience_change
+						change = scope:hd_chaos_rebellion_change
 					}
 				}
-				#偏移后判定值在-30到0之间:脱离封臣关系,转当天子朝贡(天朝契约会自动选出)
 				else_if = {
 					limit = {
-						var:hd_chaos_obedience_temp <= 0
+						highest_held_title_tier = tier_empire
+						var:hd_chaos_rebellion_temp > 20
 					}
 					break_subject_contract_and_establish_tributary_effect = {
 						SUZERAIN = scope:old_emperor_temp
 						TRIBUTARY = this
 					}
 				}
-				#偏移后判定值大于0:仍然为封臣,不做任何处理
-				remove_variable = hd_chaos_obedience_temp
+				# 王国级: <=25保持封臣, 26-44朝贡, >=45独立
+				else_if = {
+					limit = {
+						highest_held_title_tier = tier_kingdom
+						var:hd_chaos_rebellion_temp >= 45
+					}
+					becomes_independent = { change = scope:hd_chaos_rebellion_change }
+				}
+				else_if = {
+					limit = {
+						highest_held_title_tier = tier_kingdom
+						var:hd_chaos_rebellion_temp > 25
+					}
+					break_subject_contract_and_establish_tributary_effect = {
+						SUZERAIN = scope:old_emperor_temp
+						TRIBUTARY = this
+					}
+				}
+				# 公爵级: <=30保持封臣, 31-49朝贡, >=50独立
+				else_if = {
+					limit = {
+						highest_held_title_tier = tier_duchy
+						var:hd_chaos_rebellion_temp >= 50
+					}
+					becomes_independent = { change = scope:hd_chaos_rebellion_change }
+				}
+				else_if = {
+					limit = {
+						highest_held_title_tier = tier_duchy
+						var:hd_chaos_rebellion_temp > 30
+					}
+					break_subject_contract_and_establish_tributary_effect = {
+						SUZERAIN = scope:old_emperor_temp
+						TRIBUTARY = this
+					}
+				}
+				# 伯爵级: <=35保持封臣, 36-54朝贡, >=55独立
+				else_if = {
+					limit = {
+						highest_held_title_tier = tier_county
+						var:hd_chaos_rebellion_temp >= 55
+					}
+					becomes_independent = { change = scope:hd_chaos_rebellion_change }
+				}
+				else_if = {
+					limit = {
+						highest_held_title_tier = tier_county
+						var:hd_chaos_rebellion_temp > 35
+					}
+					break_subject_contract_and_establish_tributary_effect = {
+						SUZERAIN = scope:old_emperor_temp
+						TRIBUTARY = this
+					}
+				}
+				remove_variable = hd_chaos_rebellion_temp
 			}
-			resolve_title_and_vassal_change = scope:hd_chaos_obedience_change
+			resolve_title_and_vassal_change = scope:hd_chaos_rebellion_change
 		}
 
 		#独立/转朝贡的封臣立即重算派系归属(留任者凭movement_member变量保持原派系)
