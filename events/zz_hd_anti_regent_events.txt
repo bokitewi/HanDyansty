@@ -7,7 +7,9 @@ hd_anti_regent.0005 = {
 	trigger = {
 		this = character:yuan_shao
 		is_alive = yes
-		has_character_flag = hd_yuan_bohai_migration_started
+		has_character_flag = hd_yuan_bohai_migration_pending
+		NOT = { has_character_flag = hd_yuan_bohai_migration_completed }
+		var:hd_yuan_early_story_phase = flag:hd_yuan_phase_migration
 		OR = {
 			NOT = { exists = global_var:hd_anti_regent_pending_leader }
 			global_var:hd_anti_regent_pending_leader = root
@@ -18,12 +20,18 @@ hd_anti_regent.0005 = {
 			limit = { is_alive = no }
 			hd_anti_regent_select_fallback_leader_effect = yes
 		}
-		else = { hd_yuan_abort_bohai_migration_effect = yes }
+		else_if = {
+			limit = {
+				has_character_flag = hd_yuan_bohai_migration_pending
+				NOT = { has_character_flag = hd_yuan_bohai_migration_completed }
+				var:hd_yuan_early_story_phase = flag:hd_yuan_phase_migration
+			}
+			trigger_event = { id = hd_anti_regent.0005 months = 1 }
+		}
 	}
 	immediate = {
-		remove_character_flag = hd_yuan_bohai_migration_started
-		remove_character_flag = hd_yuan_bohai_migration_retry_pending
-		remove_character_flag = hd_yuan_bohai_migration_retry_used
+		remove_character_flag = hd_yuan_bohai_migration_pending
+		add_character_flag = hd_yuan_bohai_migration_started
 		if = {
 			limit = { NOT = { exists = global_var:hd_anti_regent_pending_leader } }
 			set_global_variable = {
@@ -43,8 +51,13 @@ hd_anti_regent.0005 = {
 			}
 		}
 		resolve_title_and_vassal_change = scope:hd_yuan_bohai_change
+		hd_force_warlord_effect = yes
+		remove_character_flag = hd_yuan_bohai_migration_started
+		add_character_flag = hd_yuan_bohai_migration_completed
 		add_character_flag = hd_yuan_bohai_arrived
 		add_character_flag = hd_anti_regent_dispatch_ready
+		add_character_flag = hd_anti_regent_creation_pending
+		set_variable = { name = hd_yuan_early_story_phase value = flag:hd_yuan_phase_reorganization }
 		if = {
 			limit = {
 				NOT = { has_character_flag = hd_yuan_bohai_reorganization_pending }
@@ -53,7 +66,12 @@ hd_anti_regent.0005 = {
 			add_character_flag = hd_yuan_bohai_reorganization_pending
 			trigger_event = { id = hd_anti_regent.0009 days = 1 }
 		}
-		trigger_event = { id = hd_anti_regent.0001 months = 3 }
+		if = {
+			limit = { hd_anti_regent_forced_creation_ready_trigger = yes }
+			add_character_flag = hd_anti_regent_creation_delay_scheduled
+			trigger_event = { id = hd_anti_regent.0001 months = 3 }
+		}
+		else = { trigger_event = { id = hd_anti_regent.0001 months = 1 } }
 	}
 }
 
@@ -71,11 +89,16 @@ hd_anti_regent.0007 = {
 	trigger = {
 		this = character:yuan_shao
 		is_alive = yes
-		has_character_flag = hd_yuan_bohai_migration_retry_pending
-		NOT = { has_character_flag = hd_yuan_bohai_migration_started }
-		NOT = { has_character_flag = hd_yuan_bohai_migration_retry_used }
+		has_character_flag = hd_yuan_bohai_migration_pending
+		NOT = { has_character_flag = hd_yuan_bohai_migration_completed }
+		var:hd_yuan_early_story_phase = flag:hd_yuan_phase_migration
 	}
-	on_trigger_fail = { hd_yuan_abort_bohai_migration_effect = yes }
+	on_trigger_fail = {
+		if = {
+			limit = { is_alive = no }
+			hd_anti_regent_select_fallback_leader_effect = yes
+		}
+	}
 	immediate = { hd_yuan_retry_bohai_migration_effect = yes }
 }
 
@@ -98,6 +121,18 @@ hd_anti_regent.0009 = {
 		is_alive = yes
 		has_character_flag = hd_yuan_bohai_reorganization_pending
 		NOT = { has_character_flag = hd_yuan_bohai_reorganization_received }
+		var:hd_yuan_early_story_phase = flag:hd_yuan_phase_reorganization
+	}
+	on_trigger_fail = {
+		if = {
+			limit = {
+				is_alive = yes
+				has_character_flag = hd_yuan_bohai_reorganization_pending
+				NOT = { has_character_flag = hd_yuan_bohai_reorganization_received }
+				var:hd_yuan_early_story_phase = flag:hd_yuan_phase_reorganization
+			}
+			trigger_event = { id = hd_anti_regent.0009 months = 1 }
+		}
 	}
 
 	option = {
@@ -132,6 +167,9 @@ hd_anti_regent.0009 = {
 		}
 		remove_character_flag = hd_yuan_bohai_reorganization_pending
 		add_character_flag = hd_yuan_bohai_reorganization_received
+		remove_character_flag = hd_yuan_early_story_started
+		add_character_flag = hd_yuan_early_story_completed
+		remove_variable = hd_yuan_early_story_phase
 		ai_chance = { base = 100 }
 	}
 }
@@ -144,94 +182,107 @@ hd_anti_regent.0001 = {
 	left_portrait = { character = root animation = personality_bold }
 
 	trigger = {
-		is_alive = yes
-		has_character_flag = hd_anti_regent_dispatch_ready
-		exists = global_var:hd_anti_regent_pending_leader
-		global_var:hd_anti_regent_pending_leader = root
-		NOT = { has_character_flag = hd_anti_regent_league_leader }
+		this = character:yuan_shao
+		hd_anti_regent_forced_creation_ready_trigger = yes
+		has_character_flag = hd_anti_regent_creation_pending
+		has_character_flag = hd_anti_regent_creation_delay_scheduled
+		NOT = { has_character_flag = hd_anti_regent_creation_started }
 	}
 	on_trigger_fail = {
 		if = {
 			limit = {
+				this = character:yuan_shao
 				is_alive = yes
-				has_character_flag = hd_yuan_bohai_arrived
-				NOT = { exists = global_var:hd_anti_regent_pending_leader }
+				has_character_flag = hd_anti_regent_creation_pending
+				NOT = { has_character_flag = hd_anti_regent_creation_started }
+				NOT = { has_character_flag = hd_anti_regent_creation_delay_scheduled }
+				hd_anti_regent_forced_creation_ready_trigger = yes
 			}
-			add_character_flag = hd_anti_regent_dispatch_ready
-			set_global_variable = {
-				name = hd_anti_regent_pending_leader
-				value = root
+			add_character_flag = hd_anti_regent_creation_delay_scheduled
+			trigger_event = { id = hd_anti_regent.0001 months = 3 }
+		}
+		else_if = {
+			limit = {
+				this = character:yuan_shao
+				is_alive = yes
+				has_character_flag = hd_anti_regent_creation_pending
+				NOT = { has_character_flag = hd_anti_regent_creation_started }
+				has_character_flag = hd_anti_regent_creation_delay_scheduled
+				NOT = { hd_anti_regent_forced_creation_ready_trigger = yes }
 			}
-			trigger_event = { id = hd_anti_regent.0001 days = 1 }
+			remove_character_flag = hd_anti_regent_creation_delay_scheduled
+			trigger_event = { id = hd_anti_regent.0001 months = 1 }
+		}
+		else_if = {
+			limit = {
+				this = character:yuan_shao
+				is_alive = yes
+				has_character_flag = hd_anti_regent_creation_pending
+				NOT = { has_character_flag = hd_anti_regent_creation_started }
+				NOT = { hd_anti_regent_forced_creation_ready_trigger = yes }
+			}
+			trigger_event = { id = hd_anti_regent.0001 months = 1 }
 		}
 		else_if = {
 			limit = {
 				exists = global_var:hd_anti_regent_pending_leader
 				global_var:hd_anti_regent_pending_leader = root
-				OR = {
-					is_alive = no
-					NOT = { has_character_flag = hd_yuan_bohai_arrived }
-				}
+				is_alive = no
 			}
 			hd_anti_regent_select_fallback_leader_effect = yes
-		}
-		else = {
-			remove_character_flag = hd_yuan_bohai_arrived
-			remove_character_flag = hd_anti_regent_dispatch_ready
-			if = {
-				limit = {
-					exists = global_var:hd_anti_regent_pending_leader
-					global_var:hd_anti_regent_pending_leader = root
-				}
-				remove_global_variable = hd_anti_regent_pending_leader
-			}
 		}
 	}
 
 	immediate = {
+		remove_character_flag = hd_anti_regent_creation_pending
+		remove_character_flag = hd_anti_regent_creation_delay_scheduled
+		add_character_flag = hd_anti_regent_creation_started
 		remove_character_flag = hd_yuan_bohai_arrived
 		remove_character_flag = hd_anti_regent_dispatch_ready
 		remove_global_variable = hd_anti_regent_pending_leader
+		set_variable = { name = hd_anti_regent_target value = character:dong_zhuo_2 }
+		character:dong_zhuo_2 = {
+			add_character_flag = hd_current_han_regent
+			set_variable = { name = hd_anti_regent_leader value = root }
+		}
+		add_to_variable_list = { name = hd_anti_regent_members target = root }
+		add_character_flag = hd_anti_regent_league_member
 		add_character_flag = hd_anti_regent_league_leader
+		set_global_variable = { name = hd_anti_regent_league_leader value = this }
 		if = {
-			limit = { title:e_han.holder ?= { diarch ?= { is_alive = yes } } }
-			title:e_han.holder = { diarch = { save_scope_as = hd_anti_regent_target } }
-		}
-		else_if = {
-			limit = { title:h_china.holder ?= { diarch ?= { is_alive = yes } } }
-			title:h_china.holder = { diarch = { save_scope_as = hd_anti_regent_target } }
+			limit = { character:qiao_mao ?= { is_alive = yes } }
+			add_to_variable_list = { name = hd_anti_regent_members target = character:qiao_mao }
+			character:qiao_mao = { add_character_flag = hd_anti_regent_league_member }
 		}
 		if = {
-			limit = { exists = scope:hd_anti_regent_target }
-			set_variable = { name = hd_anti_regent_target value = scope:hd_anti_regent_target }
-			scope:hd_anti_regent_target = {
-				add_character_flag = hd_current_han_regent
-				set_variable = { name = hd_anti_regent_leader value = root }
-			}
-			create_confederation = {
-				name = HD_ANTI_REGENT_LEAGUE_NAME
-				type = confederation_type:hd_anti_regent_league_type
-			}
-			scope:new_confederation = {
-				set_variable = { name = hd_anti_regent_target value = scope:hd_anti_regent_target }
-			}
-			set_global_variable = { name = hd_anti_regent_league_leader value = this }
-			character:cao_cao ?= {
-				if = {
-					limit = { title:d_chenliu.holder ?= { this = character:cao_cao } }
-					hd_anti_regent_add_cao_effect = yes
-				}
-			}
+			limit = { character:cao_cao ?= { is_alive = yes } }
+			add_to_variable_list = { name = hd_anti_regent_members target = character:cao_cao }
+			character:cao_cao = { add_character_flag = hd_anti_regent_league_member }
+		}
+		if = {
+			limit = { character:han_fu ?= { is_alive = yes } }
+			add_to_variable_list = { name = hd_anti_regent_members target = character:han_fu }
+			character:han_fu = { add_character_flag = hd_anti_regent_league_member }
+		}
+		if = {
+			limit = { character:kong_rong ?= { is_alive = yes } }
+			add_to_variable_list = { name = hd_anti_regent_members target = character:kong_rong }
+			character:kong_rong = { add_character_flag = hd_anti_regent_league_member }
 		}
 	}
 
 	option = {
 		name = hd_anti_regent.0001.a
 		if = {
-			limit = { has_character_flag = hd_anti_regent_league_leader exists = confederation }
+			limit = { has_character_flag = hd_anti_regent_league_leader has_variable_list = hd_anti_regent_members }
+			add_character_flag = hd_anti_regent_invitations_pending
 			trigger_event = { id = hd_anti_regent.0002 months = 1 }
 		}
-		else = { hd_anti_regent_cleanup_effect = yes }
+		else_if = {
+			limit = { has_character_flag = hd_anti_regent_creation_pending }
+			trigger_event = { id = hd_anti_regent.0001 months = 1 }
+		}
+		else = { hd_anti_regent_failure_effect = yes }
 		ai_chance = { base = 100 }
 	}
 }
@@ -243,17 +294,46 @@ hd_anti_regent.0002 = {
 	trigger = {
 		is_alive = yes
 		has_character_flag = hd_anti_regent_league_leader
-		exists = confederation
+		has_variable_list = hd_anti_regent_members
+		has_character_flag = hd_anti_regent_creation_started
+		has_variable = hd_anti_regent_target
+		var:hd_anti_regent_target = { is_alive = yes }
+		has_character_flag = hd_anti_regent_invitations_pending
 		NOT = { has_character_flag = hd_anti_regent_invitations_dispatched }
 	}
-	on_trigger_fail = { hd_anti_regent_failure_effect = yes }
+	on_trigger_fail = {
+		if = {
+			limit = {
+				is_alive = yes
+				has_character_flag = hd_anti_regent_creation_started
+				has_variable_list = hd_anti_regent_members
+				has_variable = hd_anti_regent_target
+				var:hd_anti_regent_target = { is_alive = yes }
+				NOT = { has_character_flag = hd_anti_regent_invitations_dispatched }
+			}
+			add_character_flag = hd_anti_regent_invitations_pending
+			trigger_event = { id = hd_anti_regent.0002 months = 1 }
+		}
+		else = { hd_anti_regent_failure_effect = yes }
+	}
 	immediate = {
 		save_scope_as = hd_inviting_leader
 		var:hd_anti_regent_target = { save_scope_as = hd_anti_regent_target_scope }
 		set_variable = { name = hd_anti_regent_pending_invites value = 0 }
+		remove_character_flag = hd_anti_regent_invitations_pending
 		add_character_flag = hd_anti_regent_invitations_dispatched
-		title:e_han.holder = {
-			every_vassal_or_below = {
+		if = {
+			limit = { title:e_han.holder ?= { is_alive = yes } }
+			title:e_han.holder = { save_scope_as = hd_anti_regent_emperor }
+		}
+		else_if = {
+			limit = { title:h_china.holder ?= { is_alive = yes } }
+			title:h_china.holder = { save_scope_as = hd_anti_regent_emperor }
+		}
+		if = {
+			limit = { exists = scope:hd_anti_regent_emperor }
+			scope:hd_anti_regent_emperor = {
+				every_vassal_or_below = {
 				limit = {
 					is_alive = yes
 					is_landed = yes
@@ -265,11 +345,12 @@ hd_anti_regent.0002 = {
 					NOT = { has_title = title:h_china }
 					NOT = { has_title = title:e_han }
 					NOT = { is_vassal_or_below_of = scope:hd_anti_regent_target_scope }
-					NOT = { is_confederation_member = yes }
+					NOT = { has_character_flag = hd_anti_regent_league_member }
 				}
-				scope:hd_inviting_leader = { change_variable = { name = hd_anti_regent_pending_invites add = 1 } }
-				set_variable = { name = hd_anti_regent_inviter value = scope:hd_inviting_leader }
-				trigger_event = { id = hd_anti_regent.0003 days = { 1 3 } }
+					scope:hd_inviting_leader = { change_variable = { name = hd_anti_regent_pending_invites add = 1 } }
+					set_variable = { name = hd_anti_regent_inviter value = scope:hd_inviting_leader }
+					trigger_event = { id = hd_anti_regent.0003 days = { 1 3 } }
+				}
 			}
 		}
 		every_independent_ruler = {
@@ -284,7 +365,7 @@ hd_anti_regent.0002 = {
 				NOT = { has_title = title:h_china }
 				NOT = { has_title = title:e_han }
 				NOT = { is_vassal_or_below_of = scope:hd_anti_regent_target_scope }
-				NOT = { is_confederation_member = yes }
+				NOT = { has_character_flag = hd_anti_regent_league_member }
 			}
 			scope:hd_inviting_leader = { change_variable = { name = hd_anti_regent_pending_invites add = 1 } }
 			set_variable = { name = hd_anti_regent_inviter value = scope:hd_inviting_leader }
@@ -304,7 +385,11 @@ hd_anti_regent.0003 = {
 	trigger = {
 		is_alive = yes
 		has_variable = hd_anti_regent_inviter
-		var:hd_anti_regent_inviter = { is_alive = yes has_character_flag = hd_anti_regent_league_leader }
+		var:hd_anti_regent_inviter = {
+			is_alive = yes
+			has_character_flag = hd_anti_regent_league_leader
+			has_variable_list = hd_anti_regent_members
+		}
 	}
 	on_trigger_fail = { hd_anti_regent_invitation_resolved_effect = yes }
 
@@ -315,7 +400,20 @@ hd_anti_regent.0003 = {
 	option = {
 		name = hd_anti_regent.0003.a
 		var:hd_anti_regent_inviter = {
-			confederation = { add_confederation_member = root }
+			if = {
+				limit = {
+					NOT = {
+						is_target_in_variable_list = {
+							name = hd_anti_regent_members
+							target = root
+						}
+					}
+				}
+				add_to_variable_list = {
+					name = hd_anti_regent_members
+					target = root
+				}
+			}
 		}
 		add_character_flag = hd_anti_regent_league_member
 		hd_anti_regent_invitation_resolved_effect = yes
@@ -344,7 +442,9 @@ hd_anti_regent.0004 = {
 	trigger = {
 		is_alive = yes
 		has_character_flag = hd_anti_regent_league_leader
-		exists = confederation
+		has_variable_list = hd_anti_regent_members
+		exists = global_var:hd_anti_regent_league_leader
+		global_var:hd_anti_regent_league_leader = root
 		has_character_flag = hd_anti_regent_war_ready
 	}
 	on_trigger_fail = { hd_anti_regent_failure_effect = yes }
@@ -358,8 +458,16 @@ hd_anti_regent.0004 = {
 				target_title = title:d_henan
 				target_title = title:d_luoyang
 			}
-			add_character_flag = hd_anti_regent_first_war_started
-			hd_call_league_members_to_all_offensive_wars_effect = yes
+			random_character_war = {
+				limit = { primary_attacker = root primary_defender = var:hd_anti_regent_target using_cb = hd_anti_regent_punitive_cb }
+				save_scope_as = hd_anti_regent_first_war
+			}
+			if = {
+				limit = { exists = scope:hd_anti_regent_first_war }
+				add_character_flag = hd_anti_regent_first_war_started
+				hd_anti_regent_call_members_to_all_offensive_wars_effect = yes
+			}
+			else = { hd_anti_regent_failure_effect = yes }
 		}
 		else = {
 			hd_anti_regent_failure_effect = yes
@@ -377,7 +485,10 @@ hd_anti_regent.0100 = {
 	trigger = {
 		is_alive = yes
 		has_character_flag = hd_anti_regent_league_leader
+		has_variable_list = hd_anti_regent_members
 		has_variable = hd_anti_regent_target
+		exists = global_var:hd_anti_regent_league_leader
+		global_var:hd_anti_regent_league_leader = root
 		var:hd_anti_regent_target = { is_alive = yes }
 	}
 	on_trigger_fail = { hd_anti_regent_failure_effect = yes }
@@ -385,8 +496,16 @@ hd_anti_regent.0100 = {
 	option = {
 		name = hd_anti_regent.0100.a
 		start_war = { cb = hd_enter_the_passes_cb target = var:hd_anti_regent_target }
-		add_character_flag = hd_anti_regent_second_war_started
-		hd_call_league_members_to_all_offensive_wars_effect = yes
+		random_character_war = {
+			limit = { primary_attacker = root primary_defender = var:hd_anti_regent_target using_cb = hd_enter_the_passes_cb }
+			save_scope_as = hd_anti_regent_second_war
+		}
+		if = {
+			limit = { exists = scope:hd_anti_regent_second_war }
+			add_character_flag = hd_anti_regent_second_war_started
+			hd_anti_regent_call_members_to_all_offensive_wars_effect = yes
+		}
+		else = { hd_anti_regent_failure_effect = yes }
 		ai_chance = {
 			base = 0
 			modifier = {
@@ -474,7 +593,10 @@ hd_anti_regent.0200 = {
 	trigger = {
 		is_alive = yes
 		has_character_flag = hd_anti_regent_league_leader
+		has_variable_list = hd_anti_regent_members
 		has_variable = hd_anti_regent_target
+		exists = global_var:hd_anti_regent_league_leader
+		global_var:hd_anti_regent_league_leader = root
 	}
 	on_trigger_fail = { hd_anti_regent_failure_effect = yes }
 
@@ -492,18 +614,16 @@ hd_anti_regent.0200 = {
 				add_to_list = hd_anti_regent_spoils
 			}
 		}
-		confederation = {
-			every_confederation_member = {
-				if = {
-					limit = { NOT = { has_variable = hd_anti_regent_contribution } }
-					set_variable = { name = hd_anti_regent_contribution value = 0 }
-				}
+		every_in_list = {
+			variable = hd_anti_regent_members
+			if = {
+				limit = { NOT = { has_variable = hd_anti_regent_contribution } }
+				set_variable = { name = hd_anti_regent_contribution value = 0 }
 			}
 		}
-		confederation = {
-			every_confederation_member = {
-				remove_character_flag = hd_anti_regent_spoils_round
-			}
+		every_in_list = {
+			variable = hd_anti_regent_members
+			remove_character_flag = hd_anti_regent_spoils_round
 		}
 		ordered_in_list = {
 			list = hd_anti_regent_spoils
@@ -511,47 +631,44 @@ hd_anti_regent.0200 = {
 			save_temporary_scope_as = hd_spoils_title
 			remove_variable = hd_spoils_recipient_found
 			scope:hd_spoils_distributor = {
-				confederation = {
-					ordered_confederation_member = {
+				ordered_in_list = {
+					variable = hd_anti_regent_members
+					order_by = var:hd_anti_regent_contribution
+					max = 1
+					limit = {
+						is_alive = yes
+						var:hd_anti_regent_contribution > 0
+						NOT = { has_character_flag = hd_anti_regent_spoils_round }
+						scope:hd_spoils_title = {
+							NOT = { has_variable = hd_spoils_recipient_found }
+						}
+					}
+					save_scope_as = hd_spoils_recipient
+					scope:hd_spoils_title = { set_variable = { name = hd_spoils_recipient_found value = yes } }
+				}
+			}
+			if = {
+				limit = { NOT = { has_variable = hd_spoils_recipient_found } }
+				scope:hd_spoils_distributor = {
+					every_in_list = {
+						variable = hd_anti_regent_members
+						remove_character_flag = hd_anti_regent_spoils_round
+					}
+				}
+				scope:hd_spoils_distributor = {
+					ordered_in_list = {
+						variable = hd_anti_regent_members
 						order_by = var:hd_anti_regent_contribution
 						max = 1
 						limit = {
 							is_alive = yes
 							var:hd_anti_regent_contribution > 0
-							NOT = { has_character_flag = hd_anti_regent_spoils_round }
 							scope:hd_spoils_title = {
 								NOT = { has_variable = hd_spoils_recipient_found }
 							}
 						}
 						save_scope_as = hd_spoils_recipient
 						scope:hd_spoils_title = { set_variable = { name = hd_spoils_recipient_found value = yes } }
-					}
-				}
-			}
-			if = {
-				limit = { NOT = { has_variable = hd_spoils_recipient_found } }
-				scope:hd_spoils_distributor = {
-					confederation = {
-						every_confederation_member = {
-							remove_character_flag = hd_anti_regent_spoils_round
-						}
-					}
-				}
-				scope:hd_spoils_distributor = {
-					confederation = {
-						ordered_confederation_member = {
-							order_by = var:hd_anti_regent_contribution
-							max = 1
-							limit = {
-								is_alive = yes
-								var:hd_anti_regent_contribution > 0
-								scope:hd_spoils_title = {
-									NOT = { has_variable = hd_spoils_recipient_found }
-								}
-							}
-							save_scope_as = hd_spoils_recipient
-							scope:hd_spoils_title = { set_variable = { name = hd_spoils_recipient_found value = yes } }
-						}
 					}
 				}
 			}
@@ -586,12 +703,12 @@ hd_anti_regent.0200 = {
 			}
 			remove_variable = hd_spoils_recipient_found
 		}
-		confederation = {
-			every_confederation_member = {
-				remove_character_flag = hd_anti_regent_spoils_round
-			}
+		every_in_list = {
+			variable = hd_anti_regent_members
+			remove_character_flag = hd_anti_regent_spoils_round
 		}
 		hd_restore_han_after_anti_regent_victory_effect = yes
+		set_global_variable = { name = hd_anti_regent_chain_resolved value = yes }
 		hd_anti_regent_cleanup_effect = yes
 	}
 

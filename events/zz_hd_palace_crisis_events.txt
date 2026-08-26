@@ -166,7 +166,6 @@ hd_palace_crisis.0004 = {
 			}
 		}
 	}
-
 	option = {
 		name = hd_palace_crisis.0004.a
 		set_global_variable = hd_palace_he_jin_killed
@@ -377,14 +376,26 @@ hd_palace_crisis.0090 = {
 		has_character_flag = hd_liu_hong_189_death_scheduled
 		NOT = { has_character_flag = hd_liu_hong_189_death_completed }
 	}
+	on_trigger_fail = {
+		if = {
+			limit = {
+				this = character:liu_hong_3
+				is_alive = yes
+				NOT = { has_character_flag = hd_liu_hong_189_death_completed }
+			}
+			add_character_flag = hd_liu_hong_189_death_scheduled
+			trigger_event = { id = hd_palace_crisis.0090 months = 1 }
+		}
+	}
 	immediate = {
-		remove_character_flag = hd_liu_hong_189_death_scheduled
-		add_character_flag = hd_liu_hong_189_death_completed
 		remove_character_modifier = hd_liu_hong_timeline_protection
 
 		if = {
 			limit = { character:liu_bian ?= { is_alive = yes } }
-			every_held_title = { add_to_list = hd_liu_hong_held_titles }
+			every_held_title = {
+				limit = { tier >= tier_county }
+				add_to_list = hd_liu_hong_held_titles
+			}
 			every_vassal = { add_to_list = hd_liu_hong_direct_vassals }
 			create_title_and_vassal_change = {
 				type = granted
@@ -408,6 +419,8 @@ hd_palace_crisis.0090 = {
 			}
 			resolve_title_and_vassal_change = scope:hd_liu_hong_succession_change
 		}
+		remove_character_flag = hd_liu_hong_189_death_scheduled
+		add_character_flag = hd_liu_hong_189_death_completed
 		if = { limit = { NOT = { has_trait = ill } } add_trait = ill }
 		death = { death_reason = death_ill }
 	}
@@ -453,9 +466,12 @@ hd_palace_crisis.0015 = {
 				limit = {
 					is_alive = yes
 					has_character_flag = hd_cao_personal_story_established
+					NOT = { has_character_flag = hd_cao_early_story_pending }
 					NOT = { has_character_flag = hd_cao_early_story_started }
+					NOT = { has_character_flag = hd_cao_early_story_completed }
 				}
-				add_character_flag = hd_cao_early_story_started
+				add_character_flag = hd_cao_early_story_pending
+				set_variable = { name = hd_cao_early_story_phase value = flag:hd_cao_phase_opening }
 				trigger_event = { id = hd_cao_chain.0001 days = { 20 50 } }
 			}
 		}
@@ -482,11 +498,14 @@ hd_palace_crisis.0015 = {
 				character:yuan_shao ?= {
 					is_alive = yes
 					has_character_flag = hd_yuan_personal_story_established
+					NOT = { has_character_flag = hd_yuan_early_story_pending }
 					NOT = { has_character_flag = hd_yuan_early_story_started }
+					NOT = { has_character_flag = hd_yuan_early_story_completed }
 				}
 			}
 			character:yuan_shao = {
-				add_character_flag = hd_yuan_early_story_started
+				add_character_flag = hd_yuan_early_story_pending
+				set_variable = { name = hd_yuan_early_story_phase value = flag:hd_yuan_phase_departure }
 				set_variable = { name = hd_palace_deposition_regent value = root }
 				set_global_variable = {
 					name = hd_anti_regent_pending_leader
@@ -668,6 +687,12 @@ hd_palace_crisis.0023 = {
 			var:hd_anti_regent_target = root
 		}
 	}
+	on_trigger_fail = {
+		if = {
+			limit = { exists = global_var:hd_anti_regent_league_leader }
+			global_var:hd_anti_regent_league_leader = { hd_anti_regent_failure_effect = yes }
+		}
+	}
 
 	option = {
 		name = hd_palace_crisis.0023.a
@@ -763,9 +788,6 @@ hd_palace_crisis.0024 = {
 			global_var:hd_anti_regent_league_leader = {
 				save_scope_as = hd_anti_regent_new_leader
 				set_variable = { name = hd_anti_regent_target value = scope:hd_han_regent_successor }
-				confederation ?= {
-					set_variable = { name = hd_anti_regent_target value = scope:hd_han_regent_successor }
-				}
 				scope:hd_han_regent_successor = {
 					set_variable = { name = hd_anti_regent_leader value = scope:hd_anti_regent_new_leader }
 				}
@@ -797,34 +819,35 @@ hd_palace_crisis.0016 = {
 	trigger = {
 		this = character:yuan_shao
 		is_alive = yes
+		has_character_flag = hd_yuan_early_story_pending
+		var:hd_yuan_early_story_phase = flag:hd_yuan_phase_departure
 		has_variable = hd_palace_deposition_regent
 		exists = global_var:hd_anti_regent_pending_leader
 		global_var:hd_anti_regent_pending_leader = root
 	}
 	on_trigger_fail = {
-		remove_variable = hd_palace_deposition_regent
 		if = {
 			limit = {
-				is_alive = no
-				exists = global_var:hd_anti_regent_pending_leader
-				global_var:hd_anti_regent_pending_leader = root
+				this = character:yuan_shao
+				is_alive = yes
+				has_character_flag = hd_yuan_early_story_pending
+				var:hd_yuan_early_story_phase = flag:hd_yuan_phase_departure
 			}
-			hd_anti_regent_select_fallback_leader_effect = yes
+			trigger_event = { id = hd_palace_crisis.0016 months = 1 }
 		}
 		else = {
-			if = {
-				limit = {
-					exists = global_var:hd_anti_regent_pending_leader
-					global_var:hd_anti_regent_pending_leader = root
-				}
-				hd_anti_regent_clear_pending_dispatch_effect = yes
-			}
-			hd_palace_crisis_cleanup_effect = yes
+			remove_variable = hd_palace_deposition_regent
+			remove_character_flag = hd_yuan_early_story_pending
+			remove_variable = hd_yuan_early_story_phase
+			if = { limit = { is_alive = no } hd_anti_regent_select_fallback_leader_effect = yes }
 		}
 	}
 
 	option = {
 		name = hd_palace_crisis.0016.a
+		remove_character_flag = hd_yuan_early_story_pending
+		add_character_flag = hd_yuan_early_story_started
+		set_variable = { name = hd_yuan_early_story_phase value = flag:hd_yuan_phase_migration }
 		remove_variable = hd_palace_deposition_regent
 		remove_character_flag = hd_palace_crisis_controller
 		# Only the deposition branch sends Yuan Shao away from Sili.  The
