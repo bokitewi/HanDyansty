@@ -225,9 +225,8 @@ hd_anti_regent_call_members_to_all_offensive_wars_effect = {
 	}
 }
 
-# Cao Cao is a historical participant, not an invitation candidate.  His
-# escape can finish before or after Yuan Shao opens the roster, so keep one
-# small pending flag for the early-arrival case.
+# Cao Cao must receive the same historical invitation whether he reaches
+# Chenliu before or after Yuan Shao opens the roster.
 hd_anti_regent_add_cao_effect = {
 	if = {
 		limit = { this = character:cao_cao is_alive = yes }
@@ -238,37 +237,36 @@ hd_anti_regent_add_cao_effect = {
 					is_alive = yes
 					has_character_flag = hd_anti_regent_league_leader
 					has_variable_list = hd_anti_regent_members
+					has_variable = hd_anti_regent_target
 				}
 			}
 			global_var:hd_anti_regent_league_leader = {
-				if = {
-					limit = {
-						NOT = {
-							is_target_in_variable_list = {
-								name = hd_anti_regent_members
-								target = character:cao_cao
-							}
-						}
-					}
-					add_to_variable_list = {
-						name = hd_anti_regent_members
-						target = character:cao_cao
-					}
-				}
+				save_scope_as = hd_inviting_leader
+				var:hd_anti_regent_target = { save_scope_as = hd_anti_regent_target_scope }
 			}
-			character:cao_cao = { add_character_flag = hd_anti_regent_league_member }
-			if = {
-				limit = {
-					OR = {
-						global_var:hd_anti_regent_league_leader = { has_character_flag = hd_anti_regent_first_war_started }
-						global_var:hd_anti_regent_league_leader = { has_character_flag = hd_anti_regent_second_war_started }
-					}
-				}
-				global_var:hd_anti_regent_league_leader = { hd_anti_regent_call_members_to_all_offensive_wars_effect = yes }
-			}
-			remove_character_flag = hd_anti_regent_cao_pending
+			hd_anti_regent_dispatch_invitation_effect = yes
 		}
 		else = { add_character_flag = hd_anti_regent_cao_pending }
+	}
+}
+
+hd_anti_regent_dispatch_invitation_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			is_landed = yes
+			exists = scope:hd_inviting_leader
+			exists = scope:hd_anti_regent_target_scope
+			NOT = { this = scope:hd_inviting_leader }
+			NOT = { this = scope:hd_anti_regent_target_scope }
+			NOT = { has_character_flag = hd_anti_regent_invitation_pending }
+			NOT = { has_character_flag = hd_anti_regent_invitation_resolved }
+		}
+		scope:hd_inviting_leader = { change_variable = { name = hd_anti_regent_pending_invites add = 1 } }
+		set_variable = { name = hd_anti_regent_inviter value = scope:hd_inviting_leader }
+		add_character_flag = hd_anti_regent_invitation_pending
+		remove_character_flag = hd_anti_regent_cao_pending
+		trigger_event = { id = hd_anti_regent.0003 days = { 1 3 } }
 	}
 }
 
@@ -307,20 +305,28 @@ hd_anti_regent_try_finish_invites_effect = {
 
 hd_anti_regent_invitation_resolved_effect = {
 	if = {
-		limit = { has_variable = hd_anti_regent_inviter }
-		var:hd_anti_regent_inviter = { save_scope_as = hd_invitation_leader }
-		remove_variable = hd_anti_regent_inviter
+		limit = {
+			has_character_flag = hd_anti_regent_invitation_pending
+			NOT = { has_character_flag = hd_anti_regent_invitation_resolved }
+		}
+		remove_character_flag = hd_anti_regent_invitation_pending
+		add_character_flag = hd_anti_regent_invitation_resolved
 		if = {
-			limit = {
-				exists = scope:hd_invitation_leader
-				scope:hd_invitation_leader = {
-					is_alive = yes
-					has_character_flag = hd_anti_regent_league_leader
-					has_variable = hd_anti_regent_pending_invites
+			limit = { has_variable = hd_anti_regent_inviter }
+			var:hd_anti_regent_inviter = { save_scope_as = hd_invitation_leader }
+			remove_variable = hd_anti_regent_inviter
+			if = {
+				limit = {
+					exists = scope:hd_invitation_leader
+					scope:hd_invitation_leader = {
+						is_alive = yes
+						has_character_flag = hd_anti_regent_league_leader
+						has_variable = hd_anti_regent_pending_invites
+					}
 				}
-			}
-			scope:hd_invitation_leader = {
-				change_variable = { name = hd_anti_regent_pending_invites add = -1 }
+				scope:hd_invitation_leader = {
+					change_variable = { name = hd_anti_regent_pending_invites add = -1 }
+				}
 			}
 		}
 		hd_anti_regent_try_finish_invites_effect = yes
