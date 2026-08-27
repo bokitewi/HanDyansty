@@ -1,30 +1,127 @@
 ﻿# Phase 2 world-opportunity setup and actual-war terminal routing.
 
-hd_migrate_legacy_historical_war_flags_effect = {
+# Force a historical companion out of landed or landless-title status before
+# employing them in Liu Bei's court.
+hd_peach_garden_force_liu_courtier_effect = {
 	if = {
-		limit = { exists = global_var:hd_fengying_fired NOT = { exists = global_var:hd_fengying_world_resolved } }
-		set_global_variable = hd_fengying_world_resolved
+		limit = { is_landed = yes }
+		if = {
+			limit = { liege ?= { is_alive = yes } }
+			liege = { save_temporary_scope_as = hd_peach_garden_title_recipient }
+		}
+		else_if = {
+			limit = { title:h_china.holder ?= { is_alive = yes } }
+			title:h_china.holder = { save_temporary_scope_as = hd_peach_garden_title_recipient }
+		}
+		else_if = {
+			limit = { title:e_han.holder ?= { is_alive = yes } }
+			title:e_han.holder = { save_temporary_scope_as = hd_peach_garden_title_recipient }
+		}
+		else = {
+			character:liu_bei = { save_temporary_scope_as = hd_peach_garden_title_recipient }
+		}
+		if = {
+			limit = {
+				exists = scope:hd_peach_garden_title_recipient
+				any_held_title = { tier >= tier_county is_landless_type_title = no }
+			}
+			create_title_and_vassal_change = {
+				type = granted
+				save_scope_as = hd_peach_garden_unland_change
+				add_claim_on_loss = no
+			}
+			every_held_title = {
+				limit = { tier >= tier_county is_landless_type_title = no }
+				change_title_holder_include_vassals = {
+					holder = scope:hd_peach_garden_title_recipient
+					change = scope:hd_peach_garden_unland_change
+				}
+			}
+			resolve_title_and_vassal_change = scope:hd_peach_garden_unland_change
+		}
+	}
+	every_held_title = {
+		limit = { is_landless_type_title = yes }
+		save_temporary_scope_as = hd_peach_garden_landless_title
+		prev = { destroy_title = scope:hd_peach_garden_landless_title }
 	}
 	if = {
-		limit = { exists = global_var:hd_guandu_fired NOT = { exists = global_var:hd_guandu_world_resolved } }
-		set_global_variable = hd_guandu_world_resolved
-	}
-	if = {
-		limit = { exists = global_var:hd_chibi_fired NOT = { exists = global_var:hd_chibi_world_resolved } }
-		set_global_variable = hd_chibi_world_resolved
-	}
-	if = {
-		limit = { exists = global_var:hd_rushu_fired NOT = { exists = global_var:hd_legacy_rushu_suppressed } }
-		set_global_variable = hd_legacy_rushu_suppressed
-	}
-	if = {
-		limit = { exists = global_var:hd_yiling_fired NOT = { exists = global_var:hd_lb25_world_resolved } }
-		set_global_variable = hd_lb25_world_resolved
+		limit = { is_alive = yes is_landed = no }
+		set_employer = character:liu_bei
 	}
 }
 
-# One idempotent entry point serves new games, monthly save migration, and
-# later Liu Bei phase adapters. The owned story is the source of truth.
+hd_fengying_try_resolve_responses_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_fengying_world_claimed }
+			NOT = { exists = global_var:hd_fengying_world_resolved }
+			OR = { character:cao_cao = { is_alive = no } character:cao_cao = { has_character_flag = hd_cao_fengying_responded } }
+			OR = { character:yuan_shao = { is_alive = no } character:yuan_shao = { has_character_flag = hd_yuan_fengying_responded } }
+		}
+		set_global_variable = hd_fengying_world_resolved
+		set_global_variable = hd_chain_terminal_alternate_failure
+		remove_global_variable = hd_fengying_world_open
+	}
+}
+
+hd_resolve_invalid_historical_world_chains_effect = {
+	if = {
+		limit = {
+			exists = global_var:hd_anti_regent_chain_resolved
+			NOT = { exists = global_var:hd_fengying_world_resolved }
+			character:cao_cao = { is_alive = no }
+			character:yuan_shao = { is_alive = no }
+		}
+		set_global_variable = hd_fengying_world_resolved
+		set_global_variable = hd_chain_terminal_alternate_failure
+		remove_global_variable = hd_fengying_world_open
+	}
+	if = {
+		limit = {
+			exists = global_var:hd_fengying_world_resolved
+			NOT = { exists = global_var:hd_guandu_world_resolved }
+			OR = { character:cao_cao = { is_alive = no } character:yuan_shao = { is_alive = no } }
+		}
+		set_global_variable = hd_guandu_world_resolved
+		set_global_variable = hd_chain_terminal_alternate_failure
+		remove_global_variable = hd_guandu_world_open
+	}
+	if = {
+		limit = {
+			exists = global_var:hd_guandu_world_resolved
+			NOT = { exists = global_var:hd_chibi_world_resolved }
+			OR = { character:cao_cao = { is_alive = no } character:sun_quan = { is_alive = no } character:liu_bei = { is_alive = no } }
+		}
+		set_global_variable = hd_chibi_world_resolved
+		set_global_variable = hd_chain_terminal_alternate_failure
+		remove_global_variable = hd_chibi_world_open
+	}
+	if = {
+		limit = {
+			exists = global_var:hd_chibi_world_resolved
+			NOT = { exists = global_var:hd_lb24_world_resolved }
+			character:guan_yu = { is_alive = no }
+		}
+		set_global_variable = hd_lb24_world_resolved
+		set_global_variable = hd_chain_terminal_alternate_failure
+		remove_global_variable = hd_lb24_world_open
+	}
+	if = {
+		limit = {
+			exists = global_var:hd_lb24_world_resolved
+			NOT = { exists = global_var:hd_lb25_world_resolved }
+			OR = { character:liu_bei = { is_alive = no } character:sun_quan = { is_alive = no } }
+		}
+		hd_clear_yiling_risks_effect = yes
+		set_global_variable = hd_lb25_world_resolved
+		set_global_variable = hd_chain_terminal_alternate_failure
+		remove_global_variable = hd_lb25_world_open
+	}
+}
+
+# One idempotent entry point serves new games and later Liu Bei phase adapters.
+# The owned story is the source of truth.
 hd_update_liu_bei_life_story_effect = {
 	if = {
 		limit = {
@@ -45,43 +142,35 @@ hd_update_liu_bei_life_story_effect = {
 
 			random_owned_story = {
 				type = hd_story_liu_bei_life
-				first_valid = {
-					triggered_effect = {
-						trigger = {
-							OR = {
-								exists = global_var:hd_lb25_world_open
-								exists = global_var:hd_lb25_world_resolved
-							}
-						}
-						effect = {
-							set_variable = {
-								name = hd_liu_bei_life_phase
-								value = flag:hd_liu_bei_phase_yiling
-							}
+				if = {
+					limit = {
+						OR = {
+							exists = global_var:hd_lb25_world_open
+							exists = global_var:hd_lb25_world_resolved
 						}
 					}
-					triggered_effect = {
-						trigger = {
-							OR = {
-								exists = global_var:hd_lb24_world_open
-								exists = global_var:hd_lb24_world_resolved
-							}
-						}
-						effect = {
-							set_variable = {
-								name = hd_liu_bei_life_phase
-								value = flag:hd_liu_bei_phase_jingzhou
-							}
+					set_variable = {
+						name = hd_liu_bei_life_phase
+						value = flag:hd_liu_bei_phase_yiling
+					}
+				}
+				else_if = {
+					limit = {
+						OR = {
+							exists = global_var:hd_lb24_world_open
+							exists = global_var:hd_lb24_world_resolved
 						}
 					}
-					triggered_effect = {
-						trigger = { NOT = { exists = var:hd_liu_bei_life_phase } }
-						effect = {
-							set_variable = {
-								name = hd_liu_bei_life_phase
-								value = flag:hd_liu_bei_phase_rising
-							}
-						}
+					set_variable = {
+						name = hd_liu_bei_life_phase
+						value = flag:hd_liu_bei_phase_jingzhou
+					}
+				}
+				else_if = {
+					limit = { NOT = { exists = var:hd_liu_bei_life_phase } }
+					set_variable = {
+						name = hd_liu_bei_life_phase
+						value = flag:hd_liu_bei_phase_rising
 					}
 				}
 			}
@@ -111,20 +200,12 @@ hd_update_liu_bei_life_story_effect = {
 					NOT = { has_character_flag = hd_peach_garden_event_opened }
 				}
 				if = {
-					limit = { current_date > 184.12.31 }
-					add_character_flag = hd_peach_garden_oath_unavailable
-				}
-				else_if = {
 					limit = {
-						current_date >= 184.1.1
-						current_date <= 184.12.31
 						character:guan_yu ?= {
 							is_alive = yes
-							is_landed = no
 						}
 						character:zhang_fei ?= {
 							is_alive = yes
-							is_landed = no
 						}
 					}
 					add_character_flag = {
@@ -132,14 +213,14 @@ hd_update_liu_bei_life_story_effect = {
 						days = 60
 					}
 					trigger_event = hd_peach_garden.0001
+					}
+					else = { add_character_flag = hd_peach_garden_oath_unavailable }
 				}
-			}
 
 			# An old save may already contain the resolved Yellow Turban state
 			# without the personal follow-up having been scheduled.
 			if = {
 				limit = {
-					current_date <= 190.12.31
 					exists = global_var:hd_yellow_turban_outcome_resolved
 					exists = global_var:hd_yellow_turban_han_survived
 					NOT = { has_character_flag = hd_liu_bei_aftermath_started }
@@ -171,31 +252,25 @@ hd_open_fengying_world_opportunity_effect = {
 		character:liu_xie = { save_scope_as = hd_fengying_emperor }
 		if = {
 			limit = {
-				character:cao_cao = {
-					is_alive = yes
-					is_landed = yes
-					is_independent_ruler = yes
-					NOT = { has_character_flag = hd_cao_fengying_story_owner }
-					NOT = { any_owned_story = { type = hd_story_cao_fengying } }
-				}
+				character:cao_cao = { is_alive = yes }
 			}
 			character:cao_cao = {
-				create_story = { type = hd_story_cao_fengying save_scope_as = hd_cao_fengying_story }
+				random_owned_story = {
+					type = hd_story_cao_life
+					set_variable = { name = hd_cao_life_phase value = flag:hd_cao_life_fengying }
+				}
 				trigger_event = hd_fengying.0001
 			}
 		}
 		if = {
 			limit = {
-				character:yuan_shao = {
-					is_alive = yes
-					is_landed = yes
-					is_independent_ruler = yes
-					NOT = { has_character_flag = hd_yuan_fengying_story_owner }
-					NOT = { any_owned_story = { type = hd_story_yuan_fengying } }
-				}
+				character:yuan_shao = { is_alive = yes }
 			}
 			character:yuan_shao = {
-				create_story = { type = hd_story_yuan_fengying save_scope_as = hd_yuan_fengying_story }
+				random_owned_story = {
+					type = hd_story_yuan_life
+					set_variable = { name = hd_yuan_life_phase value = flag:hd_yuan_life_fengying }
+				}
 				trigger_event = hd_fengying.0011
 			}
 		}
@@ -204,6 +279,18 @@ hd_open_fengying_world_opportunity_effect = {
 
 hd_open_guandu_world_opportunity_effect = {
 	set_global_variable = hd_guandu_world_open
+	character:cao_cao = {
+		random_owned_story = {
+			type = hd_story_cao_life
+			set_variable = { name = hd_cao_life_phase value = flag:hd_cao_life_guandu }
+		}
+	}
+	character:yuan_shao = {
+		random_owned_story = {
+			type = hd_story_yuan_life
+			set_variable = { name = hd_yuan_life_phase value = flag:hd_yuan_life_guandu }
+		}
+	}
 	character:cao_cao = { trigger_event = hd_historical_world.0100 }
 }
 
@@ -227,7 +314,11 @@ hd_open_chibi_world_opportunity_effect = {
 		character:cao_cao = { trigger_event = hd_historical_world.0200 }
 	}
 	else = {
-		title:k_uuii_jingzhou.holder = { trigger_event = hd_historical_world.0210 }
+		if = {
+			limit = { title:k_uuii_jingzhou.holder ?= { is_alive = yes } }
+			title:k_uuii_jingzhou.holder = { trigger_event = hd_historical_world.0210 }
+		}
+		else = { character:cao_cao = { trigger_event = hd_historical_world.0200 } }
 	}
 }
 
