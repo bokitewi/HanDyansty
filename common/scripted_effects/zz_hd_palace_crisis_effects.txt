@@ -1,8 +1,33 @@
 ﻿# Shared palace-crisis entry point.  It is deliberately idempotent because it
 # can be called by Yellow Turban resolution and by Liu Hong's death on-action.
+hd_force_start_palace_crisis_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_yellow_turban_han_fell }
+			NOT = { exists = global_var:hd_palace_crisis_queued }
+			NOT = { exists = global_var:hd_palace_crisis_started }
+			NOT = { exists = global_var:hd_palace_crisis_completed }
+		}
+		set_global_variable = hd_palace_crisis_force_entry
+		hd_try_start_palace_crisis_effect = yes
+		remove_global_variable = hd_palace_crisis_force_entry
+	}
+}
+
 hd_try_start_palace_crisis_effect = {
 	if = {
-		limit = { hd_palace_crisis_conditions_met = yes }
+		limit = {
+			OR = {
+				hd_palace_crisis_conditions_met = yes
+				AND = {
+					exists = global_var:hd_palace_crisis_force_entry
+					NOT = { exists = global_var:hd_yellow_turban_han_fell }
+					NOT = { exists = global_var:hd_palace_crisis_queued }
+					NOT = { exists = global_var:hd_palace_crisis_started }
+					NOT = { exists = global_var:hd_palace_crisis_completed }
+				}
+			}
+		}
 		set_global_variable = hd_palace_crisis_queued
 
 		# Prefer the player-controlled historical principals.  If none is human,
@@ -11,357 +36,48 @@ hd_try_start_palace_crisis_effect = {
 			limit = { character:he_jin ?= { is_alive = yes is_ai = no } }
 			character:he_jin = {
 				add_character_flag = hd_palace_crisis_controller
-				trigger_event = { id = hd_palace_crisis.0001 days = { 20 50 } }
+				trigger_event = { id = hd_palace_crisis.0001 days = 35 }
 			}
 		}
 		else_if = {
 			limit = { character:yuan_shao ?= { is_alive = yes is_ai = no } }
 			character:yuan_shao = {
 				add_character_flag = hd_palace_crisis_controller
-				trigger_event = { id = hd_palace_crisis.0001 days = { 20 50 } }
+				trigger_event = { id = hd_palace_crisis.0001 days = 35 }
 			}
 		}
 		else_if = {
 			limit = { character:cao_cao ?= { is_alive = yes is_ai = no } }
 			character:cao_cao = {
 				add_character_flag = hd_palace_crisis_controller
-				trigger_event = { id = hd_palace_crisis.0001 days = { 20 50 } }
+				trigger_event = { id = hd_palace_crisis.0001 days = 35 }
 			}
 		}
 		else_if = {
 			limit = { character:he_jin ?= { is_alive = yes } }
 			character:he_jin = {
 				add_character_flag = hd_palace_crisis_controller
-				trigger_event = { id = hd_palace_crisis.0001 days = { 20 50 } }
+				trigger_event = { id = hd_palace_crisis.0001 days = 35 }
 			}
 		}
 		else_if = {
 			limit = { character:yuan_shao ?= { is_alive = yes } }
 			character:yuan_shao = {
 				add_character_flag = hd_palace_crisis_controller
-				trigger_event = { id = hd_palace_crisis.0001 days = { 20 50 } }
+				trigger_event = { id = hd_palace_crisis.0001 days = 35 }
 			}
 		}
 		else_if = {
 			limit = { character:cao_cao ?= { is_alive = yes } }
 			character:cao_cao = {
 				add_character_flag = hd_palace_crisis_controller
-				trigger_event = { id = hd_palace_crisis.0001 days = { 20 50 } }
+				trigger_event = { id = hd_palace_crisis.0001 days = 35 }
 			}
 		}
 		else = {
 			hd_palace_crisis_cleanup_effect = yes
 		}
 	}
-}
-
-# A queued controller owns exactly one delivery attempt. Consume that ownership
-# before redispatching so a later duplicate callback from the old event cannot
-# cancel the replacement. The second failure closes the chain cleanly.
-hd_palace_recover_queued_effect = {
-	if = {
-		limit = {
-			has_character_flag = hd_palace_crisis_controller
-			exists = global_var:hd_palace_crisis_queued
-			NOT = { exists = global_var:hd_palace_crisis_started }
-		}
-		if = {
-			limit = { is_alive = yes }
-			remove_character_flag = hd_palace_crisis_controller
-		}
-		remove_global_variable = hd_palace_crisis_queued
-		if = {
-			limit = { NOT = { exists = global_var:hd_palace_crisis_queue_retry_used } }
-			set_global_variable = hd_palace_crisis_queue_retry_used
-			hd_try_start_palace_crisis_effect = yes
-		}
-		else = { hd_palace_crisis_cleanup_effect = yes }
-	}
-}
-
-# The controller flag is also the ownership token after the opening event. A
-# failed delayed node and on_death may both call this effect; only the first wins.
-hd_palace_recover_started_controller_effect = {
-	if = {
-		limit = {
-			has_character_flag = hd_palace_crisis_controller
-			exists = global_var:hd_palace_crisis_started
-		}
-		if = {
-			limit = { is_alive = yes }
-			remove_character_flag = hd_palace_crisis_controller
-		}
-		hd_palace_continue_after_controller_death_effect = yes
-	}
-}
-
-# If the player-controlled Yuan Shao or Cao Cao dies after the palace chain
-# has already opened, hand the next node back to the historical sequence
-# instead of leaving the global chain marked as started with no event owner.
-hd_palace_continue_after_controller_death_effect = {
-	if = {
-		limit = { exists = global_var:hd_palace_crisis_started }
-		if = {
-			limit = { character:he_jin ?= { is_alive = yes } }
-			character:he_jin = {
-				trigger_event = { id = hd_palace_crisis.0004 days = { 20 50 } }
-			}
-		}
-		else = {
-			set_global_variable = hd_palace_he_jin_killed
-			if = {
-				limit = { character:yuan_shao ?= { is_alive = yes } }
-				character:yuan_shao = {
-					trigger_event = { id = hd_palace_crisis.0005 days = { 20 50 } }
-				}
-			}
-			else_if = {
-				limit = { character:cao_cao ?= { is_alive = yes } }
-				character:cao_cao = {
-					trigger_event = { id = hd_palace_crisis.0005 days = { 20 50 } }
-				}
-			}
-			else = {
-				hd_palace_purge_effect = yes
-				if = {
-					limit = {
-						title:k_uuii_liangzhou = { has_variable = hd_palace_liangzhou_invited }
-						title:k_uuii_liangzhou.holder ?= { is_alive = yes has_character_flag = hd_palace_liangzhou_marching }
-					}
-					title:k_uuii_liangzhou.holder = { hd_palace_try_finalize_liangzhou_effect = yes }
-				}
-				else = { hd_palace_crisis_cleanup_effect = yes }
-			}
-		}
-	}
-}
-
-hd_palace_continue_after_he_jin_loss_effect = {
-	if = {
-		limit = {
-			exists = global_var:hd_palace_crisis_started
-			NOT = { exists = global_var:hd_palace_he_jin_killed }
-		}
-		set_global_variable = hd_palace_he_jin_killed
-		character:he_jin ?= {
-			if = { limit = { is_alive = yes } remove_character_flag = hd_palace_crisis_controller }
-		}
-		if = {
-			limit = { character:yuan_shao ?= { is_alive = yes } }
-			character:yuan_shao = { trigger_event = { id = hd_palace_crisis.0005 days = { 20 50 } } }
-		}
-		else_if = {
-			limit = { character:cao_cao ?= { is_alive = yes } }
-			character:cao_cao = { trigger_event = { id = hd_palace_crisis.0005 days = { 20 50 } } }
-		}
-		else = {
-			hd_palace_purge_effect = yes
-			if = {
-				limit = {
-					title:k_uuii_liangzhou = { has_variable = hd_palace_liangzhou_invited }
-					title:k_uuii_liangzhou.holder ?= { is_alive = yes has_character_flag = hd_palace_liangzhou_marching }
-				}
-				title:k_uuii_liangzhou.holder = { hd_palace_try_finalize_liangzhou_effect = yes }
-			}
-			else = { hd_palace_crisis_cleanup_effect = yes }
-		}
-	}
-}
-
-hd_palace_resolve_purge_recipient_failure_effect = {
-	if = {
-		limit = {
-			exists = global_var:hd_palace_crisis_started
-			exists = global_var:hd_palace_he_jin_killed
-			NOT = { exists = global_var:hd_palace_purge_completed }
-		}
-		hd_palace_purge_effect = yes
-		if = {
-			limit = {
-				title:k_uuii_liangzhou = { has_variable = hd_palace_liangzhou_invited }
-				title:k_uuii_liangzhou.holder ?= { is_alive = yes has_character_flag = hd_palace_liangzhou_marching }
-			}
-			title:k_uuii_liangzhou.holder = { hd_palace_try_finalize_liangzhou_effect = yes }
-		}
-		else_if = {
-			limit = { character:yuan_shao ?= { is_alive = yes } }
-			character:yuan_shao = { trigger_event = { id = hd_palace_crisis.0006 days = 1 } }
-		}
-		else = { hd_palace_crisis_cleanup_effect = yes }
-	}
-}
-
-hd_palace_liangzhou_march_cancel_effect = {
-	if = {
-		limit = { has_character_flag = hd_palace_liangzhou_marching }
-		if = {
-			limit = { is_alive = yes }
-			remove_character_flag = hd_palace_liangzhou_marching
-			remove_character_flag = hd_palace_liangzhou_arrived
-		}
-		if = {
-			limit = { exists = global_var:hd_palace_purge_completed }
-			if = {
-				limit = { character:yuan_shao ?= { is_alive = yes } }
-				character:yuan_shao = { trigger_event = { id = hd_palace_crisis.0006 days = 1 } }
-			}
-			else = { hd_palace_crisis_cleanup_effect = yes }
-		}
-	}
-}
-
-hd_liangzhou_start_march_effect = {
-	if = {
-		limit = {
-			is_alive = yes
-			is_landed = yes
-			NOT = { has_character_flag = hd_palace_liangzhou_marching }
-		}
-		add_character_flag = hd_palace_liangzhou_marching
-		set_variable = { name = hd_palace_liangzhou_marcher value = this }
-		title:k_uuii_liangzhou = {
-			set_variable = { name = hd_palace_liangzhou_marcher value = root }
-		}
-
-		# Every landed vassal below the Liangzhou title receives a real decision.
-		# The eventual title independence is handled only after the marcher's arrival.
-		every_vassal_or_below = {
-			limit = {
-				is_alive = yes
-				is_landed = yes
-				NOT = { this = root }
-			}
-			set_variable = { name = hd_palace_liangzhou_inviter value = root }
-			trigger_event = { id = hd_palace_crisis.0010 days = { 1 3 } }
-		}
-
-		# Administrative estates cannot travel with a travel plan. Move both the
-		# ruler and domicile directly to Luoyang, then run the same finalization.
-		set_location = {
-			location = title:b_uuii_p_787.title_province
-			stick_to_location = yes
-		}
-		domicile ?= { move_domicile = title:b_uuii_p_787.title_province }
-		add_character_flag = hd_palace_liangzhou_arrived
-		hd_palace_try_finalize_liangzhou_effect = yes
-	}
-}
-
-hd_palace_try_finalize_liangzhou_effect = {
-	save_scope_as = hd_palace_liangzhou_finalize_ruler
-	if = {
-		limit = {
-			scope:hd_palace_liangzhou_finalize_ruler = {
-				has_character_flag = hd_palace_liangzhou_marching
-				has_character_flag = hd_palace_liangzhou_arrived
-			}
-			exists = global_var:hd_palace_purge_completed
-			exists = title:k_uuii_liangzhou.holder
-			title:k_uuii_liangzhou = { var:hd_palace_liangzhou_marcher = scope:hd_palace_liangzhou_finalize_ruler }
-			scope:hd_palace_liangzhou_finalize_ruler = {
-				NOT = { has_character_flag = hd_palace_liangzhou_settled }
-			}
-		}
-		scope:hd_palace_liangzhou_finalize_ruler = { add_character_flag = hd_palace_liangzhou_settled }
-
-		# Only Sili's de jure dukes become direct vassals of the new governor.
-		# Counts and barons keep their existing hierarchy under those dukes.
-		title:k_uuii_sili = {
-			every_in_de_jure_hierarchy = {
-				continue = { tier > tier_duchy }
-				limit = {
-					tier = tier_duchy
-					exists = holder
-					holder = {
-						is_alive = yes
-						is_landed = yes
-						NOT = { this = scope:hd_palace_liangzhou_finalize_ruler }
-					}
-				}
-				holder = { add_to_list = hd_palace_sili_duchy_holders }
-			}
-		}
-		create_title_and_vassal_change = {
-			type = granted
-			save_scope_as = hd_palace_sili_change
-			add_claim_on_loss = no
-		}
-		title:k_uuii_sili = {
-			change_title_holder_include_vassals = {
-				holder = scope:hd_palace_liangzhou_finalize_ruler
-				change = scope:hd_palace_sili_change
-			}
-		}
-		every_in_list = {
-			list = hd_palace_sili_duchy_holders
-			limit = { NOT = { liege = scope:hd_palace_liangzhou_finalize_ruler } }
-			change_liege = {
-				liege = scope:hd_palace_liangzhou_finalize_ruler
-				change = scope:hd_palace_sili_change
-			}
-		}
-		resolve_title_and_vassal_change = scope:hd_palace_sili_change
-
-		# The Liangzhou ruler is the regent; the diarchy itself belongs to the
-		# current Han emperor, not to the incoming marcher.
-		scope:hd_palace_liangzhou_finalize_ruler = { hd_force_dong_regency_effect = yes }
-		scope:hd_palace_liangzhou_finalize_ruler = {
-			remove_character_flag = hd_palace_liangzhou_marching
-			trigger_event = { id = hd_palace_crisis.0015 days = 365 }
-		}
-	}
-}
-
-hd_cao_move_to_chenliu_effect = {
-	if = {
-		limit = {
-			is_alive = yes
-			NOT = { has_character_flag = hd_cao_chenliu_migration_pending }
-			NOT = { has_character_flag = hd_cao_chenliu_migration_started }
-			NOT = { has_character_flag = hd_cao_chenliu_migration_completed }
-			NOT = { has_title = title:d_chenliu }
-		}
-		add_character_flag = hd_cao_chenliu_migration_pending
-		set_location = {
-			location = title:d_chenliu.title_capital_county.title_province
-			stick_to_location = yes
-		}
-		domicile ?= { move_domicile = title:d_chenliu.title_capital_county.title_province }
-		trigger_event = { id = hd_cao_chain.0090 days = 1 }
-	}
-}
-
-hd_yuan_move_to_bohai_effect = {
-	if = {
-		limit = {
-			is_alive = yes
-			NOT = { has_character_flag = hd_yuan_bohai_migration_pending }
-			NOT = { has_character_flag = hd_yuan_bohai_migration_started }
-			NOT = { has_character_flag = hd_yuan_bohai_migration_completed }
-		}
-		add_character_flag = hd_yuan_bohai_migration_pending
-		set_location = {
-			location = title:d_bohai.title_capital_county.title_province
-			stick_to_location = yes
-		}
-		domicile ?= { move_domicile = title:d_bohai.title_capital_county.title_province }
-		trigger_event = { id = hd_anti_regent.0005 days = 1 }
-	}
-}
-
-hd_cao_cancel_chenliu_migration_effect = {
-	if = {
-		limit = {
-			is_alive = yes
-			has_character_flag = hd_cao_chenliu_migration_pending
-			NOT = { has_character_flag = hd_cao_chenliu_migration_completed }
-		}
-		trigger_event = { id = hd_cao_chain.0090 months = 1 }
-	}
-}
-
-hd_cao_retry_chenliu_migration_effect = {
-	hd_cao_cancel_chenliu_migration_effect = yes
 }
 
 hd_cao_abort_chenliu_migration_effect = {
@@ -418,7 +134,6 @@ hd_anti_regent_clear_pending_dispatch_effect = {
 					limit = { this = character:yuan_shao }
 					hd_yuan_abort_bohai_migration_effect = yes
 				}
-				remove_character_flag = hd_anti_regent_dispatch_ready
 				remove_variable = hd_palace_deposition_regent
 			}
 		}
@@ -619,13 +334,19 @@ hd_move_dong_core_to_changan_effect = {
 	character:lv_bu ?= {
 		if = {
 			limit = { is_alive = yes }
-			set_employer = scope:hd_changan_regent
+			if = {
+				limit = { NOT = { employer = scope:hd_changan_regent } }
+				set_employer = scope:hd_changan_regent
+			}
 			set_location = { location = title:b_uuii_p_867.title_province stick_to_location = yes }
 		}
 	}
 	character:li_ru ?= {
 		if = {
-			limit = { is_alive = yes }
+			limit = {
+				is_alive = yes
+				NOT = { employer = character:dong_zhuo_2 }
+			}
 			set_employer = scope:hd_changan_regent
 			set_location = { location = title:b_uuii_p_867.title_province stick_to_location = yes }
 		}
@@ -793,9 +514,9 @@ hd_anti_regent_cleanup_effect = {
 		limit = { is_alive = yes }
 		remove_character_flag = hd_anti_regent_league_leader
 		remove_character_flag = hd_anti_regent_league_member
-		remove_character_flag = hd_anti_regent_dispatch_ready
 		remove_character_flag = hd_yuan_bohai_arrived
 		remove_character_flag = hd_anti_regent_first_war_started
+		remove_character_flag = hd_anti_regent_first_war_fallback_ready
 		remove_character_flag = hd_anti_regent_second_war_started
 		remove_character_flag = hd_anti_regent_invitations_dispatched
 		remove_character_flag = hd_anti_regent_invitations_pending
