@@ -1,0 +1,306 @@
+﻿# HDPC 1.0.0 — all effects are namespaced; no death or global define overrides.
+# Do not manually call internal executor effects. Public commands are in README.
+hdpc_initialize_effect = {
+    if = {
+        limit = { NOT = { has_global_variable = hdpc_disabled } }
+        set_global_variable = { name = hdpc_disabled value = 0 }
+    }
+    if = {
+        limit = { NOT = { has_global_variable = hdpc_years_elapsed } }
+        set_global_variable = { name = hdpc_years_elapsed value = 0 }
+    }
+    if = {
+        limit = { NOT = { has_global_variable = hdpc_cycles } }
+        set_global_variable = { name = hdpc_cycles value = 0 }
+    }
+    if = {
+        limit = { NOT = { has_global_variable = hdpc_living } }
+        set_global_variable = { name = hdpc_living value = 0 }
+    }
+    if = {
+        limit = { NOT = { has_global_variable = hdpc_pooled } }
+        set_global_variable = { name = hdpc_pooled value = 0 }
+    }
+    if = {
+        limit = { NOT = { has_global_variable = hdpc_rulers } }
+        set_global_variable = { name = hdpc_rulers value = 0 }
+    }
+    if = {
+        limit = { NOT = { has_global_variable = hdpc_pressure } }
+        set_global_variable = { name = hdpc_pressure value = 0 }
+    }
+    if = {
+        limit = { NOT = { has_global_variable = hdpc_move_budget } }
+        set_global_variable = { name = hdpc_move_budget value = 0 }
+    }
+    if = {
+        limit = { NOT = { has_global_variable = hdpc_moved_last } }
+        set_global_variable = { name = hdpc_moved_last value = 0 }
+    }
+    if = {
+        limit = { NOT = { has_global_variable = hdpc_failed_last } }
+        set_global_variable = { name = hdpc_failed_last value = 0 }
+    }
+    if = {
+        limit = { NOT = { has_global_variable = hdpc_unfilled_last } }
+        set_global_variable = { name = hdpc_unfilled_last value = 0 }
+    }
+    if = {
+        limit = { NOT = { has_global_variable = hdpc_courts_last } }
+        set_global_variable = { name = hdpc_courts_last value = 0 }
+    }
+    if = {
+        limit = { NOT = { has_global_variable = hdpc_candidates_last } }
+        set_global_variable = { name = hdpc_candidates_last value = 0 }
+    }
+    if = {
+        limit = { NOT = { has_global_variable = hdpc_managed_count } }
+        set_global_variable = { name = hdpc_managed_count value = 0 }
+    }
+    if = {
+        limit = { NOT = { has_global_variable = hdpc_census_runs } }
+        set_global_variable = { name = hdpc_census_runs value = 0 }
+    }
+}
+
+# Count every living character, including pools. No movement or pressure change.
+# Agent protection flags are built separately only when a cleanup cycle is due.
+hdpc_census_effect = {
+    hdpc_initialize_effect = yes
+    set_global_variable = { name = hdpc_living value = 0 }
+    set_global_variable = { name = hdpc_pooled value = 0 }
+    set_global_variable = { name = hdpc_rulers value = 0 }
+    every_living_character = {
+        change_global_variable = { name = hdpc_living add = 1 }
+        if = {
+            limit = { is_pool_character = yes }
+            change_global_variable = { name = hdpc_pooled add = 1 }
+        }
+        if = {
+            limit = { is_ruler = yes }
+            change_global_variable = { name = hdpc_rulers add = 1 }
+        }
+    }
+    change_global_variable = { name = hdpc_census_runs add = 1 }
+}
+
+# One linear owner/scheme pass only in an active decennial cycle.
+# Guards all current scheme agents, including schemes outside their own court.
+hdpc_guard_scheme_agents_effect = {
+    every_living_character = {
+        limit = { has_owned_scheme = yes }
+        every_scheme = {
+            every_scheme_agent_character = {
+                add_character_flag = {
+                    flag = hdpc_scheme_agent_guard
+                    days = 2
+                }
+            }
+        }
+    }
+}
+
+# Character scope. Never touches unrelated modifiers.
+hdpc_release_character_effect = {
+    if = {
+        limit = { has_character_modifier = hdpc_soft_pressure_modifier }
+        remove_character_modifier = hdpc_soft_pressure_modifier
+    }
+    if = {
+        limit = { has_character_modifier = hdpc_high_pressure_modifier }
+        remove_character_modifier = hdpc_high_pressure_modifier
+    }
+}
+
+hdpc_release_all_effect = {
+    every_in_global_list = {
+        variable = hdpc_managed
+        limit = { is_alive = yes }
+        hdpc_release_character_effect = yes
+    }
+    clear_global_variable_list = hdpc_managed
+    clear_global_variable_list = hdpc_survivors
+    set_global_variable = { name = hdpc_managed_count value = 0 }
+}
+
+# Annual, bounded by the previous round's <= 2000 managed characters.
+# Rebuild the list rather than remove items while iterating it.
+hdpc_maintain_managed_effect = {
+    clear_global_variable_list = hdpc_survivors
+    set_global_variable = { name = hdpc_managed_count value = 0 }
+    every_in_global_list = {
+        variable = hdpc_managed
+        if = {
+            limit = { is_alive = yes }
+            if = {
+                limit = { hdpc_managed_still_valid_trigger = yes }
+                add_to_global_variable_list = {
+                    name = hdpc_survivors
+                    target = this
+                }
+            }
+            else = { hdpc_release_character_effect = yes }
+        }
+    }
+    clear_global_variable_list = hdpc_managed
+    every_in_global_list = {
+        variable = hdpc_survivors
+        add_to_global_variable_list = { name = hdpc_managed target = this }
+        change_global_variable = { name = hdpc_managed_count add = 1 }
+    }
+    clear_global_variable_list = hdpc_survivors
+}
+
+# Character scope; queue + court scope + budget must already be established.
+hdpc_retire_character_effect = {
+    move_to_pool = yes
+    if = {
+        limit = { is_pool_character = yes }
+        # Count a success only after checking that the native move succeeded.
+        hdpc_release_character_effect = yes
+        if = {
+            limit = { global_var:hdpc_pressure = 2 }
+            add_character_modifier = {
+                modifier = hdpc_high_pressure_modifier
+                years = hdpc_interval_years_value
+            }
+        }
+        else = {
+            add_character_modifier = {
+                modifier = hdpc_soft_pressure_modifier
+                years = hdpc_interval_years_value
+            }
+        }
+        add_to_global_variable_list = { name = hdpc_managed target = this }
+        change_global_variable = { name = hdpc_moved_last add = 1 }
+        change_global_variable = { name = hdpc_managed_count add = 1 }
+        change_local_variable = { name = hdpc_court_budget subtract = 1 }
+        change_local_variable = { name = hdpc_court_size subtract = 1 }
+        # IMPORTANT: hdpc_living is never decremented here.
+    }
+    else = { change_global_variable = { name = hdpc_failed_last add = 1 } }
+}
+
+# Ruler scope. Snapshots courtiers before any move, avoiding iterator mutation.
+hdpc_process_court_effect = {
+    save_scope_as = hdpc_court
+    save_scope_as = liege
+    change_global_variable = { name = hdpc_courts_last add = 1 }
+    set_local_variable = { name = hdpc_court_size value = 0 }
+    every_courtier = {
+        change_local_variable = { name = hdpc_court_size add = 1 }
+    }
+    set_local_variable = { name = hdpc_court_reserve value = hdpc_court_reserve_value }
+    set_local_variable = { name = hdpc_court_budget value = hdpc_court_move_budget_value }
+    clear_local_variable_list = hdpc_candidates
+    if = {
+        limit = { local_var:hdpc_court_budget >= 1 }
+        every_courtier = {
+            limit = { hdpc_retirement_candidate_trigger = yes }
+            add_to_local_variable_list = { name = hdpc_candidates target = this }
+            change_global_variable = { name = hdpc_candidates_last add = 1 }
+        }
+        every_in_local_list = {
+            variable = hdpc_candidates
+            # Recheck mutable budgets in an effect, not just iterator filtering.
+            if = {
+                limit = {
+                    global_var:hdpc_moved_last < global_var:hdpc_move_budget
+                    local_var:hdpc_court_budget >= 1
+                    local_var:hdpc_court_size > local_var:hdpc_court_reserve
+                    scope:hdpc_court = { hdpc_court_allowed_trigger = yes }
+                    hdpc_retirement_candidate_trigger = yes
+                }
+                hdpc_retire_character_effect = yes
+            }
+        }
+    }
+    clear_local_variable_list = hdpc_candidates
+}
+
+# Internal: called only through hdpc_due_cycle_effect.
+hdpc_execute_cycle_effect = {
+    hdpc_release_all_effect = yes
+    hdpc_census_effect = yes
+    set_global_variable = { name = hdpc_pressure value = 0 }
+    set_global_variable = { name = hdpc_move_budget value = 0 }
+    set_global_variable = { name = hdpc_moved_last value = 0 }
+    set_global_variable = { name = hdpc_failed_last value = 0 }
+    set_global_variable = { name = hdpc_unfilled_last value = 0 }
+    set_global_variable = { name = hdpc_courts_last value = 0 }
+    set_global_variable = { name = hdpc_candidates_last value = 0 }
+    if = {
+        limit = { global_var:hdpc_living > hdpc_start_threshold_value }
+        set_global_variable = { name = hdpc_pressure value = 1 }
+        if = {
+            limit = { global_var:hdpc_living > hdpc_target_high_value }
+            set_global_variable = { name = hdpc_pressure value = 2 }
+        }
+        set_global_variable = { name = hdpc_move_budget value = hdpc_move_budget_value }
+        hdpc_guard_scheme_agents_effect = yes
+        every_ruler = {
+            if = {
+                limit = {
+                    global_var:hdpc_moved_last < global_var:hdpc_move_budget
+                    hdpc_court_allowed_trigger = yes
+                }
+                hdpc_process_court_effect = yes
+            }
+        }
+        set_global_variable = {
+            name = hdpc_unfilled_last
+            value = global_var:hdpc_move_budget
+        }
+        change_global_variable = {
+            name = hdpc_unfilled_last
+            subtract = global_var:hdpc_moved_last
+        }
+    }
+    # Reset only after the cycle. A reload does not reset this persistent clock.
+    set_global_variable = { name = hdpc_years_elapsed value = 0 }
+    set_global_variable = { name = hdpc_has_run value = yes }
+    change_global_variable = { name = hdpc_cycles add = 1 }
+}
+
+# Public: safe to call repeatedly; respects the ten-year cooldown and pause.
+hdpc_due_cycle_effect = {
+    hdpc_initialize_effect = yes
+    if = {
+        limit = {
+            global_var:hdpc_disabled = 0
+            OR = {
+                NOT = { has_global_variable = hdpc_has_run }
+                global_var:hdpc_years_elapsed >= hdpc_interval_years_value
+            }
+        }
+        hdpc_execute_cycle_effect = yes
+    }
+}
+
+hdpc_yearly_effect = {
+    hdpc_initialize_effect = yes
+    if = {
+        limit = { global_var:hdpc_disabled = 0 }
+        hdpc_maintain_managed_effect = yes
+        if = {
+            limit = { has_global_variable = hdpc_has_run }
+            change_global_variable = { name = hdpc_years_elapsed add = 1 }
+        }
+        hdpc_due_cycle_effect = yes
+    }
+}
+
+# Public: release our tracked modifiers and stop automatic rounds.
+# Does not put characters back into their old courts or undo natural events.
+hdpc_pause_effect = {
+    hdpc_initialize_effect = yes
+    hdpc_release_all_effect = yes
+    set_global_variable = { name = hdpc_disabled value = 1 }
+    set_global_variable = { name = hdpc_pressure value = 0 }
+}
+
+# Public: resume the saved clock; no extra round is forced.
+hdpc_resume_effect = {
+    hdpc_initialize_effect = yes
+    set_global_variable = { name = hdpc_disabled value = 0 }
+}
