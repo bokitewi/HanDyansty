@@ -1,0 +1,358 @@
+# Main ROY record, monthly. This node is one shared ceremony, never one copy
+# per claimant. The initial protest is made now, not a fabricated earlier debt.
+hd_dc_dispatch_roy01_effect = {
+	if = {
+		limit = {
+			var:hd_dc_type = flag:roy
+			var:hd_dc_stage = flag:acute
+			has_variable = hd_dc_ritual_initialized
+			NOT = { has_variable = hd_dc_roy01_result }
+			NOT = { has_variable = hd_dc_roy01_action }
+			NOT = { has_variable = hd_dc_roy01_delivery_wait }
+			NOT = { has_variable = hd_dc_roy01_version }
+			exists = title:h_china.holder
+		}
+		save_scope_as = hd_dc_instance
+		remove_variable = hd_dc_roy01_favored
+		remove_variable = hd_dc_roy01_displaced
+		# Prestige selects a named petitioner; it does not prove military merit.
+		ordered_in_list = {
+			variable = hd_dc_actor_stories
+			limit = {
+				var:hd_dc_node = 1
+				hd_dc_roy01_seat_claim_trigger = yes
+				var:hd_dc_actor = { is_alive = yes is_imprisoned = no NOT = { is_at_war_with = title:h_china.holder } }
+			}
+			order_by = var:hd_dc_actor.prestige
+			max = 1
+			check_range_bounds = no
+			save_scope_as = hd_dc_favored_story
+			scope:hd_dc_instance = { set_variable = { name = hd_dc_roy01_favored value = scope:hd_dc_favored_story } }
+		}
+		ordered_in_list = {
+			variable = hd_dc_ritual_order
+			limit = {
+				this != scope:hd_dc_instance.var:hd_dc_roy01_favored
+				var:hd_dc_node = 1
+				var:hd_dc_actor = { is_alive = yes is_imprisoned = no NOT = { is_at_war_with = title:h_china.holder } }
+			}
+			order_by = { value = var:hd_dc_ritual_rank multiply = -1 }
+			max = 1
+			check_range_bounds = no
+			save_scope_as = hd_dc_displaced_story
+			scope:hd_dc_instance = { set_variable = { name = hd_dc_roy01_displaced value = scope:hd_dc_displaced_story } }
+		}
+		if = {
+			limit = { hd_dc_roy01_parties_valid_trigger = yes }
+			if = { limit = { NOT = { has_variable = hd_dc_roy01_version } } set_variable = { name = hd_dc_roy01_version value = 0 } }
+			change_variable = { name = hd_dc_roy01_version add = 1 }
+			set_variable = { name = hd_dc_roy01_delivery_wait value = yes months = 12 }
+			set_variable = { name = hd_dc_roy01_author value = title:h_china.holder }
+			set_variable = { name = hd_dc_ritual_dispute_date value = current_date }
+			save_scope_value_as = { name = hd_dc_roy01_version value = var:hd_dc_roy01_version }
+			var:hd_dc_roy01_favored.var:hd_dc_actor = { save_scope_as = hd_dc_favored }
+			var:hd_dc_roy01_displaced.var:hd_dc_actor = { save_scope_as = hd_dc_displaced }
+			title:h_china.holder = { trigger_event = { id = hd_dc_roy.0001 days = 1 } }
+		}
+	}
+}
+
+# Character scope. These are the completed, unilateral rights/authority paths.
+hd_dc_roy01_restore_effect = {
+	if = {
+		limit = { hd_dc_roy01_window_valid_trigger = yes }
+		scope:hd_dc_instance = { set_variable = { name = hd_dc_roy01_action value = flag:roy_01_a } }
+		hd_dc_restore_ritual_order_effect = yes
+		scope:hd_dc_instance = {
+			change_variable = { name = hd_dc_x add = -5 }
+			change_variable = { name = hd_dc_q add = 10 }
+			var:hd_dc_roy01_displaced.var:hd_dc_actor = { add_opinion = { target = root modifier = hd_dc_ritual_fairness_opinion opinion = 10 } }
+			var:hd_dc_roy01_favored.var:hd_dc_actor = { add_opinion = { target = root modifier = hd_dc_ritual_disappointment_opinion opinion = -10 } }
+			hd_dc_finish_roy01_effect = { RESULT = restored }
+		}
+	}
+}
+
+hd_dc_roy01_assert_effect = {
+	if = {
+		limit = { hd_dc_roy01_window_valid_trigger = yes }
+		scope:hd_dc_instance = { set_variable = { name = hd_dc_roy01_action value = flag:roy_01_c } }
+		# Confirm the current actual register and deny both petitions.
+		add_prestige = minor_prestige_gain
+		scope:hd_dc_instance = {
+			set_variable = { name = hd_dc_ritual_last_author value = root }
+			set_variable = { name = hd_dc_ritual_last_order value = flag:imperial_confirmation }
+			set_variable = { name = hd_dc_ritual_last_date value = current_date }
+			change_variable = { name = hd_dc_x add = 10 }
+			var:hd_dc_roy01_displaced.var:hd_dc_actor = { add_opinion = { target = root modifier = hd_dc_ritual_command_opinion opinion = -15 } }
+			var:hd_dc_roy01_favored.var:hd_dc_actor = { add_opinion = { target = root modifier = hd_dc_ritual_command_opinion opinion = -15 } }
+			title:h_china.holder = {
+				every_vassal = {
+					limit = { OR = { has_trait = wrathful has_trait = arrogant } NOT = { dynasty = title:h_china.holder.dynasty } }
+					add_opinion = { target = root modifier = hd_dc_ritual_command_opinion opinion = 10 }
+				}
+			}
+			every_in_list = {
+				variable = hd_dc_actor_stories
+				var:hd_dc_actor ?= { add_opinion = { target = root modifier = hd_dc_royal_cooperation_opinion } }
+			}
+			hd_dc_finish_roy01_effect = { RESULT = imposed }
+		}
+	}
+}
+
+hd_dc_roy01_offer_precedence_effect = {
+	if = {
+		limit = { hd_dc_roy01_window_valid_trigger = yes }
+		scope:hd_dc_instance.var:hd_dc_roy01_favored = { save_scope_as = hd_dc_actor_story }
+		scope:hd_dc_actor_story.var:hd_dc_actor = { save_scope_as = hd_dc_offer_to }
+		hd_dc_create_proposal_effect = {
+			OPTION = roy_01_b
+			TERMS = hd_dc_roy01_precedence_terms
+			COUNTER_TERMS = hd_dc_roy01_precedence_guarantee
+			MONTHS = 3
+		}
+		if = {
+			limit = { exists = scope:hd_dc_proposal }
+			scope:hd_dc_instance = {
+				set_variable = { name = hd_dc_roy01_action value = flag:roy_01_b }
+				set_variable = { name = hd_dc_roy01_proposal value = scope:hd_dc_proposal }
+			}
+		}
+	}
+}
+
+# Main record, after proposal maintenance. Only this node's completed reply is
+# consumed; signatures do not let a deposed ruler assign a current court seat.
+hd_dc_consume_roy01_proposal_effect = {
+	if = {
+		limit = {
+			var:hd_dc_roy01_action = flag:roy_01_b
+			NOT = { has_variable = hd_dc_roy01_result }
+			exists = var:hd_dc_roy01_proposal
+			var:hd_dc_roy01_proposal = {
+				NOT = { has_variable = hd_dc_result_consumed }
+				OR = {
+					has_variable = hd_dc_callback_committed
+					var:hd_dc_proposal_state = flag:expired
+					var:hd_dc_proposal_state = flag:invalidated
+				}
+			}
+		}
+		save_scope_as = hd_dc_instance
+		var:hd_dc_roy01_proposal = { save_scope_as = hd_dc_proposal set_variable = { name = hd_dc_result_consumed value = yes } }
+		if = {
+			limit = {
+				hd_dc_roy01_parties_valid_trigger = yes
+				scope:hd_dc_proposal = {
+					has_variable = hd_dc_callback_committed
+					var:hd_dc_proposal_state = flag:accepted
+					var:hd_dc_actor_story = {
+						var:hd_dc_node = scope:hd_dc_proposal.var:hd_dc_origin_node
+						var:hd_dc_node_version = scope:hd_dc_proposal.var:hd_dc_origin_version
+					}
+					var:hd_dc_proposal_from = title:h_china.holder
+					var:hd_dc_from_signature = var:hd_dc_proposal_from
+					var:hd_dc_to_signature = var:hd_dc_proposal_to
+					var:hd_dc_proposal_to = scope:hd_dc_instance.var:hd_dc_roy01_favored.var:hd_dc_actor
+				}
+			}
+			var:hd_dc_roy01_favored = { save_scope_as = hd_dc_favored_story }
+			title:h_china.holder = { hd_dc_grant_ritual_precedence_effect = yes }
+			scope:hd_dc_favored_story = {
+				set_variable = { name = hd_dc_ritual_pledge value = scope:hd_dc_proposal }
+				var:hd_dc_actor = { add_opinion = { target = title:h_china.holder modifier = hd_dc_ritual_precedence_opinion opinion = 20 } }
+			}
+			change_variable = { name = hd_dc_open_obligations add = 1 }
+			hd_dc_register_governance_obligation_change_effect = yes
+			if = {
+				limit = { scope:hd_dc_proposal.var:hd_dc_counter_count = 1 }
+				set_variable = { name = hd_dc_ritual_precedence_guarantee value = yes years = 1 }
+			}
+			every_in_list = {
+				variable = hd_dc_actor_stories
+				limit = { this != scope:hd_dc_favored_story }
+				change_variable = { name = hd_dc_m add = 10 }
+				var:hd_dc_actor ?= { add_opinion = { target = title:h_china.holder modifier = hd_dc_ritual_precedence_opinion opinion = -15 } }
+			}
+			hd_dc_finish_roy01_effect = { RESULT = precedence_accepted }
+		}
+		else_if = {
+			limit = { scope:hd_dc_proposal.var:hd_dc_proposal_state = flag:rejected }
+			hd_dc_finish_roy01_effect = { RESULT = precedence_rejected }
+		}
+		else_if = {
+			limit = { scope:hd_dc_proposal.var:hd_dc_proposal_state = flag:expired }
+			hd_dc_finish_roy01_effect = { RESULT = precedence_expired }
+		}
+		else = { hd_dc_finish_roy01_effect = { RESULT = precedence_invalidated } }
+		if = {
+			limit = { exists = title:h_china.holder }
+			save_scope_value_as = { name = hd_dc_roy01_reply value = var:hd_dc_roy01_result }
+			title:h_china.holder = { trigger_event = { id = hd_dc_roy.0101 days = 1 } }
+		}
+	}
+}
+
+# End this authored ceremony without dispatching ROY-02. Support invitations
+# have their own receipts; their actor/version identities remain intact.
+hd_dc_finish_roy01_effect = {
+	if = {
+		limit = { NOT = { has_variable = hd_dc_roy01_result } }
+		set_variable = { name = hd_dc_roy01_result value = flag:$RESULT$ }
+		set_variable = { name = hd_dc_roy01_completed value = current_date }
+		remove_variable = hd_dc_roy01_delivery_wait
+		every_in_list = {
+			variable = hd_dc_actor_stories
+			limit = { var:hd_dc_node = 1 }
+			set_variable = { name = hd_dc_node_completed value = flag:roy_01 }
+			remove_variable = hd_dc_option_committed
+			remove_variable = hd_dc_pending_proposal
+			remove_variable = hd_dc_pending_action
+			remove_variable = hd_dc_proposal_result
+			remove_variable = hd_dc_proposal_result_record
+		}
+		if = { limit = { has_variable = hd_dc_roy01_action } hd_dc_invite_royal_register_effect = yes }
+	}
+}
+
+# Invitations are letters requiring a real reply, not forced court attendance.
+# Saved current rank determines the actual dispatch delay; tied seats arrive
+# together. The ruler and version are frozen independently for every recipient.
+hd_dc_invite_royal_register_effect = {
+	if = {
+		limit = { exists = title:h_china.holder }
+		every_in_list = {
+			variable = hd_dc_ritual_order
+			limit = { exists = var:hd_dc_actor var:hd_dc_actor = { is_alive = yes } NOT = { has_variable = hd_dc_invitation_version } }
+			save_scope_as = hd_dc_actor_story
+			set_variable = { name = hd_dc_inviter value = title:h_china.holder }
+			set_variable = { name = hd_dc_invitation_version value = 1 }
+			set_variable = { name = hd_dc_invitation_rank value = var:hd_dc_ritual_rank }
+			save_scope_value_as = { name = hd_dc_invitation_version value = var:hd_dc_invitation_version }
+			save_scope_value_as = { name = hd_dc_invitation_rank value = var:hd_dc_invitation_rank }
+			var:hd_dc_actor = { trigger_event = { id = hd_dc_roy.0102 days = scope:hd_dc_actor_story.var:hd_dc_invitation_rank } }
+		}
+	}
+}
+
+# Actual event delivery starts the personal deadline once. Scheduled letters
+# which have never arrived cannot establish a failure to answer.
+hd_dc_receive_royal_invitation_effect = {
+	if = {
+		limit = { hd_dc_royal_invitation_delivery_valid_trigger = yes }
+		scope:hd_dc_actor_story = {
+			if = {
+				limit = { NOT = { has_variable = hd_dc_invitation_delivered } }
+				set_variable = { name = hd_dc_invitation_delivered value = current_date }
+				set_variable = { name = hd_dc_invitation_wait value = yes days = 90 }
+			}
+		}
+	}
+}
+
+# The delayed event was cancelled before delivery. A later release from prison
+# must not leave this already cancelled letter pending forever.
+hd_dc_cancel_royal_invitation_delivery_effect = {
+	save_scope_as = hd_dc_invitation_recipient
+	if = {
+		limit = {
+			exists = scope:hd_dc_actor_story
+			exists = scope:hd_dc_invitation_version
+			scope:hd_dc_actor_story = {
+				var:hd_dc_actor = scope:hd_dc_invitation_recipient
+				var:hd_dc_invitation_version = scope:hd_dc_invitation_version
+				NOT = { has_variable = hd_dc_invitation_delivered }
+				NOT = { has_variable = hd_dc_invitation_answer }
+			}
+		}
+		scope:hd_dc_actor_story = { hd_dc_close_royal_invitation_effect = { ANSWER = invalidated } }
+	}
+}
+
+# Region scope after proposal expiry/invalidity has been processed.
+hd_dc_maintain_royal_events_effect = {
+	every_in_list = {
+		variable = hd_dc_instances
+		limit = { var:hd_dc_type = flag:roy NOT = { var:hd_dc_stage = flag:closed } }
+		hd_dc_consume_roy01_proposal_effect = yes
+		hd_dc_consume_roy01_mediation_effect = yes
+		save_scope_as = hd_dc_instance
+		if = {
+			limit = { has_variable = hd_dc_roy01_version NOT = { has_variable = hd_dc_roy01_action } NOT = { has_variable = hd_dc_roy01_result } }
+			if = {
+				limit = { OR = { var:hd_dc_roy01_author != title:h_china.holder NOT = { hd_dc_roy01_parties_valid_trigger = yes } } }
+				hd_dc_finish_roy01_effect = { RESULT = invalidated }
+			}
+			else_if = { limit = { NOT = { has_variable = hd_dc_roy01_delivery_wait } } hd_dc_finish_roy01_effect = { RESULT = expired } }
+		}
+		hd_dc_dispatch_roy01_effect = yes
+		if = { limit = { NOT = { has_variable = hd_dc_roy01_version } NOT = { has_variable = hd_dc_roy01_result } } hd_dc_finish_roy01_effect = { RESULT = no_ritual_pair } }
+		every_in_list = {
+			variable = hd_dc_actor_stories
+			limit = { has_variable = hd_dc_invitation_version NOT = { has_variable = hd_dc_invitation_answer } }
+			if = {
+				limit = {
+					OR = {
+						NOT = { exists = var:hd_dc_actor }
+						NOT = { exists = title:h_china.holder }
+						var:hd_dc_actor ?= { is_alive = no }
+						var:hd_dc_inviter != title:h_china.holder
+						var:hd_dc_actor ?= { is_imprisoned = yes }
+						var:hd_dc_actor ?= { is_at_war_with = title:h_china.holder }
+					}
+				}
+				hd_dc_close_royal_invitation_effect = { ANSWER = invalidated }
+			}
+			else_if = {
+				limit = { has_variable = hd_dc_invitation_delivered NOT = { has_variable = hd_dc_invitation_wait } }
+				hd_dc_close_royal_invitation_effect = { ANSWER = expired }
+			}
+		}
+		# Invitations conclude personally. Ending the ceremony releases the
+		# acute narrative slot while real factions, wars and promises persist.
+		if = {
+			limit = {
+				has_variable = hd_dc_roy01_result
+				NOT = { has_variable = hd_dc_roy01_node_closed }
+				NOT = { any_in_list = { variable = hd_dc_actor_stories has_variable = hd_dc_invitation_version NOT = { has_variable = hd_dc_invitation_answer } } }
+			}
+			set_variable = { name = hd_dc_roy01_node_closed value = current_date }
+			set_variable = { name = hd_dc_stage value = flag:aftermath }
+			hd_dc_release_own_acute_lock_effect = yes
+		}
+	}
+}
+
+hd_dc_answer_royal_invitation_effect = {
+	if = {
+		limit = { hd_dc_royal_invitation_valid_trigger = yes }
+		scope:hd_dc_actor_story = {
+			hd_dc_close_royal_invitation_effect = { ANSWER = $ANSWER$ }
+		}
+	}
+}
+
+# Actor record scope. Cancellation and timeout close the outstanding personal
+# promise with their actual status; neither is silently turned into fulfillment.
+hd_dc_close_royal_invitation_effect = {
+	if = {
+		limit = { NOT = { has_variable = hd_dc_invitation_answer } }
+		set_variable = { name = hd_dc_invitation_answer value = flag:$ANSWER$ }
+		set_variable = { name = hd_dc_invitation_answer_date value = current_date }
+		remove_variable = hd_dc_invitation_wait
+		if = {
+			limit = { exists = var:hd_dc_ritual_pledge NOT = { has_variable = hd_dc_ritual_pledge_result } }
+			set_variable = { name = hd_dc_ritual_pledge_result value = flag:$ANSWER$ }
+			var:hd_dc_instance_ref = {
+				if = { limit = { var:hd_dc_open_obligations > 0 } change_variable = { name = hd_dc_open_obligations add = -1 } }
+				else = { set_variable = { name = hd_dc_obligation_count_error value = yes } }
+				hd_dc_register_governance_obligation_change_effect = yes
+			}
+			if = {
+				limit = { OR = { var:hd_dc_invitation_answer = flag:declined var:hd_dc_invitation_answer = flag:expired } }
+				set_variable = { name = hd_dc_ritual_pledge_breach_date value = current_date }
+			}
+		}
+	}
+}

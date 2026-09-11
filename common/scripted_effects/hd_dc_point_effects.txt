@@ -1,0 +1,116 @@
+# Sole incremental writer of persistent W/H. Situation scope; W and H use raw
+# 2000-point units. SOURCE separates native, ordinary and crisis accounting.
+# Native catalysts retain their own original phase progress and history.
+hd_dc_change_points_effect = {
+	hd_dc_sync_pressure_effect = yes
+	set_variable = { name = hd_dc_last_point_source value = flag:$SOURCE$ }
+	set_variable = { name = hd_dc_last_w_requested value = $W$ }
+	set_variable = { name = hd_dc_last_h_requested value = $H$ }
+	set_variable = { name = hd_dc_w_before value = var:hd_dc_pressure_raw }
+	set_variable = { name = hd_dc_h_before value = var:hd_dc_prosperity_raw }
+	if = {
+		limit = { var:hd_dc_last_point_source = flag:ordinary }
+		if = {
+			limit = { NOT = { var:hd_dc_ordinary_year = current_year } }
+			set_variable = { name = hd_dc_ordinary_year value = current_year }
+			set_variable = { name = hd_dc_ordinary_w_net value = 0 }
+		}
+		set_variable = {
+			name = hd_dc_w_allowed
+			value = {
+				value = var:hd_dc_ordinary_w_net
+				add = var:hd_dc_last_w_requested
+				min = { value = hd_dc_ordinary_annual_w_limit multiply = -1 }
+				max = hd_dc_ordinary_annual_w_limit
+				subtract = var:hd_dc_ordinary_w_net
+			}
+		}
+	}
+	else = { set_variable = { name = hd_dc_w_allowed value = var:hd_dc_last_w_requested } }
+	set_variable = {
+		name = hd_dc_pressure_raw
+		value = { value = var:hd_dc_w_before add = var:hd_dc_w_allowed min = 0 max = hd_dc_pressure_max }
+	}
+	set_variable = {
+		name = hd_dc_prosperity_raw
+		value = { value = var:hd_dc_h_before add = var:hd_dc_last_h_requested min = 0 max = hd_dc_prosperity_max }
+	}
+	set_variable = { name = hd_dc_last_w_actual value = { value = var:hd_dc_pressure_raw subtract = var:hd_dc_w_before } }
+	set_variable = { name = hd_dc_last_h_actual value = { value = var:hd_dc_prosperity_raw subtract = var:hd_dc_h_before } }
+	if = {
+		limit = { var:hd_dc_last_point_source = flag:ordinary }
+		change_variable = { name = hd_dc_ordinary_w_net add = var:hd_dc_last_w_actual }
+	}
+	change_variable = { name = hd_dc_point_sequence add = 1 }
+	set_variable = { name = hd_dc_last_point_date value = current_date }
+	remove_variable = hd_dc_w_before
+	remove_variable = hd_dc_h_before
+	remove_variable = hd_dc_w_allowed
+	hd_dc_sync_pressure_effect = yes
+	hd_dc_archive_point_change_effect = yes
+}
+
+# One immutable record for every actual invocation of the sole writer,
+# including clamped requests. Preserve the caller's current record/keeper.
+hd_dc_archive_point_change_effect = {
+	clear_saved_scope = hd_dc_point_previous_record
+	clear_saved_scope = hd_dc_point_previous_keeper
+	clear_saved_scope = hd_dc_point_history
+	scope:hd_dc_record ?= { save_scope_as = hd_dc_point_previous_record }
+	scope:hd_dc_keeper ?= { save_scope_as = hd_dc_point_previous_keeper }
+	hd_dc_select_record_keeper_effect = yes
+	if = {
+		limit = { exists = scope:hd_dc_keeper }
+		scope:hd_dc_keeper = { hd_dc_create_record_effect = { KIND = point_history } }
+		scope:hd_dc_record = {
+			save_scope_as = hd_dc_point_history
+			set_variable = { name = hd_dc_point_source value = situation:dynastic_cycle.var:hd_dc_last_point_source }
+			set_variable = { name = hd_dc_point_sequence value = situation:dynastic_cycle.var:hd_dc_point_sequence }
+			set_variable = { name = hd_dc_w_requested value = situation:dynastic_cycle.var:hd_dc_last_w_requested }
+			set_variable = { name = hd_dc_h_requested value = situation:dynastic_cycle.var:hd_dc_last_h_requested }
+			set_variable = { name = hd_dc_w_committed value = situation:dynastic_cycle.var:hd_dc_last_w_actual }
+			set_variable = { name = hd_dc_h_committed value = situation:dynastic_cycle.var:hd_dc_last_h_actual }
+			set_variable = { name = hd_dc_w_after value = situation:dynastic_cycle.var:hd_dc_pressure_raw }
+			set_variable = { name = hd_dc_h_after value = situation:dynastic_cycle.var:hd_dc_prosperity_raw }
+			hd_dc_stamp_calendar_effect = { PREFIX = hd_dc_point_date }
+		}
+		set_variable = { name = hd_dc_last_point_history value = scope:hd_dc_point_history }
+	}
+	else = { set_variable = { name = hd_dc_point_history_unavailable value = current_date } }
+	clear_saved_scope = hd_dc_record
+	clear_saved_scope = hd_dc_keeper
+	scope:hd_dc_point_previous_record ?= { save_scope_as = hd_dc_record }
+	scope:hd_dc_point_previous_keeper ?= { save_scope_as = hd_dc_keeper }
+}
+
+# Story option/final reward receipt. Required: persistent scope:hd_dc_receipt.
+# The owning node has already checked political outcome and actual obligations.
+# An identical receipt can never spend the annual budget or reward twice.
+hd_dc_commit_point_receipt_effect = {
+	if = {
+		limit = {
+			exists = situation:dynastic_cycle
+			exists = scope:hd_dc_receipt
+			scope:hd_dc_receipt = { NOT = { has_variable = hd_dc_points_committed } }
+		}
+		scope:hd_dc_receipt = { set_variable = { name = hd_dc_points_committed value = 1 } }
+		situation:dynastic_cycle = {
+			hd_dc_change_points_effect = {
+				W = { value = $W$ multiply = hd_dc_pressure_max divide = 100 }
+				H = { value = $H$ multiply = hd_dc_prosperity_max divide = 100 }
+				SOURCE = $SOURCE$
+			}
+		}
+		scope:hd_dc_receipt = {
+			if = { limit = { exists = scope:hd_dc_point_history } set_variable = { name = hd_dc_point_history_ref value = scope:hd_dc_point_history } }
+			set_variable = { name = hd_dc_point_source value = flag:$SOURCE$ }
+			set_variable = { name = hd_dc_w_requested value = situation:dynastic_cycle.var:hd_dc_last_w_requested }
+			set_variable = { name = hd_dc_h_requested value = situation:dynastic_cycle.var:hd_dc_last_h_requested }
+			set_variable = { name = hd_dc_point_sequence value = situation:dynastic_cycle.var:hd_dc_point_sequence }
+			set_variable = { name = hd_dc_point_date value = current_date }
+			set_variable = { name = hd_dc_w_committed value = situation:dynastic_cycle.var:hd_dc_last_w_actual }
+			set_variable = { name = hd_dc_h_committed value = situation:dynastic_cycle.var:hd_dc_last_h_actual }
+			set_variable = { name = hd_dc_points_committed value = 2 }
+		}
+	}
+}

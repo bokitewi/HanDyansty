@@ -1,0 +1,119 @@
+# Main ROY instance scope. Approved initial order: highest held title tier,
+# then age, both descending; equal tier and age share a rank. Freeze the actual
+# input values once. No invented ancestor, forced court move or salary.
+hd_dc_initialize_ritual_register_effect = {
+	if = {
+		limit = {
+			var:hd_dc_type = flag:roy
+			NOT = { has_variable = hd_dc_ritual_initialized }
+			any_in_list = { variable = hd_dc_actor_stories exists = var:hd_dc_actor }
+		}
+		save_scope_as = hd_dc_ritual_instance
+		set_variable = { name = hd_dc_ritual_count value = 0 }
+		every_in_list = {
+			variable = hd_dc_actor_stories
+			set_variable = { name = hd_dc_ritual_tier value = var:hd_dc_actor.highest_held_title_tier }
+			set_variable = { name = hd_dc_ritual_age value = var:hd_dc_actor.age }
+			scope:hd_dc_ritual_instance = { change_variable = { name = hd_dc_ritual_count add = 1 } }
+		}
+		# This comparison is performed once per crisis, across registered royals
+		# only. It does not impose a population cap or scan all world characters.
+		every_in_list = {
+			variable = hd_dc_actor_stories
+			save_scope_as = hd_dc_rank_subject
+			set_variable = { name = hd_dc_ritual_old_rank value = 1 }
+			scope:hd_dc_ritual_instance = {
+				every_in_list = {
+					variable = hd_dc_actor_stories
+					limit = {
+						OR = {
+							var:hd_dc_ritual_tier > scope:hd_dc_rank_subject.var:hd_dc_ritual_tier
+							AND = {
+								var:hd_dc_ritual_tier = scope:hd_dc_rank_subject.var:hd_dc_ritual_tier
+								var:hd_dc_ritual_age > scope:hd_dc_rank_subject.var:hd_dc_ritual_age
+							}
+						}
+					}
+					scope:hd_dc_rank_subject = { change_variable = { name = hd_dc_ritual_old_rank add = 1 } }
+				}
+			}
+			set_variable = { name = hd_dc_ritual_rank value = var:hd_dc_ritual_old_rank }
+		}
+		set_variable = { name = hd_dc_ritual_initialized value = yes }
+		set_variable = { name = hd_dc_ritual_confirmed_date value = current_date }
+		set_variable = { name = hd_dc_ritual_version value = 1 }
+		hd_dc_refresh_ritual_order_effect = yes
+		situation:dynastic_cycle = { set_variable = { name = hd_dc_ritual_instance value = scope:hd_dc_ritual_instance } }
+	}
+}
+
+# Ordered persistent list is shared by the UI and actual council invitations.
+hd_dc_refresh_ritual_order_effect = {
+	save_scope_as = hd_dc_ritual_instance
+	clear_variable_list = hd_dc_ritual_order
+	ordered_in_list = {
+		variable = hd_dc_actor_stories
+		order_by = { value = var:hd_dc_ritual_rank multiply = -1 }
+		max = var:hd_dc_ritual_count
+		check_range_bounds = no
+		save_scope_as = hd_dc_ordered_royal
+		scope:hd_dc_ritual_instance = { add_to_variable_list = { name = hd_dc_ritual_order target = scope:hd_dc_ordered_royal } }
+	}
+}
+
+# Actual h_china holder and exact instance required. Rights are changed here;
+# relation, payment and Q receipts belong to the originating node action.
+hd_dc_restore_ritual_order_effect = {
+	if = {
+		limit = {
+			this = title:h_china.holder
+			exists = scope:hd_dc_instance
+			scope:hd_dc_instance = { has_variable = hd_dc_ritual_initialized NOT = { has_variable = hd_dc_ritual_precedence_guarantee } }
+		}
+		scope:hd_dc_instance = {
+			every_in_list = {
+				variable = hd_dc_actor_stories
+				set_variable = { name = hd_dc_ritual_rank value = var:hd_dc_ritual_old_rank }
+			}
+			remove_variable = hd_dc_ritual_favored_story
+			set_variable = { name = hd_dc_ritual_last_order value = flag:old_order }
+			set_variable = { name = hd_dc_ritual_last_author value = title:h_china.holder }
+			set_variable = { name = hd_dc_ritual_last_date value = current_date }
+			change_variable = { name = hd_dc_ritual_version add = 1 }
+			hd_dc_refresh_ritual_order_effect = yes
+		}
+	}
+}
+
+# Promote one named royal to the near seat, retaining every other royal's
+# relative order and all unaffected ties. A bilateral branch must first verify
+# its accepted contract; this low-level effect does not fabricate a signature.
+hd_dc_grant_ritual_precedence_effect = {
+	if = {
+		limit = {
+			this = title:h_china.holder
+			exists = scope:hd_dc_instance
+			exists = scope:hd_dc_favored_story.var:hd_dc_actor
+			scope:hd_dc_favored_story = { var:hd_dc_instance_ref = scope:hd_dc_instance }
+			scope:hd_dc_favored_story.var:hd_dc_actor = { is_alive = yes }
+			scope:hd_dc_instance = { has_variable = hd_dc_ritual_initialized NOT = { has_variable = hd_dc_ritual_precedence_guarantee } }
+		}
+		scope:hd_dc_instance = {
+			every_in_list = {
+				variable = hd_dc_actor_stories
+				set_variable = { name = hd_dc_ritual_rank value = var:hd_dc_ritual_old_rank }
+				if = {
+					limit = { var:hd_dc_ritual_old_rank <= scope:hd_dc_favored_story.var:hd_dc_ritual_old_rank }
+					change_variable = { name = hd_dc_ritual_rank add = 1 }
+				}
+			}
+			scope:hd_dc_favored_story = { set_variable = { name = hd_dc_ritual_rank value = 1 } }
+			set_variable = { name = hd_dc_ritual_favored_story value = scope:hd_dc_favored_story }
+			set_variable = { name = hd_dc_ritual_last_order value = flag:imperial_precedence }
+			set_variable = { name = hd_dc_ritual_last_author value = title:h_china.holder }
+			set_variable = { name = hd_dc_ritual_last_date value = current_date }
+			change_variable = { name = hd_dc_ritual_version add = 1 }
+			hd_dc_refresh_ritual_order_effect = yes
+		}
+	}
+}

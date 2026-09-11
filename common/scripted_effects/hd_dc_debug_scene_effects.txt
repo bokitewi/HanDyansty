@@ -1,0 +1,157 @@
+# Explicit player-selected world changes. No answers, victories or elapsed
+# periods are supplied by a scene. Every scene keeps its actual named actors.
+# TYPE is a literal chosen by the seven menu entries; intensity is whitelisted.
+hd_dc_debug_select_epidemic_effect = {
+	epidemic_type:$TYPE$ = { save_scope_as = epidemic_type }
+	save_scope_value_as = { name = hd_dc_debug_epidemic_name value = flag:hd_dc_debug.epidemic.$TYPE$ }
+	trigger_event = { id = hd_dc_debug.0081 }
+}
+
+hd_dc_debug_spawn_selected_epidemic_effect = {
+	if = {
+		limit = { exists = scope:hd_dc_debug_outbreak_county scope:hd_dc_debug_outbreak_county = { hd_dc_debug_selected_epidemic_county_trigger = yes } }
+		scope:hd_dc_debug_outbreak_county.title_province = {
+			if = { limit = { scope:hd_dc_debug_epidemic_intensity = flag:hd_dc_debug.epidemic.minor } create_epidemic_outbreak = { type = $TYPE$ intensity = minor } }
+			else_if = { limit = { scope:hd_dc_debug_epidemic_intensity = flag:hd_dc_debug.epidemic.major } create_epidemic_outbreak = { type = $TYPE$ intensity = major } }
+			else_if = { limit = { scope:hd_dc_debug_epidemic_intensity = flag:hd_dc_debug.epidemic.apocalyptic } create_epidemic_outbreak = { type = $TYPE$ intensity = apocalyptic } }
+		}
+	}
+}
+
+hd_dc_debug_prepare_ord09_effect = {
+	if = {
+		limit = {
+			debug_only = yes is_ai = no is_alive = yes is_adult = yes is_landed = yes is_imprisoned = no exists = capital_province
+			any_character_situation = { this = situation:dynastic_cycle }
+			NOT = { has_variable = hd_dc_debug_ord09_prepared } NOT = { has_variable = hd_dc_pending_ordinary }
+			save_temporary_scope_as = hd_dc_ordinary_ruler
+			situation:dynastic_cycle = { any_situation_participant = { is_landed = yes hd_dc_ord09_captor_trigger = yes } }
+		}
+		save_scope_as = hd_dc_debug_ruler
+		situation:dynastic_cycle = {
+			random_situation_participant = { limit = { is_landed = yes hd_dc_ord09_captor_trigger = yes } save_scope_as = hd_dc_debug_captor }
+		}
+		create_character = { age = 18 gender_female_chance = 0 dynasty = none culture = root.culture faith = root.faith location = root.capital_province save_scope_as = hd_dc_debug_captive }
+		create_character = { age = 18 gender_female_chance = 0 dynasty = none culture = root.culture faith = root.faith location = root.capital_province save_scope_as = hd_dc_debug_exchange }
+		add_courtier = scope:hd_dc_debug_captive
+		add_courtier = scope:hd_dc_debug_exchange
+		if = { limit = { is_female = yes } scope:hd_dc_debug_captive = { set_mother = scope:hd_dc_debug_ruler } }
+		else = { scope:hd_dc_debug_captive = { set_father = scope:hd_dc_debug_ruler } }
+		if = { limit = { scope:hd_dc_debug_captor = { is_female = yes } } scope:hd_dc_debug_exchange = { set_mother = scope:hd_dc_debug_captor } }
+		else = { scope:hd_dc_debug_exchange = { set_father = scope:hd_dc_debug_captor } }
+		scope:hd_dc_debug_captor = { imprison = { target = scope:hd_dc_debug_captive type = house_arrest } }
+		imprison = { target = scope:hd_dc_debug_exchange type = house_arrest }
+		add_gold = 300
+		set_variable = { name = hd_dc_debug_ord09_prepared value = yes }
+		set_variable = { name = hd_dc_debug_ord09_captor value = scope:hd_dc_debug_captor }
+		set_variable = { name = hd_dc_debug_ord09_captive value = scope:hd_dc_debug_captive }
+		set_variable = { name = hd_dc_debug_ord09_exchange value = scope:hd_dc_debug_exchange }
+	}
+}
+
+hd_dc_debug_prepare_ord13_effect = {
+	if = {
+		limit = {
+			debug_only = yes is_ai = no is_alive = yes is_adult = yes is_landed = yes is_imprisoned = no exists = capital_province
+			any_character_situation = { this = situation:dynastic_cycle }
+			NOT = { has_variable = hd_dc_debug_ord13_prepared } NOT = { has_variable = hd_dc_pending_ordinary }
+			any_vassal = { is_alive = yes is_adult = yes is_imprisoned = no any_held_title = { tier = tier_county } }
+		}
+		save_scope_as = hd_dc_debug_ruler
+		random_vassal = {
+			limit = { is_alive = yes is_adult = yes is_imprisoned = no any_held_title = { tier = tier_county } }
+			save_scope_as = hd_dc_debug_petitioner
+			random_held_title = { limit = { tier = tier_county } save_scope_as = hd_dc_debug_county change_county_control = { value = 40 subtract = county_control } }
+		}
+		create_character = { age = 35 gender_female_chance = 0 dynasty = none culture = root.culture faith = root.faith location = root.capital_province save_scope_as = hd_dc_debug_friend }
+		add_courtier = scope:hd_dc_debug_friend
+		set_relation_friend = { target = scope:hd_dc_debug_friend reason = hd_dc_debug_friend_reason }
+		cp:councillor_chancellor ?= { add_opinion = { target = scope:hd_dc_debug_ruler modifier = hd_dc_debug_trust_opinion } }
+		add_gold = 300
+		add_stress = { value = 200 subtract = stress min = 0 }
+		set_variable = { name = hd_dc_debug_ord13_prepared value = yes }
+		set_variable = { name = hd_dc_debug_ord13_petitioner value = scope:hd_dc_debug_petitioner }
+		set_variable = { name = hd_dc_debug_ord13_county value = scope:hd_dc_debug_county }
+		set_variable = { name = hd_dc_debug_ord13_friend value = scope:hd_dc_debug_friend }
+	}
+}
+
+# Prepare a comparison only in two genuinely affected, actionable counties.
+hd_dc_debug_prepare_par_effect = {
+	if = {
+		limit = { hd_dc_debug_par_scene_trigger = yes }
+		clear_saved_scope = hd_dc_debug_first_county
+		clear_saved_scope = hd_dc_debug_second_county
+		situation:dynastic_cycle = {
+			random_participant_group = { limit = { hd_dc_par_group_qualified_trigger = yes } save_scope_as = hd_dc_debug_first_party }
+			random_participant_group = { limit = { hd_dc_par_group_qualified_trigger = yes this != scope:hd_dc_debug_first_party } save_scope_as = hd_dc_debug_second_party }
+			scope:hd_dc_debug_first_party.var:movement_leader = { add_opinion = { target = scope:hd_dc_debug_second_party.var:movement_leader modifier = hd_dc_debug_party_grievance_opinion opinion = -200 } }
+			scope:hd_dc_debug_second_party.var:movement_leader = { add_opinion = { target = scope:hd_dc_debug_first_party.var:movement_leader modifier = hd_dc_debug_party_grievance_opinion opinion = -200 } }
+			every_in_list = {
+				variable = hd_dc_counties
+				limit = { hd_dc_party_case_county_trigger = yes NOT = { exists = scope:hd_dc_debug_second_county } }
+				if = { limit = { NOT = { exists = scope:hd_dc_debug_first_county } } save_scope_as = hd_dc_debug_first_county }
+				else = { save_scope_as = hd_dc_debug_second_county }
+			}
+			# Rebuild the diagnostic snapshot from actual organizations after
+			# explicitly changing their leaders' opinions. No power is fabricated.
+			remove_variable = hd_dc_par_snapshot_year
+			hd_dc_snapshot_party_pool_effect = yes
+		}
+		scope:hd_dc_debug_second_county = {
+			change_county_control = { value = scope:hd_dc_debug_first_county.county_control subtract = county_control }
+			change_development_level = { value = scope:hd_dc_debug_first_county.development_level subtract = development_level }
+		}
+		add_gold = 300
+		add_character_modifier = { modifier = hd_dc_debug_policy_training years = 5 }
+		set_variable = { name = hd_dc_debug_par_prepared value = yes }
+		set_variable = { name = hd_dc_debug_par_first_county value = scope:hd_dc_debug_first_county }
+		set_variable = { name = hd_dc_debug_par_second_county value = scope:hd_dc_debug_second_county }
+	}
+}
+
+# Existing imperial relatives retain their dynasty, titles and native faction
+# permissions. A grievance is created now, never labeled an earlier crime.
+hd_dc_debug_prepare_roy_effect = {
+	if = {
+		limit = {
+			debug_only = yes is_ai = no this = title:h_china.holder
+			NOT = { has_variable = hd_dc_debug_roy_prepared }
+			situation:dynastic_cycle = { hd_dc_debug_crisis_slot_trigger = yes any_situation_participant = { count >= 2 hd_dc_debug_roy_potential_trigger = yes } }
+		}
+		save_scope_as = hd_dc_debug_ruler
+		situation:dynastic_cycle = {
+			ordered_situation_participant = {
+				limit = { hd_dc_debug_roy_potential_trigger = yes }
+				order_by = age max = 2 check_range_bounds = no
+				add_opinion = { target = scope:hd_dc_debug_ruler modifier = hd_dc_debug_roy_grievance_opinion opinion = -200 }
+				add_gold = 300
+			}
+		}
+		add_gold = 300
+		set_variable = { name = hd_dc_debug_roy_prepared value = yes }
+	}
+}
+
+hd_dc_debug_prepare_support_effect = {
+	if = {
+		limit = { debug_only = yes is_ai = no NOT = { has_variable = hd_dc_debug_support_prepared } exists = situation:dynastic_cycle.var:hd_dc_latest_roy_instance }
+		save_scope_as = recipient
+		clear_saved_scope = hd_dc_debug_claimant
+		situation:dynastic_cycle.var:hd_dc_latest_roy_instance = {
+			every_in_list = {
+				variable = hd_dc_actor_stories
+				limit = { NOT = { exists = scope:hd_dc_debug_claimant } var:hd_dc_actor = { save_temporary_scope_as = actor hd_dc_royal_offer_pair_trigger = yes } }
+				var:hd_dc_actor = { save_scope_as = hd_dc_debug_claimant }
+			}
+		}
+		if = {
+			limit = { exists = scope:hd_dc_debug_claimant }
+			add_gold = 300
+			scope:hd_dc_debug_claimant = { add_gold = 300 }
+			if = { limit = { can_add_hook = { target = scope:hd_dc_debug_claimant type = favor_hook } } add_hook = { target = scope:hd_dc_debug_claimant type = favor_hook } }
+			set_variable = { name = hd_dc_debug_support_prepared value = yes }
+			set_variable = { name = hd_dc_debug_support_claimant value = scope:hd_dc_debug_claimant }
+		}
+	}
+}

@@ -1,0 +1,157 @@
+# PAR-01-B's approved original terms: separate political and local replies.
+hd_dc_offer_par01_leadership_effect = {
+	if = {
+		limit = { hd_dc_par01_relief_offer_valid_trigger = yes }
+		clear_saved_scope = hd_dc_actor_story
+		scope:hd_dc_instance = {
+			if = {
+				limit = { var:hd_dc_par_first_story.var:hd_dc_conflict_policy = flag:relief }
+				var:hd_dc_par_first_story = { save_scope_as = hd_dc_actor_story }
+			}
+			else = { var:hd_dc_par_second_story = { save_scope_as = hd_dc_actor_story } }
+		}
+		scope:hd_dc_actor_story.var:hd_dc_actor = { save_scope_as = hd_dc_offer_to }
+		hd_dc_create_proposal_effect = { OPTION = par_01_b TERMS = hd_dc_par01_relief_leadership_terms COUNTER_TERMS = hd_dc_par01_relief_leadership_terms MONTHS = 3 }
+		if = {
+			limit = { exists = scope:hd_dc_proposal }
+			scope:hd_dc_proposal = {
+				set_variable = { name = hd_dc_policy_offer_kind value = flag:leadership }
+				set_variable = { name = hd_dc_policy_county value = scope:hd_dc_instance.var:hd_dc_par01_county }
+				set_variable = { name = hd_dc_policy_executor value = scope:hd_dc_instance.var:hd_dc_par01_executor }
+				# This branch expressly permits acceptance or rejection only.
+				set_variable = { name = hd_dc_counter_count value = 1 }
+			}
+			scope:hd_dc_instance = {
+				set_variable = { name = hd_dc_par01_action value = flag:par_01_b }
+				set_variable = { name = hd_dc_par01_political_proposal value = scope:hd_dc_proposal }
+			}
+		}
+	}
+}
+
+# Proposal scope, called only after COM-04's versioned callback. The political
+# and local signatures occupy successive versions of the same actor's node.
+hd_dc_consume_par01_policy_offer_effect = {
+	save_scope_as = hd_dc_policy_offer
+	if = {
+		limit = { has_variable = hd_dc_callback_committed NOT = { has_variable = hd_dc_policy_offer_consumed } }
+		set_variable = { name = hd_dc_policy_offer_consumed value = yes }
+		if = {
+			limit = { var:hd_dc_proposal_state = flag:accepted hd_dc_par01_offer_context_trigger = yes }
+			if = {
+				limit = { var:hd_dc_policy_offer_kind = flag:leadership }
+				hd_dc_create_par01_local_offer_effect = yes
+			}
+			else = {
+				hd_dc_fund_par01_trial_effect = yes
+				if = {
+					limit = { NOT = { has_variable = hd_dc_policy_trial } }
+					hd_dc_finish_par01_offer_effect = { RESULT = funding_failed }
+				}
+			}
+		}
+		else_if = {
+			limit = { var:hd_dc_proposal_state = flag:rejected }
+			hd_dc_finish_par01_offer_effect = { RESULT = rejected }
+		}
+		else_if = {
+			limit = { var:hd_dc_proposal_state = flag:expired }
+			hd_dc_finish_par01_offer_effect = { RESULT = expired }
+		}
+		else = { hd_dc_finish_par01_offer_effect = { RESULT = invalidated } }
+	}
+}
+
+hd_dc_create_par01_local_offer_effect = {
+	save_scope_as = hd_dc_policy_political_proposal
+	var:hd_dc_instance_ref = { save_scope_as = hd_dc_instance }
+	var:hd_dc_actor_story = {
+		save_scope_as = hd_dc_actor_story
+		# The first receipt remains in the registry and in the main record.
+		remove_variable = hd_dc_pending_proposal
+		remove_variable = hd_dc_option_committed
+		remove_variable = hd_dc_proposal_result
+		remove_variable = hd_dc_proposal_result_record
+		change_variable = { name = hd_dc_node_version add = 1 }
+	}
+	var:hd_dc_policy_executor = { save_scope_as = hd_dc_offer_to }
+	var:hd_dc_proposal_from = {
+		hd_dc_create_proposal_effect = { OPTION = par_01_b TERMS = hd_dc_par01_local_relief_terms COUNTER_TERMS = hd_dc_par01_local_relief_terms MONTHS = 3 }
+	}
+	if = {
+		limit = { exists = scope:hd_dc_proposal }
+		scope:hd_dc_proposal = {
+			set_variable = { name = hd_dc_policy_offer_kind value = flag:local }
+			set_variable = { name = hd_dc_policy_political_proposal value = scope:hd_dc_policy_political_proposal }
+			set_variable = { name = hd_dc_policy_county value = scope:hd_dc_policy_political_proposal.var:hd_dc_policy_county }
+			set_variable = { name = hd_dc_policy_executor value = scope:hd_dc_policy_political_proposal.var:hd_dc_policy_executor }
+			set_variable = { name = hd_dc_frozen_gold value = hd_dc_g2_gold }
+			set_variable = { name = hd_dc_counter_count value = 1 }
+		}
+		scope:hd_dc_instance = { set_variable = { name = hd_dc_par01_local_proposal value = scope:hd_dc_proposal } }
+	}
+	else = {
+		scope:hd_dc_policy_political_proposal = { hd_dc_finish_par01_offer_effect = { RESULT = invalidated } }
+	}
+}
+
+# A failed negotiation is a distinct outcome, with no trial, Q or imaginary
+# refund. A partial financial receipt is retained by the payment subsystem.
+hd_dc_finish_par01_offer_effect = {
+	if = {
+		limit = { NOT = { has_variable = hd_dc_policy_offer_result } }
+		set_variable = { name = hd_dc_policy_offer_result value = flag:$RESULT$ }
+		save_scope_as = hd_dc_policy_offer
+		var:hd_dc_policy_county = { save_scope_as = hd_dc_policy_county }
+		var:hd_dc_instance_ref = { set_variable = { name = hd_dc_par01_result value = flag:$RESULT$ } }
+		hd_dc_release_par01_offer_node_effect = yes
+		var:hd_dc_proposal_from ?= {
+			if = { limit = { is_alive = yes } trigger_event = { id = hd_dc_par.1202 days = 1 } }
+		}
+		var:hd_dc_proposal_to ?= {
+			if = { limit = { is_alive = yes } trigger_event = { id = hd_dc_par.1202 days = 1 } }
+		}
+	}
+}
+
+# Release only this proposal's node lock. An unrelated later proposal remains
+# intact; archived signatures and actual financial receipts are never erased.
+hd_dc_release_par01_offer_node_effect = {
+	save_scope_as = hd_dc_policy_offer
+	var:hd_dc_actor_story = {
+		if = {
+			limit = { var:hd_dc_pending_proposal = scope:hd_dc_policy_offer }
+			remove_variable = hd_dc_pending_proposal
+			remove_variable = hd_dc_option_committed
+		}
+	}
+}
+
+# Trial scope after successful native modifier application. Approval of the
+# selected policy is earned by opening the actual trial, not merely signing.
+hd_dc_note_par01_trial_started_effect = {
+	if = {
+		limit = {
+			var:hd_dc_policy_proposal = { var:hd_dc_policy_offer_kind = flag:local }
+			NOT = { has_variable = hd_dc_policy_start_reactions }
+		}
+		set_variable = { name = hd_dc_policy_start_reactions value = yes }
+		save_scope_as = hd_dc_policy_trial
+		var:hd_dc_policy_proposal.var:hd_dc_policy_political_proposal.var:hd_dc_proposal_to = {
+			add_opinion = { target = scope:hd_dc_policy_trial.var:hd_dc_policy_author modifier = hd_dc_policy_trial_selected_opinion opinion = 20 }
+		}
+		var:hd_dc_instance_ref = {
+			var:hd_dc_par_first_story = { hd_dc_note_par01_reserve_disappointment_effect = yes }
+			var:hd_dc_par_second_story = { hd_dc_note_par01_reserve_disappointment_effect = yes }
+		}
+	}
+}
+
+hd_dc_note_par01_reserve_disappointment_effect = {
+	if = {
+		limit = { var:hd_dc_conflict_policy = flag:reserve }
+		var:hd_dc_actor = {
+			add_opinion = { target = scope:hd_dc_policy_trial.var:hd_dc_policy_author modifier = hd_dc_policy_trial_passed_over_opinion opinion = -15 }
+		}
+	}
+}

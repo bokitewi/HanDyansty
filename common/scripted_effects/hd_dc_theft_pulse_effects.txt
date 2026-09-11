@@ -1,0 +1,114 @@
+# One eligible AI check per calendar year, even if the on_action is repeated.
+hd_dc_theft_pulse_check_effect = {
+	if = {
+		limit = {
+			hd_dc_theft_pulse_actor_trigger = yes
+			OR = {
+				NOT = { has_variable = hd_dc_theft_pulse_year }
+				NOT = { var:hd_dc_theft_pulse_year = current_year }
+			}
+		}
+		set_variable = { name = hd_dc_theft_pulse_year value = current_year }
+		set_variable = { name = hd_dc_theft_pulse_status value = flag:no_business_candidate }
+		remove_variable = hd_dc_theft_pulse_target
+		remove_variable = hd_dc_theft_pulse_p0
+		remove_variable = hd_dc_theft_pulse_probability
+		remove_variable = hd_dc_theft_pulse_scheme
+		save_scope_as = actor
+		clear_list = hd_dc_theft_pulse_targets
+		liege ?= {
+			if = {
+				limit = { hd_dc_theft_pulse_target_trigger = yes }
+				add_to_list = hd_dc_theft_pulse_targets
+			}
+			every_vassal = {
+				limit = { hd_dc_theft_pulse_target_trigger = yes }
+				add_to_list = hd_dc_theft_pulse_targets
+			}
+		}
+		top_liege = {
+			if = {
+				limit = { hd_dc_theft_pulse_target_trigger = yes }
+				add_to_list = hd_dc_theft_pulse_targets
+			}
+		}
+		every_vassal = {
+			limit = { hd_dc_theft_pulse_target_trigger = yes }
+			add_to_list = hd_dc_theft_pulse_targets
+		}
+		if = {
+			limit = { any_in_list = { list = hd_dc_theft_pulse_targets always = yes } }
+			set_variable = { name = hd_dc_theft_pulse_status value = flag:native_gate_failed }
+		}
+		random_in_list = {
+			list = hd_dc_theft_pulse_targets
+			limit = {
+				scope:actor = {
+					can_start_scheme = { type = celestial_siphon_treasury target_title = prev.primary_title }
+				}
+			}
+			save_scope_as = recipient
+			primary_title = { save_scope_as = target }
+			scope:actor = {
+				set_variable = { name = hd_dc_theft_pulse_target value = scope:recipient }
+				set_variable = { name = hd_dc_theft_pulse_p0 value = { value = hd_dc_siphon_base_probability_value min = 100 max = 0 } }
+				set_variable = { name = hd_dc_theft_pulse_probability value = hd_dc_siphon_initiation_probability_value }
+				set_variable = { name = hd_dc_theft_pulse_status value = flag:probability_failed }
+				random = {
+					chance = var:hd_dc_theft_pulse_probability
+					hd_dc_theft_pulse_start_effect = yes
+				}
+			}
+		}
+		clear_list = hd_dc_theft_pulse_targets
+	}
+}
+
+# Native balanced starter and the interaction's non-tooltip initialization.
+# Caller: actor; saved recipient and target must be the selected live holder/title.
+hd_dc_theft_pulse_start_effect = {
+	if = {
+		limit = {
+			hd_dc_theft_pulse_actor_trigger = yes
+			exists = scope:recipient
+			can_start_scheme = { type = celestial_siphon_treasury target_title = scope:recipient.primary_title }
+		}
+	clear_saved_scope = new_scheme
+	begin_scheme_with_agents_effect = {
+		SCHEME_TYPE = celestial_siphon_treasury
+		TARGET_TYPE = target_title
+		TARGET_SCOPE = scope:recipient.primary_title
+		AGENT_1 = agent_scout
+		AGENT_2 = agent_muscle
+		AGENT_3 = agent_infiltrator
+		AGENT_4 = agent_footpad
+		AGENT_5 = agent_lookout
+	}
+	if = {
+		limit = { exists = scope:new_scheme }
+		education_5_scheme_progress_effect = { SKILL = stewardship }
+		ep3_actor_scheme_modifier_effect = yes
+		scope:new_scheme = {
+			set_variable = { name = embezzlement_stake value = 0 }
+			set_variable = { name = embezzlement_stake_initial value = scope:recipient.treasury_siphoned_value }
+		}
+		set_variable = { name = hd_dc_theft_pulse_status value = flag:started }
+		set_variable = { name = hd_dc_theft_pulse_scheme value = scope:new_scheme }
+		stress_impact = { content = medium_stress_impact_gain }
+		if = {
+			limit = { has_relation_nemesis = scope:recipient }
+			stress_impact = { base = major_stress_impact_loss }
+		}
+		else_if = {
+			limit = { has_relation_rival = scope:recipient }
+			stress_impact = { base = medium_stress_impact_loss }
+		}
+	}
+	else = {
+		set_variable = { name = hd_dc_theft_pulse_status value = flag:native_start_failed }
+	}
+	}
+	else = {
+		set_variable = { name = hd_dc_theft_pulse_status value = flag:native_gate_failed }
+	}
+}

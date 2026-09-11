@@ -1,0 +1,541 @@
+﻿on_army_monthly = {
+	on_actions = { hd_siege_monthly }
+}
+
+on_siege_completion = {
+	on_actions = { hd_siege_building_destruction }
+}
+
+hd_siege_monthly = {
+	effect = {
+		scope:army ?= {
+			if = {
+				limit = {
+					is_army_in_siege = yes
+				}
+				if = {
+					limit = {
+						location = {
+							is_county_capital = yes
+						}
+						province_total_army_size >= minimum_army_size_value
+					}
+					location.county = {
+						if = {
+							limit = {
+								NOR = {
+									has_game_rule = siege_devastation_none
+									has_county_modifier = siege_development_decline
+								}
+							}
+							add_county_modifier = {
+								modifier = siege_development_decline
+								months = 1
+							}
+						}
+						if = {
+							limit = {
+								NOR = {
+									has_game_rule = siege_epidemic_risk_none
+									has_county_modifier = siege_epidemic_resistance_decrease
+								}
+							}
+							add_county_modifier = {
+								modifier = siege_epidemic_resistance_decrease
+								months = 1
+							}
+						}
+					}
+				}
+				if = {
+					limit = {
+						has_game_rule = siege_encampment_enabled
+					}
+					location = {
+						if = {
+							limit = {
+								NOT = {
+									has_variable = siege_encampment_upgraded
+								}
+							}
+							if = {
+								limit = {
+									has_variable = siege_encampment_tier
+								}
+								set_variable = {
+									name = new_siege_encampment_tier
+									value = var:siege_encampment_tier
+								}
+								if = {
+									limit = {
+										var:new_siege_encampment_tier < 5
+									}
+									change_variable = {
+										name = new_siege_encampment_tier
+										add = 1
+									}
+								}
+								remove_variable = siege_encampment_tier
+								set_variable = {
+									name = siege_encampment_tier
+									value = var:new_siege_encampment_tier
+									days = 35
+								}
+								remove_variable = new_siege_encampment_tier
+							}
+							else = {
+								set_variable = {
+									name = siege_encampment_tier
+									value = 0
+									days = 35
+								}
+							}
+							set_variable = {
+								name = siege_encampment_upgraded
+								months = 1
+							}
+							add_province_modifier = {
+								modifier = siege_encampment
+								months = 1
+							}
+						}
+					}
+				}
+			}
+			if = {
+				limit = {
+					OR = {
+						has_game_rule = scorched_earth_enabled
+						AND = {
+							root = {
+								is_independent_ruler = yes
+							}
+							OR = {
+								has_game_rule = scorched_earth_independent_and_player_only
+								has_game_rule = scorched_earth_independent_only
+							}
+						}
+					}
+				}
+				if = {
+					limit = {
+						is_army_in_combat = no
+						is_army_in_raid = no
+						exists = location.county
+						location.county ?= {
+							NOT = {
+								has_county_modifier = scorched_earth_county_modifier
+							}
+							OR = {
+								AND = {
+									any_neighboring_county = {
+										holder = {
+											OR = {
+												AND = {
+													is_at_war_with = root
+													any_character_war = {
+														primary_defender = root
+														war_defender_total_strength_value < war_attacker_total_strength_halved_value
+													}
+												}
+												any_liege_or_above = {
+													is_at_war_with = root
+													any_character_war = {
+														primary_defender = root
+														war_defender_total_strength_value < war_attacker_total_strength_halved_value
+													}
+												}
+												root = {
+													has_trait = paranoid
+												}
+											}
+										}
+									}
+									holder = {
+										OR = {
+											this = root
+											AND = {
+												NOT = {
+													is_at_war_with = root
+												}
+												is_vassal_or_below_of = root
+												any_liege_or_above = {
+													NOT = {
+														is_vassal_or_below_of = root
+														is_at_war_with = root
+													}
+												}
+											}
+										}
+										scope:army.location.county.county_controller = this
+									}
+									root = {
+										NOT = {
+											has_trait = just
+										}
+									}
+								}
+								AND = {
+									holder = {
+										OR = {
+											AND = {
+												is_at_war_with = root
+												any_character_war = {
+													OR = {
+														AND = {
+															is_defender = root
+															war_defender_total_strength_value < war_attacker_total_strength_halved_value
+														}
+														AND = {
+															is_attacker = root
+															war_attacker_total_strength_value < war_defender_total_strength_halved_value
+														}
+														root = {
+															OR = {
+																has_trait = wrathful
+																has_trait = vengeful
+																has_trait = sadistic
+																AND = {
+																	faith = {
+																		faith_hostility_level = {
+																			target = scope:army.location.county.faith
+																			value >= faith_hostile_level
+																		}
+																	}
+																	has_trait = zealous
+																}
+															}
+														}
+													}
+												}
+											}
+											any_liege_or_above = {
+												is_at_war_with = root
+												any_character_war = {
+													OR = {
+														AND = {
+															is_defender = root
+															war_defender_total_strength_value < war_attacker_total_strength_halved_value
+														}
+														AND = {
+															is_attacker = root
+															war_attacker_total_strength_value < war_defender_total_strength_halved_value
+														}
+														root = {
+															OR = {
+																has_trait = wrathful
+																has_trait = vengeful
+																has_trait = sadistic
+																AND = {
+																	faith = {
+																		faith_hostility_level = {
+																			target = scope:army.location.county.faith
+																			value >= faith_hostile_level
+																		}
+																	}
+																	has_trait = zealous
+																}
+															}
+														}
+													}
+												}
+											}
+										}
+									}
+									county_controller = root
+								}
+							}
+						}
+						root = {
+							is_ai = yes
+							is_at_war = yes
+							capital_county ?= {
+								NOT = {
+									this = scope:army.location.county
+								}
+							}
+							NOR = {
+								has_trait = compassionate
+								has_trait = forgiving
+								faith = {
+									OR = {
+										has_doctrine = tenet_pacifism
+										has_doctrine = tenet_dharmic_pacifism
+									}
+								}
+								culture = {
+									has_cultural_tradition = tradition_pacifism
+								}
+								AND = {
+									faith = {
+										faith_hostility_level = {
+											target = scope:army.location.county.faith
+											value = faith_fully_accepted_level
+										}
+										NOT = {
+											has_doctrine = tenet_warmonger
+										}
+									}
+									OR = {
+										has_trait = zealous
+										AND = {
+											piety < 50
+											NOT = {
+												has_trait = cynical
+											}
+										}
+									}
+								}
+								AND = {
+									NOT = {
+										scope:army.location.county.holder = root
+									}
+									OR = {
+										opinion = {
+											target = scope:army.location.county.holder
+											value >= 50
+										}
+										has_relation_lover = scope:army.location.county.holder
+										has_relation_friend = scope:army.location.county.holder
+									}
+								}
+							}
+						}
+					}
+					location.county = {
+						hd_scorched_earth_development_loss_effect = yes
+						change_county_control = -100
+						add_county_modifier = {
+							modifier = scorched_earth_county_modifier
+							years = 5
+						}
+						every_county_province = {
+							add_province_modifier = {
+								modifier = scorched_earth_province_modifier
+								years = 5
+							}
+						}
+						every_in_de_jure_hierarchy = {
+							limit = {
+								tier = tier_barony
+								title_province = {
+									has_holding = yes
+								}
+							}
+							holder = {
+								if = {
+									limit = {
+										NOT = {
+											this = root
+										}
+									}
+									if = {
+										limit = {
+											has_opinion_modifier = {
+												modifier = scorched_my_holding
+												target = root
+											}
+										}
+										remove_opinion = {
+											modifier = scorched_my_holding
+											target = root
+										}
+									}
+									add_opinion = {
+										modifier = scorched_my_holding
+										target = root
+									}
+								}
+							}
+						}
+					}
+					root = {
+						if = {
+							limit = {
+								scope:army.location.county.holder = {
+									OR = {
+										this = root
+										AND = {
+											NOT = {
+												is_at_war_with = root
+											}
+											is_vassal_or_below_of = root
+											NOT = {
+												any_liege_or_above = {
+													is_at_war_with = root
+													is_vassal_or_below_of = root
+												}
+											}
+										}
+									}
+								}
+							}
+							add_prestige = -100
+						}
+						if = {
+							limit = {
+								faith = {
+									faith_hostility_level = {
+										target = scope:army.location.county.faith
+										value = faith_fully_accepted_level
+									}
+									NOT = {
+										has_doctrine = tenet_warmonger
+									}
+								}
+							}
+							add_piety = -50
+						}
+						if = {
+							limit = {
+								has_trait = sadistic
+								scope:army.location.county.holder = {
+									OR = {
+										is_at_war_with = root
+										any_liege_or_above = {
+											is_at_war_with = root
+											NOT = {
+												prev = {
+													is_vassal_or_below_of = root
+												}
+												target_is_liege_or_above = root
+											}
+										}
+									}
+								}
+							}
+							stress_impact = {
+								base = minor_stress_impact_loss
+							}
+						}
+						if = {
+							limit = {
+								has_trait = vengeful
+								scope:army.location.county.holder = {
+									OR = {
+										is_at_war_with = root
+										any_liege_or_above = {
+											is_at_war_with = root
+											NOT = {
+												prev = {
+													is_vassal_or_below_of = root
+												}
+												target_is_liege_or_above = root
+											}
+										}
+									}
+								}
+							}
+							stress_impact = {
+								base = miniscule_stress_impact_loss
+							}
+						}
+						if = {
+							limit = {
+								has_trait = wrathful
+								scope:army.location.county.holder = {
+									OR = {
+										is_at_war_with = root
+										any_liege_or_above = {
+											is_at_war_with = root
+											NOT = {
+												prev = {
+													is_vassal_or_below_of = root
+												}
+												target_is_liege_or_above = root
+											}
+										}
+									}
+								}
+							}
+							stress_impact = {
+								base = miniscule_stress_impact_loss
+							}
+						}
+						if = {
+							limit = {
+								has_trait = zealous
+								faith = {
+									faith_hostility_level = {
+										target = scope:army.location.county.faith
+										value >= faith_hostile_level
+									}
+								}
+								scope:army.location.county.holder = {
+									OR = {
+										is_at_war_with = root
+										any_liege_or_above = {
+											is_at_war_with = root
+											NOT = {
+												prev = {
+													is_vassal_or_below_of = root
+												}
+												target_is_liege_or_above = root
+											}
+										}
+									}
+								}
+							}
+							stress_impact = {
+								base = miniscule_stress_impact_loss
+							}
+						}
+						if = {
+							limit = {
+								has_trait = paranoid
+								scope:army.location.county.holder = {
+									OR = {
+										this = root
+										AND = {
+											any_liege_or_above = {
+												this = root
+											}
+											NOT = {
+												any_liege_or_above = {
+													is_at_war_with = root
+													is_vassal_or_below_of = root
+												}
+											}
+										}
+									}
+								}
+							}
+							stress_impact = {
+								base = miniscule_stress_impact_loss
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+hd_siege_building_destruction = {
+	effect = {
+		if = {
+			limit = {
+				has_game_rule = siege_building_destruction_enabled
+			}
+			scope:barony.title_province = {
+				random = {
+					chance = 25
+					modifier = { factor = hd_siege_destroy_building_soldier_value }
+					modifier = { add = hd_siege_destroy_building_development_value }
+					destroy_random_building_variable_effect = yes
+					destroy_random_building_effect = yes
+				}
+			}
+		}
+		if = {
+			limit = {
+				has_game_rule = siege_encampment_enabled
+			}
+			scope:barony.title_province = {
+				remove_variable = siege_encampment_tier
+				remove_variable = siege_encampment_upgraded
+				remove_province_modifier = siege_encampment
+			}
+		}
+	}
+}

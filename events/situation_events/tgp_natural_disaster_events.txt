@@ -86,10 +86,10 @@ scripted_effect natural_disaster_remove_realm_effect = {
 
 # Deletes situation after last player closes great project end event (if any)
 scripted_effect attempt_delete_natural_disaster_situation_effect = {
+	# Native phase progression keeps its original caller and timing. W/H
+	# recovery is separately committed only when the whole disaster ends.
 	if = {
-		limit = {
-			has_title = title:h_china
-		}
+		limit = { has_title = title:h_china }
 		situation:dynastic_cycle = {
 			trigger_situation_catalyst = catalyst_hegemon_natural_disaster_recovered
 		}
@@ -104,6 +104,14 @@ scripted_effect attempt_delete_natural_disaster_situation_effect = {
 						NOT = { this = root }
 					}
 				}
+			}
+			if = {
+				limit = {
+					situation_current_phase = recovery
+					NOT = { any_situation_county = { always = yes } }
+					has_variable = hd_dc_disaster_occurred_committed
+				}
+				hd_dc_disaster_catalyst_once_effect = { STAGE = recovered CATALYST = catalyst_hegemon_natural_disaster_recovered }
 			}
 			end_situation = yes
 		}
@@ -2306,31 +2314,51 @@ natural_disaster.9011 = {
 natural_disaster.9901 = { 
 	hidden = yes
 	scope = none
-	trigger = { always = no } # UUII stability mode: all situations disabled.
 	immediate = {
+		# The native maintenance rule draw has already occurred. Include its
+		# probability in p0, then divide it out of this conditional draw once.
+		save_scope_value_as = { name = hd_dc_disaster_outer_chance value = 1 }
+		if = {
+			limit = { has_game_rule = natural_disaster_earthquakes_few }
+			save_scope_value_as = { name = hd_dc_disaster_outer_chance value = 0.5 }
+		}
+		save_scope_value_as = { name = hd_dc_hazard_multiplier value = hd_dc_natural_disaster_hazard_multiplier_value }
 		# Select
 		every_in_global_list = {
 			variable = earthquake_region_list
 			save_scope_as = region
-			random_list = {
-				1 = {
-					modifier = {
+			if = {
+				limit = { exists = scope:random_earthquake }
+				add_to_list = potential_earthquake_regions
+			}
+			else = {
+				# Setup contains one native background region, so no multi-region
+				# competition is hidden in this weight-to-probability conversion.
+				save_temporary_scope_as = region_temp
+				save_scope_value_as = {
+					name = hd_dc_disaster_weight
+					value = {
+						value = 1
 						add = natural_disaster_earthquake_region_chance_modifier
-					}
-					modifier = { # Lower chance to stack
-						save_temporary_scope_as = region_temp
-						any_in_global_list = {
-							variable = ongoing_earthquakes
-							var:epicenter_county.title_province ?= { geographical_region = scope:region_temp }
+						if = {
+							limit = {
+								any_in_global_list = {
+									variable = ongoing_earthquakes
+									var:epicenter_county.title_province ?= { geographical_region = scope:region_temp }
+								}
+							}
+							add = natural_disaster_earthquake_stacked_region_chance_per_year_value
 						}
-						add = natural_disaster_earthquake_stacked_region_chance_per_year_value
+						min = 0
 					}
-					add_to_list = potential_earthquake_regions
 				}
-				199 = {
-					trigger = {
-						NOT = { exists = scope:random_earthquake }
-					}
+				save_scope_value_as = {
+					name = hd_dc_hazard_base
+					value = { value = scope:hd_dc_disaster_weight multiply = 100 divide = { value = 199 add = scope:hd_dc_disaster_weight } multiply = scope:hd_dc_disaster_outer_chance }
+				}
+				random = {
+					chance = { value = hd_dc_hazard_probability_value divide = scope:hd_dc_disaster_outer_chance }
+					add_to_list = potential_earthquake_regions
 				}
 			}
 		}
@@ -2352,8 +2380,14 @@ natural_disaster.9901 = {
 natural_disaster.9902 = { 
 	hidden = yes
 	scope = none
-	trigger = { always = no } # UUII stability mode: all situations disabled.
 	immediate = {
+		save_scope_value_as = { name = hd_dc_disaster_outer_chance value = 1 }
+		if = {
+			limit = { has_game_rule = natural_disaster_floods_few }
+			save_scope_value_as = { name = hd_dc_disaster_outer_chance value = 0.5 }
+		}
+		save_scope_value_as = { name = hd_dc_hazard_multiplier value = hd_dc_natural_disaster_hazard_multiplier_value }
+		save_scope_value_as = { name = hd_dc_disaster_river_count value = 0 }
 		# Select
 		every_in_global_list = {
 			variable = flood_region_list
@@ -2367,29 +2401,52 @@ natural_disaster.9902 = {
 				}
 			}
 
-			random_list = {
-				1 = {
-					modifier = { # Higher frequency of high magnitude earthquakes
-						add = natural_disaster_flood_region_chance_modifier
-					}
-					add_to_list = potential_flood_regions
-				}
-				199 = {
-					trigger = {
-						NOT = { exists = scope:random_flood }
-					}
-				}
+			# Setup contains only Yangtze and Yellow River. Both have the same
+			# native dynamic weight. Reuse this pool, with one total draw below.
+			add_to_list = potential_flood_regions
+			save_scope_value_as = { name = hd_dc_disaster_river_count value = { value = scope:hd_dc_disaster_river_count add = 1 } }
+			save_scope_value_as = { name = hd_dc_disaster_weight value = { value = 1 add = natural_disaster_flood_region_chance_modifier min = 0 } }
+			save_scope_value_as = {
+				name = hd_dc_disaster_region_chance
+				value = { value = scope:hd_dc_disaster_weight multiply = 100 divide = { value = 199 add = scope:hd_dc_disaster_weight } }
 			}
 		}
 		clear_saved_scope = region_temp
 
-		# Randomly select one of the valid regions
-		random_in_list = {
-			list = potential_flood_regions
-			save_scope_as = region
-			trigger_event = {
-				id = natural_disaster.9912
-				months = { 0 11 }
+		if = {
+			limit = { scope:hd_dc_disaster_river_count > 0 }
+			save_scope_value_as = { name = hd_dc_disaster_conditional_chance value = 100 }
+			if = {
+				limit = { NOT = { exists = scope:random_flood } }
+				# N=1: q. N=2: 2q-q^2. The original successful candidates
+				# competed uniformly, so equal q gives the same final river split.
+				save_scope_value_as = {
+					name = hd_dc_hazard_base
+					value = {
+						value = scope:hd_dc_disaster_region_chance
+						multiply = scope:hd_dc_disaster_river_count
+						if = {
+							limit = { scope:hd_dc_disaster_river_count = 2 }
+							subtract = { value = scope:hd_dc_disaster_region_chance multiply = scope:hd_dc_disaster_region_chance divide = 100 }
+						}
+						multiply = scope:hd_dc_disaster_outer_chance
+					}
+				}
+				save_scope_value_as = {
+					name = hd_dc_disaster_conditional_chance
+					value = { value = hd_dc_hazard_probability_value divide = scope:hd_dc_disaster_outer_chance }
+				}
+			}
+			random = {
+				chance = scope:hd_dc_disaster_conditional_chance
+				random_in_list = {
+					list = potential_flood_regions
+					save_scope_as = region
+					trigger_event = {
+						id = natural_disaster.9912
+						months = { 0 11 }
+					}
+				}
 			}
 		}
 	}
@@ -2399,7 +2456,6 @@ natural_disaster.9902 = {
 natural_disaster.9911 = { 
 	hidden = yes
 	scope = none
-	trigger = { always = no } # UUII stability mode: all situations disabled.
 	immediate = {
 		spawn_earthquake_in_region_effect = { REGION = scope:region }
 	}
@@ -2409,7 +2465,6 @@ natural_disaster.9911 = {
 natural_disaster.9912 = { 
 	hidden = yes
 	scope = none
-	trigger = { always = no } # UUII stability mode: all situations disabled.
 	immediate = {
 		spawn_flood_in_region_effect = { REGION = scope:region }
 	}

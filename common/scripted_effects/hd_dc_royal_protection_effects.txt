@@ -1,0 +1,329 @@
+hd_dc_request_royal_protection_effect = {
+	if = {
+		limit = { hd_dc_royal_offer_response_trigger = yes }
+		scope:hd_dc_support = {
+			set_variable = { name = hd_dc_support_answer value = flag:protection_requested }
+			set_variable = { name = hd_dc_protection_requester value = scope:hd_dc_support_actor }
+			set_variable = { name = hd_dc_protection_reply_wait value = yes months = 3 }
+			remove_variable = hd_dc_support_wait
+			var:hd_dc_support_claimant = {
+				add_opinion = { target = scope:hd_dc_support_actor modifier = hd_dc_royal_support_opinion opinion = -5 }
+				trigger_event = { id = hd_dc_support.0208 days = 1 }
+			}
+		}
+	}
+}
+
+hd_dc_answer_royal_protection_effect = {
+	if = {
+		limit = { hd_dc_royal_protection_response_trigger = yes }
+		save_scope_value_as = { name = hd_dc_protection_answer value = flag:$ANSWER$ }
+		scope:hd_dc_support = {
+			remove_variable = hd_dc_protection_reply_wait
+			set_variable = { name = hd_dc_protection_answer value = scope:hd_dc_protection_answer }
+			set_variable = { name = hd_dc_protection_answer_date value = current_date }
+			if = {
+				limit = { var:hd_dc_protection_answer = flag:accepted }
+				set_variable = { name = hd_dc_protection_signature value = var:hd_dc_support_claimant }
+				set_variable = { name = hd_dc_protection_wait value = yes years = 5 }
+				set_variable = { name = hd_dc_protection_started value = current_date }
+				hd_dc_stamp_calendar_effect = { PREFIX = hd_dc_protection_date }
+				var:hd_dc_support_recipient = {
+					hd_dc_freeze_protection_subject_effect = yes
+					every_close_family_member = { limit = { is_alive = yes } hd_dc_freeze_protection_subject_effect = yes }
+				}
+				var:hd_dc_actor_story = { change_variable = { name = hd_dc_m add = 10 } }
+				var:hd_dc_instance_ref = {
+					change_variable = { name = hd_dc_open_obligations add = 1 }
+					hd_dc_register_governance_obligation_change_effect = yes
+				}
+				var:hd_dc_support_claimant = { add_opinion = { target = scope:hd_dc_support.var:hd_dc_support_recipient modifier = hd_dc_royal_support_opinion opinion = 15 } }
+			}
+			else = { set_variable = { name = hd_dc_support_retry_wait value = yes years = 2 } }
+			var:hd_dc_support_recipient = { trigger_event = { id = hd_dc_support.0408 days = 1 } }
+		}
+	}
+}
+
+# One person/title roster per signed contract; later births, marriage, title
+# acquisition or inheritance do not enlarge it or transfer another's signature.
+hd_dc_freeze_protection_subject_effect = {
+	save_scope_as = hd_dc_protected_person
+	if = {
+		limit = { NOT = { scope:hd_dc_support = { any_in_list = { variable = hd_dc_protection_subjects var:hd_dc_protected_person = scope:hd_dc_protected_person } } } }
+		hd_dc_create_record_effect = { KIND = protected_person }
+		scope:hd_dc_record = {
+			save_scope_as = hd_dc_protected_subject
+			set_variable = { name = hd_dc_protected_person value = scope:hd_dc_protected_person }
+			set_variable = { name = hd_dc_protection_contract value = scope:hd_dc_support }
+			set_variable = { name = hd_dc_instance_ref value = scope:hd_dc_support.var:hd_dc_instance_ref }
+		}
+		every_held_title = {
+			save_scope_as = hd_dc_protected_title
+			scope:hd_dc_protected_subject = { add_to_variable_list = { name = hd_dc_protected_titles target = scope:hd_dc_protected_title } }
+		}
+		add_to_variable_list = { name = hd_dc_protection_subjects target = scope:hd_dc_protected_subject }
+		scope:hd_dc_support = { add_to_variable_list = { name = hd_dc_protection_subjects target = scope:hd_dc_protected_subject } }
+	}
+}
+
+# Actual actor and victim, before native crime reasons can be consumed.
+# Repeat wrappers around the same synchronous action preserve its first basis;
+# the actual on_action removes the snapshot immediately after using it.
+hd_dc_clear_protection_reason_effect = {
+	remove_variable = hd_dc_protection_check_date
+	remove_variable = hd_dc_protection_check_actor
+	remove_variable = hd_dc_protection_check_kind
+	remove_variable = hd_dc_protection_check_legal
+	remove_variable = hd_dc_protection_check_source
+	remove_variable = hd_dc_protection_check_title
+}
+
+hd_dc_begin_protection_reason_effect = {
+	$TARGET$ = { hd_dc_clear_protection_reason_effect = yes }
+	hd_dc_capture_protection_reason_effect = { TARGET = $TARGET$ ACTOR = $ACTOR$ ACTION = $ACTION$ REASON = $REASON$ }
+}
+
+hd_dc_capture_protection_reason_effect = {
+	if = {
+		limit = { $TARGET$ = { has_variable_list = hd_dc_protection_subjects } }
+		$TARGET$ = { save_scope_as = hd_dc_protection_target }
+		$ACTOR$ = { save_scope_as = hd_dc_protection_actor }
+		scope:hd_dc_protection_target = {
+			if = {
+				limit = { NOT = { var:hd_dc_protection_check_date = current_date var:hd_dc_protection_check_actor = scope:hd_dc_protection_actor var:hd_dc_protection_check_kind = flag:$ACTION$ } }
+				set_variable = { name = hd_dc_protection_check_date value = current_date }
+				set_variable = { name = hd_dc_protection_check_actor value = scope:hd_dc_protection_actor }
+				set_variable = { name = hd_dc_protection_check_kind value = flag:$ACTION$ }
+				set_variable = { name = hd_dc_protection_check_source value = flag:individual_reason }
+				set_variable = { name = hd_dc_protection_check_legal value = no }
+				if = { limit = { scope:hd_dc_protection_actor = { $REASON$ = scope:hd_dc_protection_target } } set_variable = { name = hd_dc_protection_check_legal value = yes } }
+			}
+		}
+	}
+}
+
+# Freeze the native collective-purge basis before synthetic execution opinions.
+# The event's recipient is the charged family head, not each protected relative.
+hd_dc_freeze_protection_purge_reason_effect = {
+	if = {
+		limit = { has_variable_list = hd_dc_protection_subjects }
+		set_variable = { name = hd_dc_protection_purge_actor value = scope:actor }
+		set_variable = { name = hd_dc_protection_purge_subject value = scope:recipient }
+		set_variable = { name = hd_dc_protection_purge_legal value = no }
+		if = { limit = { scope:actor = { has_execute_reason = scope:recipient } } set_variable = { name = hd_dc_protection_purge_legal value = yes } }
+	}
+}
+
+hd_dc_capture_protection_purge_reason_effect = {
+	$ACTOR$ = { save_scope_as = hd_dc_protection_actor }
+	if = {
+		limit = { $TARGET$ = { var:hd_dc_protection_purge_actor = scope:hd_dc_protection_actor } }
+		$TARGET$ = {
+			set_variable = { name = hd_dc_protection_check_date value = current_date }
+			set_variable = { name = hd_dc_protection_check_actor value = scope:hd_dc_protection_actor }
+			set_variable = { name = hd_dc_protection_check_kind value = flag:$ACTION$ }
+			set_variable = { name = hd_dc_protection_check_source value = flag:family_purge_case }
+			set_variable = { name = hd_dc_protection_check_legal value = var:hd_dc_protection_purge_legal }
+		}
+	}
+}
+
+hd_dc_capture_protection_revocation_effect = {
+	scope:recipient = { hd_dc_clear_protection_reason_effect = yes }
+	if = {
+		limit = { exists = scope:landed_title scope:recipient = { has_variable_list = hd_dc_protection_subjects } scope:landed_title.holder = scope:recipient }
+		hd_dc_begin_protection_reason_effect = { TARGET = scope:recipient ACTOR = scope:actor ACTION = revoke REASON = has_revoke_title_reason }
+		scope:recipient = { set_variable = { name = hd_dc_protection_check_title value = scope:landed_title } }
+		if = {
+			limit = {
+				OR = {
+					scope:landed_title.tier = tier_barony
+					scope:recipient = { government_has_flag = government_is_herder }
+					AND = {
+						NOT = { exists = scope:use_strife_not_tyranny }
+						scope:actor = { NOT = { title_revocation_is_tyrannical_trigger = { VASSAL = scope:recipient } } }
+					}
+				}
+			}
+			scope:recipient = { set_variable = { name = hd_dc_protection_check_legal value = yes } }
+		}
+	}
+}
+
+# This direct transaction has no administrative-interaction exemption. Reuse
+# the full native claim/government/religion test with its actual county scope,
+# and restore a pre-existing landed_title before returning to the caller.
+hd_dc_capture_protection_capital_revocation_effect = {
+	title:h_china.title_capital_county.holder = { hd_dc_clear_protection_reason_effect = yes }
+	if = {
+		limit = {
+			title:h_china.title_capital_county.holder = { has_variable_list = hd_dc_protection_subjects }
+			NOT = { exists = scope:administrative_revocation }
+		}
+		if = { limit = { exists = scope:landed_title } scope:landed_title = { save_scope_as = hd_dc_previous_landed_title } }
+		title:h_china.title_capital_county = { save_scope_as = landed_title }
+		hd_dc_begin_protection_reason_effect = { TARGET = scope:landed_title.holder ACTOR = root ACTION = revoke REASON = has_revoke_title_reason }
+		scope:hd_dc_protection_target = {
+			set_variable = { name = hd_dc_protection_check_title value = scope:landed_title }
+			if = {
+				limit = { root = { NOT = { title_revocation_is_tyrannical_trigger = { VASSAL = scope:hd_dc_protection_target } } } }
+				set_variable = { name = hd_dc_protection_check_legal value = yes }
+			}
+		}
+		clear_saved_scope = landed_title
+		if = {
+			limit = { exists = scope:hd_dc_previous_landed_title }
+			scope:hd_dc_previous_landed_title = { save_scope_as = landed_title }
+			clear_saved_scope = hd_dc_previous_landed_title
+		}
+	}
+}
+
+# Protected person's actual native callback. A missing pre-action basis is
+# retained as an unresolved audit, never turned into either guilt or fulfillment.
+hd_dc_record_protection_harm_effect = {
+	save_scope_as = hd_dc_protected_person
+	every_in_list = {
+		variable = hd_dc_protection_subjects
+		limit = {
+			var:hd_dc_protected_person = scope:hd_dc_protected_person
+			var:hd_dc_protection_contract = { has_variable = hd_dc_protection_wait NOT = { has_variable = hd_dc_protection_result } var:hd_dc_support_claimant = scope:hd_dc_harm_actor }
+			trigger_if = { limit = { scope:hd_dc_harm_kind = flag:revoke } is_target_in_variable_list = { name = hd_dc_protected_titles target = scope:title } }
+		}
+		set_variable = { name = hd_dc_protection_harm_kind value = scope:hd_dc_harm_kind }
+		set_variable = { name = hd_dc_protection_harm_date value = current_date }
+		set_variable = { name = hd_dc_protection_harm_actor value = scope:hd_dc_harm_actor }
+		set_variable = { name = hd_dc_protection_harm_legal value = -1 }
+		set_variable = { name = hd_dc_protection_harm_source value = flag:unknown_reason }
+		remove_variable = hd_dc_protection_harm_case_subject
+		if = {
+			limit = {
+				scope:hd_dc_protected_person = {
+					var:hd_dc_protection_check_date = current_date
+					var:hd_dc_protection_check_actor = scope:hd_dc_harm_actor
+					var:hd_dc_protection_check_kind = scope:hd_dc_harm_kind
+					trigger_if = { limit = { has_variable = hd_dc_protection_check_title } var:hd_dc_protection_check_title = scope:title }
+				}
+			}
+			if = { limit = { scope:hd_dc_protected_person.var:hd_dc_protection_check_legal = yes } set_variable = { name = hd_dc_protection_harm_legal value = 1 } }
+			else = { set_variable = { name = hd_dc_protection_harm_legal value = 0 } }
+			set_variable = { name = hd_dc_protection_harm_source value = scope:hd_dc_protected_person.var:hd_dc_protection_check_source }
+			if = {
+				limit = { var:hd_dc_protection_harm_source = flag:family_purge_case }
+				set_variable = { name = hd_dc_protection_harm_case_subject value = scope:hd_dc_protected_person.var:hd_dc_protection_purge_subject }
+			}
+		}
+		if = { limit = { scope:hd_dc_harm_kind = flag:revoke } set_variable = { name = hd_dc_protection_harm_title value = scope:title } }
+		if = {
+			limit = { scope:hd_dc_harm_kind = flag:execute }
+			# on_death is before death; the recorded corpse's actual cause is
+			# classified in maintenance, not guessed while it is still alive.
+			set_variable = { name = hd_dc_protection_death_pending value = yes }
+		}
+		else = { hd_dc_consume_protection_harm_effect = yes }
+	}
+	hd_dc_clear_protection_reason_effect = yes
+}
+
+# Without a killer the death cannot be attributed to any signer. Only an
+# actual execution, classified after death, creates an unresolved obligation.
+hd_dc_record_protection_unknown_death_effect = {
+	save_scope_as = hd_dc_protected_person
+	every_in_list = {
+		variable = hd_dc_protection_subjects
+		limit = {
+			var:hd_dc_protected_person = scope:hd_dc_protected_person
+			var:hd_dc_protection_contract = { has_variable = hd_dc_protection_wait NOT = { has_variable = hd_dc_protection_result } }
+		}
+		set_variable = { name = hd_dc_protection_harm_kind value = flag:execute }
+		set_variable = { name = hd_dc_protection_harm_date value = current_date }
+		set_variable = { name = hd_dc_protection_harm_legal value = -1 }
+		set_variable = { name = hd_dc_protection_harm_source value = flag:unknown_actor }
+		remove_variable = hd_dc_protection_harm_actor
+		remove_variable = hd_dc_protection_harm_case_subject
+		set_variable = { name = hd_dc_protection_death_pending value = yes }
+	}
+}
+
+hd_dc_consume_protection_harm_effect = {
+	save_scope_as = hd_dc_protected_subject
+	if = {
+		limit = { var:hd_dc_protection_harm_legal = 0 }
+		var:hd_dc_protection_contract = {
+			set_variable = { name = hd_dc_protection_breach_subject value = scope:hd_dc_protected_subject }
+			hd_dc_finish_royal_protection_effect = { RESULT = breached }
+		}
+	}
+	else_if = {
+		limit = { var:hd_dc_protection_harm_legal = -1 }
+		var:hd_dc_protection_contract = { set_variable = { name = hd_dc_protection_audit_pending value = scope:hd_dc_protected_subject } }
+	}
+}
+
+hd_dc_maintain_royal_protection_effect = {
+	save_scope_as = hd_dc_support
+	if = {
+		limit = { var:hd_dc_support_answer = flag:protection_requested NOT = { has_variable = hd_dc_protection_answer } }
+		if = {
+			limit = { NOT = { hd_dc_royal_protection_context_trigger = yes } }
+			set_variable = { name = hd_dc_protection_answer value = flag:invalidated }
+			remove_variable = hd_dc_protection_reply_wait
+		}
+		else_if = {
+			limit = { NOT = { has_variable = hd_dc_protection_reply_wait } }
+			set_variable = { name = hd_dc_protection_answer value = flag:expired }
+			set_variable = { name = hd_dc_support_retry_wait value = yes years = 2 }
+		}
+	}
+	if = {
+		limit = { var:hd_dc_protection_answer = flag:accepted NOT = { has_variable = hd_dc_protection_result } }
+		every_in_list = {
+			variable = hd_dc_protection_subjects
+			limit = { has_variable = hd_dc_protection_death_pending var:hd_dc_protected_person = { is_alive = no } }
+			remove_variable = hd_dc_protection_death_pending
+			if = {
+				limit = {
+					var:hd_dc_protected_person = {
+						OR = {
+							death_reason = death_execution
+							death_reason = death_execution_killer
+							death_reason = death_execution_blood_eagle
+							death_reason = death_execution_blood_eagle_killer
+							death_reason = death_execution_blot
+							death_reason = death_sacrificed_to_gods
+							death_reason = death_sacrificed_to_foreign_gods
+							death_reason = death_kennel
+							death_reason = death_kennel_killer
+						}
+					}
+				}
+				hd_dc_consume_protection_harm_effect = yes
+			}
+		}
+		if = {
+			limit = { NOT = { has_variable = hd_dc_protection_result } }
+			if = { limit = { var:hd_dc_support_claimant = { is_alive = no } NOT = { has_variable = hd_dc_protection_audit_pending } } hd_dc_finish_royal_protection_effect = { RESULT = invalidated } }
+			else_if = {
+				limit = { NOT = { has_variable = hd_dc_protection_wait } NOT = { has_variable = hd_dc_protection_audit_pending } }
+				hd_dc_finish_royal_protection_effect = { RESULT = fulfilled }
+			}
+		}
+	}
+}
+
+hd_dc_finish_royal_protection_effect = {
+	save_scope_as = hd_dc_support
+	if = {
+		limit = { NOT = { has_variable = hd_dc_protection_result } }
+		set_variable = { name = hd_dc_protection_result value = flag:$RESULT$ }
+		set_variable = { name = hd_dc_protection_finished value = current_date }
+		remove_variable = hd_dc_protection_wait
+		var:hd_dc_instance_ref = {
+			if = { limit = { var:hd_dc_open_obligations > 0 } change_variable = { name = hd_dc_open_obligations add = -1 } }
+			else = { set_variable = { name = hd_dc_obligation_count_error value = yes } }
+			hd_dc_register_governance_obligation_change_effect = yes
+			if = { limit = { scope:hd_dc_support.var:hd_dc_protection_result = flag:breached } set_variable = { name = hd_dc_major_uncorrected_breach value = yes } }
+		}
+	}
+}

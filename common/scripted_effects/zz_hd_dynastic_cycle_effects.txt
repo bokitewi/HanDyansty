@@ -94,6 +94,7 @@ hd_transfer_mandate_to_claimant_effect = {
 					this != root
 				}
 			}
+			hd_dc_capture_protection_capital_revocation_effect = yes
 			create_title_and_vassal_change = {
 				type = revoked
 				save_scope_as = mandate_capital_change
@@ -113,11 +114,10 @@ hd_transfer_mandate_to_claimant_effect = {
 
 # HD:群雄割据期间"夺取天命"决议专用窄版效果(root=决议者)
 # 情况A(决议者已持有h_china,如汉帝重新控制80%):不动霸权持有、不重建封臣、不吞并剩余独立诸侯、
-#   不销毁任何头衔、不改地方政治边界,只发新天命奖励、重算政治派系、结束群雄割据
+#   不销毁任何头衔、不改地方政治边界,只发新天命奖励、重算政治派系并请求观察
 # 情况B(决议者未持有h_china,如曹操/刘备/袁绍最终控制80%):调用hd_transfer_mandate_to_claimant_effect
 #   完成天命易主;剩余未臣服诸侯保持独立,绝不自动吞并
-# 共通:结束所有夺天命story,按 hegemon_favored_stability_phase_value 进入青睐时代
-#   (>=0 尚文发展 Stability Advancement / <0 扩张 Stability Expansion)
+# 共通:结束所有夺天命story；实际控制与稳定期决定何时退出割据。
 hd_claim_mandate_from_chaos_effect = {
 	save_scope_as = new_son_of_heaven
 	set_variable = {
@@ -140,33 +140,40 @@ hd_claim_mandate_from_chaos_effect = {
 	}
 
 	##### 共通:新天命奖励(原版保留部分) #####
-	hidden_effect = {
-		add_treasury = {
-			value = gold
-			min = 1000
-		}
-		change_influence = {
-			value = monumental_influence_gain
-			multiply = 4
-		}
-		add_legitimacy = mandate_legitimacy_max
-	}
-	dynasty = {
-		add_dynasty_prestige = excessive_dynasty_prestige_value
-	}
-	add_character_modifier = claim_mandate_decision_modifier
-	#提高自己中国境内郡县的控制度
-	hidden_effect = {
-		every_realm_county = {
-			custom = custom_every_realm_county
-			limit = {
-				target_is_de_jure_liege_or_above = title:h_china
+	if = {
+		limit = { hd_dc_can_receive_mandate_reward_trigger = yes }
+		hidden_effect = {
+			add_treasury = {
+				value = gold
+				min = 1000
 			}
-			change_county_control = 25
+			change_influence = {
+				value = monumental_influence_gain
+				multiply = 4
+			}
+			add_legitimacy = mandate_legitimacy_max
 		}
-	}
-	show_as_tooltip = {
-		title:h_china = { change_county_control = 25 }
+		dynasty = {
+			add_dynasty_prestige = excessive_dynasty_prestige_value
+		}
+		add_character_modifier = claim_mandate_decision_modifier
+		#提高自己中国境内郡县的控制度
+		hidden_effect = {
+			every_realm_county = {
+				custom = custom_every_realm_county
+				limit = {
+					target_is_de_jure_liege_or_above = title:h_china
+				}
+				change_county_control = 25
+			}
+		}
+		show_as_tooltip = {
+			title:h_china = { change_county_control = 25 }
+		}
+		set_variable = {
+			name = hd_dc_mandate_claimed_cycle
+			value = situation:dynastic_cycle.var:hd_dc_chaos_epoch
+		}
 	}
 
 	##### 共通:结束所有夺天命story,按新格局重算政治派系 #####
@@ -186,28 +193,6 @@ hd_claim_mandate_from_chaos_effect = {
 		}
 	}
 
-	##### 共通:结束群雄割据,按青睐判定进入尚文发展/扩张时代 #####
-	scope:new_son_of_heaven = {
-		if = {
-			limit = {
-				hegemon_favored_stability_phase_value >= 0
-			}
-			situation:dynastic_cycle = {
-				situation_top_sub_region = {
-					change_phase = {
-						phase = situation_dynastic_cycle_phase_stability_advancement
-					}
-				}
-			}
-		}
-		else = {
-			situation:dynastic_cycle = {
-				situation_top_sub_region = {
-					change_phase = {
-						phase = situation_dynastic_cycle_phase_stability_expansion
-					}
-				}
-			}
-		}
-	}
+	# 决议不再立即退出割据；重新夺回霸权不受奖励收据阻挡。
+	situation:dynastic_cycle = { hd_dc_request_observation_effect = yes }
 }

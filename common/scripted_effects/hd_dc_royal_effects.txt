@@ -1,0 +1,130 @@
+# Region scope, invoked only after the annual type draw. Each actor is checked
+# again at commit; there is no random-character limit and no invented relative.
+hd_dc_boot_royal_effect = {
+	if = {
+		limit = {
+			exists = title:h_china.holder
+			any_situation_participant = { hd_dc_royal_candidate_trigger = yes }
+			NOT = { has_variable = hd_dc_roy_cooldown }
+		}
+		hd_dc_prepare_instance_effect = { TYPE = roy }
+		if = {
+			limit = { exists = scope:hd_dc_instance }
+			every_situation_participant = {
+				limit = { hd_dc_royal_candidate_trigger = yes }
+				save_scope_as = hd_dc_royal_candidate
+				scope:hd_dc_instance = {
+					add_to_variable_list = { name = hd_dc_royal_candidates target = scope:hd_dc_royal_candidate }
+				}
+			}
+			scope:hd_dc_instance = {
+				every_in_list = {
+					variable = hd_dc_royal_candidates
+					limit = { hd_dc_royal_candidate_trigger = yes }
+					hd_dc_boot_royal_actor_effect = yes
+				}
+				if = {
+					limit = {
+						any_in_list = {
+							variable = hd_dc_actor_stories
+							hd_dc_royal_story_has_faction_trigger = yes
+						}
+					}
+					set_variable = { name = hd_dc_boot_political_completed value = yes }
+					hd_dc_initialize_ritual_register_effect = yes
+				}
+			}
+			hd_dc_commit_instance_boot_effect = { TYPE = roy }
+			hd_dc_abort_unstarted_instance_effect = yes
+		}
+	}
+}
+
+# Candidate character scope. Keep an existing stronger claim and preexisting
+# claimant faction. Newly granted unpressed claims are removed only if this
+# candidate failed to obtain its actual faction and never received a story.
+hd_dc_boot_royal_actor_effect = {
+	save_scope_as = hd_dc_royal_actor
+	if = {
+		limit = {
+			hd_dc_royal_candidate_trigger = yes
+			exists = scope:hd_dc_instance
+			scope:hd_dc_instance = {
+				NOT = {
+					any_in_list = {
+						variable = hd_dc_actor_stories
+						var:hd_dc_actor = scope:hd_dc_royal_actor
+					}
+				}
+			}
+		}
+		clear_saved_scope = hd_dc_royal_faction
+		set_variable = { name = hd_dc_royal_prior_claim value = no }
+		if = {
+			limit = { has_claim_on = title:h_china }
+			set_variable = { name = hd_dc_royal_prior_claim value = yes }
+		}
+		else = { add_unpressed_claim = title:h_china }
+		if = {
+			limit = {
+				exists = joined_faction
+				joined_faction = {
+					faction_is_type = claimant_faction
+					special_character = scope:hd_dc_royal_actor
+					special_title = title:h_china
+					faction_target = title:h_china.holder
+				}
+			}
+			joined_faction = { save_scope_as = hd_dc_royal_faction }
+		}
+		else = {
+			if = {
+				limit = { has_variable = claiming_title }
+				set_variable = { name = hd_dc_saved_claiming_title value = var:claiming_title }
+			}
+			set_variable = { name = claiming_title value = title:h_china }
+			if = {
+				limit = { can_create_faction = { type = claimant_faction target = title:h_china.holder } }
+				create_faction = { type = claimant_faction target = title:h_china.holder }
+				joined_faction ?= {
+					set_special_character = scope:hd_dc_royal_actor
+					set_special_title = title:h_china
+					save_scope_as = hd_dc_royal_faction
+				}
+				if = {
+					limit = { exists = scope:hd_dc_royal_faction }
+					add_to_variable_list = { name = claimant_factions target = scope:hd_dc_royal_faction }
+				}
+			}
+			remove_variable = claiming_title
+			if = {
+				limit = { has_variable = hd_dc_saved_claiming_title }
+				set_variable = { name = claiming_title value = var:hd_dc_saved_claiming_title }
+				remove_variable = hd_dc_saved_claiming_title
+			}
+		}
+		if = {
+			limit = {
+				has_claim_on = title:h_china
+				exists = scope:hd_dc_royal_faction
+				scope:hd_dc_royal_faction = {
+					faction_is_type = claimant_faction
+					special_character = scope:hd_dc_royal_actor
+					special_title = title:h_china
+					faction_target = title:h_china.holder
+				}
+			}
+			hd_dc_create_actor_record_effect = { ROLE = claimant }
+			scope:hd_dc_actor_story = {
+				set_variable = { name = hd_dc_claimant_faction value = scope:hd_dc_royal_faction }
+				set_variable = { name = hd_dc_target_title value = title:h_china }
+				set_variable = { name = hd_dc_had_prior_claim value = scope:hd_dc_royal_actor.var:hd_dc_royal_prior_claim }
+			}
+		}
+		else_if = {
+			limit = { var:hd_dc_royal_prior_claim = no }
+			remove_claim = title:h_china
+		}
+		remove_variable = hd_dc_royal_prior_claim
+	}
+}

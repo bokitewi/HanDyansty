@@ -1,0 +1,295 @@
+# Calendar display fields are written at the actual start of each obligation.
+# They never replace native expiring variables as the authority for deadlines.
+hd_dc_stamp_calendar_effect = {
+	set_variable = { name = $PREFIX$_year value = current_year }
+	set_variable = { name = $PREFIX$_month value = current_month }
+	set_variable = { name = $PREFIX$_day value = current_day }
+}
+
+# All registry/lock/sequence state belongs to the persistent situation. A record
+# keeper is an existing living character and is unrelated to political roles.
+hd_dc_select_record_keeper_effect = {
+	clear_saved_scope = hd_dc_keeper
+	if = {
+		limit = { exists = title:h_china.holder title:h_china.holder = { is_alive = yes } }
+		title:h_china.holder = { save_scope_as = hd_dc_keeper }
+	}
+	else = {
+		situation:dynastic_cycle ?= {
+			every_in_list = {
+				variable = hd_dc_counties
+				limit = {
+					NOT = { exists = scope:hd_dc_keeper }
+					exists = holder
+					holder = { is_alive = yes }
+				}
+				holder = { save_scope_as = hd_dc_keeper }
+			}
+		}
+	}
+	if = {
+		limit = { NOT = { exists = scope:hd_dc_keeper } }
+		situation:dynastic_cycle ?= {
+			every_situation_participant = { limit = { NOT = { exists = scope:hd_dc_keeper } is_alive = yes } save_scope_as = hd_dc_keeper }
+		}
+	}
+}
+
+# Story scope. Leave the record in its regional registry if no living holder can
+# be found; monthly maintenance retries without granting a political substitute.
+hd_dc_repair_record_keeper_effect = {
+	if = {
+		limit = {
+			OR = {
+				NOT = { exists = story_owner }
+				story_owner ?= { is_alive = no }
+			}
+		}
+		hd_dc_select_record_keeper_effect = yes
+		if = {
+			limit = { exists = scope:hd_dc_keeper }
+			make_story_owner = scope:hd_dc_keeper
+			remove_variable = hd_dc_keeper_missing
+		}
+		else = {
+			set_variable = { name = hd_dc_keeper_missing value = yes }
+			# The engine owner's death callback also reaches archived records.
+			# Requeue only this missing custodian, without rescanning old history.
+			if = {
+				limit = { NOT = { has_variable = hd_dc_monthly_registered } exists = var:hd_dc_region }
+				set_variable = { name = hd_dc_monthly_registered value = yes }
+				save_scope_as = hd_dc_requeued_record
+				var:hd_dc_region = {
+					add_to_variable_list = { name = hd_dc_active_records target = scope:hd_dc_requeued_record }
+					change_variable = { name = hd_dc_active_record_count add = 1 }
+					if = {
+						limit = { var:hd_dc_active_record_count > var:hd_dc_active_record_peak }
+						set_variable = { name = hd_dc_active_record_peak value = var:hd_dc_active_record_count }
+					}
+				}
+			}
+		}
+	}
+}
+
+# Character scope, an already chosen living keeper. Returns scope:hd_dc_record.
+# No type-specific politics or rewards run merely by constructing storage.
+hd_dc_create_record_effect = {
+	clear_saved_scope = hd_dc_record
+	if = {
+		limit = { is_alive = yes exists = situation:dynastic_cycle }
+		situation:dynastic_cycle = {
+			if = {
+				limit = { NOT = { has_variable = hd_dc_record_sequence } }
+				set_variable = { name = hd_dc_record_sequence value = 0 }
+				set_variable = { name = hd_dc_active_record_count value = 0 }
+				set_variable = { name = hd_dc_active_record_peak value = 0 }
+			}
+			change_variable = { name = hd_dc_record_sequence add = 1 }
+		}
+		create_story = { type = hd_dc_record save_scope_as = hd_dc_record }
+		scope:hd_dc_record = {
+			set_variable = { name = hd_dc_record_id value = situation:dynastic_cycle.var:hd_dc_record_sequence }
+			set_variable = { name = hd_dc_record_kind value = flag:$KIND$ }
+			set_variable = { name = hd_dc_record_version value = 1 }
+			set_variable = { name = hd_dc_record_created value = current_date }
+			set_variable = { name = hd_dc_region value = situation:dynastic_cycle }
+			if = { limit = { NOT = { var:hd_dc_record_kind = flag:point_history } } set_variable = { name = hd_dc_monthly_registered value = yes } }
+		}
+		situation:dynastic_cycle = {
+			add_to_variable_list = { name = hd_dc_records target = scope:hd_dc_record }
+			if = {
+				limit = { scope:hd_dc_record = { has_variable = hd_dc_monthly_registered } }
+				add_to_variable_list = { name = hd_dc_active_records target = scope:hd_dc_record }
+				change_variable = { name = hd_dc_active_record_count add = 1 }
+				if = {
+					limit = { var:hd_dc_active_record_count > var:hd_dc_active_record_peak }
+					set_variable = { name = hd_dc_active_record_peak value = var:hd_dc_active_record_count }
+				}
+			}
+		}
+	}
+}
+
+# Region scope. Only a selected type's legal BOOT adapter calls this, after its
+# final candidate checks. The annual epoch remains spent even if BOOT aborts.
+hd_dc_prepare_instance_effect = {
+	clear_saved_scope = hd_dc_instance
+	if = {
+		limit = {
+			NOT = { has_variable = hd_dc_acute_instance_id }
+			NOT = { has_variable = hd_dc_pending_instance }
+			OR = {
+				AND = { has_variable = hd_dc_selected_type var:hd_dc_selected_type = flag:$TYPE$ has_variable = hd_dc_annual_epoch }
+				hd_dc_debug_manual_entry_trigger = { TYPE = $TYPE$ }
+			}
+		}
+		hd_dc_select_record_keeper_effect = yes
+		if = {
+			limit = { exists = scope:hd_dc_keeper }
+			scope:hd_dc_keeper = { hd_dc_create_record_effect = { KIND = instance } }
+			scope:hd_dc_record = {
+				save_scope_as = hd_dc_instance
+				set_variable = { name = hd_dc_instance_id value = var:hd_dc_record_id }
+				set_variable = { name = hd_dc_type value = flag:$TYPE$ }
+				set_variable = { name = hd_dc_stage value = flag:prepared }
+				set_variable = { name = hd_dc_annual_epoch value = current_year }
+				set_variable = { name = hd_dc_q value = 0 }
+				set_variable = { name = hd_dc_x value = 0 }
+				set_variable = { name = hd_dc_core_war_sequence value = 0 }
+				set_variable = { name = hd_dc_open_obligations value = 0 }
+				set_variable = { name = hd_dc_obligation_version value = 0 }
+				set_variable = { name = hd_dc_war_epoch value = 0 }
+				set_variable = { name = hd_dc_start_counties value = situation:dynastic_cycle.var:hd_dc_total_counties }
+				if = {
+					limit = { exists = title:h_china.holder }
+					set_variable = { name = hd_dc_initial_ruler value = title:h_china.holder }
+				}
+			}
+			set_variable = { name = hd_dc_pending_instance value = scope:hd_dc_instance }
+		}
+	}
+}
+
+# Region scope. A BOOT adapter sets political_completed only after checking its
+# actual required claim/faction/independence/war objects, never on a dice result.
+hd_dc_commit_instance_boot_effect = {
+	if = {
+		limit = {
+			exists = scope:hd_dc_instance
+			has_variable = hd_dc_pending_instance
+			var:hd_dc_pending_instance = scope:hd_dc_instance
+			NOT = { has_variable = hd_dc_acute_instance_id }
+			scope:hd_dc_instance = {
+				var:hd_dc_type = flag:$TYPE$
+				var:hd_dc_stage = flag:prepared
+				var:hd_dc_boot_political_completed = yes
+			}
+		}
+		scope:hd_dc_instance = {
+			set_variable = { name = hd_dc_stage value = flag:acute }
+			set_variable = { name = hd_dc_started value = current_date }
+			change_variable = { name = hd_dc_record_version add = 1 }
+		}
+		set_variable = { name = hd_dc_acute_instance_id value = scope:hd_dc_instance.var:hd_dc_instance_id }
+		set_variable = { name = hd_dc_acute_instance value = scope:hd_dc_instance }
+		set_variable = { name = hd_dc_acute_type value = flag:$TYPE$ }
+		set_variable = { name = hd_dc_latest_$TYPE$_instance value = scope:hd_dc_instance }
+		set_variable = { name = hd_dc_$TYPE$_started value = current_date }
+		set_variable = { name = hd_dc_$TYPE$_cooldown value = yes years = 50 }
+		add_to_variable_list = { name = hd_dc_instances target = scope:hd_dc_instance }
+		remove_variable = hd_dc_pending_instance
+	}
+}
+
+# Region scope. Does not undo already real political actions: adapters that
+# partially changed politics keep the prepared record until exact resumption.
+hd_dc_abort_unstarted_instance_effect = {
+	if = {
+		limit = {
+			exists = scope:hd_dc_instance
+			has_variable = hd_dc_pending_instance
+			var:hd_dc_pending_instance = scope:hd_dc_instance
+			scope:hd_dc_instance = {
+				var:hd_dc_stage = flag:prepared
+				NOT = { has_variable = hd_dc_sovereignty_started }
+				NOT = { has_variable = hd_dc_boot_political_completed }
+			}
+		}
+		scope:hd_dc_instance = {
+			set_variable = { name = hd_dc_stage value = flag:aborted }
+			set_variable = { name = hd_dc_closed_date value = current_date }
+			change_variable = { name = hd_dc_record_version add = 1 }
+		}
+		remove_variable = hd_dc_pending_instance
+	}
+}
+
+# Existing character scope. Every eligible royal gets a distinct child, while
+# repeated dispatch of the same actor and instance returns its original record.
+hd_dc_create_actor_record_effect = {
+	clear_saved_scope = hd_dc_actor_story
+	save_scope_as = hd_dc_record_actor
+	if = {
+		limit = { is_alive = yes exists = scope:hd_dc_instance }
+		scope:hd_dc_instance = {
+			every_in_list = {
+				variable = hd_dc_actor_stories
+				limit = { var:hd_dc_actor = scope:hd_dc_record_actor }
+				save_scope_as = hd_dc_actor_story
+			}
+		}
+		if = {
+			limit = { NOT = { exists = scope:hd_dc_actor_story } }
+			hd_dc_create_record_effect = { KIND = actor }
+			scope:hd_dc_record = {
+				save_scope_as = hd_dc_actor_story
+				set_variable = { name = hd_dc_instance_ref value = scope:hd_dc_instance }
+				set_variable = { name = hd_dc_instance_id value = scope:hd_dc_instance.var:hd_dc_instance_id }
+				set_variable = { name = hd_dc_actor value = scope:hd_dc_record_actor }
+				set_variable = { name = hd_dc_role value = flag:$ROLE$ }
+				set_variable = { name = hd_dc_node value = 1 }
+				set_variable = { name = hd_dc_node_version value = 1 }
+				set_variable = { name = hd_dc_m value = 0 }
+			}
+			scope:hd_dc_instance = { add_to_variable_list = { name = hd_dc_actor_stories target = scope:hd_dc_actor_story } }
+		}
+	}
+}
+
+# Region scope. A dead custodian cannot reset an annual draw, cooldown or lock.
+# No missing actor, missing war or missing record is interpreted as victory.
+hd_dc_maintain_record_registry_effect = {
+	set_variable = { name = hd_dc_last_maintenance_date value = current_date }
+	set_variable = { name = hd_dc_last_maintenance_records value = 0 }
+	every_in_list = {
+		variable = hd_dc_active_records
+		var:hd_dc_region = { change_variable = { name = hd_dc_last_maintenance_records add = 1 } }
+		hd_dc_repair_record_keeper_effect = yes
+		if = {
+			limit = { var:hd_dc_record_kind = flag:proposal }
+			hd_dc_maintain_proposal_effect = yes
+		}
+		else_if = {
+			limit = { var:hd_dc_record_kind = flag:war }
+			hd_dc_maintain_core_war_effect = yes
+		}
+		else_if = {
+			limit = { var:hd_dc_record_kind = flag:ordinary }
+			hd_dc_maintain_ordinary_effect = yes
+		}
+		else_if = {
+			limit = { var:hd_dc_record_kind = flag:royal_support }
+			hd_dc_maintain_royal_support_offer_effect = yes
+		}
+		else_if = {
+			limit = { var:hd_dc_record_kind = flag:policy_trial }
+			hd_dc_maintain_policy_trial_effect = yes
+		}
+		else_if = {
+			limit = { var:hd_dc_record_kind = flag:party_case }
+			hd_dc_maintain_party_policy_case_effect = yes
+		}
+		if = {
+			limit = { NOT = { hd_dc_record_needs_monthly_trigger = yes } }
+			save_scope_as = hd_dc_archived_record
+			remove_variable = hd_dc_monthly_registered
+			var:hd_dc_region = {
+				remove_list_variable = { name = hd_dc_active_records target = scope:hd_dc_archived_record }
+				change_variable = { name = hd_dc_active_record_count add = -1 }
+			}
+		}
+	}
+	every_in_list = {
+		variable = hd_dc_instances
+		limit = { NOT = { var:hd_dc_stage = flag:closed } }
+		hd_dc_refresh_escalation_guard_effect = yes
+	}
+	if = {
+		limit = {
+			has_variable = hd_dc_acute_instance_id
+			NOT = { exists = var:hd_dc_acute_instance }
+		}
+		set_variable = { name = hd_dc_registry_error value = flag:missing_acute_record }
+	}
+}

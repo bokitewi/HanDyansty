@@ -1,0 +1,122 @@
+# The native on_phase_completed callback allocates a new opportunity. Its
+# receipt is reused by every withdrawal attempt within that callback. Final
+# success has a separate slot and never consumes the last phase's receipt.
+hd_dc_begin_theft_phase_effect = {
+	if = {
+		limit = { NOT = { has_variable = hd_dc_theft_phase } }
+		set_variable = { name = hd_dc_theft_phase value = 0 }
+	}
+	change_variable = { name = hd_dc_theft_phase add = 1 }
+	remove_variable = hd_dc_theft_phase_receipt
+}
+
+# Scheme scope. SLOT is phase or final. The title's actual holder and the
+# owner's chosen account are frozen per withdrawal, not for the whole scheme.
+# The original nominal amount remains the amount frozen by the interaction.
+hd_dc_withdraw_treasury_effect = {
+	save_scope_as = hd_dc_theft_scheme
+	clear_saved_scope = hd_dc_theft_receipt
+	save_scope_value_as = { name = hd_dc_theft_received value = 0 }
+	save_scope_value_as = { name = hd_dc_theft_debited value = 0 }
+	if = {
+		limit = {
+			NOT = { has_variable = hd_dc_theft_$SLOT$_receipt }
+			exists = situation:dynastic_cycle
+			exists = scheme_owner
+			scheme_owner = { is_alive = yes }
+			exists = scheme_target_title.holder
+			scheme_target_title.holder = { is_alive = yes has_treasury = yes }
+			has_variable = embezzlement_stake_initial
+			var:embezzlement_stake_initial > 0
+		}
+		scheme_owner = { hd_dc_create_record_effect = { KIND = theft } }
+		if = {
+			limit = { exists = scope:hd_dc_record }
+			if = {
+				limit = { NOT = { has_variable = hd_dc_theft_scheme_id } }
+				set_variable = { name = hd_dc_theft_scheme_id value = scope:hd_dc_record.var:hd_dc_record_id }
+			}
+			set_variable = { name = hd_dc_theft_$SLOT$_receipt value = scope:hd_dc_record }
+			scope:hd_dc_record = {
+				set_variable = { name = hd_dc_theft_scheme_id value = scope:hd_dc_theft_scheme.var:hd_dc_theft_scheme_id }
+				set_variable = { name = hd_dc_theft_purpose value = flag:$SLOT$ }
+				set_variable = { name = hd_dc_theft_phase value = 0 }
+				if = {
+					limit = { var:hd_dc_theft_purpose = flag:phase }
+					set_variable = { name = hd_dc_theft_phase value = scope:hd_dc_theft_scheme.var:hd_dc_theft_phase }
+				}
+				set_variable = { name = hd_dc_debit_title value = scope:hd_dc_theft_scheme.scheme_target_title }
+				set_variable = { name = hd_dc_payer value = var:hd_dc_debit_title.holder }
+				set_variable = { name = hd_dc_payee value = scope:hd_dc_theft_scheme.scheme_owner }
+				set_variable = { name = hd_dc_amount_due value = scope:hd_dc_theft_scheme.var:embezzlement_stake_initial }
+				set_variable = { name = hd_dc_credit_kind value = 1 }
+				if = {
+					limit = {
+						scope:hd_dc_theft_scheme.var:siphon_destination = flag:treasury
+						OR = {
+							var:hd_dc_theft_purpose = flag:phase
+							var:hd_dc_payee = { has_treasury = yes }
+						}
+					}
+					set_variable = { name = hd_dc_credit_kind value = 2 }
+				}
+			}
+		}
+	}
+	if = {
+		limit = { exists = var:hd_dc_theft_$SLOT$_receipt }
+		var:hd_dc_theft_$SLOT$_receipt = {
+			save_scope_as = hd_dc_theft_receipt
+			hd_dc_commit_theft_withdrawal_effect = yes
+			save_scope_value_as = { name = hd_dc_theft_received value = var:hd_dc_actual_credit }
+			save_scope_value_as = { name = hd_dc_theft_debited value = var:hd_dc_actual_debit }
+		}
+	}
+}
+
+# Receipt scope. No signatures or available-balance gate: the user explicitly
+# retained native fixed withdrawals, including an already negative treasury.
+# A processing/mismatched receipt cannot execute again. Only an observed debit
+# can fund a credit; an undelivered debit remains on this persistent record.
+hd_dc_commit_theft_withdrawal_effect = {
+	if = {
+		limit = { NOT = { has_variable = hd_dc_payment_commit } }
+		set_variable = { name = hd_dc_payment_commit value = 1 }
+		set_variable = { name = hd_dc_actual_debit value = 0 }
+		set_variable = { name = hd_dc_actual_credit value = 0 }
+		set_variable = { name = hd_dc_unreturned_debit value = 0 }
+		set_variable = { name = hd_dc_debit_before value = var:hd_dc_payer.treasury }
+		var:hd_dc_payer = { remove_treasury = scope:hd_dc_theft_receipt.var:hd_dc_amount_due }
+		set_variable = {
+			name = hd_dc_actual_debit
+			value = { value = var:hd_dc_debit_before subtract = var:hd_dc_payer.treasury }
+		}
+		if = {
+			limit = { var:hd_dc_actual_debit > 0 }
+			if = {
+				limit = { var:hd_dc_credit_kind = 1 }
+				set_variable = { name = hd_dc_credit_before value = var:hd_dc_payee.gold }
+				var:hd_dc_payee = { add_gold = scope:hd_dc_theft_receipt.var:hd_dc_actual_debit }
+				set_variable = { name = hd_dc_actual_credit value = { value = var:hd_dc_payee.gold subtract = var:hd_dc_credit_before } }
+			}
+			else_if = {
+				limit = { var:hd_dc_payee = { has_treasury = yes } }
+				set_variable = { name = hd_dc_credit_before value = var:hd_dc_payee.treasury }
+				var:hd_dc_payee = { add_treasury = scope:hd_dc_theft_receipt.var:hd_dc_actual_debit }
+				set_variable = { name = hd_dc_actual_credit value = { value = var:hd_dc_payee.treasury subtract = var:hd_dc_credit_before } }
+			}
+			# Native secrets and restitution use the amount actually taken.
+			scope:hd_dc_theft_scheme = { change_variable = { name = embezzlement_stake add = scope:hd_dc_theft_receipt.var:hd_dc_actual_debit } }
+		}
+		set_variable = {
+			name = hd_dc_unreturned_debit
+			value = { value = var:hd_dc_actual_debit subtract = var:hd_dc_actual_credit min = 0 }
+		}
+		set_variable = { name = hd_dc_payment_date value = current_date }
+		if = {
+			limit = { var:hd_dc_actual_debit = var:hd_dc_amount_due var:hd_dc_actual_credit = var:hd_dc_actual_debit }
+			set_variable = { name = hd_dc_payment_commit value = 2 }
+		}
+		else = { set_variable = { name = hd_dc_payment_commit value = 3 } }
+	}
+}

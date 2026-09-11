@@ -1,0 +1,101 @@
+# Character scope. The named vassal reports an actual present control problem.
+hd_dc_ord13_petitioner_trigger = {
+	is_alive = yes
+	is_adult = yes
+	is_imprisoned = no
+	any_held_title = { tier = tier_county county_control < 50 }
+}
+
+hd_dc_ord13_eligible_trigger = {
+	is_alive = yes
+	is_adult = yes
+	is_landed = yes
+	is_imprisoned = no
+	stress_level >= 2
+	any_character_situation = { this = situation:dynastic_cycle }
+	any_vassal = { hd_dc_ord13_petitioner_trigger = yes }
+}
+
+hd_dc_ord13_window_valid_trigger = {
+	exists = scope:hd_dc_ordinary
+	save_temporary_scope_as = hd_dc_ordinary_ruler
+	hd_dc_ord13_eligible_trigger = yes
+	scope:hd_dc_ordinary = {
+		var:hd_dc_record_kind = flag:ordinary
+		var:hd_dc_actor = scope:hd_dc_ordinary_ruler
+		var:hd_dc_node = 13
+		has_variable = hd_dc_ordinary_wait
+		var:hd_dc_node_version = scope:hd_dc_ordinary_version
+		NOT = { has_variable = hd_dc_option_committed }
+		NOT = { var:hd_dc_stage = flag:closed }
+		exists = var:hd_dc_petitioner
+		var:hd_dc_petitioner = {
+			liege = scope:hd_dc_ordinary_ruler
+			hd_dc_ord13_petitioner_trigger = yes
+		}
+	}
+	var:hd_dc_pending_ordinary = scope:hd_dc_ordinary
+}
+
+hd_dc_ord13_delegation_valid_trigger = {
+	hd_dc_ord13_window_valid_trigger = yes
+	gold >= scope:hd_dc_ordinary.var:hd_dc_frozen_gold
+	exists = cp:councillor_chancellor
+	cp:councillor_chancellor = {
+		is_alive = yes
+		is_imprisoned = no
+		NOT = { has_trait = incapable }
+		opinion = { target = scope:hd_dc_ordinary_ruler value >= 20 }
+	}
+}
+
+# Actual friend or trusted close relative within current diplomatic reach.
+hd_dc_ord13_confidant_trigger = {
+	is_alive = yes
+	is_adult = yes
+	is_imprisoned = no
+	NOT = { has_trait = incapable }
+	this != scope:hd_dc_ordinary_ruler
+	in_diplomatic_range = scope:hd_dc_ordinary_ruler
+	OR = {
+		has_relation_friend = scope:hd_dc_ordinary_ruler
+		AND = { is_close_family_of = scope:hd_dc_ordinary_ruler opinion = { target = scope:hd_dc_ordinary_ruler value >= 60 } }
+	}
+}
+
+hd_dc_ord13_has_confidant_trigger = {
+	OR = {
+		any_relation = { type = friend hd_dc_ord13_confidant_trigger = yes }
+		any_close_family_member = { hd_dc_ord13_confidant_trigger = yes }
+	}
+}
+
+hd_dc_ord13_help_response_valid_trigger = {
+	is_alive = yes
+	exists = scope:hd_dc_ordinary
+	scope:hd_dc_ordinary.var:hd_dc_actor = { save_temporary_scope_as = hd_dc_ordinary_ruler }
+	hd_dc_ord13_confidant_trigger = yes
+	save_temporary_scope_as = hd_dc_ordinary_helper
+	scope:hd_dc_ordinary = {
+		var:hd_dc_record_kind = flag:ordinary
+		var:hd_dc_node = 13
+		var:hd_dc_node_version = scope:hd_dc_ordinary_version
+		var:hd_dc_option_committed = flag:ord_13_c
+		has_variable = hd_dc_ordinary_wait
+		var:hd_dc_confidant = scope:hd_dc_ordinary_helper
+		NOT = { has_variable = hd_dc_help_answer }
+		NOT = { var:hd_dc_stage = flag:closed }
+		var:hd_dc_actor = { is_alive = yes is_imprisoned = no is_landed = yes var:hd_dc_pending_ordinary = scope:hd_dc_ordinary }
+	}
+}
+
+# Native 1.19 stress_threshold.0001 tier selection and cooldowns. This is an
+# event opportunity, not a direct trait grant or a replacement probability.
+hd_dc_ord13_native_stress_followup_trigger = {
+	is_alive = yes is_adult = yes is_imprisoned = no
+	OR = {
+		AND = { stress_level >= 1 NOT = { has_character_flag = stress_threshold_event_1_cooldown } }
+		AND = { stress_level >= 2 NOT = { has_character_flag = stress_threshold_event_2_cooldown } }
+		AND = { stress_level >= 3 NOT = { has_character_flag = stress_threshold_event_3_cooldown } }
+	}
+}

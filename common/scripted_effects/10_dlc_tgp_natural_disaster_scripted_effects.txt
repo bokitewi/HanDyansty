@@ -2,6 +2,40 @@
 # EFFECTS
 #####################################################################
 
+# Actual disaster situation scope. Joins and yearly callbacks share this lock.
+hd_dc_disaster_catalyst_once_effect = {
+	if = {
+		limit = {
+			exists = situation:dynastic_cycle
+			NOT = { has_variable = hd_dc_disaster_$STAGE$_committed }
+		}
+		set_variable = { name = hd_dc_disaster_$STAGE$_committed value = yes }
+		save_scope_as = hd_dc_disaster_source
+		clear_saved_scope = hd_dc_point_history
+		# W/H only. Each native caller retains its original phase catalyst.
+		situation:dynastic_cycle = { hd_dc_map_catalyst_effect = { CATALYST = $CATALYST$ } }
+		if = {
+			limit = { exists = scope:hd_dc_point_history }
+			if = {
+				limit = { NOT = { has_variable = hd_dc_disaster_identity } }
+				set_variable = { name = hd_dc_disaster_identity value = scope:hd_dc_point_history.var:hd_dc_record_id }
+			}
+			set_variable = { name = hd_dc_disaster_$STAGE$_history value = scope:hd_dc_point_history }
+			scope:hd_dc_point_history = {
+				set_variable = { name = hd_dc_disaster_identity value = scope:hd_dc_disaster_source.var:hd_dc_disaster_identity }
+				set_variable = { name = hd_dc_disaster_stage value = flag:$STAGE$ }
+				set_variable = { name = hd_dc_disaster_epicenter value = scope:hd_dc_disaster_source.situation_center_province.county }
+				if = {
+					limit = { scope:hd_dc_disaster_source = { situation_type = natural_disaster_flood } }
+					set_variable = { name = hd_dc_disaster_type value = flag:flood }
+					set_variable = { name = hd_dc_disaster_river value = scope:hd_dc_disaster_source.var:river_region }
+				}
+				else = { set_variable = { name = hd_dc_disaster_type value = flag:earthquake } }
+			}
+		}
+	}
+}
+
 spawn_earthquake_in_region_effect = {
 	random_county_in_region = {
 		region = $REGION$
@@ -73,8 +107,18 @@ spawn_earthquake_in_region_effect = {
 spawn_earthquake_in_county_effect = {
 	$COUNTY$ = { save_scope_as = epicenter_county }
 
-	# UUII stability mode: natural-disaster situations are disabled.
-	# The guarded scope:situation block below therefore remains a safe no-op.
+	clear_saved_scope = situation
+	if = {
+		limit = {
+			scope:epicenter_county = {
+				hd_dc_earthquake_county_eligible_trigger = yes
+			}
+		}
+		start_situation = {
+			type = natural_disaster_earthquake
+			save_scope_as = situation
+		}
+	}
 
 	scope:situation ?= {
 		set_situation_center_province = scope:epicenter_county.title_province
@@ -190,16 +234,36 @@ spawn_flood_in_county_effect = {
 				NOT = {
 					any_in_global_list = {
 						variable = ongoing_floods
-						scope:region_temp = this
+						var:river_region ?= scope:region_temp
 					}
 				}
-				always = no # UUII: out-of-map geographical branch
+				scope:flood_county.title_province = { geographical_region = scope:region_temp }
 			}
 			save_scope_as = river_region
 		}
 	}
 
-	# UUII stability mode: natural-disaster situations are disabled.
+	# Recheck after the native 0-11 month delay and for direct county calls.
+	clear_saved_scope = situation
+	if = {
+		limit = {
+			exists = scope:river_region
+			scope:flood_county = {
+				hd_dc_flood_county_eligible_trigger = yes
+				title_province = { geographical_region = scope:river_region }
+			}
+			NOT = {
+				any_in_global_list = {
+					variable = ongoing_floods
+					var:river_region ?= scope:river_region
+				}
+			}
+		}
+		start_situation = {
+			type = natural_disaster_flood
+			save_scope_as = situation
+		}
+	}
 
 	# Track globally for exclusivity and distribution
 	scope:situation ?= {
@@ -214,6 +278,7 @@ spawn_flood_in_county_effect = {
 			name = river_region
 			value = scope:river_region
 		}
+		set_variable = { name = epicenter_county value = scope:flood_county }
 		
 		set_variable = {
 			name = fatalities
@@ -222,11 +287,11 @@ spawn_flood_in_county_effect = {
 
 		save_scope_value_as = {
 			name = min_severity
-			value = scope:epicenter_county.title_province.natural_disaster_flood_min_severity
+			value = scope:flood_county.title_province.natural_disaster_flood_min_severity
 		}
 		save_scope_value_as = {
 			name = max_severity
-			value = scope:epicenter_county.title_province.natural_disaster_flood_max_severity
+			value = scope:flood_county.title_province.natural_disaster_flood_max_severity
 		}
 
 		set_variable = {
@@ -272,9 +337,19 @@ natural_disaster_ruler_start_effect = {
 			}
 		}
 	}
-	tgp_activate_catalyst_against_hegemon_effect = {
-		HEGEMON = scope:ruler.top_liege
-		CATALYST = catalyst_hegemon_natural_disaster
+	if = {
+		limit = {
+			exists = title:h_china
+			title:h_china.holder ?= scope:ruler.top_liege
+			any_character_situation = {
+				situation:dynastic_cycle ?= this
+				situation_top_has_catalyst = catalyst_hegemon_natural_disaster
+			}
+		}
+		scope:situation = {
+			hd_dc_disaster_catalyst_once_effect = { STAGE = occurred CATALYST = catalyst_hegemon_natural_disaster }
+		}
+		situation:dynastic_cycle = { trigger_situation_catalyst = catalyst_hegemon_natural_disaster }
 	}
 	scope:situation = {
 		switch = {

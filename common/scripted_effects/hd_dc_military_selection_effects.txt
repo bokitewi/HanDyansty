@@ -1,0 +1,90 @@
+# Region scope, annual type-pool preparation. Native obedience is unbounded;
+# P017 therefore uses a relative rank among adult landed subjects whose ACTUAL
+# obedience_target is this emperor and whose government relationship supports
+# obedience. It never substitutes opinion, dread, a 0..100 gauge, or the native
+# obedient/disobedient threshold. No military-strength test is fabricated here.
+hd_dc_snapshot_military_social_pool_effect = {
+	if = {
+		limit = {
+			OR = { NOT = { has_variable = hd_dc_military_snapshot_year } var:hd_dc_military_snapshot_year != current_year }
+		}
+		every_in_list = {
+			variable = hd_dc_obedience_subjects
+			remove_variable = hd_dc_obedience_snapshot
+			remove_variable = hd_dc_obedience_snapshot_target
+			remove_variable = hd_dc_obedience_snapshot_year
+			remove_variable = hd_dc_military_opinion_snapshot
+			remove_variable = hd_dc_military_stance_snapshot
+			remove_variable = hd_dc_military_personality_snapshot
+		}
+		clear_variable_list = hd_dc_obedience_subjects
+		clear_variable_list = hd_dc_military_social_candidates
+		set_variable = { name = hd_dc_military_snapshot_year value = current_year }
+		set_variable = { name = hd_dc_obedience_subject_count value = 0 }
+		remove_variable = hd_dc_obedience_cutoff
+		remove_variable = hd_dc_military_snapshot_ruler
+		if = {
+			limit = { exists = title:h_china.holder }
+			title:h_china.holder = { save_scope_as = hd_dc_military_ruler }
+			set_variable = { name = hd_dc_military_snapshot_ruler value = scope:hd_dc_military_ruler }
+			title:h_china.holder = {
+				every_vassal_or_below = {
+					limit = {
+						is_alive = yes
+						is_adult = yes
+						is_landed = yes
+						exists = liege
+						liege = { government_allows = obedience }
+						exists = obedience_target
+						obedience_target = scope:hd_dc_military_ruler
+						any_character_situation = { this = situation:dynastic_cycle }
+					}
+					set_variable = { name = hd_dc_obedience_snapshot value = obedience_value }
+					set_variable = { name = hd_dc_obedience_snapshot_target value = obedience_target }
+					set_variable = { name = hd_dc_obedience_snapshot_year value = current_year }
+					set_variable = { name = hd_dc_military_opinion_snapshot value = "opinion(scope:hd_dc_military_ruler)" }
+					set_variable = { name = hd_dc_military_stance_snapshot value = no }
+					if = { limit = { has_vassal_stance = belligerent } set_variable = { name = hd_dc_military_stance_snapshot value = yes } }
+					set_variable = { name = hd_dc_military_personality_snapshot value = no }
+					if = {
+						limit = { OR = { has_trait = ambitious has_trait = brave has_trait = arrogant } }
+						set_variable = { name = hd_dc_military_personality_snapshot value = yes }
+					}
+					save_scope_as = hd_dc_obedience_subject
+					situation:dynastic_cycle = {
+						add_to_variable_list = { name = hd_dc_obedience_subjects target = scope:hd_dc_obedience_subject }
+						change_variable = { name = hd_dc_obedience_subject_count add = 1 }
+					}
+				}
+			}
+			if = {
+				limit = { var:hd_dc_obedience_subject_count > 0 }
+				# The cutoff is the ceil(0.3*N)-th value; all equal values at
+				# that boundary remain equal. Small samples/ties can exceed 30%.
+				set_variable = {
+					name = hd_dc_obedience_quota
+					value = { value = var:hd_dc_obedience_subject_count multiply = 0.3 ceiling = yes }
+				}
+				ordered_in_list = {
+					variable = hd_dc_obedience_subjects
+					order_by = { value = var:hd_dc_obedience_snapshot multiply = -1 }
+					max = var:hd_dc_obedience_quota
+					check_range_bounds = no
+					save_scope_as = hd_dc_obedience_subject
+					situation:dynastic_cycle = { set_variable = { name = hd_dc_obedience_cutoff value = scope:hd_dc_obedience_subject.var:hd_dc_obedience_snapshot } }
+				}
+				every_in_list = {
+					variable = hd_dc_obedience_subjects
+					limit = {
+						var:hd_dc_obedience_snapshot <= situation:dynastic_cycle.var:hd_dc_obedience_cutoff
+						var:hd_dc_military_opinion_snapshot <= -30
+						var:hd_dc_military_stance_snapshot = yes
+						var:hd_dc_military_personality_snapshot = yes
+					}
+					save_scope_as = hd_dc_obedience_subject
+					situation:dynastic_cycle = { add_to_variable_list = { name = hd_dc_military_social_candidates target = scope:hd_dc_obedience_subject } }
+				}
+			}
+		}
+	}
+}

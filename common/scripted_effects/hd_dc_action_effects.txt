@@ -1,0 +1,91 @@
+# Character scope, actual actor story and living scope:hd_dc_check_target.
+# Callers must first establish the attempted action's authority and real method.
+# P037 is a skill check only; it does not pay, assign rights or decide a war.
+hd_dc_prepare_ability_action_effect = {
+	clear_saved_scope = hd_dc_action
+	save_scope_as = hd_dc_check_actor
+	if = {
+		limit = {
+			is_alive = yes
+			exists = situation:dynastic_cycle
+			exists = scope:hd_dc_check_target
+			scope:hd_dc_check_target = { is_alive = yes }
+			exists = scope:hd_dc_actor_story
+			scope:hd_dc_actor_story = {
+				exists = var:hd_dc_instance_ref
+				NOT = { has_variable = hd_dc_pending_action }
+				NOT = { has_variable = hd_dc_pending_proposal }
+				NOT = { has_variable = hd_dc_option_committed }
+				var:hd_dc_instance_ref = { NOT = { has_variable = hd_dc_reward_committed } NOT = { var:hd_dc_stage = flag:closed } }
+			}
+		}
+		hd_dc_create_record_effect = { KIND = action }
+		scope:hd_dc_record = {
+			save_scope_as = hd_dc_action
+			set_variable = { name = hd_dc_actor_story value = scope:hd_dc_actor_story }
+			set_variable = { name = hd_dc_instance_ref value = scope:hd_dc_actor_story.var:hd_dc_instance_ref }
+			set_variable = { name = hd_dc_instance_id value = scope:hd_dc_actor_story.var:hd_dc_instance_id }
+			set_variable = { name = hd_dc_origin_node value = scope:hd_dc_actor_story.var:hd_dc_node }
+			set_variable = { name = hd_dc_origin_version value = scope:hd_dc_actor_story.var:hd_dc_node_version }
+			set_variable = { name = hd_dc_origin_option value = flag:$OPTION$ }
+			set_variable = { name = hd_dc_action_actor value = scope:hd_dc_check_actor }
+			set_variable = { name = hd_dc_action_target value = scope:hd_dc_check_target }
+			set_variable = { name = hd_dc_action_skill value = flag:$SKILL$ }
+			set_variable = { name = hd_dc_actor_skill value = scope:hd_dc_check_actor.$SKILL$ }
+			set_variable = { name = hd_dc_target_skill value = scope:hd_dc_check_target.$SKILL$ }
+			set_variable = { name = hd_dc_preparation value = $PREPARATION$ }
+			set_variable = { name = hd_dc_circumstance value = $CIRCUMSTANCE$ }
+			set_variable = {
+				name = hd_dc_action_chance
+				value = {
+					value = var:hd_dc_actor_skill
+					subtract = var:hd_dc_target_skill
+					multiply = 2
+					add = 50
+					add = var:hd_dc_preparation
+					subtract = var:hd_dc_circumstance
+					min = 10
+					max = 90
+				}
+			}
+		}
+		scope:hd_dc_actor_story = {
+			set_variable = { name = hd_dc_pending_action value = scope:hd_dc_action }
+			set_variable = { name = hd_dc_option_committed value = flag:$OPTION$ }
+		}
+	}
+}
+
+# Character scope. One recorded attempt consumes one random draw. A changed
+# node/version cannot receive this result; a second call cannot reroll failure.
+hd_dc_resolve_ability_action_effect = {
+	save_scope_as = hd_dc_check_actor
+	if = {
+		limit = {
+			is_alive = yes
+			exists = scope:hd_dc_action
+			scope:hd_dc_action = {
+				var:hd_dc_record_kind = flag:action
+				var:hd_dc_action_actor = scope:hd_dc_check_actor
+				NOT = { has_variable = hd_dc_action_result }
+				var:hd_dc_action_target ?= { is_alive = yes }
+				exists = var:hd_dc_action_target
+				var:hd_dc_instance_ref = { NOT = { has_variable = hd_dc_reward_committed } NOT = { var:hd_dc_stage = flag:closed } }
+				var:hd_dc_actor_story = {
+					var:hd_dc_pending_action = scope:hd_dc_action
+					var:hd_dc_node = scope:hd_dc_action.var:hd_dc_origin_node
+					var:hd_dc_node_version = scope:hd_dc_action.var:hd_dc_origin_version
+				}
+			}
+		}
+		scope:hd_dc_action = {
+			set_variable = { name = hd_dc_action_attempt_date value = current_date }
+			set_variable = { name = hd_dc_action_result value = flag:failure }
+			random = {
+				chance = var:hd_dc_action_chance
+				set_variable = { name = hd_dc_action_result value = flag:success }
+			}
+			change_variable = { name = hd_dc_record_version add = 1 }
+		}
+	}
+}

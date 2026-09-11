@@ -1,0 +1,80 @@
+# Scope: dynastic_cycle situation. The fixed county set excludes tributaries.
+hd_dc_snapshot_valid_trigger = {
+	exists = title:h_china
+	has_variable = hd_dc_schema_version
+	has_variable = hd_dc_total_counties
+	var:hd_dc_schema_version = 1
+	var:hd_dc_total_counties > 0
+	var:hd_dc_observed_counties = var:hd_dc_total_counties
+	NOT = { has_variable = hd_dc_sovereignty_busy }
+}
+
+hd_dc_has_hegemon_trigger = {
+	exists = title:h_china.holder
+	title:h_china.holder ?= { is_alive = yes }
+}
+
+hd_dc_low_control_trigger = {
+	hd_dc_has_hegemon_trigger = yes
+	hd_dc_control_numerator_value < hd_dc_enter_denominator_value
+}
+
+hd_dc_restored_control_trigger = {
+	hd_dc_has_hegemon_trigger = yes
+	hd_dc_control_numerator_value >= hd_dc_restore_denominator_value
+}
+
+# War targets are inspected on the real war scope, not inferred from a flag.
+hd_dc_is_mandate_war_trigger = {
+	OR = {
+		using_cb = claim_the_mandate_cb
+		any_in_list = {
+			list = target_titles
+			this = title:h_china
+		}
+	}
+}
+
+hd_dc_mandate_war_pending_trigger = {
+	exists = title:h_china.holder
+	title:h_china.holder ?= {
+		any_character_war = {
+			hd_dc_is_mandate_war_trigger = yes
+		}
+	}
+}
+
+hd_dc_can_enter_chaos_trigger = {
+	hd_dc_snapshot_valid_trigger = yes
+	NOT = { situation_current_phase = situation_dynastic_cycle_phase_chaos }
+	OR = {
+		AND = {
+			hd_dc_has_hegemon_trigger = no
+			has_variable = hd_dc_absent_since
+			NOT = { has_variable = hd_dc_absent_wait }
+		}
+		AND = {
+			hd_dc_low_control_trigger = yes
+			has_variable = hd_dc_low_control_since
+			NOT = { has_variable = hd_dc_low_control_wait }
+		}
+	}
+}
+
+hd_dc_can_leave_chaos_trigger = {
+	hd_dc_snapshot_valid_trigger = yes
+	situation_current_phase = situation_dynastic_cycle_phase_chaos
+	hd_dc_restored_control_trigger = yes
+	has_variable = hd_dc_restore_since
+	NOT = { has_variable = hd_dc_restore_wait }
+	hd_dc_mandate_war_pending_trigger = no
+}
+
+# Scope: decision taker. A later reconquest still transfers the mandate;
+# an already consumed announcement reward does not pay out a second time.
+hd_dc_can_receive_mandate_reward_trigger = {
+	trigger_if = {
+		limit = { has_variable = hd_dc_mandate_claimed_cycle }
+		NOT = { var:hd_dc_mandate_claimed_cycle = situation:dynastic_cycle.var:hd_dc_chaos_epoch }
+	}
+}

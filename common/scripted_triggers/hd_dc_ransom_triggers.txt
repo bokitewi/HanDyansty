@@ -1,0 +1,86 @@
+# Native ransom/release restrictions, evaluated on the actual prisoner.
+hd_dc_ord09_releasable_trigger = {
+	is_alive = yes
+	is_imprisoned = yes
+	NOT = { has_character_flag = is_being_tortured }
+	NOT = { has_character_flag = is_currently_being_purged }
+	save_temporary_scope_as = hd_dc_ransom_checked_prisoner
+	cannot_release_former_regent_whilst_old_regent_holds_power_trigger = {
+		PRISONER = scope:hd_dc_ransom_checked_prisoner
+		REGENT = scope:hd_dc_ransom_checked_prisoner.var:imprisoned_by_diarch
+	}
+}
+
+hd_dc_ord09_captor_trigger = {
+	is_alive = yes
+	is_adult = yes
+	is_imprisoned = no
+	NOT = { has_trait = incapable }
+	this != scope:hd_dc_ordinary_ruler
+}
+
+hd_dc_ord09_prisoner_trigger = {
+	hd_dc_ord09_releasable_trigger = yes
+	is_close_family_of = scope:hd_dc_ordinary_ruler
+	exists = imprisoner
+	imprisoner = { hd_dc_ord09_captor_trigger = yes }
+}
+
+hd_dc_ord09_eligible_trigger = {
+	is_alive = yes
+	is_adult = yes
+	is_landed = yes
+	is_imprisoned = no
+	NOT = { has_trait = incapable }
+	any_character_situation = { this = situation:dynastic_cycle }
+	save_temporary_scope_as = hd_dc_ordinary_ruler
+	any_close_family_member = { hd_dc_ord09_prisoner_trigger = yes }
+}
+
+# Shared between an unanswered window and accepted-contract fulfillment.
+hd_dc_ord09_case_valid_trigger = {
+	var:hd_dc_record_kind = flag:ordinary
+	var:hd_dc_node = 9
+	NOT = { var:hd_dc_stage = flag:closed }
+	exists = var:hd_dc_actor
+	var:hd_dc_actor = {
+		save_temporary_scope_as = hd_dc_ordinary_ruler
+		is_alive = yes is_adult = yes is_landed = yes is_imprisoned = no
+		NOT = { has_trait = incapable }
+		var:hd_dc_pending_ordinary = scope:hd_dc_ordinary
+	}
+	exists = var:hd_dc_captor
+	var:hd_dc_captor = { hd_dc_ord09_captor_trigger = yes }
+	exists = var:hd_dc_prisoner
+	var:hd_dc_prisoner = {
+		hd_dc_ord09_releasable_trigger = yes
+		is_imprisoned_by = scope:hd_dc_ordinary.var:hd_dc_captor
+		is_close_family_of = scope:hd_dc_ordinary_ruler
+	}
+}
+
+hd_dc_ord09_window_valid_trigger = {
+	exists = scope:hd_dc_ordinary
+	scope:hd_dc_ordinary = {
+		hd_dc_ord09_case_valid_trigger = yes
+		has_variable = hd_dc_ordinary_wait
+		var:hd_dc_actor = root
+		var:hd_dc_node_version = scope:hd_dc_ordinary_version
+		NOT = { has_variable = hd_dc_option_committed }
+	}
+}
+
+# A real captive of the payer who is close kin of the other jailer.
+hd_dc_ord09_exchange_prisoner_trigger = {
+	hd_dc_ord09_releasable_trigger = yes
+	is_imprisoned_by = scope:hd_dc_ordinary_ruler
+	is_close_family_of = scope:hd_dc_ordinary.var:hd_dc_captor
+	this != scope:hd_dc_ordinary.var:hd_dc_prisoner
+}
+
+hd_dc_ord09_can_exchange_trigger = {
+	hd_dc_ord09_window_valid_trigger = yes
+	scope:hd_dc_ordinary.var:hd_dc_captor = {
+		any_close_family_member = { hd_dc_ord09_exchange_prisoner_trigger = yes }
+	}
+}

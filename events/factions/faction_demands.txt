@@ -2041,6 +2041,13 @@ faction_demand.2001 = {
 	trigger = {
 		# May have ceased to exist by the time this triggers
 		exists = scope:faction
+		NOT = { scope:faction = { hd_dc_claimant_mobilization_paused_trigger = yes } }
+	}
+	on_trigger_fail = {
+		if = {
+			limit = { exists = scope:faction scope:faction = { hd_dc_claimant_mobilization_paused_trigger = yes } }
+			scope:faction = { set_variable = { name = hd_dc_paused_demand value = yes } }
+		}
 	}
 
 	immediate = {
@@ -2054,47 +2061,8 @@ faction_demand.2001 = {
 
 	option = {
 		name = "FACTION_DEMAND_ACCEPT"
-
-		# This effect should always be placed here, _before_ all the other effects in the block.
-		trigger_event = { on_action = on_faction_demand_accepted }
-
-		add_dread = medium_dread_loss
-
-		# LEGITIMACY LOSS FOR ACCEPTING FACTION DEMANDS
-		faction_accept_demand_legitimacy_effect = yes
-
-		scope:faction = {
-			every_faction_member = {
-				trigger_event = faction_demand.2002
-			}
-
-			special_title = {
-				add_to_list = target_titles
-			}
-		}
-
-		# Admin Emperors lose all their held titles
-		if = {
-			limit = { has_realm_law = acclamation_succession_law }
-			every_held_title = {
-				# not baronies
-				title_tier >= county
-				limit = {
-					# But not their noble family title, so they can continue playing as LADMIN
-					NOR = { has_title_law = noble_family_succession_law }
-				}
-				add_to_list = target_titles
-			}
-		}
-
-		on_claimant_faction_war_win_common = {
-			TARGET_TITLES = target_titles
-			ATTACKER = scope:faction.faction_leader
-			DEFENDER = root
-			CLAIMANT = scope:faction.special_character
-		#	ATTACKER_PRESTIGE = 0
-		#	DEFENDER_PRESTIGE = 0
-		}
+		trigger = { NOT = { scope:faction = { hd_dc_claimant_mobilization_paused_trigger = yes } } }
+		hd_dc_accept_claimant_demand_effect = yes
 
 		ai_chance = {
 			base = 10
@@ -2165,6 +2133,7 @@ faction_demand.2001 = {
 			}
 		}
 		trigger = {
+			NOT = { scope:faction = { hd_dc_claimant_mobilization_paused_trigger = yes } }
 			faction_target_can_attempt_to_bribe_with_co_emperorship_trigger = yes
 			custom_tooltip = {
 				text = FACTION_DEMAND_BRIBE_CO_EMPEROR_REASON
@@ -2192,17 +2161,22 @@ faction_demand.2001 = {
 			}
 		}
 		## And sorting the actual flow.
-		scope:faction_leader = { trigger_event = faction_demand.2006 }
+		if = {
+			limit = { NOT = { scope:faction = { hd_dc_claimant_mobilization_paused_trigger = yes } } }
+			scope:faction_leader = { trigger_event = faction_demand.2006 }
+		}
 
 		ai_chance = { liege_offer_co_emperorship_to_faction_leader_modifier = yes }
 	}
 
 	option = {
 		name = "FACTION_DEMAND_REFUSE"
-
-		faction_demand_claimant_rejected_effect = yes
-		
-		scope:faction_leader = { trigger_event = faction_demand.2003 }
+		trigger = { NOT = { scope:faction = { hd_dc_claimant_mobilization_paused_trigger = yes } } }
+		if = {
+			limit = { NOT = { scope:faction = { hd_dc_claimant_mobilization_paused_trigger = yes } } }
+			faction_demand_claimant_rejected_effect = yes
+			scope:faction_leader = { trigger_event = faction_demand.2003 }
+		}
 
 		ai_chance = {
 			base = 100
@@ -2257,9 +2231,12 @@ faction_demand.2001 = {
 		}
 	}
 
-	after = {
-		remove_variable = claimant_faction_sent_demand
+	option = {
+		name = hd_dc_support.paused_demand
+		trigger = { scope:faction = { hd_dc_claimant_mobilization_paused_trigger = yes } }
+		scope:faction = { set_variable = { name = hd_dc_paused_demand value = yes } }
 	}
+	after = { remove_variable = claimant_faction_sent_demand }
 }
 
 # Claimant Faction Demand Accepted
@@ -2290,23 +2267,7 @@ faction_demand.2003 = {
 	option = {
 		name = "FACTION_DEMAND_REFUSED_OPT"
 		scope:faction = {
-			every_faction_member = {
-				limit = {
-					this != root # i.e. not faction leader, even when the war disbands the faction
-				}
-				trigger_event = faction_demand.2004
-			}
-			
-			faction_start_war = {
-				title = special_title
-			}
-
-			# This needs to occur after the war begins, or the troops can't spawn correctly.
-			faction_spawn_member_county_armies_effect = {
-				FACTION = scope:faction
-				ARMY_OWNER = scope:faction_leader
-				PEASANT_ARMY_NAME = claimant_faction_event_troops
-			}
+			hd_dc_guard_claimant_faction_war_effect = yes
 		}
 	}
 }

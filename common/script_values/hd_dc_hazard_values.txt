@@ -1,0 +1,189 @@
+# Character scope. F changes initiation hazard, never scheme success or target
+# selection weights. The era source multiplies F once, with a combined cap 3.
+hd_dc_scheme_hazard_multiplier_value = {
+	value = 1
+	if = {
+		limit = {
+			exists = situation:dynastic_cycle
+			any_character_situation = { this = situation:dynastic_cycle }
+		}
+		switch = {
+			trigger = situation:dynastic_cycle.var:hd_dc_pressure_band
+			2 = { value = 1.15 }
+			3 = { value = 1.4 }
+			4 = { value = 1.8 }
+			5 = { value = 2.3 }
+		}
+		if = {
+			limit = { situation:dynastic_cycle = { situation_current_phase = situation_dynastic_cycle_phase_chaos } }
+			multiply = 1.5
+		}
+	}
+	max = 3
+}
+
+# Inputs are saved numeric scopes hd_dc_hazard_base (percentage, actual native
+# probability after its modifiers) and hd_dc_hazard_multiplier. This evaluates
+# 100*(1-(1-p0/100)^m), using only verified script arithmetic and temporary
+# numeric scopes. It consumes no random numbers and stores no character state.
+# User approved absolute approximation error <= 0.01 percentage points.
+# The fixed-point model remains an offline assumption, not a runtime claim.
+hd_dc_hazard_probability_value = {
+	value = scope:hd_dc_hazard_base
+	min = 0
+	max = 100
+	if = {
+		limit = {
+			scope:hd_dc_hazard_base > 0
+			scope:hd_dc_hazard_base < 100
+			scope:hd_dc_hazard_multiplier > 1
+		}
+		if = {
+			limit = {
+				save_temporary_scope_value_as = { name = hd_dc_hz_q value = { value = 100 subtract = scope:hd_dc_hazard_base multiply = 100 } }
+				save_temporary_scope_value_as = { name = hd_dc_hz_k value = 0 }
+			}
+		}
+		# Binary range reduction. Under the audited .001 percentage input model,
+		# q is a multiple of .1; rounded cutoffs cannot change the branch.
+		if = {
+			limit = { scope:hd_dc_hz_q < 0.152 }
+			if = {
+				limit = {
+					save_temporary_scope_value_as = { name = hd_dc_hz_q value = { value = scope:hd_dc_hz_q multiply = 65536 } }
+					save_temporary_scope_value_as = { name = hd_dc_hz_k value = 16 }
+				}
+			}
+		}
+		if = {
+			limit = { scope:hd_dc_hz_q < 39.062 }
+			if = {
+				limit = {
+					save_temporary_scope_value_as = { name = hd_dc_hz_q value = { value = scope:hd_dc_hz_q multiply = 256 } }
+					save_temporary_scope_value_as = { name = hd_dc_hz_k value = { value = scope:hd_dc_hz_k add = 8 } }
+				}
+			}
+		}
+		if = {
+			limit = { scope:hd_dc_hz_q < 625 }
+			if = {
+				limit = {
+					save_temporary_scope_value_as = { name = hd_dc_hz_q value = { value = scope:hd_dc_hz_q multiply = 16 } }
+					save_temporary_scope_value_as = { name = hd_dc_hz_k value = { value = scope:hd_dc_hz_k add = 4 } }
+				}
+			}
+		}
+		if = {
+			limit = { scope:hd_dc_hz_q < 2500 }
+			if = {
+				limit = {
+					save_temporary_scope_value_as = { name = hd_dc_hz_q value = { value = scope:hd_dc_hz_q multiply = 4 } }
+					save_temporary_scope_value_as = { name = hd_dc_hz_k value = { value = scope:hd_dc_hz_k add = 2 } }
+				}
+			}
+		}
+		if = {
+			limit = { scope:hd_dc_hz_q < 5000 }
+			if = {
+				limit = {
+					save_temporary_scope_value_as = { name = hd_dc_hz_q value = { value = scope:hd_dc_hz_q multiply = 2 } }
+					save_temporary_scope_value_as = { name = hd_dc_hz_k value = { value = scope:hd_dc_hz_k add = 1 } }
+				}
+			}
+		}
+		if = {
+			limit = {
+				save_temporary_scope_value_as = {
+					name = hd_dc_hz_y
+					value = { value = scope:hd_dc_hz_q subtract = 10000 multiply = 10000 divide = { value = scope:hd_dc_hz_q add = 10000 } }
+				}
+				save_temporary_scope_value_as = { name = hd_dc_hz_r value = { value = scope:hd_dc_hz_y multiply = scope:hd_dc_hz_y divide = 10000 } }
+				save_temporary_scope_value_as = {
+					name = hd_dc_hz_x
+					value = {
+						value = hd_dc_hazard_scaled_log_value
+						subtract = { value = scope:hd_dc_hz_k multiply = 6931.472 }
+						multiply = { value = scope:hd_dc_hazard_multiplier min = 1 max = 3 }
+					}
+				}
+				save_temporary_scope_value_as = { name = hd_dc_hz_j value = { value = 0 subtract = scope:hd_dc_hz_x divide = 6931.472 floor = yes } }
+				save_temporary_scope_value_as = { name = hd_dc_hz_z value = { value = scope:hd_dc_hz_j multiply = 6931.472 add = scope:hd_dc_hz_x } }
+			}
+		}
+		if = {
+			limit = { scope:hd_dc_hz_j >= 20 }
+			# Remaining failure probability < 100/2^20 percentage points.
+			value = 100
+		}
+		else = {
+			value = 10000
+			subtract = {
+				value = hd_dc_hazard_scaled_exp_value
+				divide = hd_dc_hazard_binary_divisor_value
+			}
+			# Round once to .001 of one percentage point.
+			multiply = 10
+			round = yes
+			divide = 1000
+			min = scope:hd_dc_hazard_base
+			max = 100
+		}
+	}
+}
+
+# 10000 * 2 * (y + y^3/3 + ... + y^17/17), |y| <= 1/3.
+# Horner coefficients are themselves scaled, avoiding small-value underflow.
+hd_dc_hazard_scaled_log_value = {
+	value = 588.235
+	multiply = scope:hd_dc_hz_r divide = 10000 add = 666.667
+	multiply = scope:hd_dc_hz_r divide = 10000 add = 769.231
+	multiply = scope:hd_dc_hz_r divide = 10000 add = 909.091
+	multiply = scope:hd_dc_hz_r divide = 10000 add = 1111.111
+	multiply = scope:hd_dc_hz_r divide = 10000 add = 1428.571
+	multiply = scope:hd_dc_hz_r divide = 10000 add = 2000
+	multiply = scope:hd_dc_hz_r divide = 10000 add = 3333.333
+	multiply = scope:hd_dc_hz_r divide = 10000 add = 10000
+	multiply = scope:hd_dc_hz_y divide = 10000 multiply = 2
+}
+
+# 10000 * exp(z/10000), degree 10, -ln(2) <= z/10000 <= 0.
+hd_dc_hazard_scaled_exp_value = {
+	value = 10000
+	multiply = scope:hd_dc_hz_z divide = 10000 divide = 10 add = 10000
+	multiply = scope:hd_dc_hz_z divide = 10000 divide = 9 add = 10000
+	multiply = scope:hd_dc_hz_z divide = 10000 divide = 8 add = 10000
+	multiply = scope:hd_dc_hz_z divide = 10000 divide = 7 add = 10000
+	multiply = scope:hd_dc_hz_z divide = 10000 divide = 6 add = 10000
+	multiply = scope:hd_dc_hz_z divide = 10000 divide = 5 add = 10000
+	multiply = scope:hd_dc_hz_z divide = 10000 divide = 4 add = 10000
+	multiply = scope:hd_dc_hz_z divide = 10000 divide = 3 add = 10000
+	multiply = scope:hd_dc_hz_z divide = 10000 divide = 2 add = 10000
+	multiply = scope:hd_dc_hz_z divide = 10000 add = 10000
+}
+
+# Powers of two only undo range reduction; this is not a table of p0 values.
+hd_dc_hazard_binary_divisor_value = {
+	value = 1
+	switch = {
+		trigger = scope:hd_dc_hz_j
+		1 = { value = 2 }
+		2 = { value = 4 }
+		3 = { value = 8 }
+		4 = { value = 16 }
+		5 = { value = 32 }
+		6 = { value = 64 }
+		7 = { value = 128 }
+		8 = { value = 256 }
+		9 = { value = 512 }
+		10 = { value = 1024 }
+		11 = { value = 2048 }
+		12 = { value = 4096 }
+		13 = { value = 8192 }
+		14 = { value = 16384 }
+		15 = { value = 32768 }
+		16 = { value = 65536 }
+		17 = { value = 131072 }
+		18 = { value = 262144 }
+		19 = { value = 524288 }
+	}
+}

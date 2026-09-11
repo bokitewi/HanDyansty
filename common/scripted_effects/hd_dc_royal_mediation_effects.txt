@@ -1,0 +1,127 @@
+# ROY-01-D. Invitation, signature, actual payment and ruling are separate acts.
+hd_dc_roy01_offer_mediation_effect = {
+	if = {
+		limit = { hd_dc_roy01_window_valid_trigger = yes gold >= hd_dc_g1_gold }
+		clear_saved_scope = hd_dc_offer_to
+		dynasty = {
+			ordered_dynasty_member = {
+				limit = { hd_dc_roy01_neutral_elder_trigger = yes }
+				order_by = prestige
+				max = 1
+				check_range_bounds = no
+				save_scope_as = hd_dc_offer_to
+			}
+		}
+		if = {
+			limit = { exists = scope:hd_dc_offer_to }
+			scope:hd_dc_instance.var:hd_dc_roy01_favored = { save_scope_as = hd_dc_actor_story }
+			hd_dc_create_proposal_effect = {
+				OPTION = roy_01_d
+				TERMS = hd_dc_roy01_mediation_terms
+				COUNTER_TERMS = hd_dc_roy01_mediation_written_terms
+				MONTHS = 3
+			}
+			if = {
+				limit = { exists = scope:hd_dc_proposal }
+				scope:hd_dc_proposal = { set_variable = { name = hd_dc_frozen_gold value = hd_dc_g1_gold } }
+				scope:hd_dc_instance = {
+					set_variable = { name = hd_dc_roy01_action value = flag:roy_01_d }
+					set_variable = { name = hd_dc_roy01_proposal value = scope:hd_dc_proposal }
+				}
+			}
+		}
+	}
+}
+
+# Main record scope. No payment is retried after any actual debit.
+hd_dc_consume_roy01_mediation_effect = {
+	if = {
+		limit = {
+			var:hd_dc_roy01_action = flag:roy_01_d
+			NOT = { has_variable = hd_dc_roy01_result }
+			exists = var:hd_dc_roy01_proposal
+			var:hd_dc_roy01_proposal = {
+				NOT = { has_variable = hd_dc_result_consumed }
+				OR = { has_variable = hd_dc_callback_committed var:hd_dc_proposal_state = flag:expired var:hd_dc_proposal_state = flag:invalidated }
+			}
+		}
+		save_scope_as = hd_dc_instance
+		var:hd_dc_roy01_proposal = { save_scope_as = hd_dc_proposal set_variable = { name = hd_dc_result_consumed value = yes } }
+		var:hd_dc_roy01_favored.var:hd_dc_actor = { save_scope_as = hd_dc_favored }
+		var:hd_dc_roy01_displaced.var:hd_dc_actor = { save_scope_as = hd_dc_displaced }
+		if = {
+			limit = {
+				var:hd_dc_stage = flag:acute
+				NOT = { has_variable = hd_dc_reward_committed }
+				NOT = { has_variable = hd_dc_ritual_precedence_guarantee }
+				hd_dc_roy01_parties_valid_trigger = yes
+				scope:hd_dc_proposal = {
+					var:hd_dc_proposal_state = flag:accepted
+					has_variable = hd_dc_callback_committed
+					var:hd_dc_proposal_from = title:h_china.holder
+					var:hd_dc_from_signature = var:hd_dc_proposal_from
+					var:hd_dc_to_signature = var:hd_dc_proposal_to
+					var:hd_dc_proposal_to = { hd_dc_roy01_neutral_elder_trigger = yes }
+					var:hd_dc_actor_story = {
+						var:hd_dc_pending_proposal = scope:hd_dc_proposal
+						var:hd_dc_node = scope:hd_dc_proposal.var:hd_dc_origin_node
+						var:hd_dc_node_version = scope:hd_dc_proposal.var:hd_dc_origin_version
+					}
+				}
+			}
+			title:h_china.holder = { hd_dc_create_record_effect = { KIND = payment } }
+			scope:hd_dc_record = {
+				save_scope_as = hd_dc_payment
+				set_variable = { name = hd_dc_instance_ref value = scope:hd_dc_instance }
+				set_variable = { name = hd_dc_payment_proposal value = scope:hd_dc_proposal }
+				set_variable = { name = hd_dc_payer value = scope:hd_dc_proposal.var:hd_dc_proposal_from }
+				set_variable = { name = hd_dc_payee value = scope:hd_dc_proposal.var:hd_dc_proposal_to }
+				set_variable = { name = hd_dc_payer_signature value = scope:hd_dc_proposal.var:hd_dc_from_signature }
+				set_variable = { name = hd_dc_payee_signature value = scope:hd_dc_proposal.var:hd_dc_to_signature }
+				set_variable = { name = hd_dc_amount_due value = scope:hd_dc_proposal.var:hd_dc_frozen_gold }
+				set_variable = { name = hd_dc_debit_kind value = 1 }
+				set_variable = { name = hd_dc_credit_kind value = 1 }
+			}
+			set_variable = { name = hd_dc_roy01_payment value = scope:hd_dc_payment }
+			hd_dc_execute_payment_effect = yes
+			if = {
+				limit = { hd_dc_payment_completed_trigger = yes }
+				var:hd_dc_roy01_favored = {
+					save_scope_as = hd_dc_actor_story
+					remove_variable = hd_dc_pending_proposal
+					remove_variable = hd_dc_option_committed
+				}
+				scope:hd_dc_favored = { save_scope_as = hd_dc_check_target }
+				scope:hd_dc_proposal.var:hd_dc_proposal_to = {
+					hd_dc_prepare_ability_action_effect = { OPTION = roy_01_d SKILL = diplomacy PREPARATION = 0 CIRCUMSTANCE = 0 }
+					hd_dc_resolve_ability_action_effect = yes
+				}
+				if = {
+					limit = { exists = scope:hd_dc_action scope:hd_dc_action = { has_variable = hd_dc_action_result } }
+					title:h_china.holder = { hd_dc_restore_ritual_order_effect = yes }
+					set_variable = { name = hd_dc_ritual_witness value = scope:hd_dc_proposal.var:hd_dc_proposal_to }
+					set_variable = { name = hd_dc_roy01_check value = scope:hd_dc_action }
+					var:hd_dc_ritual_witness = { add_opinion = { target = title:h_china.holder modifier = hd_dc_ritual_fairness_opinion opinion = 15 } }
+					scope:hd_dc_payment = { set_variable = { name = hd_dc_nonfinancial_terms_completed value = yes } }
+					hd_dc_credit_payment_governance_effect = { Q = 15 }
+					if = {
+						limit = { scope:hd_dc_action.var:hd_dc_action_result = flag:success }
+						change_variable = { name = hd_dc_x add = -10 }
+						scope:hd_dc_favored = { add_opinion = { target = scope:hd_dc_displaced modifier = hd_dc_ritual_fairness_opinion opinion = 10 } }
+						scope:hd_dc_displaced = { add_opinion = { target = scope:hd_dc_favored modifier = hd_dc_ritual_fairness_opinion opinion = 10 } }
+						hd_dc_finish_roy01_effect = { RESULT = mediation_success }
+					}
+					else = {
+						change_variable = { name = hd_dc_x add = 5 }
+						set_variable = { name = hd_dc_ritual_ruling_refused_by value = scope:hd_dc_favored }
+						hd_dc_finish_roy01_effect = { RESULT = mediation_failure }
+					}
+				}
+				else = { set_variable = { name = hd_dc_mediation_unsettled value = scope:hd_dc_payment } hd_dc_finish_roy01_effect = { RESULT = mediation_cancelled } }
+			}
+			else = { hd_dc_finish_roy01_effect = { RESULT = mediation_unpaid } }
+		}
+		else = { hd_dc_finish_roy01_effect = { RESULT = mediation_cancelled } }
+		if = { limit = { exists = title:h_china.holder } title:h_china.holder = { trigger_event = { id = hd_dc_roy.0101 days = 1 } } }
+	}
+}

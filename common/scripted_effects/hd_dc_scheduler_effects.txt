@@ -1,0 +1,78 @@
+# Region scope, first annual observation. Only implemented, verified BOOT
+# adapters can enter the pool. The five missing adapters are explicitly recorded
+# as unavailable implementation, never mislabeled as in-world ineligibility.
+hd_dc_observe_annual_crisis_pool_effect = {
+	if = {
+		limit = { NOT = { var:hd_dc_annual_epoch = current_year } }
+		set_variable = { name = hd_dc_annual_epoch value = current_year }
+		hd_dc_snapshot_party_pool_effect = yes
+		remove_variable = hd_dc_selected_type
+		set_variable = { name = hd_dc_annual_mil_status value = flag:adapter_unavailable }
+		set_variable = { name = hd_dc_annual_par_status value = flag:no_legal_candidate }
+		set_variable = { name = hd_dc_annual_reg_status value = flag:adapter_unavailable }
+		set_variable = { name = hd_dc_annual_sep_status value = flag:adapter_unavailable }
+		set_variable = { name = hd_dc_annual_reb_status value = flag:adapter_unavailable }
+		set_variable = { name = hd_dc_annual_inv_status value = flag:adapter_unavailable }
+		if = {
+			limit = { NOT = { hd_dc_snapshot_valid_trigger = yes } }
+			set_variable = { name = hd_dc_annual_result value = flag:invalid_snapshot }
+		}
+		else_if = {
+			limit = { var:hd_dc_pressure_raw < hd_dc_pressure_max }
+			set_variable = { name = hd_dc_annual_result value = flag:pressure_below_maximum }
+		}
+		else_if = {
+			limit = { OR = { has_variable = hd_dc_acute_instance_id has_variable = hd_dc_pending_instance has_variable = hd_dc_pending_party_case } }
+			set_variable = { name = hd_dc_annual_result value = flag:instance_locked }
+		}
+		else = {
+			set_variable = { name = hd_dc_annual_result value = flag:empty_authored_pool }
+			set_variable = { name = hd_dc_annual_roy_status value = flag:no_legal_candidate }
+			if = {
+				limit = { has_variable = hd_dc_roy_cooldown }
+				set_variable = { name = hd_dc_annual_roy_status value = flag:category_cooldown }
+			}
+			else_if = {
+				limit = { NOT = { exists = title:h_china.holder } }
+				set_variable = { name = hd_dc_annual_roy_status value = flag:no_hegemon }
+			}
+			else_if = {
+				limit = { any_situation_participant = { hd_dc_royal_candidate_trigger = yes } }
+				set_variable = { name = hd_dc_annual_roy_status value = flag:eligible }
+			}
+			if = {
+				limit = { has_variable = hd_dc_par_cooldown }
+				set_variable = { name = hd_dc_annual_par_status value = flag:category_cooldown }
+			}
+			else_if = {
+				limit = { hd_dc_par_snapshot_valid_trigger = yes var:hd_dc_par_ordered_hostile_pair_count > 0 any_in_list = { variable = hd_dc_counties hd_dc_party_case_county_trigger = yes } }
+				set_variable = { name = hd_dc_annual_par_status value = flag:eligible }
+			}
+			# One ticket per legal type, then one unordered PAR-pair draw.
+			# Candidate multiplicity does not change the type's weight.
+			random_list = {
+				100 = { trigger = { var:hd_dc_annual_roy_status = flag:eligible } set_variable = { name = hd_dc_selected_type value = flag:roy } }
+				100 = { trigger = { var:hd_dc_annual_par_status = flag:eligible } set_variable = { name = hd_dc_selected_type value = flag:par } }
+			}
+			if = {
+				limit = { var:hd_dc_selected_type = flag:roy }
+				set_variable = { name = hd_dc_annual_result value = flag:selected }
+				hd_dc_boot_royal_effect = yes
+				if = {
+					limit = { exists = scope:hd_dc_instance scope:hd_dc_instance.var:hd_dc_stage = flag:acute }
+					set_variable = { name = hd_dc_annual_result value = flag:started }
+					scope:hd_dc_instance = { hd_dc_dispatch_roy01_effect = yes }
+				}
+				else = { set_variable = { name = hd_dc_annual_result value = flag:selected_adapter_failed } }
+			}
+			else_if = {
+				limit = { var:hd_dc_selected_type = flag:par }
+				set_variable = { name = hd_dc_annual_result value = flag:selected }
+				hd_dc_select_party_pair_effect = yes
+				hd_dc_prepare_party_policy_case_effect = yes
+				if = { limit = { has_variable = hd_dc_pending_party_case } set_variable = { name = hd_dc_annual_result value = flag:awaiting_policy_statements } }
+				else = { set_variable = { name = hd_dc_annual_result value = flag:selected_adapter_failed } }
+			}
+		}
+	}
+}

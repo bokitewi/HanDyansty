@@ -1,0 +1,282 @@
+# WP18 / C18. Bind only a war explicitly selected by its chain's CB adapter.
+# Low-level scopes: hd_dc_instance (one persistent war receipt), hd_dc_war.
+# New chain adapters call hd_dc_register_core_war_effect, which allocates one
+# receipt per physical war and then invokes this exact-object binding routine.
+# The caller has already checked the CB, target title, attacker and defender.
+hd_dc_bind_core_war_effect = {
+	if = {
+		limit = {
+			exists = scope:hd_dc_instance
+			exists = scope:hd_dc_war
+			scope:hd_dc_instance = {
+				has_variable = hd_dc_instance_id
+				NOT = { has_variable = hd_dc_core_war_ref }
+				NOT = { has_variable = hd_dc_core_war_result }
+			}
+			scope:hd_dc_war = { NOT = { has_variable = hd_dc_instance_ref } }
+		}
+		scope:hd_dc_instance = {
+			if = {
+				limit = { NOT = { has_variable = hd_dc_core_war_sequence } }
+				set_variable = { name = hd_dc_core_war_sequence value = 0 }
+			}
+			change_variable = { name = hd_dc_core_war_sequence add = 1 }
+			set_variable = { name = hd_dc_core_war_ref value = scope:hd_dc_war }
+			set_variable = { name = hd_dc_core_war_attacker value = scope:hd_dc_war.primary_attacker }
+			set_variable = { name = hd_dc_core_war_defender value = scope:hd_dc_war.primary_defender }
+			set_variable = { name = hd_dc_initial_war_attacker value = scope:hd_dc_war.primary_attacker }
+			set_variable = { name = hd_dc_initial_war_defender value = scope:hd_dc_war.primary_defender }
+			set_variable = { name = hd_dc_core_war_bound_date value = current_date }
+			set_variable = { name = hd_dc_core_war_escalation_wait value = yes years = 20 }
+			remove_variable = hd_dc_stable_since
+			remove_variable = hd_dc_stable_wait
+		}
+		scope:hd_dc_war = {
+			set_variable = { name = hd_dc_instance_ref value = scope:hd_dc_instance }
+			set_variable = { name = hd_dc_core_war_sequence value = scope:hd_dc_instance.var:hd_dc_core_war_sequence }
+		}
+	}
+}
+
+# Immediate on_war_started scope. Native claimant_faction_war obtains its
+# beneficiary and target from the attacker's joined faction. Match that exact
+# faction against the existing royal child; mere matching combatants is unsafe.
+# The faction_war link may be assigned later in the engine's declaration flow,
+# so this callback uses the native CB's declaration contract itself.
+hd_dc_register_started_royal_war_effect = {
+	if = {
+		limit = {
+			exists = situation:dynastic_cycle
+			exists = scope:war
+			exists = scope:attacker.joined_faction
+			scope:war = {
+				using_cb = claimant_faction_war
+				primary_attacker = scope:attacker
+				NOT = { has_variable = hd_dc_instance_ref }
+			}
+			scope:attacker.joined_faction = {
+				faction_is_type = claimant_faction
+				special_title = title:h_china
+				exists = special_character
+			}
+		}
+		scope:war = { save_scope_as = hd_dc_war }
+		scope:attacker.joined_faction = { save_scope_as = hd_dc_started_faction }
+		title:h_china = { save_scope_as = hd_dc_war_target }
+		situation:dynastic_cycle = {
+			every_in_list = {
+				variable = hd_dc_instances
+				limit = {
+					var:hd_dc_type = flag:roy
+					NOT = { var:hd_dc_stage = flag:closed }
+				}
+				save_scope_as = hd_dc_instance
+				every_in_list = {
+					variable = hd_dc_actor_stories
+					limit = {
+						var:hd_dc_claimant_faction = scope:hd_dc_started_faction
+						var:hd_dc_actor = scope:hd_dc_started_faction.special_character
+						scope:hd_dc_war = { NOT = { has_variable = hd_dc_instance_ref } }
+					}
+					save_scope_as = hd_dc_war_actor_story
+					hd_dc_register_core_war_effect = { CB = claimant_faction_war }
+					if = {
+						limit = { exists = scope:hd_dc_war.var:hd_dc_instance_ref }
+						scope:hd_dc_war.var:hd_dc_instance_ref = {
+							set_variable = { name = hd_dc_actor_story_ref value = scope:hd_dc_war_actor_story }
+							set_variable = { name = hd_dc_war_beneficiary value = scope:hd_dc_war_actor_story.var:hd_dc_actor }
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+# Called inside the native war on_action's immediate effect, before destruction
+# of scope:war. RESULT: 1 attacker victory, 2 defender victory, 3 white peace,
+# 4 invalidation. No date, score, army comparison or missing reference invents
+# one of these results. Political changes remain the responsibility of the CB.
+hd_dc_record_core_war_result_effect = {
+	if = {
+		limit = {
+			exists = scope:war.var:hd_dc_instance_ref
+			scope:war = { has_variable = hd_dc_result_committed }
+			scope:war.var:hd_dc_instance_ref = {
+				has_variable = hd_dc_core_war_result
+				NOT = { var:hd_dc_core_war_result = $RESULT$ }
+			}
+		}
+		scope:war.var:hd_dc_instance_ref = {
+			set_variable = { name = hd_dc_result_conflict value = yes }
+			if = {
+				limit = { exists = var:hd_dc_parent_instance }
+				var:hd_dc_parent_instance = { set_variable = { name = hd_dc_war_result_conflict value = yes } }
+			}
+		}
+	}
+	if = {
+		limit = {
+			exists = scope:war
+			scope:war = {
+				exists = var:hd_dc_instance_ref
+				NOT = { has_variable = hd_dc_result_committed }
+			}
+		}
+		scope:war = {
+			save_scope_as = hd_dc_finished_war
+			var:hd_dc_instance_ref = {
+				if = {
+					limit = {
+						var:hd_dc_core_war_ref = scope:hd_dc_finished_war
+						var:hd_dc_core_war_sequence = scope:hd_dc_finished_war.var:hd_dc_core_war_sequence
+						NOT = { has_variable = hd_dc_core_war_result }
+					}
+					scope:hd_dc_finished_war = {
+						set_variable = { name = hd_dc_result_committed value = yes }
+					}
+					set_variable = { name = hd_dc_core_war_result value = $RESULT$ }
+					set_variable = { name = hd_dc_core_war_result_date value = current_date }
+					set_variable = { name = hd_dc_core_war_attacker value = scope:hd_dc_finished_war.primary_attacker }
+					set_variable = { name = hd_dc_core_war_defender value = scope:hd_dc_finished_war.primary_defender }
+					if = {
+						limit = { var:hd_dc_war_cb = flag:claimant_faction_war }
+						hd_dc_capture_royal_final_war_roster_effect = yes
+					}
+					remove_variable = hd_dc_core_war_ref
+					remove_variable = hd_dc_core_war_escalation_wait
+					remove_variable = hd_dc_stable_since
+					remove_variable = hd_dc_stable_wait
+					if = {
+						limit = { exists = var:hd_dc_parent_instance }
+						var:hd_dc_parent_instance = {
+							if = {
+								limit = { var:hd_dc_unresolved_wars > 0 }
+								change_variable = { name = hd_dc_unresolved_wars subtract = 1 }
+							}
+							else = { set_variable = { name = hd_dc_war_result_conflict value = yes } }
+							remove_variable = hd_dc_stable_since
+							remove_variable = hd_dc_stable_wait
+							remove_variable = hd_dc_stable_short_wait
+							change_variable = { name = hd_dc_war_epoch add = 1 }
+							hd_dc_interrupt_governance_stability_effect = yes
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+# Exact war receipt inside the real result callback, before its war is removed.
+# Record current native sides; invitations, faction membership and dead former
+# participants are not a substitute for the war's final roster.
+hd_dc_capture_royal_final_war_roster_effect = {
+	if = {
+		limit = {
+			NOT = { has_variable = hd_dc_final_war_roster_recorded }
+			exists = scope:hd_dc_finished_war
+			var:hd_dc_core_war_ref = scope:hd_dc_finished_war
+		}
+		save_scope_as = hd_dc_roster_receipt
+		scope:hd_dc_finished_war = {
+			every_war_attacker = {
+				save_scope_as = hd_dc_roster_member
+				scope:hd_dc_roster_receipt = { add_to_variable_list = { name = hd_dc_final_war_attackers target = scope:hd_dc_roster_member } }
+			}
+			every_war_defender = {
+				save_scope_as = hd_dc_roster_member
+				scope:hd_dc_roster_receipt = { add_to_variable_list = { name = hd_dc_final_war_defenders target = scope:hd_dc_roster_member } }
+			}
+		}
+		set_variable = { name = hd_dc_final_war_roster_recorded value = yes }
+	}
+}
+
+# Persistent war receipt, monthly. A missing reference remains unresolved.
+# Twenty years limits automatic escalation, not the lifetime of the real war.
+hd_dc_maintain_core_war_effect = {
+	if = {
+		limit = { NOT = { has_variable = hd_dc_core_war_result } }
+		if = {
+			limit = { NOT = { exists = var:hd_dc_core_war_ref } }
+			set_variable = { name = hd_dc_war_reference_missing value = yes }
+		}
+		else = {
+			remove_variable = hd_dc_war_reference_missing
+			if = {
+				limit = {
+					NOT = { has_variable = hd_dc_core_war_escalation_wait }
+					NOT = { has_variable = hd_dc_long_war_observed }
+				}
+				set_variable = { name = hd_dc_long_war_observed value = current_date }
+				var:hd_dc_parent_instance ?= { set_variable = { name = hd_dc_long_war_seen value = yes } }
+			}
+		}
+	}
+}
+
+# Main record. This current status can clear after real results, while the
+# historical long-war marker and every exact result receipt remain intact.
+hd_dc_refresh_escalation_guard_effect = {
+	if = {
+		limit = { hd_dc_automatic_escalation_allowed_trigger = yes }
+		remove_variable = hd_dc_escalation_suspended
+	}
+	else = { set_variable = { name = hd_dc_escalation_suspended value = yes } }
+}
+
+# Main instance and exact live war required. The chain adapter has verified the
+# political target against its faction/CB object; store that target separately
+# from changing primary combatants. A second war gets a new receipt, never an
+# overwrite of the first result. One physical war cannot be claimed twice.
+hd_dc_register_core_war_effect = {
+	if = {
+		limit = {
+			exists = scope:hd_dc_instance
+			exists = scope:hd_dc_war
+			exists = scope:hd_dc_war_target
+			exists = situation:dynastic_cycle
+			scope:hd_dc_instance = { var:hd_dc_record_kind = flag:instance }
+			scope:hd_dc_war = {
+				using_cb = $CB$
+				NOT = { has_variable = hd_dc_instance_ref }
+				exists = primary_attacker
+				primary_attacker = { is_alive = yes }
+			}
+		}
+		scope:hd_dc_instance = { save_scope_as = hd_dc_crisis_instance }
+		scope:hd_dc_war.primary_attacker = { hd_dc_create_record_effect = { KIND = war } }
+		scope:hd_dc_record = {
+			save_scope_as = hd_dc_war_receipt
+			set_variable = { name = hd_dc_parent_instance value = scope:hd_dc_crisis_instance }
+			set_variable = { name = hd_dc_instance_id value = scope:hd_dc_crisis_instance.var:hd_dc_instance_id }
+			set_variable = { name = hd_dc_war_target value = scope:hd_dc_war_target }
+			set_variable = { name = hd_dc_war_cb value = flag:$CB$ }
+			save_scope_as = hd_dc_instance
+		}
+		hd_dc_bind_core_war_effect = yes
+		scope:hd_dc_crisis_instance = {
+			if = {
+				limit = { scope:hd_dc_war = { var:hd_dc_instance_ref = scope:hd_dc_war_receipt } }
+				add_to_variable_list = { name = hd_dc_war_records target = scope:hd_dc_war_receipt }
+				if = {
+					limit = { NOT = { has_variable = hd_dc_unresolved_wars } }
+					set_variable = { name = hd_dc_unresolved_wars value = 0 }
+				}
+				change_variable = { name = hd_dc_unresolved_wars add = 1 }
+			}
+			else = { set_variable = { name = hd_dc_unbound_core_war value = yes } }
+			if = {
+				limit = { NOT = { has_variable = hd_dc_war_epoch } }
+				set_variable = { name = hd_dc_war_epoch value = 0 }
+			}
+			change_variable = { name = hd_dc_war_epoch add = 1 }
+			hd_dc_interrupt_governance_stability_effect = yes
+			remove_variable = hd_dc_stable_since
+			remove_variable = hd_dc_stable_wait
+			remove_variable = hd_dc_stable_short_wait
+			save_scope_as = hd_dc_instance
+		}
+	}
+}

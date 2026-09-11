@@ -1,0 +1,57 @@
+# ROY-08-A execution adapter. The caller has already delivered the actual
+# invitation and recorded the recipient's acceptance and the promised reward.
+# This is one mobilization receipt per person per crisis, not a live headcount.
+hd_dc_execute_royal_support_effect = {
+	save_scope_as = hd_dc_support_actor
+	if = {
+		limit = { hd_dc_royal_support_join_authorized_trigger = yes }
+		set_variable = { name = hd_dc_royal_support_commit_lock value = scope:hd_dc_support }
+		scope:hd_dc_support = { set_variable = { name = hd_dc_support_commit value = flag:processing } }
+		join_faction = scope:hd_dc_support.var:hd_dc_support_faction
+		if = {
+			limit = { joined_faction = scope:hd_dc_support.var:hd_dc_support_faction }
+			scope:hd_dc_support = {
+				set_variable = { name = hd_dc_support_commit value = flag:joined }
+				set_variable = { name = hd_dc_support_committed_date value = current_date }
+				set_variable = { name = hd_dc_support_m_awarded value = 0 }
+				remove_variable = hd_dc_support_wait
+				if = {
+					limit = {
+						scope:hd_dc_support_actor = {
+							NOT = {
+								AND = {
+									exists = var:hd_dc_royal_support_receipt
+									var:hd_dc_royal_support_receipt.var:hd_dc_instance_ref = scope:hd_dc_support.var:hd_dc_instance_ref
+								}
+							}
+						}
+					}
+					set_variable = { name = hd_dc_support_m_awarded value = 15 }
+					var:hd_dc_actor_story = { change_variable = { name = hd_dc_m add = 15 } }
+					scope:hd_dc_support_actor = { set_variable = { name = hd_dc_royal_support_receipt value = scope:hd_dc_support } }
+				}
+				var:hd_dc_support_claimant = { add_opinion = { target = scope:hd_dc_support_actor modifier = hd_dc_royal_support_opinion opinion = 25 } }
+				var:hd_dc_support_ruler = { add_opinion = { target = scope:hd_dc_support_actor modifier = hd_dc_royal_support_opinion opinion = -20 } }
+				var:hd_dc_instance_ref = {
+					every_in_list = {
+						variable = hd_dc_actor_stories
+						limit = { var:hd_dc_actor != scope:hd_dc_support.var:hd_dc_support_claimant }
+						var:hd_dc_actor ?= {
+							if = { limit = { is_alive = yes } add_opinion = { target = scope:hd_dc_support_actor modifier = hd_dc_royal_support_opinion opinion = -10 } }
+						}
+					}
+				}
+			}
+		}
+		else = {
+			scope:hd_dc_support = {
+				set_variable = { name = hd_dc_support_commit value = flag:join_failed }
+				set_variable = { name = hd_dc_support_committed_date value = current_date }
+				remove_variable = hd_dc_support_wait
+			}
+		}
+		# The lock covers only this actual operation. Native legal transfers stay
+		# possible; the historical M receipt is not a prohibition on leaving.
+		if = { limit = { var:hd_dc_royal_support_commit_lock = scope:hd_dc_support } remove_variable = hd_dc_royal_support_commit_lock }
+	}
+}

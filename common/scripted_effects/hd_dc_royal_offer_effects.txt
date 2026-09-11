@@ -1,0 +1,180 @@
+hd_dc_send_royal_support_offer_effect = {
+	if = {
+		limit = { hd_dc_royal_offer_pair_trigger = yes }
+		# Re-resolve the exact actor story; UI evaluation does not own a saved
+		# scope which may be consumed without checking current politics.
+		clear_saved_scope = hd_dc_offer_actor_story
+		situation:dynastic_cycle = {
+			every_in_list = {
+				variable = hd_dc_instances
+				limit = { var:hd_dc_type = flag:roy this = situation:dynastic_cycle.var:hd_dc_latest_roy_instance NOT = { has_variable = hd_dc_political_result } OR = { var:hd_dc_stage = flag:acute AND = { var:hd_dc_stage = flag:aftermath has_variable = hd_dc_roy01_node_closed } } }
+				every_in_list = {
+					variable = hd_dc_actor_stories
+					limit = { var:hd_dc_actor = scope:actor hd_dc_royal_story_has_faction_trigger = yes }
+					save_scope_as = hd_dc_offer_actor_story
+				}
+			}
+		}
+		scope:actor = { hd_dc_create_record_effect = { KIND = royal_support } }
+		scope:hd_dc_record = {
+			save_scope_as = hd_dc_support
+			set_variable = { name = hd_dc_actor_story value = scope:hd_dc_offer_actor_story }
+			set_variable = { name = hd_dc_instance_ref value = scope:hd_dc_offer_actor_story.var:hd_dc_instance_ref }
+			set_variable = { name = hd_dc_origin_node value = scope:hd_dc_offer_actor_story.var:hd_dc_node }
+			set_variable = { name = hd_dc_origin_version value = scope:hd_dc_offer_actor_story.var:hd_dc_node_version }
+			set_variable = { name = hd_dc_support_claimant value = scope:actor }
+			set_variable = { name = hd_dc_support_recipient value = scope:recipient }
+			set_variable = { name = hd_dc_support_ruler value = title:h_china.holder }
+			set_variable = { name = hd_dc_support_faction value = scope:hd_dc_offer_actor_story.var:hd_dc_claimant_faction }
+			set_variable = { name = hd_dc_claimant_signature value = scope:actor }
+			set_variable = { name = hd_dc_support_reward_gold value = hd_dc_g1_gold }
+			if = { limit = { scope:hd_dc_offer_g2 = yes } set_variable = { name = hd_dc_support_reward_gold value = hd_dc_g2_gold } }
+			else_if = { limit = { scope:hd_dc_offer_g3 = yes } set_variable = { name = hd_dc_support_reward_gold value = hd_dc_g3_gold } }
+			set_variable = { name = hd_dc_support_wait value = yes months = 3 }
+			save_scope_value_as = { name = hd_dc_support_delivery_version value = var:hd_dc_record_version }
+		}
+		scope:hd_dc_offer_actor_story = { add_to_variable_list = { name = hd_dc_support_offers target = scope:hd_dc_support } }
+		scope:actor = { save_scope_as = hd_dc_support_claimant }
+		scope:recipient = { trigger_event = { id = hd_dc_support.0008 days = 1 } }
+	}
+}
+
+# A written promise is confirmed by the invited character's own option. The
+# established executor performs the native join, then the exact promised sum
+# becomes due. In this offer the disclosed reward is immediate private gold.
+hd_dc_accept_royal_support_offer_effect = {
+	if = {
+		limit = {
+			hd_dc_royal_offer_response_trigger = yes
+			scope:hd_dc_support.var:hd_dc_support_claimant = { gold >= scope:hd_dc_support.var:hd_dc_support_reward_gold }
+		}
+		scope:hd_dc_support = {
+			set_variable = { name = hd_dc_support_answer value = flag:accepted }
+			set_variable = { name = hd_dc_support_signature value = scope:hd_dc_support_actor }
+		}
+		hd_dc_execute_royal_support_effect = yes
+		if = {
+			limit = { scope:hd_dc_support.var:hd_dc_support_commit = flag:joined }
+			scope:hd_dc_support = {
+				set_variable = { name = hd_dc_support_reward_due value = yes }
+				var:hd_dc_instance_ref = {
+					change_variable = { name = hd_dc_open_obligations add = 1 }
+					hd_dc_register_governance_obligation_change_effect = yes
+				}
+				hd_dc_pay_royal_support_reward_effect = yes
+			}
+		}
+		else = {
+			scope:hd_dc_support = {
+				set_variable = { name = hd_dc_support_commit value = flag:join_failed }
+				remove_variable = hd_dc_support_wait
+			}
+		}
+		scope:hd_dc_support.var:hd_dc_support_claimant = { trigger_event = { id = hd_dc_support.0108 days = 1 } }
+		trigger_event = { id = hd_dc_support.0108 days = 1 }
+	}
+}
+
+# Actual invitation record. Retry only when no actual debit occurred. A partial
+# transfer keeps the receipt and open obligation; it cannot become a new full
+# payment. No Q is awarded for purchasing political support.
+hd_dc_pay_royal_support_reward_effect = {
+	if = {
+		limit = {
+			var:hd_dc_support_reward_due = yes
+			NOT = { has_variable = hd_dc_support_reward_result }
+			exists = var:hd_dc_support_claimant
+			exists = var:hd_dc_support_recipient
+			var:hd_dc_support_claimant = { is_alive = yes }
+			var:hd_dc_support_recipient = { is_alive = yes }
+		}
+		save_scope_as = hd_dc_support
+		if = {
+			limit = { NOT = { exists = var:hd_dc_reward_payment } }
+			var:hd_dc_support_claimant = { hd_dc_create_record_effect = { KIND = payment } }
+			scope:hd_dc_record = {
+				set_variable = { name = hd_dc_instance_ref value = scope:hd_dc_support.var:hd_dc_instance_ref }
+				set_variable = { name = hd_dc_payer value = scope:hd_dc_support.var:hd_dc_support_claimant }
+				set_variable = { name = hd_dc_payee value = scope:hd_dc_support.var:hd_dc_support_recipient }
+				set_variable = { name = hd_dc_payer_signature value = scope:hd_dc_support.var:hd_dc_claimant_signature }
+				set_variable = { name = hd_dc_payee_signature value = scope:hd_dc_support.var:hd_dc_support_signature }
+				set_variable = { name = hd_dc_amount_due value = scope:hd_dc_support.var:hd_dc_support_reward_gold }
+				set_variable = { name = hd_dc_debit_kind value = 1 }
+				set_variable = { name = hd_dc_credit_kind value = 1 }
+			}
+			set_variable = { name = hd_dc_reward_payment value = scope:hd_dc_record }
+		}
+		var:hd_dc_reward_payment = { save_scope_as = hd_dc_payment }
+		hd_dc_execute_payment_effect = yes
+		if = {
+			limit = { hd_dc_payment_completed_trigger = yes }
+			set_variable = { name = hd_dc_support_reward_result value = flag:paid }
+			var:hd_dc_instance_ref = {
+				if = { limit = { var:hd_dc_open_obligations > 0 } change_variable = { name = hd_dc_open_obligations add = -1 } }
+				else = { set_variable = { name = hd_dc_obligation_count_error value = yes } }
+				hd_dc_register_governance_obligation_change_effect = yes
+			}
+		}
+	}
+}
+
+hd_dc_refuse_royal_support_offer_effect = {
+	if = {
+		limit = { hd_dc_royal_offer_response_trigger = yes }
+		scope:hd_dc_support = {
+			set_variable = { name = hd_dc_support_answer value = flag:loyal_to_ruler }
+			set_variable = { name = hd_dc_support_retry_wait value = yes years = 2 }
+			remove_variable = hd_dc_support_wait
+			var:hd_dc_actor_story = { change_variable = { name = hd_dc_m add = -5 } }
+			var:hd_dc_support_ruler = { add_opinion = { target = scope:hd_dc_support_actor modifier = hd_dc_royal_support_opinion opinion = 15 } }
+			var:hd_dc_support_claimant = { add_opinion = { target = scope:hd_dc_support_actor modifier = hd_dc_royal_support_opinion opinion = -20 } }
+		}
+		scope:hd_dc_support.var:hd_dc_support_claimant = { trigger_event = { id = hd_dc_support.0108 days = 1 } }
+	}
+}
+
+hd_dc_maintain_royal_support_offer_effect = {
+	save_scope_as = hd_dc_support
+	hd_dc_maintain_royal_pause_effect = yes
+	hd_dc_maintain_royal_protection_effect = yes
+	if = {
+		limit = { NOT = { has_variable = hd_dc_support_answer } }
+		save_scope_as = hd_dc_support
+		var:hd_dc_support_recipient ?= { save_scope_as = hd_dc_support_actor }
+		if = {
+			limit = { NOT = { exists = var:hd_dc_support_recipient } NOT = { has_variable = hd_dc_support_commit } }
+			set_variable = { name = hd_dc_support_answer value = flag:invalidated }
+			remove_variable = hd_dc_support_wait
+		}
+		else_if = {
+			limit = { NOT = { var:hd_dc_support_recipient ?= { hd_dc_royal_support_identity_trigger = yes } } }
+			set_variable = { name = hd_dc_support_answer value = flag:invalidated }
+			remove_variable = hd_dc_support_wait
+		}
+		else_if = {
+			limit = { NOT = { has_variable = hd_dc_support_wait } }
+			set_variable = { name = hd_dc_support_answer value = flag:expired }
+			set_variable = { name = hd_dc_support_retry_wait value = yes years = 2 }
+		}
+	}
+	if = {
+		limit = {
+			var:hd_dc_support_reward_due = yes
+			NOT = { has_variable = hd_dc_support_reward_result }
+			OR = {
+				NOT = { exists = var:hd_dc_support_claimant }
+				NOT = { exists = var:hd_dc_support_recipient }
+				var:hd_dc_support_claimant ?= { is_alive = no }
+				var:hd_dc_support_recipient ?= { is_alive = no }
+			}
+			NOT = { var:hd_dc_reward_payment ?= { has_variable = hd_dc_payment_commit } }
+		}
+		set_variable = { name = hd_dc_support_reward_result value = flag:invalidated }
+		var:hd_dc_instance_ref = {
+			if = { limit = { var:hd_dc_open_obligations > 0 } change_variable = { name = hd_dc_open_obligations add = -1 } }
+			else = { set_variable = { name = hd_dc_obligation_count_error value = yes } }
+			hd_dc_register_governance_obligation_change_effect = yes
+		}
+	}
+	hd_dc_pay_royal_support_reward_effect = yes
+}

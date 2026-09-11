@@ -30,7 +30,7 @@ hd_palace_crisis.0002 = {
 
 	option = {
 		name = hd_palace_crisis.0002.a
-		title:k_uuii_liangzhou.holder = {
+		character:dong_zhuo_2 = {
 			trigger_event = { id = hd_palace_crisis.0003 days = 15 }
 		}
 		ai_chance = { base = 100 }
@@ -99,8 +99,8 @@ hd_palace_crisis.0004 = {
 		}
 		else = { death = { death_reason = death_murder } }
 
-		character:yuan_shao = {
-			trigger_event = { id = hd_palace_crisis.0005 days = 35 }
+		character:dong_zhuo_2 = {
+			trigger_event = { id = hd_palace_crisis.0006 days = 35 }
 		}
 		ai_chance = { base = 100 }
 	}
@@ -109,17 +109,47 @@ hd_palace_crisis.0004 = {
 hd_palace_crisis.0005 = {
 	type = character_event
 	title = hd_palace_crisis.0005.t
-	desc = hd_palace_crisis.0005.desc
+	desc = {
+		first_valid = {
+			triggered_desc = { trigger = { this = character:yuan_shao } desc = hd_palace_crisis.0005.desc }
+			triggered_desc = { trigger = { this = character:cao_cao } desc = hd_palace_crisis.0005.cao_desc }
+			desc = hd_palace_crisis.0005.dong_desc
+		}
+	}
 	theme = war
 	left_portrait = { character = root animation = personality_bold }
 
 	option = {
 		name = hd_palace_crisis.0005.a
-		hd_palace_purge_effect = yes
-		title:k_uuii_liangzhou.holder = {
-			trigger_event = { id = hd_palace_crisis.0007 days = 35 }
-		}
 		ai_chance = { base = 100 }
+	}
+}
+
+# Dong owns the continuation; the purge actor's notification cannot block it.
+hd_palace_crisis.0006 = {
+	type = character_event
+	hidden = yes
+	immediate = {
+		if = {
+			limit = { character:yuan_shao = { is_alive = yes } }
+			character:yuan_shao = {
+				hd_palace_purge_effect = yes
+				trigger_event = hd_palace_crisis.0005
+			}
+		}
+		else_if = {
+			limit = { character:cao_cao = { is_alive = yes } }
+			character:cao_cao = {
+				hd_palace_purge_effect = yes
+				trigger_event = hd_palace_crisis.0005
+			}
+		}
+		else = {
+			hd_palace_purge_effect = yes
+			trigger_event = hd_palace_crisis.0005
+		}
+		debug_log = "HD_HISTORY PURGE_RESOLVED"
+		trigger_event = { id = hd_palace_crisis.0007 days = 35 }
 	}
 }
 
@@ -135,6 +165,18 @@ hd_palace_crisis.0007 = {
 		name = hd_palace_crisis.0007.a
 		set_location = { location = title:b_uuii_p_787.title_province stick_to_location = yes }
 		domicile ?= { move_domicile = title:b_uuii_p_787.title_province }
+		# Direct county vassals are not covered by the duchy-holder pass below.
+		title:k_uuii_sili.holder ?= {
+			every_vassal = {
+				limit = {
+					is_landed = yes
+					highest_held_title_tier = tier_county
+					primary_title = { de_jure_liege.de_jure_liege = title:k_uuii_sili }
+					NOT = { this = root }
+				}
+				add_to_list = hd_palace_sili_duchy_holders
+			}
+		}
 		title:k_uuii_sili = {
 			every_in_de_jure_hierarchy = {
 				continue = { tier > tier_duchy }
@@ -203,7 +245,6 @@ hd_palace_crisis.0090 = {
 		is_alive = yes
 		has_character_flag = hd_liu_hong_189_death_scheduled
 		NOT = { has_character_flag = hd_liu_hong_189_death_completed }
-		NOT = { exists = global_var:hd_yellow_turban_han_fell }
 	}
 	immediate = {
 		remove_character_modifier = hd_liu_hong_timeline_protection
@@ -237,11 +278,8 @@ hd_palace_crisis.0090 = {
 			}
 			resolve_title_and_vassal_change = scope:hd_liu_hong_succession_change
 		}
-		if = {
-			limit = { NOT = { exists = global_var:hd_yellow_turban_han_fell } }
-			add_character_flag = hd_palace_crisis_liu_hong_death_signal
-			hd_force_start_palace_crisis_effect = yes
-		}
+		add_character_flag = hd_palace_crisis_liu_hong_death_signal
+		hd_force_start_palace_crisis_effect = yes
 		remove_character_flag = hd_liu_hong_189_death_scheduled
 		add_character_flag = hd_liu_hong_189_death_completed
 		if = { limit = { NOT = { has_trait = ill } } add_trait = ill }
@@ -258,21 +296,34 @@ hd_palace_crisis.0015 = {
 
 	option = {
 		name = hd_palace_crisis.0015.a
-		if = {
-			limit = { character:liu_xie ?= { is_alive = yes } }
-			create_title_and_vassal_change = {
-				type = granted
-				save_scope_as = hd_palace_deposition_change
-				add_claim_on_loss = no
+		character:liu_bian = {
+			every_held_title = {
+				limit = { tier >= tier_county this != title:h_china this != title:e_han }
+				add_to_list = hd_palace_deposed_titles
 			}
-			title:h_china = {
-				change_title_holder = { holder = character:liu_xie change = scope:hd_palace_deposition_change }
-			}
-			title:e_han = {
-				change_title_holder = { holder = character:liu_xie change = scope:hd_palace_deposition_change }
-			}
-			resolve_title_and_vassal_change = scope:hd_palace_deposition_change
+			every_vassal = { add_to_list = hd_palace_deposed_vassals }
 		}
+		create_title_and_vassal_change = {
+			type = granted
+			save_scope_as = hd_palace_deposition_change
+			add_claim_on_loss = no
+		}
+		title:h_china = {
+			change_title_holder_include_vassals = { holder = character:liu_xie change = scope:hd_palace_deposition_change }
+		}
+		title:e_han = {
+			change_title_holder_include_vassals = { holder = character:liu_xie change = scope:hd_palace_deposition_change }
+		}
+		every_in_list = {
+			list = hd_palace_deposed_titles
+			change_title_holder_include_vassals = { holder = character:liu_xie change = scope:hd_palace_deposition_change }
+		}
+		every_in_list = {
+			list = hd_palace_deposed_vassals
+			limit = { this != character:liu_xie }
+			change_liege = { liege = character:liu_xie change = scope:hd_palace_deposition_change }
+		}
+		resolve_title_and_vassal_change = scope:hd_palace_deposition_change
 		# Deposition immediately makes Dong Zhuo the fixed warlord-regent.
 		hd_force_dong_regency_effect = yes
 		random_owned_story = {
@@ -281,17 +332,18 @@ hd_palace_crisis.0015 = {
 		}
 		add_character_flag = hd_palace_deposition_aftermath
 		add_character_flag = hd_palace_ding_lu_branch_open
-		character:cao_cao ?= {
-			add_character_flag = hd_cao_early_story_pending
-			set_variable = { name = hd_cao_early_story_phase value = flag:hd_cao_phase_opening }
-			trigger_event = { id = hd_cao_chain.0001 days = 35 }
+		character:cao_cao = {
+			if = {
+				limit = { is_alive = yes }
+				add_character_flag = hd_cao_early_story_pending
+				set_variable = { name = hd_cao_early_story_phase value = flag:hd_cao_phase_opening }
+				trigger_event = { id = hd_cao_chain.0001 days = 35 }
+			}
 		}
 		character:ding_yuan ?= {
-			character:lv_bu ?= {
-				if = {
-					limit = { NOT = { father = character:ding_yuan } }
-					adopt = character:lv_bu
-				}
+			if = {
+				limit = { character:lv_bu = { NOT = { father = character:ding_yuan } } }
+				adopt = character:lv_bu
 			}
 		}
 		character:lv_bu ?= {
@@ -302,16 +354,15 @@ hd_palace_crisis.0015 = {
 			add_character_flag = hd_ding_yuan_adoptive_son
 		}
 		trigger_event = { id = hd_palace_crisis.0020 days = 5 }
-		character:ding_yuan ?= { trigger_event = { id = hd_palace_crisis.0021 days = 30 } }
-		character:yuan_shao ?= {
-			add_character_flag = hd_yuan_early_story_pending
-			set_variable = { name = hd_yuan_early_story_phase value = flag:hd_yuan_phase_departure }
-			set_variable = { name = hd_palace_deposition_regent value = root }
-			set_global_variable = {
-				name = hd_anti_regent_pending_leader
-				value = this
+		trigger_event = { id = hd_anti_regent.0091 days = 39 }
+		character:yuan_shao = {
+			if = {
+				limit = { is_alive = yes }
+				add_character_flag = hd_yuan_early_story_pending
+				set_variable = { name = hd_yuan_early_story_phase value = flag:hd_yuan_phase_departure }
+				set_variable = { name = hd_palace_deposition_regent value = root }
+				trigger_event = { id = hd_palace_crisis.0016 days = 35 }
 			}
-			trigger_event = { id = hd_palace_crisis.0016 days = 35 }
 		}
 		ai_chance = { base = 100 }
 	}
@@ -336,6 +387,7 @@ hd_palace_crisis.0020 = {
 				death = { death_reason = death_murder killer = root }
 			}
 		}
+		character:ding_yuan = { trigger_event = { id = hd_palace_crisis.0021 days = 25 } }
 	}
 }
 
@@ -436,7 +488,7 @@ hd_palace_crisis.0022 = {
 		character:lv_bu = {
 			remove_character_flag = hd_ding_yuan_adoptive_son
 			set_employer = character:dong_zhuo_2
-			set_location = { location = title:b_uuii_p_867.title_province stick_to_location = yes }
+			set_location = { location = title:b_uuii_p_787.title_province stick_to_location = yes }
 		}
 		character:dong_zhuo_2 = {
 			if = {
@@ -453,7 +505,7 @@ hd_palace_crisis.0022 = {
 	}
 }
 
-# All invitation responses converge here.  Li Ru's name is only used by the
+# The first punitive declaration leads here. Li Ru's name is only used by the
 # localization when he is alive; the effect itself has an anonymous fallback.
 hd_palace_crisis.0023 = {
 	type = character_event
@@ -465,6 +517,9 @@ hd_palace_crisis.0023 = {
 	option = {
 		name = hd_palace_crisis.0023.a
 		hd_move_dong_core_to_changan_effect = yes
+		set_global_variable = hd_palace_crisis_completed
+		remove_global_variable = hd_palace_crisis_started
+		remove_global_variable = hd_palace_crisis_queued
 		random_owned_story = {
 			type = hd_story_dong_zhuo_life
 			set_variable = { name = hd_dong_zhuo_life_phase value = flag:hd_dong_zhuo_life_changan }
@@ -583,10 +638,9 @@ hd_palace_crisis.0016 = {
 		remove_variable = hd_palace_deposition_regent
 		remove_character_flag = hd_palace_crisis_controller
 		add_character_flag = hd_yuan_bohai_migration_pending
-		set_location = { location = title:d_bohai.title_capital_county.title_province stick_to_location = yes }
-		domicile ?= { move_domicile = title:d_bohai.title_capital_county.title_province }
+		set_location = { location = title:c_qingchi.title_province stick_to_location = yes }
+		domicile ?= { move_domicile = title:c_qingchi.title_province }
 		trigger_event = { id = hd_anti_regent.0005 days = 1 }
-		hd_palace_crisis_cleanup_effect = yes
 		ai_chance = { base = 100 }
 	}
 }

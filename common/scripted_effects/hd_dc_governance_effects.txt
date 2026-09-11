@@ -1,0 +1,150 @@
+# Main instance scope. Actual ending adapters set political_result and audited
+# fulfillment fields before this observer can open a governance account.
+# This module never classifies a political ending from Q or a missing war.
+hd_dc_observe_governance_effect = {
+	if = {
+		limit = { has_variable = hd_dc_political_result NOT = { has_variable = hd_dc_reward_committed } }
+		if = {
+			limit = { NOT = { has_variable = hd_dc_governance_started } }
+			set_variable = { name = hd_dc_governance_started value = current_date }
+			set_variable = { name = hd_dc_governance_observation_wait value = yes years = 5 }
+		}
+		if = {
+			limit = { hd_dc_governance_accounts_ready_trigger = yes hd_dc_governance_substantive_settlement_trigger = yes var:hd_dc_core_security_completed = yes NOT = { var:hd_dc_major_uncorrected_breach = yes } }
+			if = {
+				limit = { NOT = { has_variable = hd_dc_stable_since } }
+				set_variable = { name = hd_dc_stable_since value = current_date }
+				set_variable = { name = hd_dc_stable_short_wait value = yes years = 3 }
+			}
+		}
+		else = { remove_variable = hd_dc_stable_since remove_variable = hd_dc_stable_short_wait }
+		if = {
+			limit = { hd_dc_governance_full_fulfillment_trigger = yes }
+			if = {
+				limit = { NOT = { has_variable = hd_dc_full_fulfillment_since } }
+				set_variable = { name = hd_dc_full_fulfillment_since value = current_date }
+				set_variable = { name = hd_dc_stable_wait value = yes years = 5 }
+			}
+		}
+		else = { remove_variable = hd_dc_full_fulfillment_since remove_variable = hd_dc_stable_wait }
+		hd_dc_refresh_governance_tier_effect = yes
+		if = {
+			limit = { var:hd_dc_governance_tier = 3 }
+			hd_dc_commit_governance_effect = yes
+		}
+		else_if = {
+			limit = {
+				var:hd_dc_governance_tier != 0
+				NOT = { has_variable = hd_dc_governance_observation_wait }
+				exists = title:h_china.holder
+				title:h_china.holder = { is_ai = yes }
+			}
+			hd_dc_commit_governance_effect = yes
+		}
+	}
+}
+
+# Qualified is not committed. Called again synchronously by the final button.
+hd_dc_refresh_governance_tier_effect = {
+	set_variable = { name = hd_dc_governance_tier value = 0 }
+	if = {
+		limit = { hd_dc_governance_accounts_ready_trigger = yes }
+		if = { limit = { var:hd_dc_major_uncorrected_breach = yes } set_variable = { name = hd_dc_governance_tier value = -1 } }
+		else_if = {
+			limit = { var:hd_dc_q >= 60 hd_dc_governance_full_fulfillment_trigger = yes has_variable = hd_dc_full_fulfillment_since NOT = { has_variable = hd_dc_stable_wait } }
+			set_variable = { name = hd_dc_governance_tier value = 3 }
+		}
+		else_if = {
+			limit = { var:hd_dc_q >= 40 hd_dc_governance_substantive_settlement_trigger = yes var:hd_dc_core_security_completed = yes has_variable = hd_dc_stable_since NOT = { has_variable = hd_dc_stable_short_wait } }
+			set_variable = { name = hd_dc_governance_tier value = 2 }
+		}
+		else_if = { limit = { var:hd_dc_q >= 20 } set_variable = { name = hd_dc_governance_tier value = 1 } }
+	}
+}
+
+hd_dc_commit_governance_effect = {
+	hd_dc_refresh_governance_tier_effect = yes
+	if = {
+		limit = { var:hd_dc_governance_tier != 0 hd_dc_governance_accounts_ready_trigger = yes }
+		save_scope_as = hd_dc_governance_instance
+		save_scope_as = hd_dc_receipt
+		set_variable = { name = hd_dc_reward_committed value = 1 }
+		set_variable = { name = hd_dc_reward_tier value = var:hd_dc_governance_tier }
+		set_variable = { name = hd_dc_reward_date value = current_date }
+		set_variable = { name = hd_dc_reward_obligation_version value = var:hd_dc_obligation_version }
+		set_variable = { name = hd_dc_reward_war_epoch value = var:hd_dc_war_epoch }
+		if = { limit = { var:hd_dc_reward_tier = -1 } hd_dc_commit_point_receipt_effect = { W = 10 H = 0 SOURCE = crisis } }
+		else_if = { limit = { var:hd_dc_reward_tier = 3 } hd_dc_commit_point_receipt_effect = { W = -35 H = 30 SOURCE = crisis } }
+		else_if = { limit = { var:hd_dc_reward_tier = 2 } hd_dc_commit_point_receipt_effect = { W = -20 H = 15 SOURCE = crisis } }
+		else = { hd_dc_commit_point_receipt_effect = { W = -10 H = 5 SOURCE = crisis } }
+		if = {
+			limit = { var:hd_dc_points_committed = 2 }
+			set_variable = { name = hd_dc_reward_committed value = 2 }
+			set_variable = { name = hd_dc_stage value = flag:closed }
+			set_variable = { name = hd_dc_closed_date value = current_date }
+			remove_variable = hd_dc_governance_observation_wait
+			remove_variable = hd_dc_stable_short_wait
+			remove_variable = hd_dc_stable_wait
+			hd_dc_release_own_acute_lock_effect = yes
+			if = { limit = { exists = title:h_china.holder } title:h_china.holder = { trigger_event = { id = hd_dc_gov.0002 days = 1 } } }
+		}
+	}
+}
+
+# Main instance. Actual political endings call this when the acute conflict
+# ends; the registry retains the instance for stability and reward observation.
+hd_dc_release_own_acute_lock_effect = {
+	save_scope_as = hd_dc_releasing_instance
+	var:hd_dc_region ?= {
+		if = {
+			limit = {
+				var:hd_dc_acute_instance = scope:hd_dc_releasing_instance
+				var:hd_dc_acute_instance_id = scope:hd_dc_releasing_instance.var:hd_dc_instance_id
+			}
+			remove_variable = hd_dc_acute_instance
+			remove_variable = hd_dc_acute_instance_id
+			remove_variable = hd_dc_acute_type
+		}
+	}
+}
+
+# New actual obligations and real wars invalidate both continuity clocks now,
+# even if they are fulfilled/ended again before the next monthly observation.
+hd_dc_interrupt_governance_stability_effect = {
+	remove_variable = hd_dc_stable_since
+	remove_variable = hd_dc_stable_short_wait
+	remove_variable = hd_dc_full_fulfillment_since
+	remove_variable = hd_dc_stable_wait
+	remove_variable = hd_dc_governance_tier
+}
+
+hd_dc_register_governance_obligation_change_effect = {
+	change_variable = { name = hd_dc_obligation_version add = 1 }
+	remove_variable = hd_dc_governance_audit_version
+	remove_variable = hd_dc_full_fulfillment_completed
+	hd_dc_interrupt_governance_stability_effect = yes
+}
+
+# Character scope. Open one currently qualified instance, preserving all older
+# instances and making the selected identity/version visible to the callback.
+hd_dc_open_governance_review_effect = {
+	if = {
+		limit = { hd_dc_governance_reviewer_trigger = yes }
+		clear_saved_scope = hd_dc_governance_instance
+		situation:dynastic_cycle = {
+			every_in_list = {
+				variable = hd_dc_instances
+				limit = { NOT = { exists = scope:hd_dc_governance_instance } hd_dc_governance_accounts_ready_trigger = yes }
+				hd_dc_refresh_governance_tier_effect = yes
+				if = {
+					limit = { var:hd_dc_governance_tier != 0 }
+					save_scope_as = hd_dc_governance_instance
+					save_scope_value_as = { name = hd_dc_governance_id value = var:hd_dc_instance_id }
+					save_scope_value_as = { name = hd_dc_governance_obligation_version value = var:hd_dc_obligation_version }
+					save_scope_value_as = { name = hd_dc_governance_war_epoch value = var:hd_dc_war_epoch }
+				}
+			}
+		}
+		if = { limit = { exists = scope:hd_dc_governance_instance } trigger_event = { id = hd_dc_gov.0001 days = 1 } }
+	}
+}

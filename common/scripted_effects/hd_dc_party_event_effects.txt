@@ -1,0 +1,80 @@
+# PAR-01-C: a recorded order to retain the current tax policy. There is no
+# imaginary policy success, emergency tax increase, payment or governance Q.
+hd_dc_par01_assert_existing_policy_effect = {
+	if = {
+		limit = { hd_dc_par01_window_valid_trigger = yes }
+		save_scope_as = hd_dc_policy_author
+		scope:hd_dc_instance = {
+			set_variable = { name = hd_dc_par01_action value = flag:par_01_c }
+			set_variable = { name = hd_dc_par01_result value = flag:imposed_unresolved }
+			set_variable = { name = hd_dc_par01_order_author value = scope:hd_dc_policy_author }
+			set_variable = { name = hd_dc_par01_order_date value = current_date }
+			set_variable = { name = hd_dc_par01_order_policy value = flag:reserve }
+			change_variable = { name = hd_dc_x add = 10 }
+			var:hd_dc_par_first_story = { hd_dc_apply_par01_command_response_effect = yes }
+			var:hd_dc_par_second_story = { hd_dc_apply_par01_command_response_effect = yes }
+		}
+	}
+}
+
+hd_dc_apply_par01_command_response_effect = {
+	var:hd_dc_actor = { add_opinion = { target = scope:hd_dc_policy_author modifier = hd_dc_policy_silenced_opinion opinion = -10 } }
+	if = {
+		limit = { var:hd_dc_conflict_policy = flag:reserve }
+		# This person's own signed reply, rather than membership alone, is
+		# evidence of supporting the retained policy. Rebuke and policy
+		# approval remain separate reasons, even when their numbers cancel.
+		var:hd_dc_actor = { add_opinion = { target = scope:hd_dc_policy_author modifier = hd_dc_policy_retained_opinion opinion = 10 } }
+	}
+	if = {
+		limit = { var:hd_dc_node = 1 }
+		set_variable = { name = hd_dc_node_completed value = flag:par_01 }
+		change_variable = { name = hd_dc_node_version add = 1 }
+	}
+}
+
+# This release ends the authored node, not any actual war or unpaid receipt.
+# No unmade PAR-02 dispatch or governance victory is manufactured.
+hd_dc_finish_authored_party_node_effect = {
+	if = {
+		limit = { has_variable = hd_dc_par01_result NOT = { has_variable = hd_dc_par01_node_closed } }
+		set_variable = { name = hd_dc_par01_node_closed value = current_date }
+		set_variable = { name = hd_dc_stage value = flag:aftermath }
+		hd_dc_release_own_acute_lock_effect = yes
+		remove_variable = hd_dc_par01_delivery_wait
+	}
+}
+
+hd_dc_dispatch_par01_effect = {
+	save_scope_as = hd_dc_instance
+	if = {
+		limit = { var:hd_dc_type = flag:par var:hd_dc_stage = flag:acute NOT = { has_variable = hd_dc_par01_action } NOT = { has_variable = hd_dc_par01_result } NOT = { has_variable = hd_dc_par01_delivery_wait } hd_dc_par01_parties_valid_trigger = yes }
+		if = { limit = { NOT = { has_variable = hd_dc_par01_version } } set_variable = { name = hd_dc_par01_version value = 0 } }
+		change_variable = { name = hd_dc_par01_version add = 1 }
+		set_variable = { name = hd_dc_par01_delivery_wait value = yes months = 3 }
+		save_scope_value_as = { name = hd_dc_par01_version value = var:hd_dc_par01_version }
+		title:h_china.holder = { trigger_event = { id = hd_dc_par.0001 days = 1 } }
+	}
+}
+
+hd_dc_maintain_party_events_effect = {
+	every_in_list = {
+		variable = hd_dc_instances
+		limit = { var:hd_dc_type = flag:par var:hd_dc_stage = flag:acute }
+		save_scope_as = hd_dc_instance
+		hd_dc_maintain_par01_audit_effect = yes
+		if = {
+			limit = { NOT = { has_variable = hd_dc_par01_action } NOT = { has_variable = hd_dc_par01_result } }
+			if = {
+				limit = { NOT = { hd_dc_par01_parties_valid_trigger = yes } }
+				set_variable = { name = hd_dc_par01_result value = flag:invalidated }
+			}
+			else_if = {
+				limit = { has_variable = hd_dc_par01_version NOT = { has_variable = hd_dc_par01_delivery_wait } }
+				set_variable = { name = hd_dc_par01_result value = flag:expired }
+			}
+			else = { hd_dc_dispatch_par01_effect = yes }
+		}
+		hd_dc_finish_authored_party_node_effect = yes
+	}
+}

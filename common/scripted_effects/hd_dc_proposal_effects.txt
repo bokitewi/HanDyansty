@@ -1,0 +1,196 @@
+# Actual proposer character scope, legal counterpart scope:hd_dc_offer_to and
+# current actor story required. A callback carries a result to this exact node;
+# acceptance records signatures; a matching source callback separately checks
+# and executes its actual terms. There is no generic payment or Q reward.
+hd_dc_create_proposal_effect = {
+	clear_saved_scope = hd_dc_proposal
+	save_scope_as = hd_dc_offer_from
+	if = {
+		limit = {
+			is_alive = yes
+			exists = scope:hd_dc_offer_to
+			scope:hd_dc_offer_to = { is_alive = yes this != scope:hd_dc_offer_from }
+			exists = scope:hd_dc_actor_story
+			scope:hd_dc_actor_story = {
+				exists = var:hd_dc_instance_ref
+				var:hd_dc_instance_ref = { NOT = { var:hd_dc_stage = flag:closed } NOT = { has_variable = hd_dc_reward_committed } }
+				NOT = { has_variable = hd_dc_pending_action }
+				NOT = { has_variable = hd_dc_pending_proposal }
+				NOT = { has_variable = hd_dc_option_committed }
+			}
+		}
+		hd_dc_create_record_effect = { KIND = proposal }
+		scope:hd_dc_record = {
+			save_scope_as = hd_dc_proposal
+			set_variable = { name = hd_dc_actor_story value = scope:hd_dc_actor_story }
+			set_variable = { name = hd_dc_instance_ref value = scope:hd_dc_actor_story.var:hd_dc_instance_ref }
+			set_variable = { name = hd_dc_instance_id value = scope:hd_dc_actor_story.var:hd_dc_instance_id }
+			set_variable = { name = hd_dc_origin_node value = scope:hd_dc_actor_story.var:hd_dc_node }
+			set_variable = { name = hd_dc_origin_version value = scope:hd_dc_actor_story.var:hd_dc_node_version }
+			set_variable = { name = hd_dc_origin_option value = flag:$OPTION$ }
+			set_variable = { name = hd_dc_proposal_from value = scope:hd_dc_offer_from }
+			set_variable = { name = hd_dc_proposal_to value = scope:hd_dc_offer_to }
+			set_variable = { name = hd_dc_responder value = scope:hd_dc_offer_to }
+			set_variable = { name = hd_dc_from_signature value = scope:hd_dc_offer_from }
+			set_variable = { name = hd_dc_proposal_terms value = flag:$TERMS$ }
+			set_variable = { name = hd_dc_counter_terms value = flag:$COUNTER_TERMS$ }
+			set_variable = { name = hd_dc_proposal_state value = flag:waiting }
+			set_variable = { name = hd_dc_counter_count value = 0 }
+			set_variable = { name = hd_dc_proposal_wait value = yes months = $MONTHS$ }
+			set_variable = { name = hd_dc_answer_months value = $MONTHS$ }
+		}
+		scope:hd_dc_actor_story = {
+			set_variable = { name = hd_dc_pending_proposal value = scope:hd_dc_proposal }
+			set_variable = { name = hd_dc_option_committed value = flag:$OPTION$ }
+		}
+		scope:hd_dc_proposal = { hd_dc_deliver_proposal_effect = yes }
+	}
+}
+
+# Story scope. Frozen delivery version prevents an old open window answering a
+# revised offer. The parties and terms are copied into the event context.
+hd_dc_deliver_proposal_effect = {
+	save_scope_as = hd_dc_proposal
+	save_scope_value_as = { name = hd_dc_proposal_version value = var:hd_dc_record_version }
+	save_scope_value_as = { name = hd_dc_proposal_terms value = var:hd_dc_proposal_terms }
+	save_scope_value_as = { name = hd_dc_counter_terms value = var:hd_dc_counter_terms }
+	var:hd_dc_proposal_from = { save_scope_as = hd_dc_proposer }
+	var:hd_dc_proposal_to = { save_scope_as = hd_dc_recipient }
+	if = {
+		limit = { var:hd_dc_actor_story = { var:hd_dc_record_kind = flag:ordinary var:hd_dc_node = 9 } }
+		var:hd_dc_actor_story = {
+			var:hd_dc_prisoner = { save_scope_as = hd_dc_prisoner }
+			var:hd_dc_exchange_prisoner ?= { save_scope_as = hd_dc_exchange_prisoner }
+		}
+	}
+	var:hd_dc_responder = { trigger_event = { id = hd_dc_com.0004 days = 1 } }
+}
+
+# Character scope, checked again at option execution, not only when displayed.
+hd_dc_accept_proposal_effect = {
+	if = {
+		limit = { hd_dc_proposal_response_valid_trigger = yes }
+		scope:hd_dc_proposal = {
+			if = {
+				limit = { var:hd_dc_responder = var:hd_dc_proposal_to }
+				set_variable = { name = hd_dc_to_signature value = root }
+			}
+			else = { set_variable = { name = hd_dc_from_signature value = root } }
+			if = {
+				limit = {
+					var:hd_dc_from_signature = var:hd_dc_proposal_from
+					var:hd_dc_to_signature = var:hd_dc_proposal_to
+				}
+				set_variable = { name = hd_dc_proposal_state value = flag:accepted }
+				set_variable = { name = hd_dc_answered value = current_date }
+				remove_variable = hd_dc_proposal_wait
+				change_variable = { name = hd_dc_record_version add = 1 }
+				var:hd_dc_proposal_from = { add_opinion = { target = scope:hd_dc_proposal.var:hd_dc_proposal_to modifier = hd_dc_signed_terms_opinion } }
+				var:hd_dc_proposal_to = { add_opinion = { target = scope:hd_dc_proposal.var:hd_dc_proposal_from modifier = hd_dc_signed_terms_opinion } }
+				hd_dc_return_proposal_result_effect = { RESULT = accepted }
+			}
+		}
+	}
+}
+
+# Counteroffer is specific to the source node's authored guarantee terms. It
+# invalidates the first signature and asks the original proposer exactly once.
+hd_dc_counter_proposal_effect = {
+	if = {
+		limit = {
+			hd_dc_proposal_response_valid_trigger = yes
+			scope:hd_dc_proposal = { var:hd_dc_counter_count = 0 }
+		}
+		scope:hd_dc_proposal = {
+			set_variable = { name = hd_dc_counter_count value = 1 }
+			set_variable = { name = hd_dc_proposal_terms value = var:hd_dc_counter_terms }
+			set_variable = { name = hd_dc_to_signature value = root }
+			remove_variable = hd_dc_from_signature
+			set_variable = { name = hd_dc_responder value = var:hd_dc_proposal_from }
+			set_variable = { name = hd_dc_proposal_wait value = yes months = var:hd_dc_answer_months }
+			change_variable = { name = hd_dc_record_version add = 1 }
+			var:hd_dc_proposal_from = { add_opinion = { target = scope:hd_dc_proposal.var:hd_dc_proposal_to modifier = hd_dc_counter_terms_opinion } }
+			hd_dc_deliver_proposal_effect = yes
+		}
+	}
+}
+
+hd_dc_reject_proposal_effect = {
+	if = {
+		limit = { hd_dc_proposal_response_valid_trigger = yes }
+		scope:hd_dc_proposal = {
+			set_variable = { name = hd_dc_proposal_state value = flag:rejected }
+			set_variable = { name = hd_dc_answered value = current_date }
+			remove_variable = hd_dc_proposal_wait
+			change_variable = { name = hd_dc_record_version add = 1 }
+			var:hd_dc_proposal_from = { add_opinion = { target = scope:hd_dc_proposal.var:hd_dc_proposal_to modifier = hd_dc_rejected_terms_opinion } }
+			hd_dc_return_proposal_result_effect = { RESULT = rejected }
+		}
+	}
+}
+
+# Story scope; callback result remains distinct and is consumed only by the
+# source node's matching option branch. No generic success exit exists here.
+hd_dc_return_proposal_result_effect = {
+	if = {
+		limit = {
+			NOT = { has_variable = hd_dc_callback_committed }
+			exists = var:hd_dc_actor_story
+			var:hd_dc_actor_story = {
+				var:hd_dc_pending_proposal = scope:hd_dc_proposal
+				var:hd_dc_node = scope:hd_dc_proposal.var:hd_dc_origin_node
+				var:hd_dc_node_version = scope:hd_dc_proposal.var:hd_dc_origin_version
+			}
+		}
+		set_variable = { name = hd_dc_callback_committed value = yes }
+		var:hd_dc_actor_story = {
+			set_variable = { name = hd_dc_proposal_result value = flag:$RESULT$ }
+			set_variable = { name = hd_dc_proposal_result_record value = scope:hd_dc_proposal }
+			if = {
+				limit = { var:hd_dc_record_kind = flag:ordinary var:hd_dc_node = 9 }
+				hd_dc_consume_ord09_proposal_effect = yes
+			}
+		}
+		if = {
+			limit = { var:hd_dc_origin_option = flag:par_01_b has_variable = hd_dc_policy_offer_kind }
+			hd_dc_consume_par01_policy_offer_effect = yes
+		}
+		else_if = {
+			limit = { var:hd_dc_origin_option = flag:par_01_b has_variable = hd_dc_policy_county }
+			hd_dc_fund_par01_trial_effect = yes
+		}
+	}
+}
+
+# Story scope, monthly. A dead signatory invalidates unsigned negotiation;
+# inheritance of accepted political obligations belongs to their own contracts.
+hd_dc_maintain_proposal_effect = {
+	if = {
+		limit = { var:hd_dc_proposal_state = flag:waiting }
+		save_scope_as = hd_dc_proposal
+		if = {
+			limit = {
+				OR = {
+					NOT = { exists = var:hd_dc_proposal_from }
+					NOT = { exists = var:hd_dc_proposal_to }
+					var:hd_dc_proposal_from ?= { is_alive = no }
+					var:hd_dc_proposal_to ?= { is_alive = no }
+					NOT = { exists = var:hd_dc_instance_ref }
+					var:hd_dc_instance_ref ?= { var:hd_dc_stage = flag:closed }
+					var:hd_dc_instance_ref ?= { has_variable = hd_dc_reward_committed }
+					AND = { has_variable = hd_dc_policy_offer_kind NOT = { hd_dc_par01_offer_context_trigger = yes } }
+				}
+			}
+			set_variable = { name = hd_dc_proposal_state value = flag:invalidated }
+			remove_variable = hd_dc_proposal_wait
+			change_variable = { name = hd_dc_record_version add = 1 }
+			hd_dc_return_proposal_result_effect = { RESULT = invalidated }
+		}
+		else_if = {
+			limit = { NOT = { has_variable = hd_dc_proposal_wait } }
+			set_variable = { name = hd_dc_proposal_state value = flag:expired }
+			change_variable = { name = hd_dc_record_version add = 1 }
+			hd_dc_return_proposal_result_effect = { RESULT = expired }
+		}
+	}
+}

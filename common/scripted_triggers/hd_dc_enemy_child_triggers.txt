@@ -1,0 +1,130 @@
+# ORD-19: a present courtier is the child of a real rival. The child's own
+# known conduct is checked separately; parentage never supplies a crime.
+hd_dc_ord19_visitor_trigger = {
+	is_alive = yes
+	is_adult = yes
+	is_imprisoned = no
+	this != scope:hd_dc_ordinary_ruler
+	is_courtier_of = scope:hd_dc_ordinary_ruler
+	NOT = { has_trait = incapable }
+	NOT = { has_relation_rival = scope:hd_dc_ordinary_ruler }
+	NOT = { has_relation_nemesis = scope:hd_dc_ordinary_ruler }
+	save_temporary_scope_as = hd_dc_ord19_checked_visitor
+	scope:hd_dc_ordinary_ruler = { NOT = { has_imprisonment_reason = scope:hd_dc_ord19_checked_visitor } }
+	OR = {
+		AND = { exists = father father = { has_relation_rival = scope:hd_dc_ordinary_ruler } }
+		AND = { exists = mother mother = { has_relation_rival = scope:hd_dc_ordinary_ruler } }
+	}
+}
+
+hd_dc_ord19_eligible_trigger = {
+	is_alive = yes is_adult = yes is_landed = yes is_imprisoned = no
+	NOT = { has_trait = incapable }
+	any_character_situation = { this = situation:dynastic_cycle }
+	save_temporary_scope_as = hd_dc_ordinary_ruler
+	any_courtier = { hd_dc_ord19_visitor_trigger = yes }
+}
+
+hd_dc_ord19_window_valid_trigger = {
+	is_alive = yes is_adult = yes is_landed = yes is_imprisoned = no
+	NOT = { has_trait = incapable }
+	save_temporary_scope_as = hd_dc_ordinary_ruler
+	exists = scope:hd_dc_ordinary
+	var:hd_dc_pending_ordinary = scope:hd_dc_ordinary
+	scope:hd_dc_ordinary = {
+		var:hd_dc_record_kind = flag:ordinary
+		var:hd_dc_actor = scope:hd_dc_ordinary_ruler
+		var:hd_dc_node = 19
+		var:hd_dc_node_version = scope:hd_dc_ordinary_version
+		has_variable = hd_dc_ordinary_wait
+		NOT = { has_variable = hd_dc_option_committed }
+		NOT = { var:hd_dc_stage = flag:closed }
+		var:hd_dc_parent_was_rival = yes
+		exists = var:hd_dc_enemy_parent
+		exists = var:hd_dc_visitor
+		var:hd_dc_visitor = {
+			is_alive = yes is_adult = yes is_imprisoned = no
+			is_courtier_of = scope:hd_dc_ordinary_ruler
+			NOT = { has_trait = incapable }
+			NOT = { has_relation_rival = scope:hd_dc_ordinary_ruler }
+			NOT = { has_relation_nemesis = scope:hd_dc_ordinary_ruler }
+			is_child_of = scope:hd_dc_ordinary.var:hd_dc_enemy_parent
+		}
+	}
+	NOT = { has_imprisonment_reason = scope:hd_dc_ordinary.var:hd_dc_visitor }
+}
+
+# A present adult whom both principals actually trust. No relationship is
+# manufactured by the invitation or inherited from the parent's quarrel.
+hd_dc_ord19_guarantor_trigger = {
+	is_alive = yes is_adult = yes is_imprisoned = no
+	NOT = { has_trait = incapable }
+	this != scope:hd_dc_ordinary_ruler
+	this != scope:hd_dc_ordinary.var:hd_dc_visitor
+	opinion = { target = scope:hd_dc_ordinary_ruler value >= 60 }
+	opinion = { target = scope:hd_dc_ordinary.var:hd_dc_visitor value >= 60 }
+	save_temporary_scope_as = hd_dc_checked_guarantor
+	scope:hd_dc_ordinary_ruler = { opinion = { target = scope:hd_dc_checked_guarantor value >= 60 } }
+	scope:hd_dc_ordinary.var:hd_dc_visitor = { opinion = { target = scope:hd_dc_checked_guarantor value >= 60 } }
+}
+
+hd_dc_ord19_can_offer_cooperation_trigger = {
+	hd_dc_ord19_window_valid_trigger = yes
+	gold >= hd_dc_g1_gold
+	any_courtier = { hd_dc_ord19_guarantor_trigger = yes }
+}
+
+# Story scope: the original principals and paid work survive event boundaries.
+hd_dc_ord19_cooperation_context_trigger = {
+	var:hd_dc_node = 19
+	var:hd_dc_option_committed = flag:ord_19_c
+	NOT = { var:hd_dc_stage = flag:closed }
+	exists = var:hd_dc_actor
+	exists = var:hd_dc_visitor
+	exists = var:hd_dc_guarantor
+	var:hd_dc_actor = {
+		is_alive = yes is_landed = yes is_imprisoned = no
+		NOT = { has_trait = incapable }
+		var:hd_dc_pending_ordinary = scope:hd_dc_ordinary
+		any_character_situation = { this = situation:dynastic_cycle }
+		NOT = { has_imprisonment_reason = scope:hd_dc_ordinary.var:hd_dc_visitor }
+	}
+	var:hd_dc_visitor = {
+		is_alive = yes is_adult = yes is_imprisoned = no
+		NOT = { has_trait = incapable }
+		is_courtier_of = scope:hd_dc_ordinary.var:hd_dc_actor
+	}
+	var:hd_dc_guarantor = {
+		is_alive = yes is_adult = yes is_imprisoned = no
+		NOT = { has_trait = incapable }
+		in_diplomatic_range = scope:hd_dc_ordinary.var:hd_dc_actor
+	}
+}
+
+hd_dc_ord19_cooperation_response_trigger = {
+	exists = scope:hd_dc_ordinary
+	scope:hd_dc_ordinary = {
+		hd_dc_ord19_cooperation_context_trigger = yes
+		var:hd_dc_node_version = scope:hd_dc_ordinary_version
+		has_variable = hd_dc_cooperation_wait
+	}
+	OR = { this = scope:hd_dc_ordinary.var:hd_dc_visitor this = scope:hd_dc_ordinary.var:hd_dc_guarantor }
+}
+
+hd_dc_ord19_cooperation_invitation_trigger = {
+	hd_dc_ord19_cooperation_response_trigger = yes
+	scope:hd_dc_ordinary.var:hd_dc_cooperation_state = flag:waiting
+	OR = {
+		AND = { this = scope:hd_dc_ordinary.var:hd_dc_visitor scope:hd_dc_ordinary = { NOT = { has_variable = hd_dc_visitor_signature } } }
+		AND = { this = scope:hd_dc_ordinary.var:hd_dc_guarantor scope:hd_dc_ordinary = { NOT = { has_variable = hd_dc_guarantor_signature } } }
+	}
+}
+
+hd_dc_ord19_cooperation_letter_trigger = {
+	hd_dc_ord19_cooperation_response_trigger = yes
+	scope:hd_dc_ordinary.var:hd_dc_cooperation_state = flag:working
+	OR = {
+		AND = { this = scope:hd_dc_ordinary.var:hd_dc_visitor scope:hd_dc_ordinary = { NOT = { has_variable = hd_dc_visitor_letter } } }
+		AND = { this = scope:hd_dc_ordinary.var:hd_dc_guarantor scope:hd_dc_ordinary = { NOT = { has_variable = hd_dc_guarantor_letter } } }
+	}
+}

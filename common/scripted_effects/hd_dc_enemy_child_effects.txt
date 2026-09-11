@@ -1,0 +1,196 @@
+# ORD-19: actual reception, inherited-blame refusal, or a signed cooperation.
+hd_dc_start_ord19_effect = {
+	if = {
+		limit = { hd_dc_ord19_eligible_trigger = yes NOT = { has_variable = hd_dc_pending_ordinary } }
+		random_courtier = { limit = { hd_dc_ord19_visitor_trigger = yes } save_scope_as = hd_dc_visitor }
+		scope:hd_dc_visitor = {
+			if = {
+				limit = { exists = father father = { has_relation_rival = scope:hd_dc_ordinary_ruler } }
+				father = { save_scope_as = hd_dc_enemy_parent }
+			}
+			else = { mother = { save_scope_as = hd_dc_enemy_parent } }
+		}
+		hd_dc_create_record_effect = { KIND = ordinary }
+		scope:hd_dc_record = {
+			save_scope_as = hd_dc_ordinary
+			set_variable = { name = hd_dc_actor value = scope:hd_dc_ordinary_ruler }
+			set_variable = { name = hd_dc_visitor value = scope:hd_dc_visitor }
+			set_variable = { name = hd_dc_enemy_parent value = scope:hd_dc_enemy_parent }
+			set_variable = { name = hd_dc_parent_was_rival value = yes }
+			set_variable = { name = hd_dc_node value = 19 }
+			set_variable = { name = hd_dc_node_version value = 1 }
+			set_variable = { name = hd_dc_stage value = flag:acute }
+			set_variable = { name = hd_dc_ordinary_wait value = yes months = 3 }
+		}
+		set_variable = { name = hd_dc_pending_ordinary value = scope:hd_dc_ordinary }
+		save_scope_value_as = { name = hd_dc_ordinary_version value = 1 }
+		trigger_event = { id = hd_dc_ord.0019 days = 1 }
+	}
+}
+
+hd_dc_ord19_offer_cooperation_effect = {
+	if = {
+		limit = { hd_dc_ord19_can_offer_cooperation_trigger = yes }
+		random_courtier = { limit = { hd_dc_ord19_guarantor_trigger = yes } save_scope_as = hd_dc_guarantor }
+		scope:hd_dc_ordinary = {
+			set_variable = { name = hd_dc_option_committed value = flag:ord_19_c }
+			set_variable = { name = hd_dc_guarantor value = scope:hd_dc_guarantor }
+			set_variable = { name = hd_dc_payer_signature value = scope:hd_dc_ordinary_ruler }
+			set_variable = { name = hd_dc_frozen_gold value = hd_dc_g1_gold }
+			set_variable = { name = hd_dc_cooperation_state value = flag:waiting }
+			set_variable = { name = hd_dc_cooperation_wait value = yes months = 3 }
+			hd_dc_stamp_calendar_effect = { PREFIX = hd_dc_cooperation_invited }
+			var:hd_dc_visitor = { trigger_event = { id = hd_dc_ord.0119 days = 1 } }
+			var:hd_dc_guarantor = { trigger_event = { id = hd_dc_ord.0119 days = 1 } }
+		}
+	}
+}
+
+hd_dc_ord19_accept_cooperation_effect = {
+	if = {
+		limit = { hd_dc_ord19_cooperation_invitation_trigger = yes }
+		save_scope_as = hd_dc_correspondent
+		scope:hd_dc_ordinary = {
+			if = {
+				limit = { var:hd_dc_visitor = scope:hd_dc_correspondent }
+				set_variable = { name = hd_dc_visitor_signature value = scope:hd_dc_correspondent }
+			}
+			else = { set_variable = { name = hd_dc_guarantor_signature value = scope:hd_dc_correspondent } }
+			if = {
+				limit = { var:hd_dc_visitor_signature = var:hd_dc_visitor var:hd_dc_guarantor_signature = var:hd_dc_guarantor }
+				# The second actual acceptance starts the one payment; no reply
+				# or later maintenance call can create another installment.
+				set_variable = { name = hd_dc_cooperation_state value = flag:funding }
+				var:hd_dc_actor = { hd_dc_create_record_effect = { KIND = payment } }
+				scope:hd_dc_record = {
+					save_scope_as = hd_dc_payment
+					set_variable = { name = hd_dc_payer value = scope:hd_dc_ordinary.var:hd_dc_actor }
+					set_variable = { name = hd_dc_payee value = scope:hd_dc_ordinary.var:hd_dc_visitor }
+					set_variable = { name = hd_dc_payer_signature value = scope:hd_dc_ordinary.var:hd_dc_payer_signature }
+					set_variable = { name = hd_dc_payee_signature value = scope:hd_dc_ordinary.var:hd_dc_visitor_signature }
+					set_variable = { name = hd_dc_amount_due value = scope:hd_dc_ordinary.var:hd_dc_frozen_gold }
+					set_variable = { name = hd_dc_debit_kind value = 1 }
+					set_variable = { name = hd_dc_credit_kind value = 1 }
+				}
+				set_variable = { name = hd_dc_cooperation_payment value = scope:hd_dc_payment }
+				hd_dc_execute_payment_effect = yes
+				if = {
+					limit = { hd_dc_payment_completed_trigger = yes }
+					set_variable = { name = hd_dc_cooperation_state value = flag:working }
+					set_variable = { name = hd_dc_cooperation_wait value = yes months = 3 }
+					hd_dc_stamp_calendar_effect = { PREFIX = hd_dc_cooperation_writing }
+					var:hd_dc_visitor = { trigger_event = { id = hd_dc_ord.0219 days = 1 } }
+					var:hd_dc_guarantor = { trigger_event = { id = hd_dc_ord.0219 days = 1 } }
+				}
+				else = { hd_dc_ord19_finish_cooperation_effect = { RESULT = cooperation_unpaid } }
+			}
+		}
+	}
+}
+
+hd_dc_ord19_decline_cooperation_effect = {
+	if = {
+		limit = { hd_dc_ord19_cooperation_invitation_trigger = yes }
+		save_scope_as = hd_dc_correspondent
+		scope:hd_dc_ordinary = {
+			set_variable = { name = hd_dc_declined_by value = scope:hd_dc_correspondent }
+			hd_dc_ord19_finish_cooperation_effect = { RESULT = cooperation_rejected }
+		}
+	}
+}
+
+hd_dc_ord19_submit_letter_effect = {
+	if = {
+		limit = { hd_dc_ord19_cooperation_letter_trigger = yes }
+		save_scope_as = hd_dc_correspondent
+		scope:hd_dc_ordinary = {
+			if = {
+				limit = { var:hd_dc_visitor = scope:hd_dc_correspondent }
+				set_variable = { name = hd_dc_visitor_letter value = scope:hd_dc_correspondent }
+			}
+			else = { set_variable = { name = hd_dc_guarantor_letter value = scope:hd_dc_correspondent } }
+			if = {
+				limit = { var:hd_dc_visitor_letter = var:hd_dc_visitor var:hd_dc_guarantor_letter = var:hd_dc_guarantor }
+				save_scope_as = hd_dc_receipt
+				hd_dc_commit_point_receipt_effect = { W = -2 H = 0 SOURCE = ordinary }
+				var:hd_dc_visitor = { add_opinion = { target = scope:hd_dc_ordinary.var:hd_dc_actor modifier = hd_dc_ordinary_response_opinion opinion = 15 } }
+				var:hd_dc_guarantor = { add_opinion = { target = scope:hd_dc_ordinary.var:hd_dc_actor modifier = hd_dc_ordinary_response_opinion opinion = 15 } }
+				var:hd_dc_actor = {
+					random_courtier = {
+						limit = { is_alive = yes is_adult = yes has_trait = vengeful this != scope:hd_dc_ordinary.var:hd_dc_guarantor this != scope:hd_dc_ordinary.var:hd_dc_visitor has_relation_rival = scope:hd_dc_ordinary.var:hd_dc_enemy_parent }
+						add_opinion = { target = scope:hd_dc_ordinary.var:hd_dc_actor modifier = hd_dc_ordinary_response_opinion opinion = -10 }
+					}
+				}
+				hd_dc_ord19_finish_cooperation_effect = { RESULT = cooperation_completed }
+			}
+		}
+	}
+}
+
+hd_dc_ord19_withdraw_letter_effect = {
+	if = {
+		limit = { hd_dc_ord19_cooperation_letter_trigger = yes }
+		save_scope_as = hd_dc_correspondent
+		scope:hd_dc_ordinary = {
+			set_variable = { name = hd_dc_withdrew_by value = scope:hd_dc_correspondent }
+			hd_dc_ord19_finish_cooperation_effect = { RESULT = cooperation_withdrawn }
+		}
+	}
+}
+
+# Closing this ordinary case never erases the separate actual payment ledger.
+hd_dc_ord19_finish_cooperation_effect = {
+	if = {
+		limit = { NOT = { var:hd_dc_stage = flag:closed } }
+		remove_variable = hd_dc_cooperation_wait
+		hd_dc_close_ordinary_effect = { RESULT = $RESULT$ }
+		var:hd_dc_actor ?= { if = { limit = { is_alive = yes } trigger_event = { id = hd_dc_ord.0319 days = 1 } } }
+		var:hd_dc_visitor ?= { if = { limit = { is_alive = yes } trigger_event = { id = hd_dc_ord.0319 days = 1 } } }
+		var:hd_dc_guarantor ?= { if = { limit = { is_alive = yes } trigger_event = { id = hd_dc_ord.0319 days = 1 } } }
+	}
+}
+
+hd_dc_maintain_ord19_cooperation_effect = {
+	if = {
+		limit = { var:hd_dc_option_committed = flag:ord_19_c NOT = { var:hd_dc_stage = flag:closed } }
+		save_scope_as = hd_dc_ordinary
+		if = {
+			limit = { NOT = { hd_dc_ord19_cooperation_context_trigger = yes } }
+			hd_dc_ord19_finish_cooperation_effect = { RESULT = cooperation_invalidated }
+		}
+		else_if = {
+			limit = { NOT = { has_variable = hd_dc_cooperation_wait } }
+			hd_dc_ord19_finish_cooperation_effect = { RESULT = cooperation_expired }
+		}
+	}
+}
+
+hd_dc_ord19_judge_person_effect = {
+	if = {
+		limit = { hd_dc_ord19_window_valid_trigger = yes }
+		scope:hd_dc_ordinary = { save_scope_as = hd_dc_receipt set_variable = { name = hd_dc_option_committed value = flag:ord_19_a } }
+		scope:hd_dc_ordinary.var:hd_dc_visitor = { add_opinion = { target = scope:hd_dc_ordinary_ruler modifier = hd_dc_ordinary_response_opinion opinion = 20 } }
+		random_courtier = {
+			limit = { is_alive = yes is_adult = yes has_trait = vengeful this != scope:hd_dc_ordinary.var:hd_dc_visitor has_relation_rival = scope:hd_dc_ordinary.var:hd_dc_enemy_parent }
+			add_opinion = { target = scope:hd_dc_ordinary_ruler modifier = hd_dc_ordinary_response_opinion opinion = -15 }
+		}
+		hd_dc_commit_point_receipt_effect = { W = -1 H = 0 SOURCE = ordinary }
+		scope:hd_dc_ordinary = { hd_dc_close_ordinary_effect = { RESULT = judged_by_conduct } }
+	}
+}
+
+hd_dc_ord19_blame_family_effect = {
+	if = {
+		limit = { hd_dc_ord19_window_valid_trigger = yes }
+		scope:hd_dc_ordinary = { save_scope_as = hd_dc_receipt set_variable = { name = hd_dc_option_committed value = flag:ord_19_b } }
+		# This actual hostile reception supplies its own opinion consequence.
+		# No legal cause exists in this case: no prison, execution or revocation.
+		scope:hd_dc_ordinary.var:hd_dc_visitor = { add_opinion = { target = scope:hd_dc_ordinary_ruler modifier = hd_dc_ordinary_response_opinion opinion = -30 } }
+		random_courtier = {
+			limit = { is_alive = yes is_adult = yes has_trait = vengeful this != scope:hd_dc_ordinary.var:hd_dc_visitor has_relation_rival = scope:hd_dc_ordinary.var:hd_dc_enemy_parent }
+			add_opinion = { target = scope:hd_dc_ordinary_ruler modifier = hd_dc_ordinary_response_opinion opinion = 15 }
+		}
+		hd_dc_commit_point_receipt_effect = { W = 2 H = 0 SOURCE = ordinary }
+		scope:hd_dc_ordinary = { hd_dc_close_ordinary_effect = { RESULT = blamed_for_parent } }
+	}
+}

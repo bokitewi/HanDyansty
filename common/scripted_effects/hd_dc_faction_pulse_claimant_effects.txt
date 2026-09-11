@@ -1,0 +1,105 @@
+﻿# Call after the annual opportunity succeeds, before the equal-weight type draw.
+# TYPE is claimant_faction or ceremonial_claimant_faction. Existing native gates
+# keep ceremonial creation unavailable; this interface never enables Japan.
+hd_dc_prepare_extra_claimant_effect = {
+	clear_saved_scope = hd_dc_extra_$TYPE$_creator
+	clear_saved_scope = hd_dc_extra_$TYPE$_title
+	clear_saved_scope = hd_dc_extra_$TYPE$_claimant
+	situation:dynastic_cycle = {
+		every_situation_participant = {
+			limit = { hd_dc_extra_claimant_creator_trigger = { TYPE = $TYPE$ } }
+			if = {
+				limit = { NOT = { exists = scope:hd_dc_extra_$TYPE$_claimant } }
+				save_scope_as = hd_dc_extra_probe_creator
+				scope:hd_dc_extra_faction_target = {
+					every_held_title = {
+						if = {
+							limit = { NOT = { exists = scope:hd_dc_extra_$TYPE$_claimant } }
+							save_scope_as = hd_dc_extra_probe_title
+							scope:hd_dc_extra_probe_creator = {
+								hd_dc_probe_extra_claimant_title_effect = { TYPE = $TYPE$ }
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+# Character = creator. Preserve the UI's prior title through each native probe.
+hd_dc_save_extra_claiming_title_effect = {
+	clear_saved_scope = hd_dc_extra_previous_claiming_title
+	if = {
+		limit = { has_variable = claiming_title }
+		var:claiming_title = { save_scope_as = hd_dc_extra_previous_claiming_title }
+	}
+	set_variable = { name = claiming_title value = scope:hd_dc_extra_probe_title }
+}
+hd_dc_restore_extra_claiming_title_effect = {
+	remove_variable = claiming_title
+	if = {
+		limit = { exists = scope:hd_dc_extra_previous_claiming_title }
+		set_variable = { name = claiming_title value = scope:hd_dc_extra_previous_claiming_title }
+	}
+	clear_saved_scope = hd_dc_extra_previous_claiming_title
+}
+
+hd_dc_probe_extra_claimant_title_effect = {
+	hd_dc_save_extra_claiming_title_effect = yes
+	if = {
+		limit = { can_create_faction = { type = $TYPE$ target = scope:hd_dc_extra_faction_target } }
+		scope:hd_dc_extra_probe_title = {
+			random_claimant = {
+				limit = { hd_dc_extra_claimant_person_trigger = { TYPE = $TYPE$ } }
+				save_scope_as = hd_dc_extra_$TYPE$_claimant
+				scope:hd_dc_extra_probe_title = { save_scope_as = hd_dc_extra_$TYPE$_title }
+				scope:hd_dc_extra_probe_creator = { save_scope_as = hd_dc_extra_$TYPE$_creator }
+			}
+		}
+	}
+	hd_dc_restore_extra_claiming_title_effect = yes
+}
+
+# Only the selected type calls create. Recheck both parties and the real title.
+hd_dc_create_extra_claimant_effect = {
+	scope:hd_dc_extra_realm = { set_variable = { name = hd_dc_extra_faction_result value = flag:hd_dc_extra_faction_creation_failed } }
+	if = {
+		limit = { hd_dc_extra_claimant_available_trigger = { TYPE = $TYPE$ } }
+		scope:hd_dc_extra_$TYPE$_title = { save_scope_as = hd_dc_extra_probe_title }
+		scope:hd_dc_extra_$TYPE$_creator = {
+			save_scope_as = hd_dc_extra_probe_creator
+			hd_dc_save_extra_claiming_title_effect = yes
+			if = {
+				limit = {
+					hd_dc_extra_claimant_creator_trigger = { TYPE = $TYPE$ }
+					can_create_faction = { type = $TYPE$ target = scope:hd_dc_extra_faction_target }
+					scope:hd_dc_extra_$TYPE$_claimant = { hd_dc_extra_claimant_person_trigger = { TYPE = $TYPE$ } }
+				}
+				create_faction = { type = $TYPE$ target = scope:hd_dc_extra_faction_target }
+				if = {
+					limit = { exists = joined_faction joined_faction = { faction_is_type = $TYPE$ faction_target = scope:hd_dc_extra_faction_target } }
+					joined_faction = {
+						set_special_character = scope:hd_dc_extra_$TYPE$_claimant
+						set_special_title = scope:hd_dc_extra_probe_title
+						save_scope_as = hd_dc_extra_created_claimant_faction
+					}
+					scope:hd_dc_extra_$TYPE$_claimant = {
+						if = {
+							limit = { scope:hd_dc_extra_created_claimant_faction = { faction_is_type = claimant_faction } }
+							add_to_variable_list = { name = claimant_factions target = scope:hd_dc_extra_created_claimant_faction }
+						}
+						else = { add_to_variable_list = { name = ceremonial_claimant_factions target = scope:hd_dc_extra_created_claimant_faction } }
+					}
+					hd_dc_record_extra_faction_effect = { TYPE = $TYPE$ }
+					scope:hd_dc_extra_realm = {
+						set_variable = { name = hd_dc_extra_faction_actor value = scope:hd_dc_extra_probe_creator }
+						set_variable = { name = hd_dc_extra_faction_claimant value = scope:hd_dc_extra_$TYPE$_claimant }
+						set_variable = { name = hd_dc_extra_faction_claimed_title value = scope:hd_dc_extra_probe_title }
+					}
+				}
+			}
+			hd_dc_restore_extra_claiming_title_effect = yes
+		}
+	}
+}

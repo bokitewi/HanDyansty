@@ -1,0 +1,212 @@
+hd_dc_start_ord09_effect = {
+	if = {
+		limit = { hd_dc_ord09_eligible_trigger = yes NOT = { has_variable = hd_dc_pending_ordinary } }
+		random_close_family_member = { limit = { hd_dc_ord09_prisoner_trigger = yes } save_scope_as = hd_dc_prisoner }
+		scope:hd_dc_prisoner.imprisoner = { save_scope_as = hd_dc_captor }
+		hd_dc_create_record_effect = { KIND = ordinary }
+		scope:hd_dc_record = {
+			save_scope_as = hd_dc_ordinary
+			set_variable = { name = hd_dc_actor value = scope:hd_dc_ordinary_ruler }
+			set_variable = { name = hd_dc_prisoner value = scope:hd_dc_prisoner }
+			set_variable = { name = hd_dc_captor value = scope:hd_dc_captor }
+			set_variable = { name = hd_dc_node value = 9 }
+			set_variable = { name = hd_dc_node_version value = 1 }
+			set_variable = { name = hd_dc_stage value = flag:acute }
+			set_variable = { name = hd_dc_ordinary_wait value = yes months = 3 }
+			set_variable = { name = hd_dc_frozen_gold value = hd_dc_g2_gold }
+			# The ordinary record owns this negotiation; it creates no acute
+			# regional crisis lock, governance Q or inherited political debt.
+			set_variable = { name = hd_dc_instance_ref value = scope:hd_dc_ordinary }
+			set_variable = { name = hd_dc_instance_id value = var:hd_dc_record_id }
+		}
+		set_variable = { name = hd_dc_pending_ordinary value = scope:hd_dc_ordinary }
+		save_scope_value_as = { name = hd_dc_ordinary_version value = 1 }
+		trigger_event = { id = hd_dc_ord.0009 days = 1 }
+	}
+}
+
+hd_dc_ord09_offer_effect = {
+	save_scope_value_as = { name = hd_dc_ransom_mode value = flag:$MODE$ }
+	if = {
+		limit = {
+			hd_dc_ord09_window_valid_trigger = yes
+			OR = {
+				AND = { scope:hd_dc_ransom_mode = flag:gold gold >= scope:hd_dc_ordinary.var:hd_dc_frozen_gold }
+				AND = { scope:hd_dc_ransom_mode = flag:exchange hd_dc_ord09_can_exchange_trigger = yes }
+			}
+		}
+		if = {
+			limit = { scope:hd_dc_ransom_mode = flag:exchange }
+			scope:hd_dc_ordinary.var:hd_dc_captor = {
+				random_close_family_member = { limit = { hd_dc_ord09_exchange_prisoner_trigger = yes } save_scope_as = hd_dc_exchange_prisoner }
+			}
+			scope:hd_dc_ordinary = { set_variable = { name = hd_dc_exchange_prisoner value = scope:hd_dc_exchange_prisoner } }
+		}
+		scope:hd_dc_ordinary = { save_scope_as = hd_dc_actor_story set_variable = { name = hd_dc_ransom_mode value = flag:$MODE$ } }
+		scope:hd_dc_ordinary.var:hd_dc_captor = { save_scope_as = hd_dc_offer_to }
+		hd_dc_create_proposal_effect = { OPTION = ord_09_$OPTION$ TERMS = hd_dc_ord09_$OPTION$_terms COUNTER_TERMS = hd_dc_ord09_$OPTION$_terms MONTHS = 3 }
+		if = {
+			limit = { exists = scope:hd_dc_proposal }
+			# A fixed price or named exchange can be accepted or rejected.
+			# There is no authored second price or hidden political guarantee.
+			scope:hd_dc_proposal = { set_variable = { name = hd_dc_counter_count value = 1 } }
+			scope:hd_dc_ordinary = { set_variable = { name = hd_dc_ransom_proposal value = scope:hd_dc_proposal } remove_variable = hd_dc_ordinary_wait }
+		}
+	}
+}
+
+hd_dc_ord09_refuse_effect = {
+	if = {
+		limit = { hd_dc_ord09_window_valid_trigger = yes }
+		scope:hd_dc_ordinary = { set_variable = { name = hd_dc_option_committed value = flag:ord_09_b } save_scope_as = hd_dc_receipt }
+		scope:hd_dc_ordinary.var:hd_dc_prisoner = {
+			every_close_family_member = {
+				limit = { is_alive = yes this != scope:hd_dc_ordinary_ruler }
+				add_opinion = { target = scope:hd_dc_ordinary_ruler modifier = hd_dc_ordinary_response_opinion opinion = -15 }
+			}
+		}
+		random_courtier = {
+			limit = { is_alive = yes is_adult = yes OR = { has_trait = wrathful has_trait = callous } }
+			add_opinion = { target = scope:hd_dc_ordinary_ruler modifier = hd_dc_ordinary_response_opinion opinion = 10 }
+		}
+		hd_dc_commit_point_receipt_effect = { W = 1 H = 0 SOURCE = ordinary }
+		scope:hd_dc_ordinary = { hd_dc_close_ordinary_effect = { RESULT = ransom_refused } }
+	}
+}
+
+# Ordinary record scope. Exact callback/node/version/signatures are necessary;
+# neither a sent proposal nor a dead/transferred prisoner can authorize payment.
+hd_dc_consume_ord09_proposal_effect = {
+	save_scope_as = hd_dc_ordinary
+	if = {
+		limit = {
+			var:hd_dc_node = 9
+			NOT = { var:hd_dc_stage = flag:closed }
+			exists = var:hd_dc_ransom_proposal
+			var:hd_dc_ransom_proposal = {
+				NOT = { has_variable = hd_dc_result_consumed }
+				has_variable = hd_dc_callback_committed
+			}
+		}
+		var:hd_dc_ransom_proposal = { save_scope_as = hd_dc_proposal set_variable = { name = hd_dc_result_consumed value = yes } }
+		if = {
+			limit = {
+				hd_dc_ord09_case_valid_trigger = yes
+				var:hd_dc_pending_proposal = scope:hd_dc_proposal
+				var:hd_dc_node_version = scope:hd_dc_proposal.var:hd_dc_origin_version
+				scope:hd_dc_proposal = {
+					var:hd_dc_proposal_state = flag:accepted
+					var:hd_dc_proposal_from = scope:hd_dc_ordinary.var:hd_dc_actor
+					var:hd_dc_proposal_to = scope:hd_dc_ordinary.var:hd_dc_captor
+					var:hd_dc_from_signature = var:hd_dc_proposal_from
+					var:hd_dc_to_signature = var:hd_dc_proposal_to
+				}
+			}
+			if = {
+				limit = { var:hd_dc_ransom_mode = flag:gold }
+				hd_dc_execute_ord09_ransom_effect = yes
+			}
+			else_if = {
+				limit = { var:hd_dc_ransom_mode = flag:exchange exists = var:hd_dc_exchange_prisoner var:hd_dc_exchange_prisoner = { hd_dc_ord09_exchange_prisoner_trigger = yes } }
+				var:hd_dc_prisoner = { release_from_prison = yes }
+				if = {
+					limit = { var:hd_dc_prisoner = { is_imprisoned = no } }
+					var:hd_dc_exchange_prisoner = { release_from_prison = yes }
+					if = {
+						limit = { var:hd_dc_exchange_prisoner = { is_imprisoned = no } }
+						hd_dc_finish_ord09_exchange_effect = yes
+					}
+					else = { hd_dc_close_ordinary_effect = { RESULT = exchange_partial } }
+				}
+				else = { hd_dc_close_ordinary_effect = { RESULT = release_failed } }
+			}
+			else = { hd_dc_close_ordinary_effect = { RESULT = invalidated } }
+		}
+		else_if = {
+			limit = { scope:hd_dc_proposal.var:hd_dc_proposal_state = flag:rejected }
+			hd_dc_close_ordinary_effect = { RESULT = ransom_rejected }
+		}
+		else = { hd_dc_close_ordinary_effect = { RESULT = ransom_cancelled } }
+		var:hd_dc_actor ?= { trigger_event = { id = hd_dc_ord.0209 days = 1 } }
+	}
+}
+
+hd_dc_execute_ord09_ransom_effect = {
+	var:hd_dc_actor = { hd_dc_create_record_effect = { KIND = payment } }
+	scope:hd_dc_record = {
+		save_scope_as = hd_dc_payment
+		set_variable = { name = hd_dc_payer value = scope:hd_dc_ordinary.var:hd_dc_actor }
+		set_variable = { name = hd_dc_payee value = scope:hd_dc_ordinary.var:hd_dc_captor }
+		set_variable = { name = hd_dc_payer_signature value = scope:hd_dc_proposal.var:hd_dc_from_signature }
+		set_variable = { name = hd_dc_payee_signature value = scope:hd_dc_proposal.var:hd_dc_to_signature }
+		set_variable = { name = hd_dc_amount_due value = scope:hd_dc_ordinary.var:hd_dc_frozen_gold }
+		set_variable = { name = hd_dc_debit_kind value = 1 }
+		set_variable = { name = hd_dc_credit_kind value = 1 }
+	}
+	set_variable = { name = hd_dc_ransom_payment value = scope:hd_dc_payment }
+	hd_dc_execute_payment_effect = yes
+	if = {
+		limit = { hd_dc_payment_completed_trigger = yes }
+		var:hd_dc_prisoner = { release_from_prison = yes }
+		if = {
+			limit = { var:hd_dc_prisoner = { is_imprisoned = no } }
+			var:hd_dc_prisoner = {
+				add_opinion = { target = scope:hd_dc_ordinary_ruler modifier = hd_dc_ordinary_response_opinion opinion = 25 }
+				every_close_family_member = {
+					limit = { is_alive = yes this != scope:hd_dc_ordinary_ruler }
+					add_opinion = { target = scope:hd_dc_ordinary_ruler modifier = hd_dc_ordinary_response_opinion opinion = 25 }
+				}
+			}
+			var:hd_dc_captor = { add_opinion = { target = scope:hd_dc_ordinary_ruler modifier = hd_dc_ordinary_response_opinion opinion = 5 } }
+			set_variable = { name = hd_dc_prisoner_released value = yes }
+			hd_dc_close_ordinary_effect = { RESULT = ransomed }
+		}
+		else = { hd_dc_refund_ord09_payment_effect = yes hd_dc_close_ordinary_effect = { RESULT = release_failed } }
+	}
+	else = { hd_dc_refund_ord09_payment_effect = yes hd_dc_close_ordinary_effect = { RESULT = ransom_unpaid } }
+}
+
+# Same synchronous transaction only. Return the actual credited sum; never
+# fabricate the part that the payment engine did not credit to the jailer.
+hd_dc_refund_ord09_payment_effect = {
+	if = {
+		limit = { scope:hd_dc_payment = { has_variable = hd_dc_actual_credit var:hd_dc_actual_credit > 0 NOT = { has_variable = hd_dc_refund_checked } } }
+		scope:hd_dc_payment = {
+			set_variable = { name = hd_dc_refund_checked value = yes }
+			set_variable = { name = hd_dc_refund_target value = { value = var:hd_dc_actual_credit max = var:hd_dc_payee.gold min = 0 } }
+			set_variable = { name = hd_dc_refund_before value = var:hd_dc_payee.gold }
+			var:hd_dc_payee = { add_gold = { value = scope:hd_dc_payment.var:hd_dc_refund_target multiply = -1 } }
+			set_variable = { name = hd_dc_refund_debit value = { value = var:hd_dc_refund_before subtract = var:hd_dc_payee.gold } }
+			set_variable = { name = hd_dc_refund_payer_before value = var:hd_dc_payer.gold }
+			var:hd_dc_payer = { add_gold = scope:hd_dc_payment.var:hd_dc_refund_debit }
+			set_variable = { name = hd_dc_refund_credit value = { value = var:hd_dc_payer.gold subtract = var:hd_dc_refund_payer_before } }
+			set_variable = { name = hd_dc_unreturned_debit value = { value = var:hd_dc_actual_debit subtract = var:hd_dc_refund_credit } }
+		}
+	}
+}
+
+hd_dc_finish_ord09_exchange_effect = {
+	save_scope_as = hd_dc_receipt
+	var:hd_dc_prisoner = {
+		every_close_family_member = {
+			limit = { is_alive = yes this != scope:hd_dc_ordinary.var:hd_dc_captor }
+			add_opinion = { target = scope:hd_dc_ordinary.var:hd_dc_captor modifier = hd_dc_ordinary_response_opinion opinion = 10 }
+		}
+	}
+	var:hd_dc_exchange_prisoner = {
+		every_close_family_member = {
+			limit = { is_alive = yes this != scope:hd_dc_ordinary_ruler }
+			add_opinion = { target = scope:hd_dc_ordinary_ruler modifier = hd_dc_ordinary_response_opinion opinion = 10 }
+		}
+	}
+	var:hd_dc_actor = {
+		random_courtier = {
+			limit = { is_alive = yes is_adult = yes has_relation_rival = scope:hd_dc_ordinary.var:hd_dc_exchange_prisoner }
+			add_opinion = { target = scope:hd_dc_ordinary_ruler modifier = hd_dc_ordinary_response_opinion opinion = -15 }
+		}
+	}
+	set_variable = { name = hd_dc_prisoner_released value = yes }
+	set_variable = { name = hd_dc_exchange_prisoner_released value = yes }
+	hd_dc_commit_point_receipt_effect = { W = -1 H = 0 SOURCE = ordinary }
+	hd_dc_close_ordinary_effect = { RESULT = exchanged }
+}

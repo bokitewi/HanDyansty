@@ -1,0 +1,93 @@
+# Region scope, after the annual type draw has selected PAR and chosen two
+# actual groups. This adapter never substitutes the observer's diagnostic pair.
+hd_dc_boot_party_effect = {
+	clear_saved_scope = hd_dc_instance
+	if = {
+		limit = {
+			OR = {
+				AND = { var:hd_dc_selected_type = flag:par var:hd_dc_annual_epoch = current_year NOT = { var:hd_dc_par_boot_epoch = current_year } }
+				hd_dc_debug_manual_entry_trigger = { TYPE = par }
+			}
+			NOT = { has_variable = hd_dc_par_cooldown }
+			NOT = { has_variable = hd_dc_acute_instance_id }
+			NOT = { has_variable = hd_dc_pending_instance }
+			hd_dc_par_snapshot_valid_trigger = yes
+			exists = scope:hd_dc_par_selected_first_group
+			exists = scope:hd_dc_par_selected_second_group
+			any_participant_group = { this = scope:hd_dc_par_selected_first_group }
+			any_participant_group = { this = scope:hd_dc_par_selected_second_group }
+			scope:hd_dc_par_selected_first_group = { hd_dc_par_group_qualified_trigger = yes }
+			scope:hd_dc_par_selected_first_group = { save_temporary_scope_as = hd_dc_par_first_group }
+			scope:hd_dc_par_selected_second_group = { hd_dc_par_hostile_pair_trigger = yes }
+		}
+		set_variable = { name = hd_dc_par_boot_epoch value = current_year }
+		hd_dc_prepare_instance_effect = { TYPE = par }
+		if = {
+			limit = { exists = scope:hd_dc_instance }
+			scope:hd_dc_instance = {
+				set_variable = { name = hd_dc_par_initial_total_power value = situation:dynastic_cycle.var:hd_dc_par_total_power }
+			}
+			scope:hd_dc_par_selected_first_group = { hd_dc_bind_party_leader_effect = { SIDE = first } }
+			scope:hd_dc_par_selected_second_group = { hd_dc_bind_party_leader_effect = { SIDE = second } }
+			scope:hd_dc_instance = {
+				if = {
+					limit = {
+						exists = var:hd_dc_par_first_story
+						exists = var:hd_dc_par_second_story
+						var:hd_dc_par_first_story != var:hd_dc_par_second_story
+						var:hd_dc_par_first_story.var:hd_dc_actor = scope:hd_dc_par_selected_first_group.var:movement_leader
+						var:hd_dc_par_second_story.var:hd_dc_actor = scope:hd_dc_par_selected_second_group.var:movement_leader
+						var:hd_dc_par_first_story.var:hd_dc_instance_ref = scope:hd_dc_instance
+						var:hd_dc_par_second_story.var:hd_dc_instance_ref = scope:hd_dc_instance
+					}
+					set_variable = { name = hd_dc_boot_political_completed value = yes }
+				}
+			}
+			hd_dc_commit_instance_boot_effect = { TYPE = par }
+			hd_dc_abort_unstarted_instance_effect = yes
+		}
+	}
+}
+
+# Native group scope. A situation and one of its four native group type IDs
+# identify the organization; the leader's character ID identifies this tenure.
+# Members receive no personal master crisis, claims, faction or army here.
+hd_dc_bind_party_leader_effect = {
+	save_scope_as = hd_dc_par_binding_group
+	if = {
+		limit = {
+			exists = scope:hd_dc_instance
+			scope:hd_dc_instance = {
+				var:hd_dc_type = flag:par
+				var:hd_dc_stage = flag:prepared
+				NOT = { has_variable = hd_dc_par_$SIDE$_story }
+			}
+			hd_dc_par_group_qualified_trigger = yes
+			hd_dc_par_group_snapshot_current_trigger = yes
+		}
+		var:movement_leader = { hd_dc_create_actor_record_effect = { ROLE = party_leader } }
+		if = {
+			limit = { exists = scope:hd_dc_actor_story }
+			scope:hd_dc_actor_story = {
+				set_variable = { name = hd_dc_party_type value = scope:hd_dc_par_binding_group.var:hd_dc_par_group_type }
+				set_variable = { name = hd_dc_party_initial_leader value = var:hd_dc_actor }
+				set_variable = { name = hd_dc_party_initial_power value = scope:hd_dc_par_binding_group.var:hd_dc_par_power_snapshot }
+				set_variable = { name = hd_dc_party_goal value = scope:hd_dc_par_binding_group.var:hd_dc_par_group_type }
+				set_variable = { name = hd_dc_party_bound_date value = current_date }
+			}
+			every_in_list = {
+				variable = hd_dc_par_member_snapshot
+				save_scope_as = hd_dc_par_bound_member
+				scope:hd_dc_actor_story = {
+					if = {
+						limit = {
+							NOT = { is_target_in_variable_list = { name = hd_dc_party_initial_members target = scope:hd_dc_par_bound_member } }
+						}
+						add_to_variable_list = { name = hd_dc_party_initial_members target = scope:hd_dc_par_bound_member }
+					}
+				}
+			}
+			scope:hd_dc_instance = { set_variable = { name = hd_dc_par_$SIDE$_story value = scope:hd_dc_actor_story } }
+		}
+	}
+}

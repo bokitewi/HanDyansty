@@ -1,0 +1,265 @@
+# Region scope. The annual opportunity belongs to the ruler, not a dynasty.
+# Only completed authored nodes may enter this pool; the remaining ORD nodes
+# are tracked as unfinished in the plan ledger, never synthesized as successes.
+hd_dc_observe_ordinary_pool_effect = {
+	every_situation_participant = {
+		limit = { is_alive = yes is_adult = yes is_landed = yes NOT = { var:hd_dc_ordinary_year = current_year } }
+		set_variable = { name = hd_dc_ordinary_year value = current_year }
+		if = {
+			limit = { NOT = { has_variable = hd_dc_pending_ordinary } OR = { hd_dc_ord09_eligible_trigger = yes hd_dc_ord13_eligible_trigger = yes hd_dc_ord19_eligible_trigger = yes } }
+			save_scope_value_as = { name = hd_dc_hazard_base value = hd_dc_ordinary_annual_base_chance }
+			save_scope_value_as = { name = hd_dc_hazard_multiplier value = hd_dc_social_hazard_multiplier_value }
+			random = {
+				chance = hd_dc_hazard_probability_value
+				random_list = {
+					1 = { trigger = { hd_dc_ord09_eligible_trigger = yes } hd_dc_start_ord09_effect = yes }
+					1 = { trigger = { hd_dc_ord13_eligible_trigger = yes } hd_dc_start_ord13_effect = yes }
+					1 = { trigger = { hd_dc_ord19_eligible_trigger = yes } hd_dc_start_ord19_effect = yes }
+				}
+			}
+		}
+	}
+}
+
+hd_dc_start_ord13_effect = {
+	if = {
+		limit = { hd_dc_ord13_eligible_trigger = yes NOT = { has_variable = hd_dc_pending_ordinary } }
+		save_scope_as = hd_dc_ordinary_ruler
+		random_vassal = { limit = { hd_dc_ord13_petitioner_trigger = yes } save_scope_as = hd_dc_petitioner }
+		hd_dc_create_record_effect = { KIND = ordinary }
+		scope:hd_dc_record = {
+			save_scope_as = hd_dc_ordinary
+			set_variable = { name = hd_dc_actor value = scope:hd_dc_ordinary_ruler }
+			set_variable = { name = hd_dc_petitioner value = scope:hd_dc_petitioner }
+			set_variable = { name = hd_dc_node value = 13 }
+			set_variable = { name = hd_dc_ordinary_wait value = yes months = 3 }
+			set_variable = { name = hd_dc_node_version value = 1 }
+			set_variable = { name = hd_dc_stage value = flag:acute }
+			set_variable = { name = hd_dc_frozen_gold value = hd_dc_g1_gold }
+		}
+		set_variable = { name = hd_dc_pending_ordinary value = scope:hd_dc_ordinary }
+		save_scope_value_as = { name = hd_dc_ordinary_version value = 1 }
+		trigger_event = { id = hd_dc_ord.0013 days = 1 }
+	}
+}
+
+# A: the existing chancellor receives a real domestic-affairs task. The 30
+# gold funds the office; it is a recorded expense, not an invented bilateral debt.
+hd_dc_ord13_delegate_effect = {
+	if = {
+		limit = { hd_dc_ord13_delegation_valid_trigger = yes }
+		cp:councillor_chancellor = { save_scope_as = hd_dc_ordinary_helper }
+		scope:hd_dc_ordinary = {
+			set_variable = { name = hd_dc_option_committed value = flag:ord_13_a }
+			set_variable = { name = hd_dc_helper value = scope:hd_dc_ordinary_helper }
+			set_variable = { name = hd_dc_gold_before value = scope:hd_dc_ordinary_ruler.gold }
+		}
+		add_gold = { value = scope:hd_dc_ordinary.var:hd_dc_frozen_gold multiply = -1 }
+		scope:hd_dc_ordinary = {
+			set_variable = { name = hd_dc_actual_gold_spent value = { value = var:hd_dc_gold_before subtract = scope:hd_dc_ordinary_ruler.gold } }
+		}
+		scope:hd_dc_ordinary_helper = { set_council_task = { task_type = task_domestic_affairs } }
+		if = {
+			limit = {
+				scope:hd_dc_ordinary_helper = { is_performing_council_task = task_domestic_affairs }
+				scope:hd_dc_ordinary.var:hd_dc_actual_gold_spent = scope:hd_dc_ordinary.var:hd_dc_frozen_gold
+			}
+			add_stress = -15
+			hd_dc_ord13_personality_stress_effect = yes
+			scope:hd_dc_ordinary_helper = { add_opinion = { target = scope:hd_dc_ordinary_ruler modifier = hd_dc_ordinary_response_opinion opinion = 15 } }
+			scope:hd_dc_ordinary.var:hd_dc_petitioner = { add_opinion = { target = scope:hd_dc_ordinary_ruler modifier = hd_dc_ordinary_response_opinion opinion = -10 } }
+			scope:hd_dc_ordinary = { hd_dc_close_ordinary_effect = { RESULT = delegated } }
+		}
+		else = {
+			add_gold = scope:hd_dc_ordinary.var:hd_dc_actual_gold_spent
+			scope:hd_dc_ordinary = {
+				set_variable = { name = hd_dc_gold_refunded value = var:hd_dc_actual_gold_spent }
+				hd_dc_close_ordinary_effect = { RESULT = delegation_failed }
+			}
+		}
+	}
+}
+
+hd_dc_ord13_rebuke_effect = {
+	if = {
+		limit = { hd_dc_ord13_window_valid_trigger = yes }
+		scope:hd_dc_ordinary = { set_variable = { name = hd_dc_option_committed value = flag:ord_13_b } save_scope_as = hd_dc_receipt }
+		add_stress = -5
+		hd_dc_ord13_personality_stress_effect = yes
+		scope:hd_dc_ordinary.var:hd_dc_petitioner = { add_opinion = { target = scope:hd_dc_ordinary_ruler modifier = hd_dc_ordinary_response_opinion opinion = -25 } }
+		# Any flattering response is made now by a real courtier; no prior
+		# misconduct or secret is manufactured and no trait is granted here.
+		random_courtier = {
+			limit = { is_alive = yes is_adult = yes has_trait = deceitful this != scope:hd_dc_ordinary.var:hd_dc_petitioner }
+			add_opinion = { target = scope:hd_dc_ordinary_ruler modifier = hd_dc_ordinary_response_opinion opinion = 10 }
+			save_scope_as = hd_dc_flatterer
+			scope:hd_dc_ordinary = { set_variable = { name = hd_dc_flatterer value = scope:hd_dc_flatterer } }
+		}
+		hd_dc_commit_point_receipt_effect = { W = 1 H = 0 SOURCE = ordinary }
+		# Ask the native mental-break manager only when an eligible tier is
+		# outside its own cooldown. It selects actual events and coping choices.
+		if = {
+			limit = { hd_dc_ord13_native_stress_followup_trigger = yes }
+			scope:hd_dc_ordinary = { set_variable = { name = hd_dc_native_stress_requested value = current_date } }
+			trigger_event = { id = hd_dc_ord.0313 days = 1 }
+		}
+		scope:hd_dc_ordinary = { hd_dc_close_ordinary_effect = { RESULT = rebuked } }
+	}
+}
+
+hd_dc_ord13_ask_help_effect = {
+	if = {
+		limit = { hd_dc_ord13_window_valid_trigger = yes hd_dc_ord13_has_confidant_trigger = yes }
+		# Temporary candidates belong to this single option execution. A friend
+		# who is also family appears once, and nobody is moved into court.
+		every_relation = {
+			type = friend
+			limit = { hd_dc_ord13_confidant_trigger = yes }
+			add_to_temporary_list = hd_dc_ord13_confidants
+		}
+		every_close_family_member = {
+			limit = { hd_dc_ord13_confidant_trigger = yes NOT = { is_in_list = hd_dc_ord13_confidants } }
+			add_to_temporary_list = hd_dc_ord13_confidants
+		}
+		random_in_list = { list = hd_dc_ord13_confidants save_scope_as = hd_dc_confidant }
+		scope:hd_dc_ordinary = {
+			set_variable = { name = hd_dc_option_committed value = flag:ord_13_c }
+			set_variable = { name = hd_dc_confidant value = scope:hd_dc_confidant }
+			set_variable = { name = hd_dc_ordinary_wait value = yes months = 3 }
+		}
+		hd_dc_ord13_personality_stress_effect = yes
+		scope:hd_dc_confidant = { trigger_event = { id = hd_dc_ord.0113 days = 1 } }
+	}
+}
+
+# One native minor gain for conduct contrary to personality, separately from
+# relief. Native stress modifiers apply to this positive delta only. Multiple
+# matching traits do not charge the same act twice.
+hd_dc_ord13_personality_stress_effect = {
+	if = {
+		limit = {
+			NOT = { scope:hd_dc_ordinary = { has_variable = hd_dc_personality_stress_checked } }
+		}
+		scope:hd_dc_ordinary = { set_variable = { name = hd_dc_personality_stress_checked value = yes } }
+		if = {
+			limit = {
+				OR = {
+					AND = { scope:hd_dc_ordinary.var:hd_dc_option_committed = flag:ord_13_a has_trait = arrogant }
+					AND = { scope:hd_dc_ordinary.var:hd_dc_option_committed = flag:ord_13_b OR = { has_trait = compassionate has_trait = forgiving } }
+					AND = { scope:hd_dc_ordinary.var:hd_dc_option_committed = flag:ord_13_c has_trait = paranoid }
+				}
+			}
+			scope:hd_dc_ordinary = {
+				set_variable = { name = hd_dc_personality_stress_base value = minor_stress_impact_gain }
+				set_variable = { name = hd_dc_stress_before value = scope:hd_dc_ordinary_ruler.stress }
+			}
+			add_stress = minor_stress_impact_gain
+			scope:hd_dc_ordinary = {
+				set_variable = { name = hd_dc_personality_stress_actual value = { value = scope:hd_dc_ordinary_ruler.stress subtract = var:hd_dc_stress_before } }
+			}
+		}
+	}
+}
+
+# Recipient's answer performs the actual personal conversation. There is no
+# transfer of regency or title authority, and the request alone has no reward.
+hd_dc_ord13_answer_help_effect = {
+	if = {
+		limit = { hd_dc_ord13_help_response_valid_trigger = yes }
+		scope:hd_dc_ordinary = { set_variable = { name = hd_dc_help_answer value = flag:$ANSWER$ } save_scope_as = hd_dc_receipt }
+		if = {
+			limit = { scope:hd_dc_ordinary.var:hd_dc_help_answer = flag:helped }
+			scope:hd_dc_ordinary_ruler = { add_stress = -20 }
+			add_opinion = { target = scope:hd_dc_ordinary_ruler modifier = hd_dc_ordinary_response_opinion opinion = 20 }
+			scope:hd_dc_ordinary_ruler = {
+				every_vassal = {
+					limit = {
+						is_alive = yes
+						exists = joined_faction
+						joined_faction = { faction_is_type = claimant_faction faction_target = scope:hd_dc_ordinary_ruler }
+						NOT = { this = scope:hd_dc_ordinary_helper }
+					}
+					add_opinion = { target = scope:hd_dc_ordinary_ruler modifier = hd_dc_ordinary_response_opinion opinion = -10 }
+				}
+			}
+			hd_dc_commit_point_receipt_effect = { W = -1 H = 0 SOURCE = ordinary }
+		}
+		scope:hd_dc_ordinary = { hd_dc_close_ordinary_effect = { RESULT = $ANSWER$ } }
+		scope:hd_dc_ordinary_ruler = { trigger_event = { id = hd_dc_ord.0213 days = 1 } }
+	}
+}
+
+hd_dc_close_ordinary_effect = {
+	if = {
+		limit = { NOT = { var:hd_dc_stage = flag:closed } }
+		save_scope_as = hd_dc_ordinary
+		set_variable = { name = hd_dc_stage value = flag:closed }
+		set_variable = { name = hd_dc_ordinary_result value = flag:$RESULT$ }
+		set_variable = { name = hd_dc_closed_date value = current_date }
+		remove_variable = hd_dc_ordinary_wait
+		change_variable = { name = hd_dc_node_version add = 1 }
+		var:hd_dc_actor ?= {
+			if = { limit = { var:hd_dc_pending_ordinary = scope:hd_dc_ordinary } remove_variable = hd_dc_pending_ordinary }
+		}
+	}
+}
+
+hd_dc_cancel_ordinary_delivery_effect = {
+	if = {
+		limit = {
+			exists = scope:hd_dc_ordinary
+			scope:hd_dc_ordinary.var:hd_dc_node_version = scope:hd_dc_ordinary_version
+			OR = { this = scope:hd_dc_ordinary.var:hd_dc_actor this = scope:hd_dc_ordinary.var:hd_dc_confidant }
+		}
+		scope:hd_dc_ordinary = { hd_dc_close_ordinary_effect = { RESULT = invalidated } }
+	}
+}
+
+# Cancel only uncompleted requests whose actual actors can no longer act.
+# Successful, rejected and already invalidated records keep their history.
+hd_dc_maintain_ordinary_effect = {
+	if = {
+		limit = { NOT = { var:hd_dc_stage = flag:closed } }
+		save_scope_as = hd_dc_ordinary
+		if = {
+			limit = {
+				NOT = { has_variable = hd_dc_ordinary_wait }
+				OR = { var:hd_dc_node = 13 AND = { NOT = { has_variable = hd_dc_option_committed } NOT = { has_variable = hd_dc_ransom_proposal } } }
+			}
+			hd_dc_close_ordinary_effect = { RESULT = expired }
+		}
+		if = { limit = { var:hd_dc_node = 19 } hd_dc_maintain_ord19_cooperation_effect = yes }
+		if = {
+			limit = { var:hd_dc_node = 9 }
+			hd_dc_consume_ord09_proposal_effect = yes
+			if = {
+				limit = { NOT = { var:hd_dc_stage = flag:closed } NOT = { hd_dc_ord09_case_valid_trigger = yes } }
+				hd_dc_close_ordinary_effect = { RESULT = invalidated }
+			}
+		}
+		if = {
+			limit = {
+				OR = {
+					NOT = { exists = var:hd_dc_actor }
+					var:hd_dc_actor ?= { is_alive = no }
+					var:hd_dc_actor ?= { is_landed = no }
+					var:hd_dc_actor ?= { is_imprisoned = yes }
+				}
+			}
+			hd_dc_close_ordinary_effect = { RESULT = invalidated }
+		}
+		else_if = {
+			limit = { var:hd_dc_option_committed = flag:ord_13_c }
+			var:hd_dc_actor = { save_scope_as = hd_dc_ordinary_ruler }
+			if = {
+				limit = {
+					OR = {
+						NOT = { exists = var:hd_dc_confidant }
+						NOT = { var:hd_dc_confidant ?= { hd_dc_ord13_confidant_trigger = yes } }
+					}
+				}
+				hd_dc_close_ordinary_effect = { RESULT = invalidated }
+			}
+		}
+	}
+}

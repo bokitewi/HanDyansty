@@ -1,0 +1,119 @@
+# Actual county, not the ruler's capital used as a substitute for disaster area.
+hd_dc_policy_affected_county_trigger = {
+	title_tier = county
+	OR = {
+		has_province_with_epidemic = { intensity = any }
+		any_county_situation = { tgp_natural_disaster_situation_is_disaster_trigger = yes }
+	}
+}
+
+# Accepted local execution proposal for PAR-01-B. The leader's political
+# acceptance alone is not the county holder's consent or a paid relief budget.
+hd_dc_par01_local_agreement_trigger = {
+	var:hd_dc_record_kind = flag:proposal
+	var:hd_dc_origin_option = flag:par_01_b
+	var:hd_dc_origin_node = 1
+	var:hd_dc_proposal_state = flag:accepted
+	var:hd_dc_proposal_terms = flag:hd_dc_par01_local_relief_terms
+	has_variable = hd_dc_callback_committed
+	NOT = { has_variable = hd_dc_policy_trial }
+	var:hd_dc_from_signature = var:hd_dc_proposal_from
+	var:hd_dc_to_signature = var:hd_dc_proposal_to
+	hd_dc_par01_political_consent_trigger = yes
+	exists = var:hd_dc_proposal_from
+	exists = var:hd_dc_proposal_to
+	var:hd_dc_proposal_from = title:h_china.holder
+	var:hd_dc_proposal_to = { is_alive = yes is_imprisoned = no }
+	exists = var:hd_dc_policy_county
+	situation:dynastic_cycle = { is_target_in_variable_list = { name = hd_dc_counties target = scope:hd_dc_policy_proposal.var:hd_dc_policy_county } }
+	var:hd_dc_policy_county = {
+		hd_dc_policy_affected_county_trigger = yes
+		holder = scope:hd_dc_policy_proposal.var:hd_dc_proposal_to
+		NOT = { has_variable = hd_dc_policy_trial }
+		NOT = { has_county_modifier = ep3_governance_tax_relief }
+		NOT = { has_county_modifier = hd_dc_par_tax_relief_modifier }
+	}
+	var:hd_dc_instance_ref = {
+		var:hd_dc_type = flag:par
+		var:hd_dc_stage = flag:acute
+		NOT = { has_variable = hd_dc_reward_committed }
+		NOT = { has_variable = hd_dc_par01_trial }
+	}
+	var:hd_dc_actor_story = {
+		var:hd_dc_instance_ref = scope:hd_dc_policy_proposal.var:hd_dc_instance_ref
+		var:hd_dc_pending_proposal = scope:hd_dc_policy_proposal
+		var:hd_dc_node = 1
+		var:hd_dc_node_version = scope:hd_dc_policy_proposal.var:hd_dc_origin_version
+	}
+}
+
+# Local proposal scope. Supporting relief in the opening inquiry does not
+# authorize an appointment to execute it. Require the separate real COM-04
+# acceptance by the relief leader before the local agreement can spend money.
+hd_dc_par01_political_consent_trigger = {
+	exists = var:hd_dc_policy_political_proposal
+	var:hd_dc_policy_political_proposal = {
+		var:hd_dc_record_kind = flag:proposal
+		var:hd_dc_origin_option = flag:par_01_b
+		var:hd_dc_origin_node = 1
+		var:hd_dc_proposal_state = flag:accepted
+		var:hd_dc_proposal_terms = flag:hd_dc_par01_relief_leadership_terms
+		has_variable = hd_dc_callback_committed
+		var:hd_dc_instance_ref = scope:hd_dc_policy_proposal.var:hd_dc_instance_ref
+		var:hd_dc_proposal_from = scope:hd_dc_policy_proposal.var:hd_dc_proposal_from
+		var:hd_dc_from_signature = var:hd_dc_proposal_from
+		var:hd_dc_to_signature = var:hd_dc_proposal_to
+		var:hd_dc_proposal_to = { is_alive = yes is_imprisoned = no }
+		OR = {
+			var:hd_dc_actor_story = scope:hd_dc_policy_proposal.var:hd_dc_instance_ref.var:hd_dc_par_first_story
+			var:hd_dc_actor_story = scope:hd_dc_policy_proposal.var:hd_dc_instance_ref.var:hd_dc_par_second_story
+		}
+		var:hd_dc_actor_story = {
+			var:hd_dc_instance_ref = scope:hd_dc_policy_proposal.var:hd_dc_instance_ref
+			var:hd_dc_conflict_policy = flag:relief
+			var:hd_dc_actor = scope:hd_dc_policy_proposal.var:hd_dc_policy_political_proposal.var:hd_dc_proposal_to
+		}
+	}
+}
+
+hd_dc_par01_trial_ready_trigger = {
+	hd_dc_par01_local_agreement_trigger = yes
+	exists = var:hd_dc_policy_payment
+	var:hd_dc_policy_payment = {
+		var:hd_dc_record_kind = flag:payment
+		var:hd_dc_instance_ref = scope:hd_dc_policy_proposal.var:hd_dc_instance_ref
+		var:hd_dc_payment_proposal = scope:hd_dc_policy_proposal
+		var:hd_dc_payer = scope:hd_dc_policy_proposal.var:hd_dc_proposal_from
+		var:hd_dc_payee = scope:hd_dc_policy_proposal.var:hd_dc_proposal_to
+		var:hd_dc_payment_commit = 2
+		var:hd_dc_amount_due = hd_dc_g2_gold
+		var:hd_dc_actual_debit = hd_dc_g2_gold
+		var:hd_dc_actual_credit = hd_dc_g2_gold
+		NOT = { has_variable = hd_dc_q_committed }
+	}
+}
+
+# Character receiving a report, bound to the original signatories.
+hd_dc_policy_notice_recipient_trigger = {
+	is_alive = yes
+	exists = scope:hd_dc_policy_trial
+	scope:hd_dc_policy_trial = { var:hd_dc_record_kind = flag:policy_trial }
+	OR = {
+		this = scope:hd_dc_policy_trial.var:hd_dc_policy_author
+		this = scope:hd_dc_policy_trial.var:hd_dc_policy_executor
+		this = scope:hd_dc_policy_trial.var:hd_dc_policy_first_leader
+		this = scope:hd_dc_policy_trial.var:hd_dc_policy_second_leader
+	}
+}
+
+# Trial record. A new office holder cannot silently sign for the old executor.
+hd_dc_policy_trial_authority_trigger = {
+	exists = var:hd_dc_policy_county
+	exists = var:hd_dc_policy_executor
+	var:hd_dc_policy_executor = { is_alive = yes is_imprisoned = no }
+	var:hd_dc_policy_county = { holder = scope:hd_dc_policy_trial.var:hd_dc_policy_executor }
+	var:hd_dc_instance_ref = {
+		NOT = { var:hd_dc_stage = flag:closed }
+		NOT = { has_variable = hd_dc_reward_committed }
+	}
+}

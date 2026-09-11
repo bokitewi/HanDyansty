@@ -1,0 +1,170 @@
+# Region after the annual PAR and unordered-pair selections. This inquiry is
+# not the main crisis, and spends no fifty-year cooldown before a real dispute.
+hd_dc_prepare_party_policy_case_effect = {
+	clear_saved_scope = hd_dc_party_case
+	clear_saved_scope = hd_dc_case_attempt_region
+	if = {
+		limit = {
+			OR = {
+				AND = { var:hd_dc_selected_type = flag:par var:hd_dc_annual_epoch = current_year NOT = { var:hd_dc_par_case_attempt_year = current_year } }
+				hd_dc_debug_manual_entry_trigger = { TYPE = par }
+			}
+			var:hd_dc_par_pair_draw_year = current_year
+			NOT = { has_variable = hd_dc_pending_party_case }
+			NOT = { has_variable = hd_dc_acute_instance_id }
+			NOT = { has_variable = hd_dc_pending_instance }
+			NOT = { has_variable = hd_dc_par_cooldown }
+		}
+		set_variable = { name = hd_dc_par_case_attempt_year value = current_year }
+		save_scope_as = hd_dc_case_attempt_region
+	}
+	if = {
+		limit = {
+			scope:hd_dc_case_attempt_region = this
+			title:h_china.holder = { is_alive = yes }
+			hd_dc_par_snapshot_valid_trigger = yes
+			hd_dc_par_named_pair_trigger = { FIRST = scope:hd_dc_par_selected_first_group SECOND = scope:hd_dc_par_selected_second_group }
+		}
+		clear_saved_scope = hd_dc_case_county
+		every_in_list = {
+			variable = hd_dc_counties
+			limit = { NOT = { exists = scope:hd_dc_case_county } hd_dc_party_case_county_trigger = yes }
+			save_scope_as = hd_dc_case_county
+		}
+		if = {
+			limit = { exists = scope:hd_dc_case_county }
+			title:h_china.holder = { hd_dc_create_record_effect = { KIND = party_case } }
+			scope:hd_dc_record = {
+				save_scope_as = hd_dc_party_case
+				set_variable = { name = hd_dc_case_year value = current_year }
+				set_variable = { name = hd_dc_case_ruler value = title:h_china.holder }
+				set_variable = { name = hd_dc_case_county value = scope:hd_dc_case_county }
+				set_variable = { name = hd_dc_case_executor value = scope:hd_dc_case_county.holder }
+				set_variable = { name = hd_dc_case_first_type value = scope:hd_dc_par_selected_first_group.var:hd_dc_par_group_type }
+				set_variable = { name = hd_dc_case_second_type value = scope:hd_dc_par_selected_second_group.var:hd_dc_par_group_type }
+				set_variable = { name = hd_dc_case_first_leader value = scope:hd_dc_par_selected_first_group.var:movement_leader }
+				set_variable = { name = hd_dc_case_second_leader value = scope:hd_dc_par_selected_second_group.var:movement_leader }
+				set_variable = { name = hd_dc_case_wait value = yes months = 3 }
+				if = { limit = { hd_dc_debug_manual_entry_trigger = { TYPE = par } } set_variable = { name = hd_dc_debug_requester value = scope:hd_dc_debug_requester } }
+			}
+			set_variable = { name = hd_dc_pending_party_case value = scope:hd_dc_party_case }
+			scope:hd_dc_party_case = {
+				hd_dc_deliver_party_policy_inquiry_effect = { SIDE = first }
+				hd_dc_deliver_party_policy_inquiry_effect = { SIDE = second }
+			}
+		}
+	}
+}
+
+hd_dc_deliver_party_policy_inquiry_effect = {
+	save_scope_as = hd_dc_party_case
+	save_scope_value_as = { name = hd_dc_case_side value = flag:$SIDE$ }
+	var:hd_dc_case_ruler = { save_scope_as = hd_dc_case_ruler }
+	var:hd_dc_case_county = { save_scope_as = hd_dc_case_county }
+	var:hd_dc_case_$SIDE$_leader = { trigger_event = { id = hd_dc_par.1001 days = 1 } }
+}
+
+# Actual answering leader. Choices are written by that person's response;
+# neither the observer nor the other party may supply a missing signature.
+hd_dc_answer_party_policy_inquiry_effect = {
+	if = {
+		limit = { hd_dc_party_case_window_valid_trigger = yes }
+		save_scope_as = hd_dc_case_signatory
+		scope:hd_dc_party_case = {
+			if = {
+				limit = { scope:hd_dc_case_side = flag:first }
+				set_variable = { name = hd_dc_case_first_vote value = flag:$POLICY$ }
+				set_variable = { name = hd_dc_case_first_signature value = scope:hd_dc_case_signatory }
+			}
+			else = {
+				set_variable = { name = hd_dc_case_second_vote value = flag:$POLICY$ }
+				set_variable = { name = hd_dc_case_second_signature value = scope:hd_dc_case_signatory }
+			}
+			hd_dc_maintain_party_policy_case_effect = yes
+		}
+	}
+}
+
+hd_dc_maintain_party_policy_case_effect = {
+	if = {
+		limit = { var:hd_dc_record_kind = flag:party_case NOT = { has_variable = hd_dc_case_result } }
+		save_scope_as = hd_dc_party_case
+		if = {
+			limit = { NOT = { hd_dc_party_case_current_trigger = yes } }
+			set_variable = { name = hd_dc_case_result value = flag:invalidated }
+		}
+		else_if = {
+			limit = { NOT = { has_variable = hd_dc_case_wait } }
+			set_variable = { name = hd_dc_case_result value = flag:expired }
+		}
+		else_if = {
+			limit = { OR = { var:hd_dc_case_first_vote = flag:decline var:hd_dc_case_second_vote = flag:decline } }
+			set_variable = { name = hd_dc_case_result value = flag:declined }
+		}
+		else_if = {
+			limit = {
+				var:hd_dc_case_first_signature = var:hd_dc_case_first_leader
+				var:hd_dc_case_second_signature = var:hd_dc_case_second_leader
+			}
+			if = {
+				limit = { var:hd_dc_case_first_vote = var:hd_dc_case_second_vote }
+				set_variable = { name = hd_dc_case_result value = flag:aligned }
+			}
+			else_if = {
+				limit = {
+					OR = { var:hd_dc_case_first_vote = flag:relief var:hd_dc_case_first_vote = flag:reserve }
+					OR = { var:hd_dc_case_second_vote = flag:relief var:hd_dc_case_second_vote = flag:reserve }
+				}
+				hd_dc_boot_party_policy_case_effect = yes
+			}
+		}
+		if = {
+			limit = { has_variable = hd_dc_case_result }
+			remove_variable = hd_dc_case_wait
+			var:hd_dc_region = {
+				if = {
+					limit = { var:hd_dc_pending_party_case = scope:hd_dc_party_case }
+					remove_variable = hd_dc_pending_party_case
+				}
+			}
+		}
+	}
+}
+
+# Two opposite, signed positions now exist about the same actual county.
+hd_dc_boot_party_policy_case_effect = {
+	if = {
+		limit = { debug_only = yes exists = var:hd_dc_debug_requester }
+		var:hd_dc_debug_requester = { save_scope_as = hd_dc_debug_requester }
+		save_scope_value_as = { name = hd_dc_debug_manual value = flag:par }
+	}
+	clear_saved_scope = hd_dc_par_selected_first_group
+	clear_saved_scope = hd_dc_par_selected_second_group
+	situation:dynastic_cycle = {
+		every_participant_group = {
+			if = {
+				limit = { var:hd_dc_par_group_type = scope:hd_dc_party_case.var:hd_dc_case_first_type }
+				save_scope_as = hd_dc_par_selected_first_group
+			}
+			else_if = {
+				limit = { var:hd_dc_par_group_type = scope:hd_dc_party_case.var:hd_dc_case_second_type }
+				save_scope_as = hd_dc_par_selected_second_group
+			}
+		}
+		hd_dc_boot_party_effect = yes
+	}
+	if = {
+		limit = { exists = scope:hd_dc_instance scope:hd_dc_instance.var:hd_dc_stage = flag:acute }
+		set_variable = { name = hd_dc_case_result value = flag:started }
+		set_variable = { name = hd_dc_instance_ref value = scope:hd_dc_instance }
+		scope:hd_dc_instance = {
+			set_variable = { name = hd_dc_par01_policy_case value = scope:hd_dc_party_case }
+			set_variable = { name = hd_dc_par01_county value = scope:hd_dc_party_case.var:hd_dc_case_county }
+			set_variable = { name = hd_dc_par01_executor value = scope:hd_dc_party_case.var:hd_dc_case_executor }
+			var:hd_dc_par_first_story = { set_variable = { name = hd_dc_conflict_policy value = scope:hd_dc_party_case.var:hd_dc_case_first_vote } }
+			var:hd_dc_par_second_story = { set_variable = { name = hd_dc_conflict_policy value = scope:hd_dc_party_case.var:hd_dc_case_second_vote } }
+			hd_dc_dispatch_par01_effect = yes
+		}
+	}
+	else = { set_variable = { name = hd_dc_case_result value = flag:boot_failed } }
+}

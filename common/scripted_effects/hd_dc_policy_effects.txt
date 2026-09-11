@@ -1,0 +1,174 @@
+# Proposal record after real local acceptance and the matching actual payment.
+# The PAR-01 event adapter must freeze county, payment and origin before calling.
+hd_dc_fund_par01_trial_effect = {
+	save_scope_as = hd_dc_policy_proposal
+	if = {
+		limit = {
+			hd_dc_par01_local_agreement_trigger = yes
+			NOT = { has_variable = hd_dc_policy_funding_checked }
+			NOT = { has_variable = hd_dc_policy_payment }
+			var:hd_dc_frozen_gold = hd_dc_g2_gold
+		}
+		set_variable = { name = hd_dc_policy_funding_checked value = yes }
+		if = {
+			limit = { var:hd_dc_proposal_from = { gold >= hd_dc_g2_gold } }
+			var:hd_dc_proposal_from = { hd_dc_create_record_effect = { KIND = payment } }
+			scope:hd_dc_record = {
+				save_scope_as = hd_dc_payment
+				set_variable = { name = hd_dc_instance_ref value = scope:hd_dc_policy_proposal.var:hd_dc_instance_ref }
+				set_variable = { name = hd_dc_payment_proposal value = scope:hd_dc_policy_proposal }
+				set_variable = { name = hd_dc_payer value = scope:hd_dc_policy_proposal.var:hd_dc_proposal_from }
+				set_variable = { name = hd_dc_payee value = scope:hd_dc_policy_proposal.var:hd_dc_proposal_to }
+				set_variable = { name = hd_dc_payer_signature value = scope:hd_dc_policy_proposal.var:hd_dc_from_signature }
+				set_variable = { name = hd_dc_payee_signature value = scope:hd_dc_policy_proposal.var:hd_dc_to_signature }
+				set_variable = { name = hd_dc_amount_due value = scope:hd_dc_policy_proposal.var:hd_dc_frozen_gold }
+				set_variable = { name = hd_dc_debit_kind value = 1 }
+				set_variable = { name = hd_dc_credit_kind value = 1 }
+			}
+			set_variable = { name = hd_dc_policy_payment value = scope:hd_dc_payment }
+			hd_dc_execute_payment_effect = yes
+			hd_dc_begin_par01_trial_effect = yes
+		}
+	}
+}
+
+hd_dc_begin_par01_trial_effect = {
+	save_scope_as = hd_dc_policy_proposal
+	if = {
+		limit = { hd_dc_par01_trial_ready_trigger = yes }
+		var:hd_dc_proposal_to = { hd_dc_create_record_effect = { KIND = policy_trial } }
+		scope:hd_dc_record = {
+			save_scope_as = hd_dc_policy_trial
+			set_variable = { name = hd_dc_instance_ref value = scope:hd_dc_policy_proposal.var:hd_dc_instance_ref }
+			set_variable = { name = hd_dc_policy_proposal value = scope:hd_dc_policy_proposal }
+			set_variable = { name = hd_dc_policy_county value = scope:hd_dc_policy_proposal.var:hd_dc_policy_county }
+			set_variable = { name = hd_dc_policy_executor value = scope:hd_dc_policy_proposal.var:hd_dc_proposal_to }
+			set_variable = { name = hd_dc_policy_author value = scope:hd_dc_policy_proposal.var:hd_dc_proposal_from }
+			set_variable = { name = hd_dc_policy_payment value = scope:hd_dc_policy_proposal.var:hd_dc_policy_payment }
+			if = {
+				limit = { scope:hd_dc_policy_proposal = { var:hd_dc_policy_offer_kind = flag:local } }
+				set_variable = { name = hd_dc_policy_first_leader value = var:hd_dc_instance_ref.var:hd_dc_par_first_story.var:hd_dc_actor }
+				set_variable = { name = hd_dc_policy_second_leader value = var:hd_dc_instance_ref.var:hd_dc_par_second_story.var:hd_dc_actor }
+			}
+			set_variable = { name = hd_dc_policy_start_control value = var:hd_dc_policy_county.county_control }
+			set_variable = { name = hd_dc_policy_start_development value = var:hd_dc_policy_county.development_level }
+			set_variable = { name = hd_dc_policy_started value = current_date }
+			set_variable = { name = hd_dc_policy_wait value = yes months = 12 }
+			var:hd_dc_policy_county = {
+				set_variable = { name = hd_dc_policy_trial value = scope:hd_dc_policy_trial }
+				add_county_modifier = { modifier = hd_dc_par_tax_relief_modifier years = 1 }
+			}
+			var:hd_dc_instance_ref = {
+				set_variable = { name = hd_dc_par01_trial value = scope:hd_dc_policy_trial }
+				change_variable = { name = hd_dc_open_obligations add = 1 }
+				hd_dc_register_governance_obligation_change_effect = yes
+			}
+		}
+		set_variable = { name = hd_dc_policy_trial value = scope:hd_dc_policy_trial }
+		# No Q, extra payment or fabricated increase in development here.
+		scope:hd_dc_policy_trial = { hd_dc_maintain_policy_trial_effect = yes }
+		scope:hd_dc_policy_trial = {
+			if = {
+				limit = { NOT = { has_variable = hd_dc_policy_result } }
+				hd_dc_note_par01_trial_started_effect = yes
+				hd_dc_deliver_policy_trial_notice_effect = { EVENT = hd_dc_par.1101 }
+			}
+		}
+	}
+}
+
+hd_dc_maintain_policy_trial_effect = {
+	if = {
+		limit = { var:hd_dc_record_kind = flag:policy_trial NOT = { has_variable = hd_dc_policy_result } }
+		save_scope_as = hd_dc_policy_trial
+		if = {
+			limit = { NOT = { hd_dc_policy_trial_authority_trigger = yes } }
+			hd_dc_finish_policy_trial_effect = { RESULT = authority_lost }
+		}
+		else_if = {
+			limit = { var:hd_dc_policy_county.var:hd_dc_policy_trial != scope:hd_dc_policy_trial }
+			hd_dc_finish_policy_trial_effect = { RESULT = interrupted }
+		}
+		else_if = {
+			limit = { NOT = { has_variable = hd_dc_policy_wait } }
+			# Calendar expiry is the completion boundary; the modifier itself
+			# may already have expired before this month's maintenance pulse.
+			hd_dc_finish_policy_trial_effect = { RESULT = fulfilled }
+		}
+		else_if = {
+			limit = { var:hd_dc_policy_county = { NOT = { has_county_modifier = hd_dc_par_tax_relief_modifier } } }
+			hd_dc_finish_policy_trial_effect = { RESULT = interrupted }
+		}
+	}
+}
+
+hd_dc_finish_policy_trial_effect = {
+	if = {
+		limit = { NOT = { has_variable = hd_dc_policy_result } }
+		save_scope_as = hd_dc_policy_trial
+		set_variable = { name = hd_dc_policy_result value = flag:$RESULT$ }
+		set_variable = { name = hd_dc_policy_finished value = current_date }
+		remove_variable = hd_dc_policy_wait
+		var:hd_dc_policy_county ?= {
+			if = {
+				limit = { var:hd_dc_policy_trial = scope:hd_dc_policy_trial }
+				remove_county_modifier = hd_dc_par_tax_relief_modifier
+				remove_variable = hd_dc_policy_trial
+			}
+		}
+		var:hd_dc_instance_ref ?= {
+			change_variable = { name = hd_dc_open_obligations add = -1 }
+			hd_dc_register_governance_obligation_change_effect = yes
+		}
+		if = {
+			limit = { var:hd_dc_policy_result = flag:fulfilled }
+			set_variable = { name = hd_dc_policy_end_control value = var:hd_dc_policy_county.county_control }
+			set_variable = { name = hd_dc_policy_end_development value = var:hd_dc_policy_county.development_level }
+			var:hd_dc_policy_payment = {
+				save_scope_as = hd_dc_payment
+				set_variable = { name = hd_dc_nonfinancial_terms_completed value = yes }
+			}
+			hd_dc_credit_payment_governance_effect = { Q = 5 }
+		}
+		if = {
+			limit = { var:hd_dc_policy_proposal = { var:hd_dc_policy_offer_kind = flag:local } }
+			var:hd_dc_instance_ref = { set_variable = { name = hd_dc_par01_result value = scope:hd_dc_policy_trial.var:hd_dc_policy_result } }
+			var:hd_dc_policy_proposal = { hd_dc_release_par01_offer_node_effect = yes }
+		}
+		hd_dc_deliver_policy_trial_notice_effect = { EVENT = hd_dc_par.1201 }
+	}
+}
+
+# Called once from the actual start or terminal transition. Dead signatories
+# are not silently replaced by a successor who never joined this agreement.
+hd_dc_deliver_policy_trial_notice_effect = {
+	save_scope_as = hd_dc_policy_trial
+	var:hd_dc_policy_county = { save_scope_as = hd_dc_policy_county }
+	var:hd_dc_policy_author ?= {
+		if = {
+			limit = { is_alive = yes }
+			trigger_event = { id = $EVENT$ days = 1 }
+		}
+	}
+	var:hd_dc_policy_executor ?= {
+		if = {
+			limit = { is_alive = yes this != scope:hd_dc_policy_trial.var:hd_dc_policy_author }
+			trigger_event = { id = $EVENT$ days = 1 }
+		}
+	}
+	var:hd_dc_policy_first_leader ?= { hd_dc_deliver_policy_leader_notice_effect = { EVENT = $EVENT$ } }
+	var:hd_dc_policy_second_leader ?= { hd_dc_deliver_policy_leader_notice_effect = { EVENT = $EVENT$ } }
+}
+
+# The two leaders are distinct in the signed policy case; either can also be
+# the county executor. That person receives one copy of each actual report.
+hd_dc_deliver_policy_leader_notice_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			this != scope:hd_dc_policy_trial.var:hd_dc_policy_author
+			this != scope:hd_dc_policy_trial.var:hd_dc_policy_executor
+		}
+		trigger_event = { id = $EVENT$ days = 1 }
+	}
+}

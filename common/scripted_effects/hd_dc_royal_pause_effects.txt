@@ -1,0 +1,200 @@
+hd_dc_pause_royal_support_effect = {
+	if = {
+		limit = { hd_dc_can_pause_royal_support_trigger = yes }
+		use_hook = scope:hd_dc_support.var:hd_dc_support_claimant
+		scope:hd_dc_support = {
+			set_variable = { name = hd_dc_support_answer value = flag:paused_by_hook }
+			set_variable = { name = hd_dc_hook_used_by value = scope:hd_dc_support_actor }
+			set_variable = { name = hd_dc_hook_used_date value = current_date }
+			set_variable = { name = hd_dc_pause_started value = current_date }
+			hd_dc_stamp_calendar_effect = { PREFIX = hd_dc_pause_date }
+			remove_variable = hd_dc_support_wait
+			var:hd_dc_support_faction = {
+				set_variable = { name = hd_dc_pause_record value = scope:hd_dc_support }
+				set_variable = { name = hd_dc_mobilization_wait value = yes years = 1 }
+			}
+			var:hd_dc_instance_ref = {
+				change_variable = { name = hd_dc_x add = -15 }
+				change_variable = { name = hd_dc_open_obligations add = 1 }
+				hd_dc_register_governance_obligation_change_effect = yes
+			}
+			var:hd_dc_support_claimant = { add_opinion = { target = scope:hd_dc_support_actor modifier = hd_dc_royal_support_opinion opinion = -10 } }
+			var:hd_dc_support_ruler = { add_opinion = { target = scope:hd_dc_support_actor modifier = hd_dc_royal_support_opinion opinion = 10 } }
+			var:hd_dc_support_claimant = { trigger_event = { id = hd_dc_support.0308 days = 1 } }
+		}
+		trigger_event = { id = hd_dc_support.0308 days = 1 }
+	}
+}
+
+# Native demand payload, in the original faction scope. Both initial and
+# delayed demands pass here; the delayed case re-resolves live political roles.
+hd_dc_dispatch_claimant_demand_effect = {
+	save_scope_as = faction
+	faction_leader = { save_scope_as = faction_leader }
+	faction_target = { save_scope_as = faction_target }
+	special_character = { save_scope_as = faction_claimant }
+	special_title = { save_scope_as = faction_targeted_title }
+	every_faction_member = {
+		limit = { is_ai = no this != scope:faction.faction_leader }
+		trigger_event = faction_demand.2005
+	}
+	faction_target = { trigger_event = { id = faction_demand.2001 days = 5 } }
+}
+
+hd_dc_guard_claimant_demand_effect = {
+	if = {
+		limit = { hd_dc_claimant_mobilization_paused_trigger = yes }
+		set_variable = { name = hd_dc_paused_demand value = yes }
+	}
+	else = { hd_dc_dispatch_claimant_demand_effect = yes }
+}
+
+# A rejected ultimatum's actual declaration payload. Army generation follows
+# a real declaration exactly as in the installed native claimant event.
+hd_dc_declare_claimant_faction_war_effect = {
+	save_scope_as = faction
+	faction_leader = { save_scope_as = faction_leader }
+	every_faction_member = {
+		limit = { this != scope:faction_leader }
+		trigger_event = faction_demand.2004
+	}
+	faction_start_war = { title = special_title }
+	faction_spawn_member_county_armies_effect = {
+		FACTION = scope:faction
+		ARMY_OWNER = scope:faction_leader
+		PEASANT_ARMY_NAME = claimant_faction_event_troops
+	}
+}
+
+hd_dc_guard_claimant_faction_war_effect = {
+	if = {
+		limit = { hd_dc_claimant_mobilization_paused_trigger = yes }
+		set_variable = { name = hd_dc_paused_war value = yes }
+		set_variable = { name = hd_dc_paused_war_leader value = faction_leader }
+		remove_variable = hd_dc_paused_demand
+	}
+	else = { hd_dc_declare_claimant_faction_war_effect = yes }
+}
+
+# Faction update callback. A queued war is not converted into a new ultimatum;
+# changed actors cancel the stored instruction instead of inventing consent.
+hd_dc_resume_claimant_mobilization_effect = {
+	if = {
+		limit = { exists = var:hd_dc_pause_record NOT = { has_variable = hd_dc_mobilization_wait } }
+		if = {
+			limit = {
+				var:hd_dc_pause_record.var:hd_dc_support_claimant = special_character
+				var:hd_dc_pause_record.var:hd_dc_support_ruler = faction_target
+				exists = faction_leader exists = faction_target exists = special_character exists = special_title
+				NOT = { exists = faction_war }
+				special_character = { is_alive = yes is_imprisoned = no }
+			}
+			if = {
+				limit = {
+					exists = var:hd_dc_paused_arrest_actor exists = var:hd_dc_paused_arrest_recipient
+					var:hd_dc_paused_war_leader = faction_leader
+					var:hd_dc_paused_arrest_actor = faction_target
+					var:hd_dc_paused_arrest_recipient = { is_alive = yes }
+				}
+				save_scope_as = retaliating_faction
+				var:hd_dc_paused_arrest_actor = { save_scope_as = actor }
+				var:hd_dc_paused_arrest_recipient = { save_scope_as = recipient }
+				# The native entry rechecks current military power and retains its
+				# own arrest notification. It does not spawn ultimatum troops.
+				imprisonment_retribution_start_faction_war_if_valid = yes
+			}
+			else_if = {
+				limit = { has_variable = hd_dc_paused_war var:hd_dc_paused_war_leader = faction_leader }
+				remove_variable = hd_dc_paused_war
+				remove_variable = hd_dc_paused_war_leader
+				remove_variable = hd_dc_pause_record
+				hd_dc_declare_claimant_faction_war_effect = yes
+			}
+			else_if = {
+				limit = { has_variable = hd_dc_paused_demand NOT = { has_variable = hd_dc_paused_war } }
+				remove_variable = hd_dc_paused_demand
+				hd_dc_dispatch_claimant_demand_effect = yes
+			}
+		}
+		remove_variable = hd_dc_paused_demand
+		remove_variable = hd_dc_paused_war
+		remove_variable = hd_dc_paused_war_leader
+		remove_variable = hd_dc_paused_arrest_actor
+		remove_variable = hd_dc_paused_arrest_recipient
+		remove_variable = hd_dc_pause_record
+	}
+}
+
+# Invitation record scope. Finishing the personal pause does not settle war.
+hd_dc_maintain_royal_pause_effect = {
+	save_scope_as = hd_dc_support
+	if = {
+		limit = { has_variable = hd_dc_pause_started NOT = { has_variable = hd_dc_pause_result } }
+		if = {
+			limit = {
+				exists = var:hd_dc_support_faction
+				var:hd_dc_support_faction = {
+					has_variable = hd_dc_mobilization_wait
+					special_character = scope:hd_dc_support.var:hd_dc_support_claimant
+					faction_target = scope:hd_dc_support.var:hd_dc_support_ruler
+					NOT = { exists = faction_war }
+				}
+			}
+		}
+		else = {
+			set_variable = { name = hd_dc_pause_result value = flag:invalidated }
+			if = {
+				limit = {
+					exists = var:hd_dc_support_faction
+					var:hd_dc_support_faction = {
+						special_character = scope:hd_dc_support.var:hd_dc_support_claimant
+						faction_target = scope:hd_dc_support.var:hd_dc_support_ruler
+						NOT = { has_variable = hd_dc_mobilization_wait }
+					}
+				}
+				set_variable = { name = hd_dc_pause_result value = flag:fulfilled }
+			}
+			else_if = {
+				limit = { exists = var:hd_dc_support_faction var:hd_dc_support_faction ?= { has_variable = hd_dc_mobilization_wait exists = faction_war } }
+				set_variable = { name = hd_dc_pause_result value = flag:breached }
+				var:hd_dc_instance_ref = { set_variable = { name = hd_dc_major_uncorrected_breach value = yes } }
+			}
+			set_variable = { name = hd_dc_pause_ended value = current_date }
+			var:hd_dc_instance_ref = {
+				if = { limit = { var:hd_dc_open_obligations > 0 } change_variable = { name = hd_dc_open_obligations add = -1 } }
+				else = { set_variable = { name = hd_dc_obligation_count_error value = yes } }
+				hd_dc_register_governance_obligation_change_effect = yes
+			}
+		}
+	}
+}
+
+# Original claimant acceptance payload, guarded again when an old window is
+# answered. The on_action still precedes every native acceptance consequence.
+hd_dc_accept_claimant_demand_effect = {
+	if = {
+		limit = { NOT = { scope:faction = { hd_dc_claimant_mobilization_paused_trigger = yes } } }
+		trigger_event = { on_action = on_faction_demand_accepted }
+		add_dread = medium_dread_loss
+		faction_accept_demand_legitimacy_effect = yes
+		scope:faction = {
+			every_faction_member = { trigger_event = faction_demand.2002 }
+			special_title = { add_to_list = target_titles }
+		}
+		if = {
+			limit = { has_realm_law = acclamation_succession_law }
+			every_held_title = {
+				title_tier >= county
+				limit = { NOR = { has_title_law = noble_family_succession_law } }
+				add_to_list = target_titles
+			}
+		}
+		on_claimant_faction_war_win_common = {
+			TARGET_TITLES = target_titles
+			ATTACKER = scope:faction.faction_leader
+			DEFENDER = root
+			CLAIMANT = scope:faction.special_character
+		}
+	}
+	else = { scope:faction = { set_variable = { name = hd_dc_paused_demand value = yes } } }
+}

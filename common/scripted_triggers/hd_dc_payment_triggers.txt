@@ -1,0 +1,56 @@
+# C14-C16 / API-11. One persistent record per installment. Account kind:
+# 1 private gold, 2 treasury bound to the recorded political title.
+# Required scope: hd_dc_payment. Signatures are the actual answering characters,
+# never an AI weight, opinion modifier, or the event's unrelated ROOT.
+hd_dc_payment_authorized_trigger = {
+	exists = scope:hd_dc_payment
+	scope:hd_dc_payment = {
+		exists = var:hd_dc_payer
+		exists = var:hd_dc_payee
+		var:hd_dc_payer != var:hd_dc_payee
+		var:hd_dc_payer = { is_alive = yes }
+		var:hd_dc_payee = { is_alive = yes }
+		exists = var:hd_dc_payer_signature
+		exists = var:hd_dc_payee_signature
+		var:hd_dc_payer_signature = var:hd_dc_payer
+		var:hd_dc_payee_signature = var:hd_dc_payee
+		has_variable = hd_dc_amount_due
+		var:hd_dc_amount_due > 0
+		NOT = { has_variable = hd_dc_payment_commit }
+		OR = {
+			AND = {
+				var:hd_dc_debit_kind = 1
+				var:hd_dc_payer = { gold >= scope:hd_dc_payment.var:hd_dc_amount_due }
+			}
+			AND = {
+				var:hd_dc_debit_kind = 2
+				exists = var:hd_dc_debit_title
+				exists = var:hd_dc_debit_title.holder
+				var:hd_dc_debit_title.holder = var:hd_dc_payer
+				var:hd_dc_payer = {
+					has_treasury = yes
+					treasury >= scope:hd_dc_payment.var:hd_dc_amount_due
+				}
+			}
+		}
+		OR = {
+			var:hd_dc_credit_kind = 1
+			AND = {
+				var:hd_dc_credit_kind = 2
+				exists = var:hd_dc_credit_title
+				exists = var:hd_dc_credit_title.holder
+				var:hd_dc_credit_title.holder = var:hd_dc_payee
+				var:hd_dc_payee = { has_treasury = yes }
+			}
+		}
+	}
+}
+
+hd_dc_payment_completed_trigger = {
+	exists = scope:hd_dc_payment
+	scope:hd_dc_payment = {
+		var:hd_dc_payment_commit = 2
+		var:hd_dc_actual_debit = var:hd_dc_amount_due
+		var:hd_dc_actual_credit = var:hd_dc_amount_due
+	}
+}

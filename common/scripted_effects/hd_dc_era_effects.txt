@@ -1,0 +1,246 @@
+# All observer effects run on situation:dynastic_cycle unless noted otherwise.
+# Political actors and wars change sovereignty. This observer only reads it.
+hd_dc_initialize_scope_effect = {
+	if = {
+		limit = {
+			exists = title:h_china
+			NOT = { has_variable = hd_dc_schema_version }
+		}
+		save_temporary_scope_as = hd_dc_state
+		set_variable = { name = hd_dc_total_counties value = 0 }
+		clear_variable_list = hd_dc_counties
+		title:h_china = {
+			every_de_jure_county = {
+				set_variable = { name = hd_dc_core_county_v1 value = yes }
+				save_temporary_scope_as = hd_dc_county
+				scope:hd_dc_state = {
+					add_to_variable_list = {
+						name = hd_dc_counties
+						target = scope:hd_dc_county
+					}
+					change_variable = { name = hd_dc_total_counties add = 1 }
+				}
+			}
+		}
+		set_variable = { name = hd_dc_schema_version value = 1 }
+		set_variable = { name = hd_dc_chaos_epoch value = 0 }
+		set_variable = { name = hd_dc_state_epoch value = 0 }
+		set_variable = { name = hd_dc_snapshot_epoch value = 0 }
+	}
+}
+
+# Separate expiring timers count complete calendar months from first evidence.
+# The persistent since marker distinguishes an elapsed timer from no timer.
+hd_dc_start_era_timer_effect = {
+	if = {
+		limit = { NOT = { has_variable = hd_dc_$REASON$_since } }
+		set_variable = { name = hd_dc_$REASON$_since value = current_date }
+		set_variable = {
+			name = hd_dc_$REASON$_wait
+			value = yes
+			months = $MONTHS$
+		}
+	}
+}
+
+hd_dc_clear_era_timers_effect = {
+	remove_variable = hd_dc_absent_since
+	remove_variable = hd_dc_absent_wait
+	remove_variable = hd_dc_low_control_since
+	remove_variable = hd_dc_low_control_wait
+	remove_variable = hd_dc_restore_since
+	remove_variable = hd_dc_restore_wait
+}
+
+hd_dc_refresh_snapshot_effect = {
+	hd_dc_initialize_scope_effect = yes
+	save_temporary_scope_as = hd_dc_state
+	change_variable = { name = hd_dc_snapshot_epoch add = 1 }
+	set_variable = { name = hd_dc_snapshot_status value = 0 }
+	set_variable = { name = hd_dc_controlled_counties value = 0 }
+	set_variable = { name = hd_dc_observed_counties value = 0 }
+	every_in_list = {
+		variable = hd_dc_counties
+		scope:hd_dc_state = {
+			change_variable = { name = hd_dc_observed_counties add = 1 }
+		}
+		if = {
+			limit = {
+				exists = title:h_china.holder
+				exists = holder
+				holder ?= {
+					OR = {
+						this = title:h_china.holder
+						any_liege_or_above = { this = title:h_china.holder }
+					}
+				}
+			}
+			scope:hd_dc_state = {
+				change_variable = { name = hd_dc_controlled_counties add = 1 }
+			}
+		}
+	}
+	# Reuse the count from the real traversal; profiling never scans again.
+	if = {
+		limit = { NOT = { var:hd_dc_snapshot_scan_year = current_year } }
+		set_variable = { name = hd_dc_snapshot_scan_year value = current_year }
+		set_variable = { name = hd_dc_snapshot_scans_this_year value = 0 }
+		set_variable = { name = hd_dc_snapshot_counties_this_year value = 0 }
+	}
+	change_variable = { name = hd_dc_snapshot_scans_this_year add = 1 }
+	change_variable = { name = hd_dc_snapshot_counties_this_year add = var:hd_dc_observed_counties }
+	set_variable = { name = hd_dc_control_percent value = hd_dc_control_percent_value }
+	set_variable = { name = hd_dc_snapshot_date value = current_date }
+	if = {
+		limit = { hd_dc_snapshot_valid_trigger = no }
+		# Unknown intervals never count as sustained political evidence.
+		if = {
+			limit = { NOT = { has_variable = hd_dc_snapshot_invalid } }
+			debug_log = "HD DC: invalid political snapshot; era unchanged and unproven timers discarded."
+		}
+		set_variable = { name = hd_dc_snapshot_invalid value = yes }
+		set_variable = { name = hd_dc_pressure_interval_unproven value = yes }
+		hd_dc_clear_era_timers_effect = yes
+	}
+	else = {
+		remove_variable = hd_dc_snapshot_invalid
+		set_variable = { name = hd_dc_snapshot_status value = 2 }
+		if = {
+			limit = { hd_dc_has_hegemon_trigger = no }
+			set_variable = { name = hd_dc_snapshot_status value = 1 }
+			remove_variable = hd_dc_low_control_since
+			remove_variable = hd_dc_low_control_wait
+			remove_variable = hd_dc_restore_since
+			remove_variable = hd_dc_restore_wait
+			hd_dc_start_era_timer_effect = {
+				REASON = absent
+				MONTHS = hd_dc_absent_wait_months
+			}
+		}
+		else_if = {
+			limit = { hd_dc_low_control_trigger = yes }
+			remove_variable = hd_dc_absent_since
+			remove_variable = hd_dc_absent_wait
+			remove_variable = hd_dc_restore_since
+			remove_variable = hd_dc_restore_wait
+			hd_dc_start_era_timer_effect = {
+				REASON = low_control
+				MONTHS = hd_dc_low_control_wait_months
+			}
+		}
+		else = {
+			remove_variable = hd_dc_absent_since
+			remove_variable = hd_dc_absent_wait
+			remove_variable = hd_dc_low_control_since
+			remove_variable = hd_dc_low_control_wait
+			if = {
+				limit = {
+					situation_current_phase = situation_dynastic_cycle_phase_chaos
+					hd_dc_restored_control_trigger = yes
+					hd_dc_mandate_war_pending_trigger = no
+				}
+				hd_dc_start_era_timer_effect = {
+					REASON = restore
+					MONTHS = hd_dc_restore_wait_months
+				}
+			}
+			else = {
+				remove_variable = hd_dc_restore_since
+				remove_variable = hd_dc_restore_wait
+			}
+		}
+	}
+}
+
+# The sole scripted phase writer. Scope: situation sub-region.
+hd_dc_write_phase_effect = {
+	if = {
+		limit = { situation:dynastic_cycle = { NOT = { situation_current_phase = $PHASE$ } } }
+		change_phase = { phase = $PHASE$ }
+		situation:dynastic_cycle = {
+			change_variable = { name = hd_dc_state_epoch add = 1 }
+			set_variable = { name = hd_dc_last_transition_snapshot value = var:hd_dc_snapshot_epoch }
+			set_variable = { name = hd_dc_last_transition_date value = current_date }
+		}
+	}
+}
+
+# Existing non-chaos routes retain their original target. They cannot end chaos.
+# Scope: situation sub-region. Requests from political actions are observed later.
+hd_dc_route_nonchaos_phase_effect = {
+	if = {
+		limit = {
+			situation:dynastic_cycle = {
+				NOT = { situation_current_phase = situation_dynastic_cycle_phase_chaos }
+			}
+		}
+		hd_dc_write_phase_effect = { PHASE = $PHASE$ }
+	}
+	situation:dynastic_cycle = { hd_dc_request_observation_effect = yes }
+}
+
+hd_dc_evaluate_era_effect = {
+	if = {
+		limit = { hd_dc_can_enter_chaos_trigger = yes }
+		if = {
+			limit = { hd_dc_has_hegemon_trigger = no }
+			set_variable = { name = hd_dc_last_era_reason value = 1 }
+		}
+		else = { set_variable = { name = hd_dc_last_era_reason value = 2 } }
+		situation_top_sub_region = {
+			hd_dc_write_phase_effect = { PHASE = situation_dynastic_cycle_phase_chaos }
+		}
+		hd_dc_clear_era_timers_effect = yes
+	}
+	else_if = {
+		limit = { hd_dc_can_leave_chaos_trigger = yes }
+		set_variable = { name = hd_dc_last_era_reason value = 3 }
+		if = {
+			limit = { title:h_china.holder = { hegemon_favored_stability_phase_value >= 0 } }
+			situation_top_sub_region = {
+				hd_dc_write_phase_effect = { PHASE = situation_dynastic_cycle_phase_stability_advancement }
+			}
+		}
+		else = {
+			situation_top_sub_region = {
+				hd_dc_write_phase_effect = { PHASE = situation_dynastic_cycle_phase_stability_expansion }
+			}
+		}
+		hd_dc_clear_era_timers_effect = yes
+	}
+}
+
+# Merge repeated same-day political callbacks; sample after title transactions.
+hd_dc_request_observation_effect = {
+	if = {
+		limit = { NOT = { has_variable = hd_dc_observation_queued } }
+		set_variable = { name = hd_dc_observation_queued value = yes }
+		trigger_event = { on_action = hd_dc_observe_political_state days = 1 }
+	}
+}
+
+# Scope: CB lifecycle callback, while scope:war is still alive. A brief war
+# also breaks the recovery interval even if it ends between monthly samples.
+hd_dc_observe_mandate_war_effect = {
+	if = {
+		limit = {
+			exists = situation:dynastic_cycle
+			exists = scope:war
+			scope:war = { hd_dc_is_mandate_war_trigger = yes }
+		}
+		situation:dynastic_cycle = {
+			remove_variable = hd_dc_restore_since
+			remove_variable = hd_dc_restore_wait
+			hd_dc_request_observation_effect = yes
+		}
+	}
+}
+
+# Notification only, including when h_china has no holder.
+hd_dc_notify_chaos_effect = {
+	change_variable = { name = hd_dc_chaos_epoch add = 1 }
+	every_player = {
+		limit = { tgp_does_this_player_care_about_the_dynastic_cycle = yes }
+		trigger_event = hd_dc_era.0001
+	}
+}

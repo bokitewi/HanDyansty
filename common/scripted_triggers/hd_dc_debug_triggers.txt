@@ -1,0 +1,152 @@
+# This temporary flag can only bypass an annual draw, never a real signature,
+# political qualification, cooldown or an occupied instance slot.
+hd_dc_debug_manual_entry_trigger = {
+	scope:hd_dc_debug_manual = flag:$TYPE$
+	debug_only = yes
+	exists = scope:hd_dc_debug_requester
+}
+
+hd_dc_debug_family_scene_trigger = {
+	any_character_situation = { this = situation:dynastic_cycle }
+	basic_is_valid_for_yearly_events_trigger = yes
+	NOT = { has_trait = trusting }
+	any_spouse = { adultery_0001_valid_partner_trigger = yes }
+	OR = {
+		has_trait = paranoid
+		any_consort = { adultery_0001_valid_partner_trigger = yes OR = { has_trait = lustful has_trait = seducer adultery_0001_unfaithful_trigger = yes } }
+		any_relation = { type = soulmate adultery_0001_valid_partner_trigger = yes OR = { has_trait = lustful has_trait = seducer adultery_0001_unfaithful_trigger = yes } }
+	}
+	accepts_adultery_without_penalty_trigger = no
+}
+
+hd_dc_debug_rival_scene_trigger = {
+	any_character_situation = { this = situation:dynastic_cycle }
+	NOT = { has_character_flag = had_event_yearly_1010 }
+	any_relation = { type = rival yearly_1010_abductor_trigger = yes }
+	any_courtier = { yearly_1010_abductee_trigger = yes }
+	OR = {
+		cp:councillor_marshal ?= { is_available_ai = yes NOT = { has_trait = wounded_3 } }
+		employs_court_position = huntperson_camp_officer
+	}
+}
+
+hd_dc_debug_crisis_slot_trigger = {
+	hd_dc_snapshot_valid_trigger = yes
+	NOT = { has_variable = hd_dc_acute_instance_id }
+	NOT = { has_variable = hd_dc_pending_instance }
+	NOT = { has_variable = hd_dc_pending_party_case }
+}
+
+hd_dc_debug_roy_entry_trigger = {
+	debug_only = yes is_ai = no this = title:h_china.holder
+	situation:dynastic_cycle = {
+		hd_dc_debug_crisis_slot_trigger = yes
+		NOT = { has_variable = hd_dc_roy_cooldown }
+		any_situation_participant = { count >= 2 hd_dc_royal_candidate_trigger = yes }
+	}
+}
+
+hd_dc_debug_par_entry_trigger = {
+	debug_only = yes is_ai = no this = title:h_china.holder
+	situation:dynastic_cycle = {
+		hd_dc_debug_crisis_slot_trigger = yes
+		NOT = { has_variable = hd_dc_par_cooldown }
+		hd_dc_par_snapshot_valid_trigger = yes
+		var:hd_dc_par_ordered_hostile_pair_count > 0
+		any_in_list = { variable = hd_dc_counties hd_dc_party_case_county_trigger = yes }
+	}
+}
+
+hd_dc_debug_par_scene_trigger = {
+	debug_only = yes is_ai = no this = title:h_china.holder
+	NOT = { has_variable = hd_dc_debug_par_prepared }
+	situation:dynastic_cycle = {
+		hd_dc_debug_crisis_slot_trigger = yes
+		NOT = { has_variable = hd_dc_par_cooldown }
+		any_participant_group = { count >= 2 hd_dc_par_group_qualified_trigger = yes }
+		any_in_list = { variable = hd_dc_counties count >= 2 hd_dc_party_case_county_trigger = yes }
+	}
+}
+
+# Choose a real claimant who can make this player a real support offer.
+hd_dc_debug_epidemic_county_trigger = {
+	title_tier = county
+	exists = holder
+	holder = { is_alive = yes is_imprisoned = no is_vassal_or_below_of = title:h_china.holder }
+	NOT = { has_province_with_epidemic = { intensity = any } }
+	NOT = { has_variable = hd_dc_policy_trial }
+	NOT = { has_county_modifier = ep3_governance_tax_relief }
+	NOT = { has_county_modifier = hd_dc_par_tax_relief_modifier }
+	NOT = { has_game_rule = epidemic_frequency_disabled }
+}
+
+# Province scope. Read the native zero/nonzero contract, not a second RNG pool.
+hd_dc_debug_epidemic_intensity_trigger = {
+	exists = scope:epidemic_type
+	save_temporary_scope_value_as = {
+		name = hd_dc_debug_epidemic_base
+		value = {
+			value = outbreak_chance_$INTENSITY$_default_value
+			if = {
+				limit = { scope:epidemic_type = epidemic_type:consumption has_variable = consumption_endemic_variable }
+				if = { limit = { scope:hd_dc_debug_epidemic_intensity = flag:hd_dc_debug.epidemic.minor } add = outbreak_increase_add_high }
+				else = { add = outbreak_increase_add_low }
+			}
+			if = {
+				limit = { scope:epidemic_type = epidemic_type:measles has_variable = measles_endemic_variable }
+				if = { limit = { scope:hd_dc_debug_epidemic_intensity = flag:hd_dc_debug.epidemic.minor } add = outbreak_increase_add_high }
+				else_if = { limit = { scope:hd_dc_debug_epidemic_intensity = flag:hd_dc_debug.epidemic.major } add = outbreak_increase_add_medium }
+				else = { add = outbreak_increase_add_low }
+			}
+			if = { limit = { scope:epidemic_type = epidemic_type:dysentery } value = outbreak_chance_dysentery_default_value }
+			if = { limit = { scope:epidemic_type = epidemic_type:bubonic_plague scope:hd_dc_debug_epidemic_intensity = flag:hd_dc_debug.epidemic.apocalyptic } value = outbreak_chance_black_plague_default_value multiply = outbreak_chance_black_plague_mult_value }
+			else = { multiply = outbreak_chance_$INTENSITY$_mult_value }
+			multiply = recent_epidemics_outbreak_mult_value
+		}
+	}
+	scope:hd_dc_debug_epidemic_base > 0
+	trigger_if = {
+		limit = { OR = { scope:epidemic_type = epidemic_type:measles scope:epidemic_type = epidemic_type:dysentery scope:epidemic_type = epidemic_type:ergotism } }
+		has_dlc_feature = legends_of_the_dead
+	}
+	trigger_if = {
+		limit = { scope:epidemic_type = epidemic_type:ergotism }
+		NOT = { is_target_in_variable_list = { name = epidemic_cooldown target = epidemic_type:ergotism } }
+	}
+	trigger_if = {
+		limit = { scope:epidemic_type = epidemic_type:bubonic_plague scope:hd_dc_debug_epidemic_intensity = flag:hd_dc_debug.epidemic.apocalyptic }
+		NOT = { has_global_variable = black_death }
+		NOT = { has_game_rule = bd_frequency_never }
+		NOT = { has_game_rule = bd_frequency_once has_global_variable = black_death_happened }
+		# The loaded custom-map historical geographic branch is explicitly false.
+		NOT = { has_game_rule = bd_occurrence_historical }
+	}
+}
+
+hd_dc_debug_selected_epidemic_county_trigger = {
+	hd_dc_debug_epidemic_county_trigger = yes
+	title_province = {
+		OR = {
+			AND = { scope:hd_dc_debug_epidemic_intensity = flag:hd_dc_debug.epidemic.minor hd_dc_debug_epidemic_intensity_trigger = { INTENSITY = minor } }
+			AND = { scope:hd_dc_debug_epidemic_intensity = flag:hd_dc_debug.epidemic.major hd_dc_debug_epidemic_intensity_trigger = { INTENSITY = major } }
+			AND = { scope:hd_dc_debug_epidemic_intensity = flag:hd_dc_debug.epidemic.apocalyptic hd_dc_debug_epidemic_intensity_trigger = { INTENSITY = apocalyptic } }
+		}
+	}
+}
+
+hd_dc_debug_roy_potential_trigger = {
+	is_alive = yes is_adult = yes is_landed = yes is_imprisoned = no
+	exists = dynasty dynasty = title:h_china.holder.dynasty this != title:h_china.holder
+	highest_held_title_tier > tier_barony NOT = { has_trait = incapable }
+	NOT = { is_at_war_with = title:h_china.holder }
+	is_a_faction_member = no
+	can_join_or_create_faction_against = { who = title:h_china.holder faction = claimant_faction check_in_a_faction = yes }
+}
+
+hd_dc_debug_support_sender_trigger = {
+	this = situation:dynastic_cycle.var:hd_dc_latest_roy_instance
+	any_in_list = {
+		variable = hd_dc_actor_stories
+		var:hd_dc_actor = { save_temporary_scope_as = actor hd_dc_royal_offer_pair_trigger = yes }
+	}
+}

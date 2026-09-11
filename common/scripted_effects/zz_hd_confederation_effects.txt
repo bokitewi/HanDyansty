@@ -217,7 +217,7 @@ hd_anti_regent_add_real_member_effect = {
 			has_variable = hd_anti_regent_confederation
 			exists = confederation
 			confederation = {
-				this = root.var:hd_anti_regent_confederation
+				this = prev.var:hd_anti_regent_confederation
 				confederation_type = confederation_type:hd_anti_regent_league_type
 			}
 		}
@@ -325,51 +325,168 @@ hd_anti_regent_add_real_member_effect = {
 	}
 }
 
-# At the three-month deadline, force the first valid historical co-founder.
-hd_anti_regent_prepare_first_war_effect = {
+# Called in priority order; keep the current living leader at the deadline.
+hd_anti_regent_consider_core_effect = {
 	if = {
-		limit = { NOT = { hd_anti_regent_real_confederation_ready_trigger = yes } }
+		limit = { hd_anti_regent_core_candidate_trigger = yes }
 		if = {
-			limit = {
-				character:cao_cao ?= { hd_anti_regent_join_candidate_trigger = yes }
-			}
-			character:cao_cao = { save_scope_as = hd_anti_regent_joiner }
-			hd_anti_regent_add_real_member_effect = yes
+			limit = { NOT = { exists = scope:hd_anti_regent_core_leader } }
+			save_scope_as = hd_anti_regent_core_leader
 		}
-		if = {
+		else_if = {
 			limit = {
-				NOT = { hd_anti_regent_real_confederation_ready_trigger = yes }
-				character:qiao_mao ?= { hd_anti_regent_join_candidate_trigger = yes }
+				this != scope:hd_anti_regent_core_leader
+				NOT = { exists = scope:hd_anti_regent_core_member }
 			}
-			character:qiao_mao = { save_scope_as = hd_anti_regent_joiner }
-			hd_anti_regent_add_real_member_effect = yes
-		}
-		if = {
-			limit = {
-				NOT = { hd_anti_regent_real_confederation_ready_trigger = yes }
-				character:han_fu ?= { hd_anti_regent_join_candidate_trigger = yes }
-			}
-			character:han_fu = { save_scope_as = hd_anti_regent_joiner }
-			hd_anti_regent_add_real_member_effect = yes
-		}
-		if = {
-			limit = {
-				NOT = { hd_anti_regent_real_confederation_ready_trigger = yes }
-				character:kong_rong ?= { hd_anti_regent_join_candidate_trigger = yes }
-			}
-			character:kong_rong = { save_scope_as = hd_anti_regent_joiner }
-			hd_anti_regent_add_real_member_effect = yes
+			save_scope_as = hd_anti_regent_core_member
 		}
 	}
+}
 
+# Current scope: Dong Zhuo. Both timed checkpoints use this selection.
+hd_anti_regent_select_core_effect = {
+	clear_saved_scope = hd_anti_regent_core_leader
+	clear_saved_scope = hd_anti_regent_core_member
 	if = {
-		limit = { hd_anti_regent_real_confederation_ready_trigger = yes }
-		trigger_event = { id = hd_anti_regent.0004 days = 1 }
+		limit = { exists = global_var:hd_anti_regent_league_leader }
+		global_var:hd_anti_regent_league_leader = { hd_anti_regent_consider_core_effect = yes }
 	}
-	else = { hd_anti_regent_failure_effect = yes }
+	character:yuan_shao = { hd_anti_regent_consider_core_effect = yes }
+	character:cao_cao = { hd_anti_regent_consider_core_effect = yes }
+	character:yuan_shu = { hd_anti_regent_consider_core_effect = yes }
+	character:sun_jian = { hd_anti_regent_consider_core_effect = yes }
+	character:han_fu = { hd_anti_regent_consider_core_effect = yes }
+	character:zhang_miao = { hd_anti_regent_consider_core_effect = yes }
+	character:liu_dai = { hd_anti_regent_consider_core_effect = yes }
+	character:kong_zhou = { hd_anti_regent_consider_core_effect = yes }
+	character:wang_kuang = { hd_anti_regent_consider_core_effect = yes }
+	character:qiao_mao = { hd_anti_regent_consider_core_effect = yes }
+	character:bao_xin = { hd_anti_regent_consider_core_effect = yes }
+	character:yuan_yi = { hd_anti_regent_consider_core_effect = yes }
+	if = {
+		limit = { NOT = { exists = scope:hd_anti_regent_core_leader } }
+		random_ruler = {
+			limit = {
+				hd_anti_regent_core_candidate_trigger = yes
+				is_landed = yes
+				highest_held_title_tier >= tier_county
+				highest_held_title_tier < tier_empire
+				culture = { has_cultural_pillar = heritage_chinese }
+				NOT = { is_vassal_or_below_of = character:dong_zhuo_2 }
+			}
+			save_scope_as = hd_anti_regent_core_leader
+		}
+	}
+	if = {
+		limit = {
+			exists = scope:hd_anti_regent_core_leader
+			NOT = { exists = scope:hd_anti_regent_core_member }
+		}
+		random_ruler = {
+			limit = {
+				hd_anti_regent_core_candidate_trigger = yes
+				this != scope:hd_anti_regent_core_leader
+				is_landed = yes
+				highest_held_title_tier >= tier_county
+				highest_held_title_tier < tier_empire
+				culture = { has_cultural_pillar = heritage_chinese }
+				NOT = { is_vassal_or_below_of = character:dong_zhuo_2 }
+			}
+			save_scope_as = hd_anti_regent_core_member
+		}
+	}
+}
+
+hd_anti_regent_prepare_core_character_effect = {
+	if = { limit = { is_imprisoned = yes } release_from_prison = yes }
+	if = { limit = { is_tributary = yes } end_tributary = yes }
+	remove_character_flag = hd_anti_regent_league_excluded
+	if = { limit = { this = character:yuan_shao } hd_yuan_settle_bohai_effect = yes }
+	else_if = { limit = { this = character:cao_cao } hd_cao_settle_chenliu_effect = yes }
+	else = { hd_force_independent_warlord_effect = yes }
+}
+
+# Current scope: Dong Zhuo. Preserve a surviving league across a leader's death.
+hd_anti_regent_prepare_first_war_effect = {
+	hd_anti_regent_select_core_effect = yes
+	clear_saved_scope = hd_anti_regent_core_confederation
+	if = {
+		limit = {
+			exists = scope:hd_anti_regent_core_leader
+			exists = scope:hd_anti_regent_core_member
+		}
+		scope:hd_anti_regent_core_leader = { hd_anti_regent_prepare_core_character_effect = yes }
+		scope:hd_anti_regent_core_member = { hd_anti_regent_prepare_core_character_effect = yes }
+		if = {
+			limit = { exists = var:hd_anti_regent_confederation }
+			var:hd_anti_regent_confederation = { save_scope_as = hd_anti_regent_core_confederation }
+		}
+		scope:hd_anti_regent_core_leader = {
+			if = {
+				limit = { NOT = { exists = scope:hd_anti_regent_core_confederation } }
+				if = {
+					limit = { confederation ?= { confederation_type = confederation_type:hd_anti_regent_league_type } }
+					confederation = { save_scope_as = hd_anti_regent_core_confederation }
+				}
+				else = {
+					if = {
+						limit = { exists = confederation }
+						confederation = { remove_confederation_member = scope:hd_anti_regent_core_leader }
+					}
+					create_confederation = {
+						name = HD_ANTI_REGENT_LEAGUE_NAME
+						type = confederation_type:hd_anti_regent_league_type
+					}
+					confederation = { save_scope_as = hd_anti_regent_core_confederation }
+				}
+			}
+		}
+		if = {
+			limit = { exists = scope:hd_anti_regent_core_confederation }
+			scope:hd_anti_regent_core_leader = { hd_anti_regent_attach_core_member_effect = yes }
+			scope:hd_anti_regent_core_member = { hd_anti_regent_attach_core_member_effect = yes }
+			set_variable = { name = hd_anti_regent_confederation value = scope:hd_anti_regent_core_confederation }
+			set_variable = { name = hd_anti_regent_leader value = scope:hd_anti_regent_core_leader }
+			set_global_variable = { name = hd_anti_regent_league_leader value = scope:hd_anti_regent_core_leader }
+			scope:hd_anti_regent_core_leader = {
+				set_variable = { name = hd_anti_regent_confederation value = scope:hd_anti_regent_core_confederation }
+				set_variable = { name = hd_anti_regent_target value = character:dong_zhuo_2 }
+				if = { limit = { has_variable_list = hd_anti_regent_members } clear_variable_list = hd_anti_regent_members }
+			}
+			scope:hd_anti_regent_core_confederation = {
+				every_confederation_member = {
+					save_scope_as = hd_anti_regent_roster_member
+					remove_character_flag = hd_anti_regent_league_leader
+					set_variable = { name = hd_league_leader value = scope:hd_anti_regent_core_leader }
+					if = {
+						limit = { has_character_flag = hd_anti_regent_invitation_pending }
+						set_variable = { name = hd_anti_regent_inviter value = scope:hd_anti_regent_core_leader }
+					}
+					scope:hd_anti_regent_core_leader = {
+						add_to_variable_list = { name = hd_anti_regent_members target = scope:hd_anti_regent_roster_member }
+					}
+				}
+			}
+			scope:hd_anti_regent_core_leader = { add_character_flag = hd_anti_regent_league_leader }
+		}
+	}
+	else = { debug_log = "HD_HISTORY FAIL INSUFFICIENT_LIVING_COALITION_CORE" }
+}
+
+hd_anti_regent_attach_core_member_effect = {
+	save_scope_as = hd_anti_regent_attaching_member
+	if = {
+		limit = { NOT = { is_member_of_confederation = scope:hd_anti_regent_core_confederation } }
+		if = {
+			limit = { exists = confederation }
+			confederation = { remove_confederation_member = scope:hd_anti_regent_attaching_member }
+		}
+		scope:hd_anti_regent_core_confederation = { add_confederation_member = scope:hd_anti_regent_attaching_member }
+	}
 }
 
 hd_anti_regent_call_members_to_all_offensive_wars_effect = {
+	save_scope_as = hd_anti_regent_calling_leader
 	if = {
 		limit = {
 			hd_anti_regent_real_confederation_ready_trigger = yes
@@ -377,14 +494,14 @@ hd_anti_regent_call_members_to_all_offensive_wars_effect = {
 		confederation = {
 			every_confederation_member = {
 				limit = {
-					this != root
+					this != scope:hd_anti_regent_calling_leader
 					is_alive = yes
 					is_imprisoned = no
 				}
 				save_temporary_scope_as = hd_anti_regent_member_to_call
-				root = {
+				scope:hd_anti_regent_calling_leader = {
 					every_character_war = {
-						limit = { primary_attacker = root }
+						limit = { primary_attacker = scope:hd_anti_regent_calling_leader }
 						save_temporary_scope_as = hd_anti_regent_war_to_join
 						if = {
 							limit = {
@@ -401,28 +518,40 @@ hd_anti_regent_call_members_to_all_offensive_wars_effect = {
 	}
 }
 
-# Cao Cao must receive the same historical invitation whether he reaches
-# Chenliu before or after Yuan Shao opens the roster.
-hd_anti_regent_add_cao_effect = {
+hd_anti_regent_dispatch_all_invitations_effect = {
+	save_scope_as = hd_inviting_leader
+	var:hd_anti_regent_target = { save_scope_as = hd_anti_regent_target_scope }
+	set_variable = { name = hd_anti_regent_pending_invites value = 0 }
+	add_character_flag = hd_anti_regent_invitations_dispatched
 	if = {
-		limit = { this = character:cao_cao is_alive = yes }
-		if = {
-			limit = {
-				exists = global_var:hd_anti_regent_league_leader
-				global_var:hd_anti_regent_league_leader = {
-					is_alive = yes
-					has_character_flag = hd_anti_regent_league_leader
-					has_variable = hd_anti_regent_target
-				}
-			}
-			global_var:hd_anti_regent_league_leader = {
-				save_scope_as = hd_inviting_leader
-				var:hd_anti_regent_target = { save_scope_as = hd_anti_regent_target_scope }
-			}
-			hd_anti_regent_dispatch_invitation_effect = yes
-		}
-		else = { add_character_flag = hd_anti_regent_cao_pending }
+		limit = { title:e_han.holder ?= { is_alive = yes } }
+		title:e_han.holder = { save_scope_as = hd_anti_regent_emperor }
 	}
+	else_if = {
+		limit = { title:h_china.holder ?= { is_alive = yes } }
+		title:h_china.holder = { save_scope_as = hd_anti_regent_emperor }
+	}
+	if = {
+		limit = { exists = scope:hd_anti_regent_emperor }
+		scope:hd_anti_regent_emperor = {
+			every_vassal_or_below = {
+				limit = {
+					is_alive = yes
+					is_landed = yes
+					highest_held_title_tier >= tier_county
+					highest_held_title_tier < tier_empire
+					culture = { has_cultural_pillar = heritage_chinese }
+					NOT = { this = scope:hd_inviting_leader }
+					NOT = { this = scope:hd_anti_regent_target_scope }
+					NOT = { this = scope:hd_anti_regent_emperor }
+				}
+				hd_anti_regent_dispatch_invitation_effect = yes
+			}
+		}
+	}
+	character:qiao_mao ?= { hd_anti_regent_dispatch_invitation_effect = yes }
+	character:han_fu ?= { hd_anti_regent_dispatch_invitation_effect = yes }
+	character:kong_rong ?= { hd_anti_regent_dispatch_invitation_effect = yes }
 }
 
 hd_anti_regent_dispatch_invitation_effect = {
@@ -434,13 +563,13 @@ hd_anti_regent_dispatch_invitation_effect = {
 			exists = scope:hd_anti_regent_target_scope
 			NOT = { this = scope:hd_inviting_leader }
 			NOT = { this = scope:hd_anti_regent_target_scope }
+			NOT = { this = character:cao_cao }
 			NOT = { has_character_flag = hd_anti_regent_invitation_pending }
 			NOT = { has_character_flag = hd_anti_regent_invitation_resolved }
 		}
 		scope:hd_inviting_leader = { change_variable = { name = hd_anti_regent_pending_invites add = 1 } }
 		set_variable = { name = hd_anti_regent_inviter value = scope:hd_inviting_leader }
 		add_character_flag = hd_anti_regent_invitation_pending
-		remove_character_flag = hd_anti_regent_cao_pending
 		trigger_event = { id = hd_anti_regent.0003 days = 2 }
 	}
 }

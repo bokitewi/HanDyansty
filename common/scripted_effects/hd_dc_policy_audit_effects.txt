@@ -1,0 +1,299 @@
+# Character (emperor), with a versioned PAR-01 window. A funds actual accounts;
+# D opens two separately accepted, paid and timed policies before joint review.
+hd_dc_par01_offer_audit_effect = {
+	save_scope_value_as = { name = hd_dc_audit_mode value = flag:$MODE$ }
+	if = {
+		limit = {
+			OR = {
+				AND = { scope:hd_dc_audit_mode = flag:audit hd_dc_par01_audit_available_trigger = yes }
+				AND = { scope:hd_dc_audit_mode = flag:comparison hd_dc_par01_comparison_available_trigger = yes }
+			}
+		}
+		save_scope_as = hd_dc_audit_author
+		scope:hd_dc_instance = {
+			set_variable = { name = hd_dc_par01_action value = flag:$OPTION$ }
+			set_variable = { name = hd_dc_audit_mode value = flag:$MODE$ }
+			set_variable = { name = hd_dc_audit_state value = flag:offered }
+			set_variable = { name = hd_dc_audit_author value = scope:hd_dc_audit_author }
+			set_variable = { name = hd_dc_audit_first_county value = var:hd_dc_par01_county }
+			set_variable = { name = hd_dc_audit_first_executor value = var:hd_dc_par01_executor }
+			set_variable = { name = hd_dc_audit_wait value = yes months = 3 }
+			set_variable = { name = hd_dc_audit_amount value = 30 }
+			if = {
+				limit = { var:hd_dc_audit_mode = flag:comparison }
+				set_variable = { name = hd_dc_audit_amount value = 50 }
+				situation:dynastic_cycle = {
+					random_in_list = {
+						variable = hd_dc_counties
+						limit = { hd_dc_par01_comparison_county_trigger = yes }
+						save_scope_as = hd_dc_comparison_county
+					}
+				}
+				set_variable = { name = hd_dc_audit_second_county value = scope:hd_dc_comparison_county }
+				set_variable = { name = hd_dc_audit_second_executor value = scope:hd_dc_comparison_county.holder }
+				hd_dc_par01_send_executor_effect = { SIDE = second }
+			}
+			hd_dc_par01_send_executor_effect = { SIDE = first }
+		}
+	}
+}
+
+hd_dc_par01_send_executor_effect = {
+	save_scope_as = hd_dc_instance
+	save_scope_value_as = { name = hd_dc_audit_side value = flag:$SIDE$ }
+	save_scope_value_as = { name = hd_dc_par01_version value = var:hd_dc_par01_version }
+	var:hd_dc_audit_$SIDE$_county = { save_scope_as = hd_dc_audit_county }
+	var:hd_dc_audit_$SIDE$_executor = { trigger_event = { id = hd_dc_par.1301 days = 1 } }
+}
+
+hd_dc_par01_answer_executor_effect = {
+	if = {
+		limit = { hd_dc_par01_executor_window_trigger = yes }
+		save_scope_as = hd_dc_audit_signatory
+		scope:hd_dc_instance = {
+			if = {
+				limit = { scope:hd_dc_audit_side = flag:first }
+				set_variable = { name = hd_dc_audit_first_answer value = flag:$ANSWER$ }
+				set_variable = { name = hd_dc_audit_first_signature value = scope:hd_dc_audit_signatory }
+			}
+			else = {
+				set_variable = { name = hd_dc_audit_second_answer value = flag:$ANSWER$ }
+				set_variable = { name = hd_dc_audit_second_signature value = scope:hd_dc_audit_signatory }
+			}
+			hd_dc_maintain_par01_audit_effect = yes
+		}
+	}
+}
+
+# Snapshot each actual local authority and cash transaction immediately before
+# execution. A failed second payment does not erase the first receipt or term.
+hd_dc_par01_fund_audit_side_effect = {
+	if = {
+		limit = {
+			var:hd_dc_audit_$SIDE$_signature = var:hd_dc_audit_$SIDE$_executor
+			var:hd_dc_audit_$SIDE$_answer = flag:accepted
+			var:hd_dc_audit_$SIDE$_county = { hd_dc_party_case_county_trigger = yes holder = scope:hd_dc_instance.var:hd_dc_audit_$SIDE$_executor }
+			var:hd_dc_audit_author = { gold >= scope:hd_dc_instance.var:hd_dc_audit_amount }
+			NOT = { has_variable = hd_dc_audit_$SIDE$_payment }
+		}
+		var:hd_dc_audit_author = { hd_dc_create_record_effect = { KIND = payment } }
+		scope:hd_dc_record = {
+			save_scope_as = hd_dc_payment
+			set_variable = { name = hd_dc_instance_ref value = scope:hd_dc_instance }
+			set_variable = { name = hd_dc_payer value = scope:hd_dc_instance.var:hd_dc_audit_author }
+			set_variable = { name = hd_dc_payee value = scope:hd_dc_instance.var:hd_dc_audit_$SIDE$_executor }
+			set_variable = { name = hd_dc_payer_signature value = var:hd_dc_payer }
+			set_variable = { name = hd_dc_payee_signature value = scope:hd_dc_instance.var:hd_dc_audit_$SIDE$_signature }
+			set_variable = { name = hd_dc_amount_due value = scope:hd_dc_instance.var:hd_dc_audit_amount }
+			set_variable = { name = hd_dc_debit_kind value = 1 }
+			set_variable = { name = hd_dc_credit_kind value = 1 }
+		}
+		set_variable = { name = hd_dc_audit_$SIDE$_payment value = scope:hd_dc_payment }
+		hd_dc_execute_payment_effect = yes
+		if = {
+			limit = { hd_dc_payment_completed_trigger = yes }
+			set_variable = { name = hd_dc_audit_$SIDE$_funded value = current_date }
+			hd_dc_stamp_calendar_effect = { PREFIX = hd_dc_audit_$SIDE$_date }
+			set_variable = { name = hd_dc_audit_$SIDE$_start_control value = var:hd_dc_audit_$SIDE$_county.county_control }
+			set_variable = { name = hd_dc_audit_$SIDE$_start_development value = var:hd_dc_audit_$SIDE$_county.development_level }
+			if = {
+				limit = { var:hd_dc_audit_mode = flag:comparison }
+				set_variable = { name = hd_dc_audit_$SIDE$_term value = yes months = 12 }
+				var:hd_dc_audit_$SIDE$_county = { set_variable = { name = hd_dc_policy_trial value = scope:hd_dc_instance } }
+				change_variable = { name = hd_dc_open_obligations add = 1 }
+				hd_dc_register_governance_obligation_change_effect = yes
+				var:hd_dc_audit_$SIDE$_executor = { add_opinion = { target = scope:hd_dc_instance.var:hd_dc_audit_author modifier = hd_dc_policy_trial_selected_opinion opinion = 15 } }
+			}
+		}
+	}
+}
+
+hd_dc_maintain_par01_audit_effect = {
+	save_scope_as = hd_dc_instance
+	if = {
+		limit = { has_variable = hd_dc_audit_state NOT = { has_variable = hd_dc_par01_result } }
+		if = {
+			limit = { NOT = { hd_dc_par01_audit_context_trigger = yes } }
+			hd_dc_finish_par01_audit_effect = { RESULT = invalidated }
+		}
+		else_if = {
+			limit = { var:hd_dc_audit_state = flag:offered }
+			if = {
+				limit = {
+					OR = {
+						var:hd_dc_audit_first_county = { NOT = { hd_dc_party_case_county_trigger = yes holder = scope:hd_dc_instance.var:hd_dc_audit_first_executor } }
+						AND = { var:hd_dc_audit_mode = flag:comparison var:hd_dc_audit_second_county = { NOT = { hd_dc_par01_comparison_county_trigger = yes holder = scope:hd_dc_instance.var:hd_dc_audit_second_executor } } }
+					}
+				}
+				hd_dc_finish_par01_audit_effect = { RESULT = invalidated }
+			}
+			else_if = {
+				limit = { OR = { var:hd_dc_audit_first_answer = flag:rejected var:hd_dc_audit_second_answer = flag:rejected } }
+				hd_dc_finish_par01_audit_effect = { RESULT = rejected }
+			}
+			else_if = {
+				limit = { NOT = { has_variable = hd_dc_audit_wait } }
+				hd_dc_finish_par01_audit_effect = { RESULT = expired }
+			}
+			else_if = {
+				limit = { var:hd_dc_audit_first_answer = flag:accepted OR = { var:hd_dc_audit_mode = flag:audit var:hd_dc_audit_second_answer = flag:accepted } }
+				set_variable = { name = hd_dc_audit_state value = flag:funding }
+				hd_dc_par01_fund_audit_side_effect = { SIDE = first }
+				if = {
+					limit = { var:hd_dc_audit_mode = flag:comparison }
+					hd_dc_par01_fund_audit_side_effect = { SIDE = second }
+					if = {
+						limit = { has_variable = hd_dc_audit_first_funded }
+						var:hd_dc_audit_first_county = { add_county_modifier = { modifier = hd_dc_par_tax_relief_modifier years = 1 } }
+					}
+					set_variable = { name = hd_dc_audit_state value = flag:trial }
+					remove_variable = hd_dc_audit_wait
+				}
+				else_if = {
+					limit = { has_variable = hd_dc_audit_first_funded }
+					hd_dc_par01_request_reports_effect = yes
+				}
+				else = { hd_dc_finish_par01_audit_effect = { RESULT = unpaid } }
+			}
+		}
+		else_if = {
+			limit = { var:hd_dc_audit_state = flag:trial }
+			hd_dc_par01_check_trial_side_effect = { SIDE = first }
+			hd_dc_par01_check_trial_side_effect = { SIDE = second }
+			if = {
+				limit = { has_variable = hd_dc_audit_first_result has_variable = hd_dc_audit_second_result }
+				if = {
+					limit = { var:hd_dc_audit_first_result = flag:fulfilled var:hd_dc_audit_second_result = flag:fulfilled }
+					hd_dc_par01_request_reports_effect = yes
+				}
+				else = { hd_dc_finish_par01_audit_effect = { RESULT = partial } }
+			}
+		}
+		else_if = {
+			limit = { var:hd_dc_audit_state = flag:reporting }
+			if = {
+				limit = { OR = { var:hd_dc_audit_first_report = flag:rejected var:hd_dc_audit_second_report = flag:rejected } }
+				hd_dc_finish_par01_audit_effect = { RESULT = audit_rejected }
+			}
+			else_if = {
+				limit = { NOT = { has_variable = hd_dc_audit_wait } }
+				hd_dc_finish_par01_audit_effect = { RESULT = audit_expired }
+			}
+			else_if = {
+				limit = { var:hd_dc_audit_first_report = flag:verified var:hd_dc_audit_second_report = flag:verified }
+				var:hd_dc_audit_first_payment = { save_scope_as = hd_dc_payment set_variable = { name = hd_dc_nonfinancial_terms_completed value = yes } }
+				if = {
+					limit = { var:hd_dc_audit_mode = flag:audit }
+					hd_dc_credit_payment_governance_effect = { Q = 10 }
+					change_variable = { name = hd_dc_x add = -5 }
+				}
+				else = { hd_dc_credit_payment_governance_effect = { Q = 20 } }
+				hd_dc_finish_par01_audit_effect = { RESULT = verified }
+			}
+		}
+	}
+}
+
+hd_dc_par01_check_trial_side_effect = {
+	save_scope_value_as = { name = hd_dc_audit_processing_side value = flag:$SIDE$ }
+	if = {
+		limit = { NOT = { has_variable = hd_dc_audit_$SIDE$_result } }
+		if = { limit = { NOT = { has_variable = hd_dc_audit_$SIDE$_funded } } set_variable = { name = hd_dc_audit_$SIDE$_result value = flag:unpaid } }
+		else_if = {
+			limit = {
+				OR = {
+					var:hd_dc_audit_$SIDE$_executor = { OR = { is_alive = no is_imprisoned = yes NOT = { is_vassal_or_below_of = title:h_china.holder } } }
+					var:hd_dc_audit_$SIDE$_county = { NOT = { holder = scope:hd_dc_instance.var:hd_dc_audit_$SIDE$_executor any_county_situation = { this = situation:dynastic_cycle } } }
+					var:hd_dc_audit_$SIDE$_county.var:hd_dc_policy_trial != scope:hd_dc_instance
+				}
+			}
+			set_variable = { name = hd_dc_audit_$SIDE$_result value = flag:invalidated }
+		}
+		else_if = {
+			limit = { NOT = { has_variable = hd_dc_audit_$SIDE$_term } }
+			set_variable = { name = hd_dc_audit_$SIDE$_result value = flag:fulfilled }
+			set_variable = { name = hd_dc_audit_$SIDE$_end_control value = var:hd_dc_audit_$SIDE$_county.county_control }
+			set_variable = { name = hd_dc_audit_$SIDE$_end_development value = var:hd_dc_audit_$SIDE$_county.development_level }
+		}
+		else_if = {
+			limit = {
+				OR = {
+					AND = { scope:hd_dc_audit_processing_side = flag:first var:hd_dc_audit_first_county = { NOT = { has_county_modifier = hd_dc_par_tax_relief_modifier } } }
+					AND = { scope:hd_dc_audit_processing_side = flag:second var:hd_dc_audit_second_county = { OR = { has_county_modifier = hd_dc_par_tax_relief_modifier has_county_modifier = ep3_governance_tax_relief } } }
+				}
+			}
+			set_variable = { name = hd_dc_audit_$SIDE$_result value = flag:interrupted }
+		}
+		if = { limit = { has_variable = hd_dc_audit_$SIDE$_result } hd_dc_par01_end_trial_side_effect = { SIDE = $SIDE$ } }
+	}
+}
+
+hd_dc_par01_end_trial_side_effect = {
+	save_scope_value_as = { name = hd_dc_audit_processing_side value = flag:$SIDE$ }
+	remove_variable = hd_dc_audit_$SIDE$_term
+	if = {
+		limit = { has_variable = hd_dc_audit_$SIDE$_funded NOT = { has_variable = hd_dc_audit_$SIDE$_ended } var:hd_dc_audit_mode = flag:comparison }
+		set_variable = { name = hd_dc_audit_$SIDE$_ended value = current_date }
+		if = { limit = { NOT = { has_variable = hd_dc_audit_$SIDE$_result } } set_variable = { name = hd_dc_audit_$SIDE$_result value = flag:invalidated } }
+		change_variable = { name = hd_dc_open_obligations add = -1 }
+		hd_dc_register_governance_obligation_change_effect = yes
+		var:hd_dc_audit_$SIDE$_county = {
+			if = {
+				limit = { var:hd_dc_policy_trial = scope:hd_dc_instance }
+				remove_variable = hd_dc_policy_trial
+				if = { limit = { scope:hd_dc_audit_processing_side = flag:first } remove_county_modifier = hd_dc_par_tax_relief_modifier }
+			}
+		}
+	}
+}
+
+hd_dc_par01_request_reports_effect = {
+	set_variable = { name = hd_dc_audit_state value = flag:reporting }
+	set_variable = { name = hd_dc_audit_wait value = yes months = 3 }
+	save_scope_value_as = { name = hd_dc_par01_version value = var:hd_dc_par01_version }
+	save_scope_value_as = { name = hd_dc_audit_side value = flag:first }
+	var:hd_dc_par_first_story.var:hd_dc_actor = { trigger_event = { id = hd_dc_par.1302 days = 1 } }
+	save_scope_value_as = { name = hd_dc_audit_side value = flag:second }
+	var:hd_dc_par_second_story.var:hd_dc_actor = { trigger_event = { id = hd_dc_par.1302 days = 1 } }
+}
+
+hd_dc_par01_submit_audit_effect = {
+	save_scope_value_as = { name = hd_dc_audit_response value = flag:$ANSWER$ }
+	if = {
+		limit = { hd_dc_par01_auditor_window_trigger = yes }
+		save_scope_as = hd_dc_audit_signatory
+		scope:hd_dc_instance = {
+			if = {
+				limit = { scope:hd_dc_audit_side = flag:first }
+				set_variable = { name = hd_dc_audit_first_report value = flag:$ANSWER$ }
+				set_variable = { name = hd_dc_audit_first_auditor value = scope:hd_dc_audit_signatory }
+			}
+			else = {
+				set_variable = { name = hd_dc_audit_second_report value = flag:$ANSWER$ }
+				set_variable = { name = hd_dc_audit_second_auditor value = scope:hd_dc_audit_signatory }
+			}
+			if = {
+				limit = { scope:hd_dc_audit_response = flag:verified var:hd_dc_audit_mode = flag:audit }
+				scope:hd_dc_audit_signatory = { add_opinion = { target = scope:hd_dc_instance.var:hd_dc_audit_author modifier = hd_dc_policy_retained_opinion opinion = 10 } }
+			}
+			else_if = {
+				limit = { scope:hd_dc_audit_response = flag:rejected var:hd_dc_audit_mode = flag:comparison }
+				scope:hd_dc_audit_signatory = { add_opinion = { target = scope:hd_dc_instance.var:hd_dc_audit_author modifier = hd_dc_policy_silenced_opinion opinion = -10 } }
+			}
+			hd_dc_maintain_par01_audit_effect = yes
+		}
+	}
+}
+
+hd_dc_finish_par01_audit_effect = {
+	if = {
+		limit = { NOT = { has_variable = hd_dc_par01_result } }
+		set_variable = { name = hd_dc_par01_result value = flag:$RESULT$ }
+		set_variable = { name = hd_dc_par01_completed value = current_date }
+		remove_variable = hd_dc_audit_wait
+		hd_dc_par01_end_trial_side_effect = { SIDE = first }
+		hd_dc_par01_end_trial_side_effect = { SIDE = second }
+		hd_dc_finish_authored_party_node_effect = yes
+		var:hd_dc_audit_author ?= { if = { limit = { is_alive = yes } trigger_event = { id = hd_dc_par.1303 days = 1 } } }
+	}
+}
