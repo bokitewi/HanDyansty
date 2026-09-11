@@ -199,18 +199,7 @@ hd_call_league_members_to_all_offensive_wars_effect = {
 # scope:hd_anti_regent_joiner: the character accepting or being forced into the league
 hd_anti_regent_add_real_member_effect = {
 	save_scope_as = hd_anti_regent_joining_leader
-	scope:hd_anti_regent_joiner = {
-		if = {
-			limit = { is_alive = yes is_landed = yes is_independent_ruler = no }
-			create_title_and_vassal_change = {
-				type = independency
-				save_scope_as = hd_anti_regent_joiner_independence
-				add_claim_on_loss = no
-			}
-			becomes_independent = { change = scope:hd_anti_regent_joiner_independence }
-			resolve_title_and_vassal_change = scope:hd_anti_regent_joiner_independence
-		}
-	}
+	clear_saved_scope = hd_anti_regent_real_confederation
 
 	if = {
 		limit = {
@@ -223,36 +212,6 @@ hd_anti_regent_add_real_member_effect = {
 		}
 		confederation = {
 			save_scope_as = hd_anti_regent_real_confederation
-		}
-	}
-	else_if = {
-		limit = {
-			hd_valid_anti_regent_member_trigger = { CHARACTER = this }
-			is_confederation_member = no
-			exists = scope:hd_anti_regent_joiner
-			scope:hd_anti_regent_joiner = {
-				hd_valid_anti_regent_member_trigger = { CHARACTER = this }
-				is_confederation_member = no
-			}
-		}
-		remove_variable = hd_anti_regent_confederation
-		create_confederation = {
-			name = HD_ANTI_REGENT_LEAGUE_NAME
-			type = confederation_type:hd_anti_regent_league_type
-		}
-		if = {
-			limit = {
-				exists = scope:new_confederation
-				scope:new_confederation = {
-					confederation_type = confederation_type:hd_anti_regent_league_type
-				}
-				is_member_of_confederation = scope:new_confederation
-			}
-			set_variable = {
-				name = hd_anti_regent_confederation
-				value = scope:new_confederation
-			}
-			scope:new_confederation = { save_scope_as = hd_anti_regent_real_confederation }
 		}
 	}
 
@@ -398,12 +357,18 @@ hd_anti_regent_select_core_effect = {
 }
 
 hd_anti_regent_prepare_core_character_effect = {
-	if = { limit = { is_imprisoned = yes } release_from_prison = yes }
-	if = { limit = { is_tributary = yes } end_tributary = yes }
-	remove_character_flag = hd_anti_regent_league_excluded
-	if = { limit = { this = character:yuan_shao } hd_yuan_settle_bohai_effect = yes }
-	else_if = { limit = { this = character:cao_cao } hd_cao_settle_chenliu_effect = yes }
-	else = { hd_force_independent_warlord_effect = yes }
+	if = {
+		limit = { NOT = { has_character_flag = hd_anti_regent_core_prepared } }
+		if = { limit = { is_imprisoned = yes } release_from_prison = yes }
+		if = { limit = { is_tributary = yes } end_tributary = yes }
+		remove_character_flag = hd_anti_regent_league_excluded
+		if = { limit = { this = character:yuan_shao } hd_yuan_settle_bohai_effect = yes }
+		else_if = { limit = { this = character:cao_cao } hd_cao_settle_chenliu_effect = yes }
+		else = { hd_force_independent_celestial_effect = yes }
+		add_character_flag = hd_anti_regent_core_prepared
+		# Include core actors in terminal cleanup even if they later leave or die.
+		add_to_global_variable_list = { name = hd_anti_regent_invitees target = this }
+	}
 }
 
 # Current scope: Dong Zhuo. Preserve a surviving league across a leader's death.
@@ -425,7 +390,7 @@ hd_anti_regent_prepare_first_war_effect = {
 			if = {
 				limit = { NOT = { exists = scope:hd_anti_regent_core_confederation } }
 				if = {
-					limit = { confederation ?= { confederation_type = confederation_type:hd_anti_regent_league_type } }
+					limit = { exists = confederation confederation = { confederation_type = confederation_type:hd_anti_regent_league_type } }
 					confederation = { save_scope_as = hd_anti_regent_core_confederation }
 				}
 				else = {
@@ -443,6 +408,7 @@ hd_anti_regent_prepare_first_war_effect = {
 		}
 		if = {
 			limit = { exists = scope:hd_anti_regent_core_confederation }
+			set_global_variable = { name = hd_anti_regent_active_confederation value = scope:hd_anti_regent_core_confederation }
 			scope:hd_anti_regent_core_leader = { hd_anti_regent_attach_core_member_effect = yes }
 			scope:hd_anti_regent_core_member = { hd_anti_regent_attach_core_member_effect = yes }
 			set_variable = { name = hd_anti_regent_confederation value = scope:hd_anti_regent_core_confederation }
@@ -501,7 +467,10 @@ hd_anti_regent_call_members_to_all_offensive_wars_effect = {
 				save_temporary_scope_as = hd_anti_regent_member_to_call
 				scope:hd_anti_regent_calling_leader = {
 					every_character_war = {
-						limit = { primary_attacker = scope:hd_anti_regent_calling_leader }
+						limit = {
+							primary_attacker = scope:hd_anti_regent_calling_leader
+							OR = { using_cb = hd_anti_regent_punitive_cb using_cb = hd_enter_the_passes_cb }
+						}
 						save_temporary_scope_as = hd_anti_regent_war_to_join
 						if = {
 							limit = {
@@ -536,10 +505,7 @@ hd_anti_regent_dispatch_all_invitations_effect = {
 		scope:hd_anti_regent_emperor = {
 			every_vassal_or_below = {
 				limit = {
-					is_alive = yes
-					is_landed = yes
-					highest_held_title_tier >= tier_county
-					highest_held_title_tier < tier_empire
+					hd_anti_regent_invitee_eligible_trigger = yes
 					culture = { has_cultural_pillar = heritage_chinese }
 					NOT = { this = scope:hd_inviting_leader }
 					NOT = { this = scope:hd_anti_regent_target_scope }
@@ -557,8 +523,8 @@ hd_anti_regent_dispatch_all_invitations_effect = {
 hd_anti_regent_dispatch_invitation_effect = {
 	if = {
 		limit = {
-			is_alive = yes
-			is_landed = yes
+			hd_anti_regent_invitee_eligible_trigger = yes
+			NOT = { exists = global_var:hd_anti_regent_chain_resolved }
 			exists = scope:hd_inviting_leader
 			exists = scope:hd_anti_regent_target_scope
 			NOT = { this = scope:hd_inviting_leader }
@@ -566,15 +532,86 @@ hd_anti_regent_dispatch_invitation_effect = {
 			NOT = { this = character:cao_cao }
 			NOT = { has_character_flag = hd_anti_regent_invitation_pending }
 			NOT = { has_character_flag = hd_anti_regent_invitation_resolved }
+			NOT = { is_member_of_confederation = global_var:hd_anti_regent_active_confederation }
 		}
 		scope:hd_inviting_leader = { change_variable = { name = hd_anti_regent_pending_invites add = 1 } }
 		set_variable = { name = hd_anti_regent_inviter value = scope:hd_inviting_leader }
 		add_character_flag = hd_anti_regent_invitation_pending
+		add_to_global_variable_list = { name = hd_anti_regent_invitees target = this }
 		trigger_event = { id = hd_anti_regent.0003 days = 2 }
 	}
 }
 
+# Current scope: the accepting character. Only a verified league may release them.
+hd_anti_regent_try_join_effect = {
+	if = {
+		limit = { exists = global_var:hd_anti_regent_chain_resolved }
+		hd_anti_regent_invitation_resolved_effect = yes
+	}
+	else_if = {
+		limit = { has_character_flag = hd_anti_regent_invitation_accepted is_alive = yes }
+		save_scope_as = hd_anti_regent_joiner
+		if = {
+			limit = {
+				hd_anti_regent_invitee_eligible_trigger = yes
+				exists = global_var:hd_anti_regent_league_leader
+				exists = global_var:hd_anti_regent_active_confederation
+				global_var:hd_anti_regent_league_leader = { hd_anti_regent_real_confederation_ready_trigger = yes }
+				OR = {
+					is_confederation_member = no
+					is_member_of_confederation = global_var:hd_anti_regent_active_confederation
+				}
+			}
+			set_variable = { name = hd_anti_regent_inviter value = global_var:hd_anti_regent_league_leader }
+			if = {
+				limit = { is_independent_ruler = no }
+				set_variable = { name = hd_anti_regent_original_liege value = liege }
+				create_title_and_vassal_change = { type = independency save_scope_as = hd_anti_regent_joiner_independence add_claim_on_loss = no }
+				becomes_independent = { change = scope:hd_anti_regent_joiner_independence }
+				resolve_title_and_vassal_change = scope:hd_anti_regent_joiner_independence
+			}
+			global_var:hd_anti_regent_league_leader = { hd_anti_regent_add_real_member_effect = yes }
+			if = {
+				limit = { is_member_of_confederation = global_var:hd_anti_regent_active_confederation }
+				debug_log = "HD_COALITION JOIN_CONFIRMED"
+				set_variable = { name = hd_league_leader value = global_var:hd_anti_regent_league_leader }
+				if = {
+					limit = { this = character:cao_cao }
+					random_owned_story = { type = hd_story_cao_life set_variable = { name = hd_cao_life_phase value = flag:hd_cao_life_coalition } }
+				}
+				hd_anti_regent_invitation_resolved_effect = yes
+				global_var:hd_anti_regent_league_leader = { hd_anti_regent_call_members_to_all_offensive_wars_effect = yes }
+			}
+			else = {
+				if = {
+					limit = { hd_anti_regent_can_restore_liege_trigger = yes }
+					create_title_and_vassal_change = { type = swear_fealty save_scope_as = hd_anti_regent_join_rollback add_claim_on_loss = no }
+					change_liege = { liege = var:hd_anti_regent_original_liege change = scope:hd_anti_regent_join_rollback }
+					resolve_title_and_vassal_change = scope:hd_anti_regent_join_rollback
+					if = {
+						limit = { exists = liege liege = var:hd_anti_regent_original_liege }
+						debug_log = "HD_COALITION JOIN_FAILED_LIEGE_RESTORED"
+					}
+					else = { debug_log = "HD_COALITION JOIN_FAILED_RESTORE_NOT_CONFIRMED" }
+				}
+				else = { debug_log = "HD_COALITION JOIN_FAILED_NO_VALID_ORIGINAL_LIEGE" }
+			}
+		}
+		if = {
+			limit = {
+				has_character_flag = hd_anti_regent_invitation_accepted
+				NOT = { has_character_flag = hd_anti_regent_join_retry_queued }
+			}
+			add_character_flag = hd_anti_regent_join_retry_queued
+			trigger_event = { id = hd_anti_regent.0094 months = 1 }
+		}
+	}
+}
+
 hd_anti_regent_invitation_resolved_effect = {
+	remove_character_flag = hd_anti_regent_invitation_accepted
+	remove_character_flag = hd_anti_regent_join_retry_queued
+	remove_variable = hd_anti_regent_original_liege
 	if = {
 		limit = {
 			has_character_flag = hd_anti_regent_invitation_pending

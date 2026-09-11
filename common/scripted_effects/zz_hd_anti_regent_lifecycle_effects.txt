@@ -1,0 +1,217 @@
+# Stage survives the elected leader: 0 founding, 1 first war, 2 decision,
+# 3 second war, 4 final settlement. Dong owns the single monthly dispatcher.
+hd_anti_regent_war_invalidated_effect = {
+	if = {
+		limit = { NOT = { exists = global_var:hd_anti_regent_chain_resolved } }
+		if = {
+			limit = { character:dong_zhuo_2 = { is_alive = no } }
+			debug_log = "HD_COALITION TERMINAL_TARGET_DEAD_ON_INVALIDATION"
+			hd_anti_regent_failure_effect = yes
+		}
+		else = {
+			debug_log = "HD_COALITION WAR_INVALIDATED_RETRY_PENDING"
+			hd_anti_regent_queue_maintenance_effect = yes
+		}
+	}
+}
+
+hd_anti_regent_queue_maintenance_effect = {
+	if = {
+		limit = { exists = global_var:hd_anti_regent_stage NOT = { exists = global_var:hd_anti_regent_chain_resolved } }
+		character:dong_zhuo_2 = {
+			if = {
+				limit = { is_alive = yes NOT = { has_character_flag = hd_anti_regent_maintenance_queued } }
+				add_character_flag = hd_anti_regent_maintenance_queued
+				trigger_event = { id = hd_anti_regent.0093 months = 1 }
+			}
+		}
+	}
+}
+
+hd_anti_regent_consider_successor_effect = {
+	if = {
+		limit = {
+			NOT = { exists = scope:hd_anti_regent_successor }
+			hd_anti_regent_successor_eligible_trigger = yes
+		}
+		save_scope_as = hd_anti_regent_successor
+	}
+}
+
+# Only existing members can succeed. Never settle/release new core characters here.
+hd_anti_regent_refresh_leader_effect = {
+	clear_saved_scope = hd_anti_regent_successor
+	global_var:hd_anti_regent_league_leader ?= { hd_anti_regent_consider_successor_effect = yes }
+	character:yuan_shao ?= { hd_anti_regent_consider_successor_effect = yes }
+	character:cao_cao ?= { hd_anti_regent_consider_successor_effect = yes }
+	character:yuan_shu ?= { hd_anti_regent_consider_successor_effect = yes }
+	character:sun_jian ?= { hd_anti_regent_consider_successor_effect = yes }
+	character:han_fu ?= { hd_anti_regent_consider_successor_effect = yes }
+	character:zhang_miao ?= { hd_anti_regent_consider_successor_effect = yes }
+	character:liu_dai ?= { hd_anti_regent_consider_successor_effect = yes }
+	character:kong_zhou ?= { hd_anti_regent_consider_successor_effect = yes }
+	character:wang_kuang ?= { hd_anti_regent_consider_successor_effect = yes }
+	character:qiao_mao ?= { hd_anti_regent_consider_successor_effect = yes }
+	character:bao_xin ?= { hd_anti_regent_consider_successor_effect = yes }
+	character:yuan_yi ?= { hd_anti_regent_consider_successor_effect = yes }
+	if = {
+		limit = { NOT = { exists = scope:hd_anti_regent_successor } }
+		global_var:hd_anti_regent_active_confederation = {
+			random_confederation_member = {
+				limit = { hd_anti_regent_successor_eligible_trigger = yes }
+				save_scope_as = hd_anti_regent_successor
+			}
+		}
+	}
+	if = {
+		limit = {
+			exists = scope:hd_anti_regent_successor
+			OR = {
+				NOT = { exists = global_var:hd_anti_regent_league_leader }
+				global_var:hd_anti_regent_league_leader != scope:hd_anti_regent_successor
+			}
+		}
+		global_var:hd_anti_regent_league_leader ?= {
+			remove_character_flag = hd_anti_regent_league_leader
+			remove_character_flag = hd_anti_regent_decision_queued
+			remove_character_flag = hd_anti_regent_settlement_queued
+			clear_variable_list = hd_anti_regent_members
+			remove_variable = hd_anti_regent_target
+			remove_variable = hd_anti_regent_confederation
+		}
+		set_global_variable = { name = hd_anti_regent_league_leader value = scope:hd_anti_regent_successor }
+		scope:hd_anti_regent_successor = {
+			add_character_flag = hd_anti_regent_league_leader
+			set_variable = { name = hd_anti_regent_confederation value = global_var:hd_anti_regent_active_confederation }
+			set_variable = { name = hd_anti_regent_target value = character:dong_zhuo_2 }
+			clear_variable_list = hd_anti_regent_members
+		}
+		global_var:hd_anti_regent_active_confederation = {
+			every_confederation_member = {
+				save_scope_as = hd_anti_regent_roster_member
+				set_variable = { name = hd_league_leader value = scope:hd_anti_regent_successor }
+				scope:hd_anti_regent_successor = {
+					add_to_variable_list = { name = hd_anti_regent_members target = scope:hd_anti_regent_roster_member }
+				}
+			}
+		}
+		every_in_global_list = {
+			variable = hd_anti_regent_invitees
+			limit = { has_character_flag = hd_anti_regent_invitation_pending }
+			set_variable = { name = hd_anti_regent_inviter value = scope:hd_anti_regent_successor }
+		}
+		character:dong_zhuo_2 = { set_variable = { name = hd_anti_regent_leader value = scope:hd_anti_regent_successor } }
+		debug_log = "HD_COALITION LEADER_SUCCESSION_CONFIRMED"
+	}
+}
+
+# Current scope: elected leader. Read all the target's wars before declaring.
+hd_anti_regent_try_stage_war_effect = {
+	clear_saved_scope = hd_anti_regent_stage_war
+	character:dong_zhuo_2 = {
+		random_character_war = {
+			limit = { using_cb = $CB$ primary_defender = character:dong_zhuo_2 }
+			save_scope_as = hd_anti_regent_stage_war
+		}
+	}
+	if = {
+		limit = {
+			NOT = { exists = scope:hd_anti_regent_stage_war }
+			hd_anti_regent_real_confederation_ready_trigger = yes
+			character:dong_zhuo_2 = { is_alive = yes is_landed = yes has_character_flag = hd_current_han_regent }
+		}
+		if = {
+			limit = { global_var:hd_anti_regent_stage = 1 }
+			start_war = { cb = $CB$ target = character:dong_zhuo_2 target_title = title:d_henan target_title = title:d_luoyang }
+		}
+		else = { start_war = { cb = $CB$ target = character:dong_zhuo_2 } }
+		random_character_war = {
+			limit = { using_cb = $CB$ primary_defender = character:dong_zhuo_2 }
+			save_scope_as = hd_anti_regent_stage_war
+		}
+		if = {
+			limit = { exists = scope:hd_anti_regent_stage_war }
+			debug_log = "HD_COALITION STAGE_WAR_CONFIRMED"
+		}
+		else = { debug_log = "HD_COALITION STAGE_WAR_RETRY_PENDING" }
+	}
+	if = {
+		limit = { exists = scope:hd_anti_regent_stage_war }
+		hd_anti_regent_call_members_to_all_offensive_wars_effect = yes
+		if = {
+			limit = {
+				global_var:hd_anti_regent_stage = 1
+				NOT = { exists = global_var:hd_anti_regent_first_war_confirmed }
+			}
+			set_global_variable = hd_anti_regent_first_war_confirmed
+			add_character_flag = hd_anti_regent_first_war_started
+			trigger_event = hd_anti_regent.0012
+			trigger_event = { id = hd_anti_regent.0004 days = 1 }
+			character:dong_zhuo_2 = {
+				add_character_flag = hd_anti_regent_invitations_complete
+				trigger_event = { id = hd_palace_crisis.0023 days = 1 }
+			}
+		}
+	}
+}
+
+# Current scope: Dong. No global ruler scan and only one scheduled dispatcher.
+hd_anti_regent_maintain_effect = {
+	if = {
+		limit = { NOT = { exists = global_var:hd_anti_regent_chain_resolved } }
+		if = {
+			limit = { NOT = { exists = global_var:hd_anti_regent_founded } }
+			hd_anti_regent_prepare_first_war_effect = yes
+			if = {
+				limit = {
+					exists = global_var:hd_anti_regent_league_leader
+					global_var:hd_anti_regent_league_leader = { hd_anti_regent_real_confederation_ready_trigger = yes }
+				}
+				set_global_variable = hd_anti_regent_founded
+				global_var:hd_anti_regent_league_leader = {
+					add_character_flag = hd_anti_regent_creation_started
+					hd_anti_regent_dispatch_all_invitations_effect = yes
+					trigger_event = hd_anti_regent.0001
+					trigger_event = { id = hd_anti_regent.0002 days = 1 }
+					random_owned_story = { type = hd_story_yuan_life set_variable = { name = hd_yuan_life_phase value = flag:hd_yuan_life_coalition } }
+				}
+				random_owned_story = { type = hd_story_dong_zhuo_life set_variable = { name = hd_dong_zhuo_life_phase value = flag:hd_dong_zhuo_life_coalition } }
+				debug_log = "HD_COALITION FOUNDING_CONFIRMED"
+			}
+		}
+		if = {
+			limit = { exists = global_var:hd_anti_regent_active_confederation }
+			hd_anti_regent_refresh_leader_effect = yes
+			if = {
+				limit = { exists = scope:hd_anti_regent_successor }
+				scope:hd_anti_regent_successor = {
+					if = { limit = { global_var:hd_anti_regent_stage = 1 } hd_anti_regent_try_stage_war_effect = { CB = hd_anti_regent_punitive_cb } }
+					else_if = { limit = { global_var:hd_anti_regent_stage = 3 } hd_anti_regent_try_stage_war_effect = { CB = hd_enter_the_passes_cb } }
+					else_if = {
+						limit = { global_var:hd_anti_regent_stage = 2 NOT = { has_character_flag = hd_anti_regent_decision_queued } }
+						add_character_flag = hd_anti_regent_decision_queued
+						trigger_event = { id = hd_anti_regent.0100 days = 1 }
+					}
+					else_if = {
+						limit = { global_var:hd_anti_regent_stage = 4 NOT = { has_character_flag = hd_anti_regent_settlement_queued } }
+						add_character_flag = hd_anti_regent_settlement_queued
+						trigger_event = { id = hd_anti_regent.0200 days = 1 }
+					}
+				}
+			}
+			else = { debug_log = "HD_COALITION SUCCESSION_WAITING_FOR_ELIGIBLE_MEMBER" }
+		}
+		if = {
+			limit = {
+				exists = global_var:hd_anti_regent_founded
+				OR = {
+					NOT = { exists = global_var:hd_anti_regent_active_confederation }
+					global_var:hd_anti_regent_active_confederation = { NOT = { any_confederation_member = { is_alive = yes is_landed = yes } } }
+				}
+			}
+			debug_log = "HD_COALITION TERMINAL_EMPTY_LEAGUE"
+			hd_anti_regent_failure_effect = yes
+		}
+		hd_anti_regent_queue_maintenance_effect = yes
+	}
+}
