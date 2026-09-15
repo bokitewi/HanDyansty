@@ -1,0 +1,80 @@
+﻿# Dong Zhuo's arrival settlement. Called only by hd_palace_crisis.0007.a,
+# after hd_palace_sili_change has resolved. No pulse or regency hook is added.
+# A "jun" here is an existing DUCHY-tier ruler, not a county-tier ruler.
+hd_dong_arrival_release_liangzhou_dukes_effect = {
+	if = {
+		limit = {
+			this = character:dong_zhuo_2
+			is_alive = yes
+			has_title = title:k_uuii_sili
+			NOT = { has_character_flag = hd_dong_arrival_liangzhou_released }
+		}
+		# One-shot guard also blocks re-entry while the transaction fires on-actions.
+		# An empty eligible set is a completed settlement, not a future world pulse.
+		add_character_flag = hd_dong_arrival_liangzhou_released
+
+		# Snapshot by de jure titles, not by Dong's current direct character vassals.
+		# The kingdom itself is visited but never selected; recursion stops at duchies.
+		title:k_uuii_liangzhou = {
+			every_in_de_jure_hierarchy = {
+				continue = { tier > tier_duchy }
+				limit = {
+					tier = tier_duchy
+					exists = holder
+					holder = {
+						is_alive = yes
+						is_landed = yes
+						highest_held_title_tier = tier_duchy
+						is_independent_ruler = no
+						NOT = { this = character:dong_zhuo_2 }
+					}
+				}
+				holder = {
+					# One character can hold several Liangzhou duchies. Submit once.
+					save_temporary_scope_as = hd_dong_arrival_liangzhou_candidate
+					if = {
+						limit = {
+							NOT = {
+								any_in_list = {
+									list = hd_dong_arrival_liangzhou_dukes
+									this = scope:hd_dong_arrival_liangzhou_candidate
+								}
+							}
+						}
+						add_to_temporary_list = hd_dong_arrival_liangzhou_dukes
+					}
+				}
+			}
+		}
+
+		if = {
+			limit = {
+				any_in_list = {
+					list = hd_dong_arrival_liangzhou_dukes
+					always = yes
+				}
+			}
+			# A separate independence transaction; do not reuse the granted Sili change.
+			create_title_and_vassal_change = {
+				type = independency
+				save_scope_as = hd_dong_arrival_liangzhou_independence_change
+				add_claim_on_loss = no
+			}
+			every_in_list = {
+				list = hd_dong_arrival_liangzhou_dukes
+				limit = {
+					is_alive = yes
+					is_landed = yes
+					highest_held_title_tier = tier_duchy
+					is_independent_ruler = no
+					NOT = { this = character:dong_zhuo_2 }
+				}
+				# Character scope: retain this duke's counties and sub-vassal hierarchy.
+				becomes_independent = {
+					change = scope:hd_dong_arrival_liangzhou_independence_change
+				}
+			}
+			resolve_title_and_vassal_change = scope:hd_dong_arrival_liangzhou_independence_change
+		}
+	}
+}
