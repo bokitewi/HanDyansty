@@ -1,4 +1,4 @@
-on_imprison = { on_actions = { hd_dc_protection_on_imprison } }
+﻿on_imprison = { on_actions = { hd_dc_protection_on_imprison } }
 hd_dc_protection_on_imprison = {
 	trigger = { has_variable_list = hd_dc_protection_subjects exists = scope:imprisoner }
 	effect = {
@@ -26,8 +26,42 @@ on_title_lost = { on_actions = { hd_dc_protection_on_revoked } }
 hd_dc_protection_on_revoked = {
 	trigger = { has_variable_list = hd_dc_protection_subjects scope:transfer_type = flag:revoked exists = scope:title exists = scope:new_holder }
 	effect = {
-		scope:new_holder = { save_scope_as = hd_dc_harm_actor }
-		save_scope_value_as = { name = hd_dc_harm_kind value = flag:revoke }
-		hd_dc_record_protection_harm_effect = yes
+		clear_saved_scope = hd_dc_harm_actor
+		if = {
+			limit = {
+				scope:title = {
+					var:hd_dc_title_protection_date = current_date
+					var:hd_dc_title_protection_old_holder = root
+					var:hd_dc_title_protection_new_holder = scope:new_holder
+					exists = var:hd_dc_title_protection_actor
+				}
+			}
+			scope:title.var:hd_dc_title_protection_actor = { save_scope_as = hd_dc_harm_actor }
+			set_variable = { name = hd_dc_protection_check_actor value = scope:hd_dc_harm_actor }
+			set_variable = { name = hd_dc_protection_check_date value = current_date }
+			set_variable = { name = hd_dc_protection_check_kind value = flag:revoke }
+			set_variable = { name = hd_dc_protection_check_title value = scope:title }
+			set_variable = { name = hd_dc_protection_check_legal value = scope:title.var:hd_dc_title_protection_legal }
+			set_variable = { name = hd_dc_protection_check_source value = flag:individual_reason }
+		}
+		else_if = {
+			limit = {
+				var:hd_dc_protection_check_date = current_date
+				var:hd_dc_protection_check_kind = flag:revoke
+				var:hd_dc_protection_check_title = scope:title
+				var:hd_dc_protection_check_actor = scope:new_holder
+			}
+			var:hd_dc_protection_check_actor = { save_scope_as = hd_dc_harm_actor }
+		}
+		if = {
+			limit = { exists = scope:hd_dc_harm_actor }
+			if = {
+				limit = { scope:title = { NOT = { has_variable = hd_dc_title_protection_consumed } } }
+				save_scope_value_as = { name = hd_dc_harm_kind value = flag:revoke }
+				hd_dc_record_protection_harm_effect = yes
+				scope:title = { if = { limit = { has_variable = hd_dc_title_protection_actor } set_variable = { name = hd_dc_title_protection_consumed value = yes } } }
+			}
+		}
+		else = { hd_dc_record_protection_unknown_revocation_effect = yes }
 	}
 }

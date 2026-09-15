@@ -1,0 +1,200 @@
+﻿# ============================================================
+# 烛广 Regional Customs —— on_action 挂钩
+# ============================================================
+
+# ---------- 真正钩子 ----------
+
+# 厚生慎死·极端爆发（非常时期人物响应）—— 战争开始总入口
+# 作用域：War（scope:war / scope:attacker / scope:defender）
+on_war_started = {
+	on_actions = {
+		# 厚生慎死，死则举大名耳
+		zgrc_si_ze_ju_da_ming
+	}
+}
+
+
+# 开局：统一初始化入口（是否初始化按游戏规则 zgrc_init_on_start 判断）
+# on_game_start = {
+# 	on_actions = {
+# 		zgrc_game_start_init
+# 	}
+# }
+
+
+on_birth_child = {
+	on_actions = {
+		zgrc_hanjia_children_on_birth
+	}
+}
+
+# on_16th_birthday = {
+# 	on_actions = {
+# 		zgrc_hanjia_guandai_on_adult
+# 	}
+# } 似乎与文化转换重复
+
+on_character_culture_change = {
+	on_actions = {
+		zgrc_hanjia_guandai_on_culture_change
+	}
+}
+
+five_year_playable_pulse = {
+	on_actions = {
+		zgrc_ruxiang_pulse
+	}
+}
+# 革新同步：每年全局计数 + 每年文化同步
+yearly_global_pulse = {
+	on_actions = {
+		zgrc_innovation_sync_count_pulse
+	}
+}
+
+yearly_culture_pulse = {
+	on_actions = {
+		zgrc_innovation_sync_pulse
+	}
+}
+
+
+
+# ---------- 本地提炼 ----------
+
+# 开局初始化：按游戏规则 zgrc_init_on_start 决定是否执行
+# 启用时依次：① 地域风俗初始化 ② 全局分发汉家冠带
+zgrc_game_start_init = {
+	effect = {
+		if = {
+			limit = { has_game_rule = zgrc_init_on_start_enabled }
+			# ① 革新初始化（与原版 han 对齐）
+			zgrc_innovation_init_effect = yes
+			# ② 地域风俗初始化 仅香草适配需要 TODO
+			# zgrc_distribute_regional_customs_effect = yes
+			# ③ 全局分发汉家冠带
+			zgrc_distribute_hanjia_guandai_effect = yes
+		}
+	}
+}
+
+# 出生：① 子嗣文化绑定出生地（汉家认同内改从当地）② 汉家冠带授予
+zgrc_hanjia_children_on_birth = {
+	effect = {
+		# ① 子嗣文化绑定出生地：新生儿文化有华夏礼乐、出生地文化亦有华夏礼乐且不一致 → 改为当地文化
+		if = {
+			limit = {
+				culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue }
+				location.county = {
+					culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue }
+					NOT = { culture = root.culture }
+				}
+			}
+			set_culture = location.county.culture
+		}
+		# ② 汉家冠带：文化有华夏礼乐 → 添加
+		if = {
+			limit = {
+				culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue }
+				NOT = { has_trait = zgrc_hanjia_guandai }
+			}
+			add_trait = zgrc_hanjia_guandai
+		}
+	}
+}
+
+# # 成年16岁：失格清理（该特质者，文化无华夏礼乐则移除）
+# zgrc_hanjia_guandai_on_adult = {
+# 	effect = {
+# 		if = {
+# 			limit = {
+# 				age = 16
+# 				has_trait = zgrc_hanjia_guandai
+# 				NOT = { culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue } }
+# 			}
+# 			remove_trait = zgrc_hanjia_guandai
+# 		}
+# 	}
+# }
+
+# 转文化：仅清理（离开华夏礼乐文化则移除）
+zgrc_hanjia_guandai_on_culture_change = {
+	effect = {
+		if = {
+			limit = {
+				has_trait = zgrc_hanjia_guandai
+				NOT = { culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue } }
+			}
+			remove_trait = zgrc_hanjia_guandai
+		}
+	}
+}
+
+# 入乡随俗：五年度检测（当场判定，直接触发选择事件）
+zgrc_ruxiang_pulse = {
+	trigger = {
+		# 我是汉家风俗
+		culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue }
+		# 首都 county 头衔久居达标（5/10/30年，可配置）
+		capital_county = {
+			title_held_years >= zgrc_ruxiang_required_years
+			# 当地亦为汉家风俗且与我不相同
+			culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue }
+			NOT = { culture = root.culture }
+		}
+		# 冷却中不弹
+		NOT = { has_character_flag = zgrc_ruxiang_cooldown }
+	}
+	effect = {
+		trigger_event = { id = zgrc_common.0002 days = { 0 10 } }
+	}
+}
+
+
+# 革新同步 —— 全局计数（yearly_global_pulse 每年调用一次）
+zgrc_innovation_sync_count_pulse = {
+	effect = {
+		# 计数 +1
+		if = {
+			limit = { exists = global_var:g_zgrc_sync_count }
+			set_global_variable = { name = g_zgrc_sync_count value = { value = global_var:g_zgrc_sync_count add = 1 } }
+		}
+		else = {
+			set_global_variable = { name = g_zgrc_sync_count value = 1 }
+		}
+		# 达阈值 → 归零（culture 侧据此同步）
+		if = {
+			limit = { global_var:g_zgrc_sync_count >= zgrc_innovation_sync_threshold }
+			set_global_variable = { name = g_zgrc_sync_count value = 0 }
+		}
+	}
+}
+
+# 革新同步 —— 文化侧（yearly_culture_pulse 每年调用一次，计数为 0 才同步）
+zgrc_innovation_sync_pulse = {
+	trigger = {
+		has_cultural_tradition = tradition_zgrc_hua_xia_li_yue
+		exists = culture_head
+		culture_head = { top_liege = { highest_held_title_tier >= tier_empire } }
+		has_game_rule = zgrc_innovation_sync_enabled
+	}
+	effect = {
+		if = {
+			limit = {
+				exists = global_var:g_zgrc_sync_count
+				global_var:g_zgrc_sync_count = 0
+			}
+			zgrc_innovation_sync_effect = yes
+		}
+	}
+}
+
+# 死则举大名耳
+zgrc_si_ze_ju_da_ming = {
+	effect = {
+		# 天下响应 TODO:待重新设计
+		# zgrc_tianxia_xiangying_effect = yes
+		# 极端爆发
+		zgrc_jiduan_baofa_effect = yes
+	}
+}

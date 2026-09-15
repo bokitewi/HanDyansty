@@ -1,0 +1,64 @@
+﻿# A confirmed roster survives transient engine removals, but never terminal cleanup.
+hd_anti_regent_member_left_effect = {
+	if = {
+		limit = { exists = global_var:hd_anti_regent_chain_resolved }
+		debug_log = "HD_COALITION MEMBER_LEFT_TERMINAL"
+	}
+	else_if = { limit = { is_alive = no } debug_log = "HD_COALITION MEMBER_LEFT_DEAD" }
+	else_if = { limit = { is_landed = no } debug_log = "HD_COALITION MEMBER_LEFT_LANDLESS" }
+	else_if = { limit = { is_independent_ruler = no } debug_log = "HD_COALITION MEMBER_LEFT_NOT_INDEPENDENT" }
+	else_if = {
+		limit = { has_character_flag = hd_anti_regent_league_member NOT = { has_character_flag = hd_anti_regent_member_repair_queued } }
+		add_character_flag = hd_anti_regent_member_repair_queued
+		trigger_event = { id = hd_anti_regent.0095 days = 1 }
+		debug_log = "HD_COALITION MEMBER_LEFT_REPAIR_QUEUED"
+	}
+}
+
+hd_anti_regent_repair_member_effect = {
+	save_scope_as = hd_anti_regent_repair_member
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_anti_regent_chain_resolved }
+			has_character_flag = hd_anti_regent_league_member
+			hd_valid_anti_regent_member_trigger = { CHARACTER = this }
+		}
+		if = {
+			limit = { any_character_war = { using_cb = hd_anti_regent_punitive_cb any_war_defender = { this = scope:hd_anti_regent_repair_member } } }
+			debug_log = "HD_COALITION MEMBER_REPAIR_SKIPPED_ENEMY"
+		}
+		else_if = {
+			limit = { exists = global_var:hd_anti_regent_active_confederation }
+			save_scope_as = hd_anti_regent_repair_member
+			if = {
+				limit = { NOT = { is_member_of_confederation = global_var:hd_anti_regent_active_confederation } }
+				if = {
+					limit = { NOT = { exists = confederation } }
+					global_var:hd_anti_regent_active_confederation = { add_confederation_member = scope:hd_anti_regent_repair_member }
+				}
+				else = { debug_log = "HD_COALITION MEMBER_REPAIR_SKIPPED_OTHER_LEAGUE" }
+			}
+			if = {
+				limit = { is_member_of_confederation = global_var:hd_anti_regent_active_confederation }
+				character:dong_zhuo_2 ?= {
+					if = {
+						limit = { is_alive = yes }
+						every_character_war = {
+							limit = { using_cb = hd_anti_regent_punitive_cb primary_defender = character:dong_zhuo_2 }
+							save_scope_as = hd_anti_regent_repair_war
+							if = {
+								limit = { scope:hd_anti_regent_repair_member = { NOT = { is_attacker_in_war = scope:hd_anti_regent_repair_war } NOT = { is_defender_in_war = scope:hd_anti_regent_repair_war } } }
+								add_attacker = scope:hd_anti_regent_repair_member
+							}
+							if = { limit = { scope:hd_anti_regent_repair_member = { is_attacker_in_war = scope:hd_anti_regent_repair_war } } debug_log = "HD_COALITION MEMBER_REPAIR_WAR_PARTICIPATION_CONFIRMED" }
+							else = { debug_log = "HD_COALITION MEMBER_REPAIR_WAR_PARTICIPATION_FAILED" }
+						}
+					}
+				}
+				debug_log = "HD_COALITION MEMBER_REPAIR_MEMBERSHIP_CONFIRMED"
+			}
+			else = { debug_log = "HD_COALITION MEMBER_REPAIR_FAILED" }
+		}
+		else = { debug_log = "HD_COALITION MEMBER_REPAIR_NO_ORIGINAL_LEAGUE" }
+	}
+}

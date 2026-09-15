@@ -105,7 +105,7 @@ hd_force_dong_regency_effect = {
 		hd_force_dong_celestial_effect = yes
 		add_trait = kuzhu_empire_overseer
 		add_character_flag = hd_current_han_regent
-		title:e_han.holder = {
+		title:h_china.holder = {
 			add_trait = kuzhu_puppet_ruler
 			if = {
 				limit = {
@@ -187,52 +187,12 @@ hd_cao_settle_chenliu_effect = {
 	domicile ?= { move_domicile = title:c_uuii_p_579.title_province }
 }
 
-hd_restore_han_after_anti_regent_victory_effect = {
-	title:e_han.holder ?= {
-		end_diarchy = yes
-		remove_trait = kuzhu_puppet_ruler
-	}
-	character:dong_zhuo_2 ?= {
-		if = {
-			limit = { is_alive = yes }
-			remove_character_flag = hd_current_han_regent
-			remove_trait = kuzhu_empire_overseer
-		}
-	}
-	if = {
-		limit = { has_variable = hd_anti_regent_target }
-		var:hd_anti_regent_target = {
-			if = {
-				limit = { is_alive = yes }
-				remove_character_flag = hd_current_han_regent
-				remove_trait = kuzhu_empire_overseer
-				remove_variable = hd_anti_regent_leader
-			}
-		}
-	}
-}
-
 hd_handle_dong_regent_death_effect = {
+	hd_dong_queue_death_settlement_effect = yes
 	if = {
 		limit = { exists = global_var:hd_anti_regent_stage }
 		debug_log = "HD_COALITION TERMINAL_DONG_DEATH"
 		hd_anti_regent_failure_effect = yes
-	}
-	else = {
-		title:k_uuii_sili = { current_heir ?= { save_scope_as = hd_dong_regent_successor } }
-		if = {
-			limit = { exists = scope:hd_dong_regent_successor is_alive = yes }
-			scope:hd_dong_regent_successor = {
-				add_character_flag = hd_han_regent_succession_pending
-				trigger_event = { id = hd_palace_crisis.0024 days = 1 }
-			}
-		}
-		else = {
-			title:e_han.holder ?= {
-				end_diarchy = yes
-				remove_trait = kuzhu_puppet_ruler
-			}
-		}
 	}
 }
 
@@ -304,7 +264,7 @@ hd_luoyang_noble_purge_effect = {
 
 hd_move_dong_core_to_changan_effect = {
 	save_scope_as = hd_changan_regent
-	title:e_han.holder ?= {
+	title:h_china.holder ?= {
 		set_realm_capital = title:c_uuii_p_867
 		set_location = { location = title:b_uuii_p_867.title_province stick_to_location = yes }
 	}
@@ -439,36 +399,41 @@ hd_anti_regent_failure_effect = {
 
 hd_anti_regent_first_war_victory_effect = {
 	save_scope_as = hd_anti_regent_first_war_recipient
+	global_var:hd_anti_regent_league_leader ?= {
+		if = { limit = { is_alive = yes } save_scope_as = hd_anti_regent_first_war_recipient }
+	}
 	if = {
 		limit = {
+			NOT = { exists = global_var:hd_anti_regent_chain_resolved }
 			scope:hd_anti_regent_first_war_recipient = {
 				is_alive = yes
 			}
 		}
-		create_title_and_vassal_change = {
-			type = conquest
-			save_scope_as = hd_anti_regent_first_war_change
-			add_claim_on_loss = no
+		hd_dong_grant_duchy_effect = { DUCHY = d_henan RECIPIENT = scope:hd_anti_regent_first_war_recipient }
+		character:yuan_shao ?= {
+			random_owned_story = { type = hd_story_yuan_life set_variable = { name = hd_yuan_life_phase value = flag:hd_yuan_life_warlords } }
 		}
-		title:d_henan = {
-			change_title_holder_include_vassals = {
-				holder = scope:hd_anti_regent_first_war_recipient
-				change = scope:hd_anti_regent_first_war_change
-			}
+		character:cao_cao ?= {
+			random_owned_story = { type = hd_story_cao_life set_variable = { name = hd_cao_life_phase value = flag:hd_cao_life_warlords } }
 		}
-		title:d_luoyang = {
-			change_title_holder_include_vassals = {
-				holder = scope:hd_anti_regent_first_war_recipient
-				change = scope:hd_anti_regent_first_war_change
-			}
+		character:dong_zhuo_2 ?= {
+			random_owned_story = { type = hd_story_dong_zhuo_life set_variable = { name = hd_dong_zhuo_life_phase value = flag:hd_dong_zhuo_life_survived } }
 		}
-		resolve_title_and_vassal_change = scope:hd_anti_regent_first_war_change
+		set_global_variable = { name = hd_anti_regent_chain_resolved value = yes }
+		debug_log = "HD_COALITION TERMINAL_FIRST_WAR_VICTORY_WITHDRAWAL"
+		hd_dong_queue_murder_effect = yes
+		hd_yuan_jizhou_queue_effect = yes
+		hd_anti_regent_cleanup_effect = yes
+		scope:hd_anti_regent_first_war_recipient = { trigger_event = { id = hd_anti_regent.0100 days = 1 } }
 	}
 }
 
 hd_anti_regent_cleanup_effect = {
+	# Cleanup is also used before a war starts; it must never schedule a murder.
 	set_global_variable = { name = hd_anti_regent_chain_resolved value = yes }
 	hd_anti_regent_clear_pending_dispatch_effect = yes
+	every_in_global_list = { variable = hd_anti_regent_confirmed_members hd_anti_regent_clear_actor_effect = yes }
+	clear_global_variable_list = hd_anti_regent_confirmed_members
 	every_in_global_list = {
 		variable = hd_anti_regent_invitees
 		hd_anti_regent_clear_actor_effect = yes
@@ -479,7 +444,7 @@ hd_anti_regent_cleanup_effect = {
 		disband_confederation = yes
 	}
 	global_var:hd_anti_regent_league_leader ?= { hd_anti_regent_clear_actor_effect = yes }
-	character:dong_zhuo_2 ?= { hd_anti_regent_clear_actor_effect = yes remove_character_flag = hd_current_han_regent }
+	character:dong_zhuo_2 ?= { hd_anti_regent_clear_actor_effect = yes }
 	hd_anti_regent_clear_actor_effect = yes
 	remove_global_variable = hd_anti_regent_league_leader
 	remove_global_variable = hd_anti_regent_active_confederation
@@ -489,6 +454,8 @@ hd_anti_regent_cleanup_effect = {
 }
 
 hd_anti_regent_clear_actor_effect = {
+	if = {
+		limit = { is_alive = yes }
 		hd_anti_regent_invitation_resolved_effect = yes
 		clear_variable_list = hd_anti_regent_members
 		remove_variable = hd_anti_regent_confederation
@@ -496,17 +463,14 @@ hd_anti_regent_clear_actor_effect = {
 		remove_variable = hd_league_leader
 		remove_variable = hd_anti_regent_inviter
 		remove_character_flag = hd_anti_regent_maintenance_queued
-		remove_character_flag = hd_anti_regent_decision_queued
-		remove_character_flag = hd_anti_regent_settlement_queued
+		remove_character_flag = hd_anti_regent_member_repair_queued
 		remove_character_flag = hd_anti_regent_core_prepared
 		remove_character_flag = hd_anti_regent_leader_dying
-		remove_character_flag = hd_anti_regent_spoils_round
 		remove_character_flag = hd_anti_regent_league_leader
 		remove_character_flag = hd_anti_regent_league_member
 		remove_character_flag = hd_yuan_bohai_arrived
 		remove_character_flag = hd_anti_regent_first_war_started
 		remove_character_flag = hd_anti_regent_first_war_fallback_ready
-		remove_character_flag = hd_anti_regent_second_war_started
 		remove_character_flag = hd_anti_regent_invitations_dispatched
 		remove_character_flag = hd_anti_regent_invitations_pending
 		remove_character_flag = hd_anti_regent_invitations_complete
@@ -515,5 +479,5 @@ hd_anti_regent_clear_actor_effect = {
 		remove_character_flag = hd_anti_regent_creation_started
 		remove_variable = hd_anti_regent_target
 		remove_variable = hd_anti_regent_pending_invites
-		remove_variable = hd_anti_regent_contribution
+	}
 }

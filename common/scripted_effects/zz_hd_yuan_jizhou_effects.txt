@@ -1,0 +1,122 @@
+﻿# Only formal anti-Dong war outcomes call this; league cleanup never schedules it.
+hd_yuan_jizhou_queue_effect = {
+	if = {
+		limit = { exists = global_var:hd_anti_regent_first_war_confirmed NOT = { exists = global_var:hd_yuan_jizhou_scheduled } }
+		set_global_variable = hd_yuan_jizhou_scheduled
+		if = {
+			limit = { character:yuan_shao = { is_alive = yes } character:gong_sun_zan = { is_alive = yes } character:han_fu = { is_alive = yes is_landed = yes } }
+			set_global_variable = hd_yuan_jizhou_pending
+			set_global_variable = { name = hd_yuan_jizhou_invite_waiting value = yes days = 30 }
+			character:yuan_shao = { trigger_event = { id = hd_yuan_jizhou.0001 days = 30 } }
+			debug_log = "HD_YUAN JIZHOU_INVITATION_QUEUED_30_DAYS"
+		}
+		else = { debug_log = "HD_YUAN JIZHOU_QUEUE_ABORTED_ACTOR_DEAD_OR_HAN_LANDLESS" }
+	}
+}
+
+hd_yuan_jizhou_end_effect = {
+	remove_global_variable = hd_yuan_jizhou_pending
+	remove_global_variable = hd_yuan_jizhou_invite_waiting
+	remove_global_variable = hd_yuan_jizhou_handover_waiting
+	remove_global_variable = hd_yuan_jizhou_war
+	remove_global_variable = hd_yuan_jizhou_target
+}
+
+hd_yuan_jizhou_start_effect = {
+	if = {
+		limit = { NOT = { hd_yuan_jizhou_actors_ready_trigger = yes } }
+		debug_log = "HD_YUAN JIZHOU_START_ABORTED_ACTOR_DEAD_OR_LANDLESS"
+		hd_yuan_jizhou_end_effect = yes
+	}
+	else_if = {
+		limit = { NOT = { title:k_uuii_jizhou = { holder = character:han_fu } } }
+		debug_log = "HD_YUAN JIZHOU_START_ABORTED_HAN_LOST_TARGET"
+		hd_yuan_jizhou_end_effect = yes
+	}
+	else = {
+		set_global_variable = hd_yuan_jizhou_war_attempted
+		character:gong_sun_zan = {
+			start_war = { cb = hd_yuan_jizhou_cb target = character:han_fu target_title = title:k_uuii_jizhou }
+			random_character_war = {
+				limit = { using_cb = hd_yuan_jizhou_cb primary_attacker = character:gong_sun_zan primary_defender = character:han_fu }
+				set_global_variable = { name = hd_yuan_jizhou_war value = this }
+			}
+		}
+		if = {
+			limit = { exists = global_var:hd_yuan_jizhou_war }
+			set_global_variable = { name = hd_yuan_jizhou_target value = title:k_uuii_jizhou }
+			set_global_variable = { name = hd_yuan_jizhou_handover_waiting value = yes days = 30 }
+			character:yuan_shao = { trigger_event = { id = hd_yuan_jizhou.0002 days = 30 } }
+			character:yuan_shao = { trigger_event = hd_yuan_jizhou.0010 }
+			debug_log = "HD_YUAN JIZHOU_REAL_WAR_CONFIRMED_HANDOVER_QUEUED_30_DAYS"
+		}
+		else = { debug_log = "HD_YUAN JIZHOU_WAR_CREATION_FAILED" hd_yuan_jizhou_end_effect = yes }
+	}
+}
+
+hd_yuan_jizhou_handover_effect = {
+	set_global_variable = hd_yuan_jizhou_handover_started
+	# Snapshot before title transfers or fealty can change the iterators.
+	global_var:hd_yuan_jizhou_war = { save_scope_as = hd_yuan_original_war }
+	character:han_fu = {
+		every_held_title = { add_to_list = hd_yuan_han_titles }
+		every_vassal = { add_to_list = hd_yuan_han_vassals }
+	}
+	# Give Yuan the superior rank while Han still holds his counties. Native
+	# transfer_behavior then handles the existing defensive war on subjugation.
+	create_title_and_vassal_change = { type = granted save_scope_as = hd_yuan_rank_change add_claim_on_loss = no }
+	every_in_list = {
+		list = hd_yuan_han_titles
+		limit = { tier >= tier_kingdom is_noble_family_title = no }
+		change_title_holder = { holder = character:yuan_shao change = scope:hd_yuan_rank_change }
+	}
+	resolve_title_and_vassal_change = scope:hd_yuan_rank_change
+	character:han_fu = {
+		if = {
+			limit = { is_landed = yes highest_held_title_tier < character:yuan_shao.highest_held_title_tier NOT = { liege = character:yuan_shao } }
+			create_title_and_vassal_change = { type = swear_fealty save_scope_as = hd_yuan_han_fealty add_claim_on_loss = no }
+			change_liege = { liege = character:yuan_shao change = scope:hd_yuan_han_fealty }
+			resolve_title_and_vassal_change = scope:hd_yuan_han_fealty
+		}
+	}
+	create_title_and_vassal_change = { type = granted save_scope_as = hd_yuan_realm_change add_claim_on_loss = no }
+	every_in_list = {
+		list = hd_yuan_han_vassals
+		limit = { is_alive = yes NOT = { this = character:yuan_shao } NOT = { liege = character:yuan_shao } }
+		change_liege = { liege = character:yuan_shao change = scope:hd_yuan_realm_change }
+	}
+	every_in_list = {
+		list = hd_yuan_han_titles
+		limit = { is_noble_family_title = no holder = character:han_fu }
+		change_title_holder = { holder = character:yuan_shao change = scope:hd_yuan_realm_change }
+	}
+	resolve_title_and_vassal_change = scope:hd_yuan_realm_change
+	character:han_fu = {
+		every_held_title = {
+			limit = { is_noble_family_title = yes }
+			save_scope_as = hd_yuan_han_family_title
+			character:han_fu = { destroy_title = scope:hd_yuan_han_family_title }
+		}
+		if = { limit = { is_imprisoned = yes } release_from_prison = yes }
+		if = { limit = { is_ruler = no } set_employer = character:yuan_shao }
+		if = { limit = { is_courtier_of = character:yuan_shao } debug_log = "HD_YUAN HAN_COURT_CONFIRMED" }
+		else = { debug_log = "HD_YUAN HAN_COURT_ASSIGNMENT_FAILED" }
+	}
+	if = {
+		limit = {
+			character:han_fu = { is_alive = yes is_courtier_of = character:yuan_shao is_ruler = no }
+			NOT = { any_in_list = { list = hd_yuan_han_titles is_noble_family_title = no NOT = { holder = character:yuan_shao } } }
+			NOT = { any_in_list = { list = hd_yuan_han_vassals is_alive = yes NOT = { liege = character:yuan_shao } } }
+		}
+		set_global_variable = hd_yuan_jizhou_realm_transferred
+		debug_log = "HD_YUAN HAN_REALM_AND_COURT_CONFIRMED"
+	}
+	else = { debug_log = "HD_YUAN HAN_REALM_OR_COURT_INCOMPLETE" }
+	character:yuan_shao = {
+		set_relation_rival = { reason = rival_historical target = character:gong_sun_zan }
+		add_character_flag = hd_yuan_jizhou_claim_received
+		random_owned_story = { type = hd_story_yuan_life set_variable = { name = hd_yuan_life_phase value = flag:hd_yuan_life_jizhou } }
+		trigger_event = { id = hd_yuan_jizhou.0003 days = 1 }
+	}
+	debug_log = "HD_YUAN HANDOVER_APPLIED_AWAITING_ORIGINAL_WAR_VERIFICATION"
+}

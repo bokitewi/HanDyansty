@@ -1,5 +1,5 @@
-# Stage survives the elected leader: 0 founding, 1 first war, 2 decision,
-# 3 second war, 4 final settlement. Dong owns the single monthly dispatcher.
+﻿# Stage survives the elected leader: 0 founding, 1 war. Victory ends the chain.
+# Dong owns the single monthly dispatcher.
 hd_anti_regent_war_invalidated_effect = {
 	if = {
 		limit = { NOT = { exists = global_var:hd_anti_regent_chain_resolved } }
@@ -72,12 +72,13 @@ hd_anti_regent_refresh_leader_effect = {
 			}
 		}
 		global_var:hd_anti_regent_league_leader ?= {
+			if = {
+				limit = { is_alive = yes }
 			remove_character_flag = hd_anti_regent_league_leader
-			remove_character_flag = hd_anti_regent_decision_queued
-			remove_character_flag = hd_anti_regent_settlement_queued
 			clear_variable_list = hd_anti_regent_members
 			remove_variable = hd_anti_regent_target
 			remove_variable = hd_anti_regent_confederation
+			}
 		}
 		set_global_variable = { name = hd_anti_regent_league_leader value = scope:hd_anti_regent_successor }
 		scope:hd_anti_regent_successor = {
@@ -97,7 +98,7 @@ hd_anti_regent_refresh_leader_effect = {
 		}
 		every_in_global_list = {
 			variable = hd_anti_regent_invitees
-			limit = { has_character_flag = hd_anti_regent_invitation_pending }
+			limit = { is_alive = yes has_character_flag = hd_anti_regent_invitation_pending }
 			set_variable = { name = hd_anti_regent_inviter value = scope:hd_anti_regent_successor }
 		}
 		character:dong_zhuo_2 = { set_variable = { name = hd_anti_regent_leader value = scope:hd_anti_regent_successor } }
@@ -120,11 +121,8 @@ hd_anti_regent_try_stage_war_effect = {
 			hd_anti_regent_real_confederation_ready_trigger = yes
 			character:dong_zhuo_2 = { is_alive = yes is_landed = yes has_character_flag = hd_current_han_regent }
 		}
-		if = {
-			limit = { global_var:hd_anti_regent_stage = 1 }
-			start_war = { cb = $CB$ target = character:dong_zhuo_2 target_title = title:d_henan target_title = title:d_luoyang }
-		}
-		else = { start_war = { cb = $CB$ target = character:dong_zhuo_2 } }
+		# The war targets Dong's realm; only Henan transfers on victory.
+		start_war = { cb = $CB$ target = character:dong_zhuo_2 }
 		random_character_war = {
 			limit = { using_cb = $CB$ primary_defender = character:dong_zhuo_2 }
 			save_scope_as = hd_anti_regent_stage_war
@@ -144,6 +142,7 @@ hd_anti_regent_try_stage_war_effect = {
 				NOT = { exists = global_var:hd_anti_regent_first_war_confirmed }
 			}
 			set_global_variable = hd_anti_regent_first_war_confirmed
+			character:dong_zhuo_2 = { hd_dong_purge_yuan_effect = yes }
 			add_character_flag = hd_anti_regent_first_war_started
 			trigger_event = hd_anti_regent.0012
 			trigger_event = { id = hd_anti_regent.0004 days = 1 }
@@ -160,7 +159,7 @@ hd_anti_regent_maintain_effect = {
 	if = {
 		limit = { NOT = { exists = global_var:hd_anti_regent_chain_resolved } }
 		if = {
-			limit = { NOT = { exists = global_var:hd_anti_regent_founded } }
+			limit = { NOT = { exists = global_var:hd_anti_regent_founded } NOT = { exists = global_var:hd_anti_regent_first_war_confirmed } }
 			hd_anti_regent_prepare_first_war_effect = yes
 			if = {
 				limit = {
@@ -181,22 +180,12 @@ hd_anti_regent_maintain_effect = {
 		}
 		if = {
 			limit = { exists = global_var:hd_anti_regent_active_confederation }
+			every_in_global_list = { variable = hd_anti_regent_confirmed_members limit = { is_alive = yes } hd_anti_regent_repair_member_effect = yes }
 			hd_anti_regent_refresh_leader_effect = yes
 			if = {
 				limit = { exists = scope:hd_anti_regent_successor }
 				scope:hd_anti_regent_successor = {
 					if = { limit = { global_var:hd_anti_regent_stage = 1 } hd_anti_regent_try_stage_war_effect = { CB = hd_anti_regent_punitive_cb } }
-					else_if = { limit = { global_var:hd_anti_regent_stage = 3 } hd_anti_regent_try_stage_war_effect = { CB = hd_enter_the_passes_cb } }
-					else_if = {
-						limit = { global_var:hd_anti_regent_stage = 2 NOT = { has_character_flag = hd_anti_regent_decision_queued } }
-						add_character_flag = hd_anti_regent_decision_queued
-						trigger_event = { id = hd_anti_regent.0100 days = 1 }
-					}
-					else_if = {
-						limit = { global_var:hd_anti_regent_stage = 4 NOT = { has_character_flag = hd_anti_regent_settlement_queued } }
-						add_character_flag = hd_anti_regent_settlement_queued
-						trigger_event = { id = hd_anti_regent.0200 days = 1 }
-					}
 				}
 			}
 			else = { debug_log = "HD_COALITION SUCCESSION_WAITING_FOR_ELIGIBLE_MEMBER" }
@@ -209,8 +198,15 @@ hd_anti_regent_maintain_effect = {
 					global_var:hd_anti_regent_active_confederation = { NOT = { any_confederation_member = { is_alive = yes is_landed = yes } } }
 				}
 			}
-			debug_log = "HD_COALITION TERMINAL_EMPTY_LEAGUE"
-			hd_anti_regent_failure_effect = yes
+			# A missing league is not a war result. Rebuild without resetting stage.
+			debug_log = "HD_COALITION EMPTY_LEAGUE_REBUILD_PENDING"
+			if = {
+				limit = { NOT = { exists = global_var:hd_anti_regent_first_war_confirmed } }
+				remove_global_variable = hd_anti_regent_founded
+				remove_global_variable = hd_anti_regent_active_confederation
+				remove_variable = hd_anti_regent_confederation
+			}
+			else = { debug_log = "HD_COALITION ACTIVE_WAR_ORIGINAL_LEAGUE_UNAVAILABLE" }
 		}
 		hd_anti_regent_queue_maintenance_effect = yes
 	}

@@ -1,0 +1,324 @@
+﻿# Cao Cao's Fengying takeover.  The caller is always Cao Cao.
+#
+# The historical CB first transfers Jingzhao.  This file only handles the
+# later court takeover, which waits until Cao controls Xu Chang personally or
+# through a vassal.  The wait deliberately does not revoke Xu Chang from
+# another ruler.
+hd_cao_fengying_victory_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_fengying_world_resolved }
+			has_character_flag = hd_cao_fengying_authorized
+			hd_cao_fengying_actor_valid_trigger = yes
+		}
+		# Jingzhao's counties may include the emperor's final holding. Preserve
+		# the Han title now; regency and relocation still wait for Xu Chang.
+		title:h_china = { set_landless_title = yes }
+		hd_dong_grant_duchy_effect = { DUCHY = d_jingzhao RECIPIENT = character:cao_cao }
+		add_character_flag = hd_cao_fengying_takeover_pending
+		hd_cao_fengying_try_takeover_effect = yes
+	}
+}
+
+hd_cao_fengying_try_takeover_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_fengying_world_resolved }
+			has_character_flag = hd_cao_fengying_authorized
+			hd_cao_fengying_actor_valid_trigger = yes
+			hd_dong_transition_pending_trigger = no
+		}
+		if = {
+			limit = {
+				title:d_jingzhao.holder = this
+				hd_cao_controls_xuchang_trigger = yes
+			}
+			hd_cao_fengying_complete_takeover_effect = yes
+		}
+		else_if = {
+			limit = { title:d_jingzhao.holder = this }
+			add_character_flag = hd_cao_fengying_takeover_pending
+		}
+	}
+}
+
+hd_cao_fengying_complete_takeover_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_fengying_world_resolved }
+			has_character_flag = hd_cao_fengying_authorized
+			hd_cao_fengying_actor_valid_trigger = yes
+			hd_dong_transition_pending_trigger = no
+			title:d_jingzhao.holder = this
+			hd_cao_controls_xuchang_trigger = yes
+			title:h_china.holder ?= { is_alive = yes }
+		}
+
+		save_scope_as = hd_cao_fengying_takeover_actor
+		title:h_china.holder = { save_scope_as = hd_cao_fengying_han_emperor }
+
+		# Snapshot every direct Han vassal before the e_han transfer.  The rank
+		# filter is intentionally applied later: the former e_han holder must
+		# remain eligible after losing that empire title.
+		scope:hd_cao_fengying_han_emperor = {
+			every_vassal = {
+				limit = {
+					NOT = { this = scope:hd_cao_fengying_takeover_actor }
+				}
+				add_to_list = hd_cao_fengying_han_vassals
+			}
+		}
+		# If the former e_han holder belongs to Han, remember its direct
+		# vassals too.  Only ranks that become illegal under its post-transfer
+		# duke/king rank are reparented below; the remaining hierarchy stays put.
+		title:e_han.holder ?= {
+			if = {
+				limit = {
+					NOT = { this = scope:hd_cao_fengying_takeover_actor }
+					is_vassal_or_below_of = scope:hd_cao_fengying_han_emperor
+				}
+				save_scope_as = hd_cao_fengying_former_guan_zhong_holder
+				every_vassal = {
+					limit = { NOT = { this = scope:hd_cao_fengying_takeover_actor } }
+					add_to_list = hd_cao_fengying_former_guan_zhong_vassals
+				}
+			}
+		}
+
+		# Snapshot every real title personally held by the emperor.  h_china,
+		# e_han, and landless noble-family/minister titles are handled separately
+		# and therefore never enter this list.
+		scope:hd_cao_fengying_han_emperor = {
+			every_held_title = {
+				limit = {
+					tier >= tier_barony
+					is_landless_type_title = no
+					is_noble_family_title = no
+					NOT = { this = title:h_china }
+					NOT = { this = title:e_han }
+				}
+				add_to_list = hd_cao_fengying_han_real_titles
+			}
+		}
+
+		# First establish the empire-tier vassal relationship.  Keeping this in
+		# its own transaction makes all later king/duke vassal transfers validate
+		# against Cao's new empire rank.
+		create_title_and_vassal_change = {
+			type = granted
+			save_scope_as = hd_cao_fengying_empire_change
+			add_claim_on_loss = no
+		}
+		if = {
+			limit = { NOT = { title:e_han.holder = scope:hd_cao_fengying_takeover_actor } }
+			title:e_han = {
+				change_title_holder = {
+					holder = scope:hd_cao_fengying_takeover_actor
+					change = scope:hd_cao_fengying_empire_change
+				}
+			}
+		}
+		if = {
+			limit = {
+				scope:hd_cao_fengying_takeover_actor = {
+					NOT = { liege = scope:hd_cao_fengying_han_emperor }
+				}
+			}
+			scope:hd_cao_fengying_takeover_actor = {
+				change_liege = {
+					liege = scope:hd_cao_fengying_han_emperor
+					change = scope:hd_cao_fengying_empire_change
+				}
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_cao_fengying_empire_change
+
+		# Make h_china landless before the second transaction can remove the
+		# emperor's last county.  Its capital remains the real Xu Chang county.
+		title:h_china = {
+			set_landless_title = yes
+			set_capital_county = title:c_uuii_p_738
+		}
+
+		# Transfer only land directly held by the emperor, including the
+		# baronies under each transferred county, then move the saved eligible
+		# direct vassals.  Imperial office holders remain with Han.  The lists
+		# are execution-local; no persistent global list is needed.
+		create_title_and_vassal_change = {
+			type = granted
+			save_scope_as = hd_cao_fengying_domain_change
+			add_claim_on_loss = no
+		}
+		every_in_list = {
+			list = hd_cao_fengying_han_real_titles
+			limit = {
+				holder = scope:hd_cao_fengying_han_emperor
+				NOT = { holder = scope:hd_cao_fengying_takeover_actor }
+			}
+			change_title_holder = {
+				holder = scope:hd_cao_fengying_takeover_actor
+				change = scope:hd_cao_fengying_domain_change
+				take_baronies = yes
+			}
+		}
+		every_in_list = {
+			list = hd_cao_fengying_han_vassals
+			limit = {
+				is_alive = yes
+				NOT = { this = scope:hd_cao_fengying_takeover_actor }
+				highest_held_title_tier < tier_empire
+				NOT = { liege = scope:hd_cao_fengying_takeover_actor }
+			}
+			if = {
+				limit = { is_ruler = yes }
+				change_liege = {
+					liege = scope:hd_cao_fengying_takeover_actor
+					change = scope:hd_cao_fengying_domain_change
+				}
+			}
+			else = { set_employer = scope:hd_cao_fengying_takeover_actor }
+		}
+		if = {
+			limit = {
+				exists = scope:hd_cao_fengying_former_guan_zhong_holder
+				scope:hd_cao_fengying_former_guan_zhong_holder = {
+					OR = { is_ruler = no highest_held_title_tier < tier_empire }
+				}
+			}
+			every_in_list = {
+				list = hd_cao_fengying_former_guan_zhong_vassals
+				limit = {
+					is_alive = yes
+					NOT = { this = scope:hd_cao_fengying_takeover_actor }
+				}
+				if = {
+					limit = { highest_held_title_tier >= tier_empire }
+					change_liege = {
+						liege = scope:hd_cao_fengying_han_emperor
+						change = scope:hd_cao_fengying_domain_change
+					}
+				}
+				else_if = {
+					limit = {
+						OR = {
+							scope:hd_cao_fengying_former_guan_zhong_holder = { is_ruler = no }
+							highest_held_title_tier >= scope:hd_cao_fengying_former_guan_zhong_holder.highest_held_title_tier
+						}
+					}
+					change_liege = {
+						liege = scope:hd_cao_fengying_takeover_actor
+						change = scope:hd_cao_fengying_domain_change
+					}
+				}
+				else_if = {
+					limit = { NOT = { liege = scope:hd_cao_fengying_former_guan_zhong_holder } }
+					change_liege = {
+						liege = scope:hd_cao_fengying_former_guan_zhong_holder
+						change = scope:hd_cao_fengying_domain_change
+					}
+				}
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_cao_fengying_domain_change
+
+		scope:hd_cao_fengying_takeover_actor = {
+			set_primary_title_to = title:e_han
+		}
+
+		# The Han hegemony remains with its emperor but no longer owns landed
+		# territory.  Its capital is still a real county, so the estate and the
+		# emperor's physical location are moved there explicitly.
+		character:wang_yun ?= {
+			if = {
+				limit = { is_alive = yes }
+			remove_character_flag = hd_current_han_regent
+			remove_trait = kuzhu_empire_overseer
+			}
+		}
+		character:li_jue ?= {
+			if = {
+				limit = { is_alive = yes }
+			remove_character_flag = hd_current_han_regent
+			remove_trait = kuzhu_empire_overseer
+			}
+		}
+		scope:hd_cao_fengying_takeover_actor = {
+			hd_dong_install_regent_effect = yes
+		}
+		scope:hd_cao_fengying_han_emperor = {
+			# Existing celestial rulers normally already have an east Asian estate.
+			# If a title-transfer edge case removed it, create the native noble
+			# family title first, then use the native estate setup helper.
+			if = {
+				limit = {
+					has_domicile = no
+					NOT = { any_held_title = { is_noble_family_title = yes } }
+				}
+				if = {
+					limit = { NOT = { has_game_rule = never_noble_family_title } }
+					create_noble_family_effect = { GOVERNMENT_GIVER = this }
+				}
+				else = {
+					# Only the emperor bypasses the optional family-title creation
+					# rule. Preserve the native house-head prerequisite.
+					if = {
+						limit = {
+							exists = house.house_head
+							NOT = { house.house_head = scope:hd_cao_fengying_han_emperor }
+						}
+						if = {
+							limit = {
+								house.house_head = {
+									is_ai = yes
+									OR = {
+										AND = {
+											top_liege = scope:hd_cao_fengying_han_emperor.top_liege
+											OR = {
+												is_ruler = no
+												highest_held_title_tier < scope:hd_cao_fengying_han_emperor.highest_held_title_tier
+											}
+										}
+										NOT = { exists = liege }
+									}
+								}
+							}
+							house = { set_house_head = scope:hd_cao_fengying_han_emperor }
+						}
+						else = { create_cadet_branch = {} }
+					}
+					give_noble_family_title = {
+						name = noble_family_name
+						tier = county
+						article = DEFAULT_TITLE_NAME_ARTICLE
+						government = celestial_government
+					}
+				}
+				domicile ?= { set_up_domicile_estate_effect = yes }
+			}
+			domicile ?= {
+				move_domicile = title:c_uuii_p_738.title_province
+			}
+			set_location = {
+				location = title:c_uuii_p_738.title_province
+				stick_to_location = yes
+			}
+			if = {
+				limit = { has_domicile = no }
+				debug_log = "HD_CAO FENGYING EMPEROR_ESTATE_MISSING"
+			}
+		}
+
+		set_global_variable = {
+			name = hd_fengying_world_claimed
+			value = scope:hd_cao_fengying_takeover_actor
+		}
+		set_global_variable = hd_fengying_world_resolved
+		set_global_variable = hd_chain_terminal_historical
+		remove_global_variable = hd_fengying_world_open
+		scope:hd_cao_fengying_takeover_actor = {
+			remove_character_flag = hd_cao_fengying_authorized
+			remove_character_flag = hd_cao_fengying_takeover_pending
+		}
+		debug_log = "HD_CAO FENGYING TAKEOVER_COMPLETED_AT_XUCHANG"
+	}
+}

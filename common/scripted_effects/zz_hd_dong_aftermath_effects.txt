@@ -1,0 +1,377 @@
+﻿# Called only after the first war object exists, before the migration event.
+hd_dong_purge_yuan_effect = {
+	if = {
+		limit = { NOT = { exists = global_var:hd_dong_yuan_purge_completed } exists = character:yuan_kui.dynasty }
+		character:yuan_kui.dynasty = {
+			every_dynasty_member = {
+				limit = { hd_dong_yuan_execution_target_trigger = yes }
+				add_to_list = hd_dong_yuan_victims
+			}
+		}
+		set_global_variable = hd_dong_yuan_purge_completed
+		every_in_list = {
+			list = hd_dong_yuan_victims
+			hd_dc_begin_protection_reason_effect = { TARGET = this ACTOR = character:dong_zhuo_2 ACTION = execute REASON = has_execute_reason }
+			death = { death_reason = death_execution killer = character:dong_zhuo_2 }
+		}
+		debug_log = "HD_DONG YUAN_PURGE_COMPLETED"
+	}
+	else_if = {
+		limit = { NOT = { exists = character:yuan_kui.dynasty } }
+		debug_log = "HD_DONG YUAN_PURGE_ABORTED_DYNASTY_MISSING"
+	}
+}
+
+# Transfer only the named de jure duchy, not unrelated personal vassals.
+hd_dong_grant_duchy_effect = {
+	# A full duchy transfer can include the emperor's last county.
+	title:h_china = { if = { limit = { exists = holder } set_landless_title = yes } }
+	create_title_and_vassal_change = {
+		type = conquest
+		save_scope_as = hd_dong_duchy_change
+		add_claim_on_loss = no
+	}
+	title:$DUCHY$ = {
+		if = {
+			limit = { NOT = { holder = $RECIPIENT$ } }
+			change_title_holder = { holder = $RECIPIENT$ change = scope:hd_dong_duchy_change }
+		}
+		every_in_de_jure_hierarchy = {
+			limit = { tier = tier_county NOT = { holder = $RECIPIENT$ } }
+			change_title_holder_include_vassals = { holder = $RECIPIENT$ change = scope:hd_dong_duchy_change }
+		}
+	}
+	resolve_title_and_vassal_change = scope:hd_dong_duchy_change
+}
+
+hd_dong_queue_murder_effect = {
+	if = {
+		limit = {
+			exists = global_var:hd_anti_regent_first_war_confirmed
+			NOT = { exists = global_var:hd_dong_murder_scheduled }
+			NOT = { exists = global_var:hd_dong_settlement_pending }
+			NOT = { exists = global_var:hd_dong_settlement_completed }
+			exists = character:dong_zhuo_2
+			character:dong_zhuo_2 = { is_alive = yes }
+		}
+		set_global_variable = hd_dong_murder_scheduled
+		set_global_variable = hd_dong_war_chain_ended
+		set_global_variable = { name = hd_dong_war_ended_date value = current_date }
+		if = {
+			limit = { exists = character:wang_yun exists = title:h_china.holder character:wang_yun = { is_alive = yes } title:h_china.holder = { is_alive = yes } }
+			set_global_variable = hd_dong_murder_pending
+			set_global_variable = { name = hd_dong_murder_waiting value = yes days = 30 }
+			character:wang_yun = {
+				every_scheme = { limit = { scheme_type = murder scheme_target_character = character:dong_zhuo_2 } end_scheme = yes }
+				trigger_event = { id = hd_dong_aftermath.0001 days = 30 }
+			}
+			debug_log = "HD_DONG MURDER_QUEUED_30_DAYS"
+		}
+		else = { debug_log = "HD_DONG MURDER_ABORTED_WANG_OR_EMPEROR_MISSING" }
+	}
+}
+
+# Called before succession. Keep titles, not dying holders, across the delay.
+hd_dong_queue_death_settlement_effect = {
+	if = {
+		limit = { NOT = { exists = global_var:hd_dong_settlement_pending } NOT = { exists = global_var:hd_dong_settlement_processed } NOT = { exists = global_var:hd_dong_settlement_aborted } }
+		remove_global_variable = hd_dong_murder_pending
+		set_global_variable = hd_dong_settlement_pending
+		clear_global_variable_list = hd_dong_breakaway_titles
+		every_held_title = {
+			limit = { tier >= tier_county is_landless_type_title = no }
+			add_to_global_variable_list = { name = hd_dong_breakaway_titles target = this }
+		}
+		every_vassal_or_below = { hd_dong_snapshot_breakaway_effect = yes }
+		title:h_china.holder ?= {
+			every_vassal_or_below = { hd_dong_snapshot_breakaway_effect = yes }
+			trigger_event = { id = hd_dong_aftermath.0002 days = 1 }
+		}
+		if = {
+			limit = { NOT = { exists = title:h_china.holder } }
+			hd_dong_abort_settlement_effect = yes
+		}
+	}
+}
+
+hd_dong_snapshot_breakaway_effect = {
+	every_held_title = {
+		limit = { tier >= tier_county is_landless_type_title = no }
+		add_to_global_variable_list = { name = hd_dong_breakaway_titles target = this }
+	}
+}
+
+hd_dong_abort_settlement_effect = {
+	remove_global_variable = hd_dong_settlement_pending
+	clear_global_variable_list = hd_dong_breakaway_titles
+	set_global_variable = hd_dong_settlement_aborted
+	debug_log = "HD_DONG SETTLEMENT_ABORTED_REQUIRED_ACTOR_MISSING"
+}
+
+# Current scope is the intended regent. The variable belongs to the real Han ruler.
+hd_dong_install_regent_effect = {
+	save_scope_as = hd_dong_new_regent
+	if = { limit = { is_alive = yes is_imprisoned = yes exists = title:h_china.holder } release_from_prison = yes }
+	# A family title makes its holder a ruler even without landed counties.
+	if = {
+		limit = { is_alive = yes exists = title:h_china.holder NOT = { liege = title:h_china.holder } }
+		if = {
+			limit = { is_ruler = yes highest_held_title_tier < tier_hegemony }
+			create_title_and_vassal_change = { type = granted save_scope_as = hd_dong_regent_liege_change add_claim_on_loss = no }
+			change_liege = { liege = title:h_china.holder change = scope:hd_dong_regent_liege_change }
+			resolve_title_and_vassal_change = scope:hd_dong_regent_liege_change
+		}
+		else_if = { limit = { is_ruler = no } set_employer = title:h_china.holder }
+	}
+	if = {
+		limit = { is_alive = yes OR = { liege = title:h_china.holder is_courtier_of = title:h_china.holder } }
+		title:h_china.holder = {
+			if = {
+				limit = { exists = diarch diarch != scope:hd_dong_new_regent }
+				diarch = { remove_character_flag = hd_current_han_regent remove_trait = kuzhu_empire_overseer }
+			}
+			set_variable = { name = hd_dong_fixed_regent value = scope:hd_dong_new_regent }
+			add_trait = kuzhu_puppet_ruler
+			if = { limit = { has_active_diarchy = yes NOT = { has_diarchy_type = regency } } end_diarchy = yes }
+			designate_diarch = scope:hd_dong_new_regent
+			try_start_diarchy = regency
+			set_diarch = scope:hd_dong_new_regent
+			set_diarchy_swing = 100
+		}
+		if = {
+			limit = { title:h_china.holder = { has_diarchy_type = regency diarch = scope:hd_dong_new_regent } }
+			add_character_flag = hd_current_han_regent
+			add_trait = kuzhu_empire_overseer
+			debug_log = "HD_DONG REGENT_INSTALL_CONFIRMED"
+		}
+		else = {
+			title:h_china.holder = { remove_variable = hd_dong_fixed_regent }
+			debug_log = "HD_DONG REGENT_INSTALL_FAILED_DIARCHY"
+		}
+	}
+	else = { debug_log = "HD_DONG REGENT_INSTALL_FAILED_NO_HAN_RELATION" }
+}
+
+hd_dong_settle_death_effect = {
+	if = {
+		limit = { NOT = { any_in_global_list = { variable = hd_dong_breakaway_titles always = yes } } }
+		set_global_variable = hd_dong_settlement_partial
+		debug_log = "HD_DONG BREAKAWAY_SNAPSHOT_EMPTY"
+	}
+	# Resolve original titles to living successors BEFORE Jingzhao transfers.
+	every_in_global_list = {
+		variable = hd_dong_breakaway_titles
+		holder ?= {
+			if = {
+				limit = {
+					is_alive = yes is_landed = yes
+					NOT = { this = title:h_china.holder }
+					NOT = { this = character:lv_bu }
+					NOT = { any_held_title = { tier = tier_empire is_landless_type_title = yes } }
+					NOT = { is_in_list = hd_dong_breakaway_rulers }
+				}
+				add_to_list = hd_dong_breakaway_rulers
+			}
+		}
+	}
+	# Release existing dukes first; kings keep only their personal duchies.
+	every_in_list = {
+		list = hd_dong_breakaway_rulers
+		limit = { is_independent_ruler = no highest_held_title_tier = tier_duchy }
+		hd_dong_release_ruler_effect = yes
+	}
+	every_in_list = {
+		list = hd_dong_breakaway_rulers
+		limit = { is_independent_ruler = no highest_held_title_tier >= tier_kingdom }
+		hd_dong_release_ruler_effect = yes
+	}
+	every_in_list = {
+		list = hd_dong_breakaway_rulers
+		limit = { is_independent_ruler = no highest_held_title_tier = tier_county liege = title:h_china.holder }
+		hd_dong_release_ruler_effect = yes
+	}
+	clear_global_variable_list = hd_dong_breakaway_titles
+	if = {
+		limit = { exists = character:lv_bu character:lv_bu = { is_alive = yes } }
+		hd_dong_grant_duchy_effect = { DUCHY = d_jingzhao RECIPIENT = character:lv_bu }
+		create_title_and_vassal_change = { type = granted save_scope_as = hd_dong_lubu_liege_change add_claim_on_loss = no }
+		character:lv_bu = { change_liege = { liege = title:h_china.holder change = scope:hd_dong_lubu_liege_change } }
+		resolve_title_and_vassal_change = scope:hd_dong_lubu_liege_change
+		character:lv_bu = {
+			hd_force_celestial_effect = yes
+			set_realm_capital = title:c_uuii_p_867
+			set_location = { location = title:c_uuii_p_867.title_province stick_to_location = yes }
+		}
+	}
+	else = { set_global_variable = hd_dong_settlement_partial debug_log = "HD_DONG LUBU_SUCCESSION_ABORTED_ACTOR_DEAD" }
+	character:wang_yun ?= {
+		if = {
+			limit = { is_alive = yes }
+			set_location = { location = title:c_uuii_p_867.title_province stick_to_location = yes }
+			hd_dong_install_regent_effect = yes
+		}
+		else = { set_global_variable = hd_dong_settlement_partial debug_log = "HD_DONG WANG_REGENCY_ABORTED_ACTOR_DEAD" }
+	}
+	character:diao_chan ?= {
+		if = {
+			limit = { is_alive = yes character:wang_yun = { is_alive = yes } }
+			character:wang_yun = { adopt = character:diao_chan }
+			add_character_flag = hd_dong_diaochan_adopted
+			hd_dong_diaochan_union_effect = yes
+		}
+	}
+	remove_global_variable = hd_dong_settlement_pending
+	set_global_variable = hd_dong_settlement_processed
+	if = {
+		limit = { exists = character:li_jue character:li_jue = { is_alive = yes } }
+		hd_dong_grant_duchy_effect = { DUCHY = d_hongnong RECIPIENT = character:li_jue }
+		character:li_jue = {
+			hd_force_independent_celestial_effect = yes
+			set_realm_capital = title:c_uuii_p_842
+			set_location = { location = title:c_uuii_p_842.title_province stick_to_location = yes }
+			add_pressed_claim = title:e_han
+			if = {
+				limit = { NOT = { has_character_flag = hd_li_jue_event_troops_received } }
+				spawn_army = {
+					name = hd_li_jue_event_troops
+					location = title:c_uuii_p_842.title_province
+					origin = title:c_uuii_p_842.title_province
+					men_at_arms = { type = armored_footmen stacks = 30 }
+					men_at_arms = { type = armored_horsemen stacks = 80 }
+					inheritable = no
+					uses_supply = yes
+				}
+				add_character_flag = hd_li_jue_event_troops_received
+			}
+			set_global_variable = hd_li_jue_war_pending
+			trigger_event = { id = hd_dong_aftermath.0003 days = 1 }
+		}
+		character:guo_si ?= {
+			if = {
+				limit = { is_alive = yes }
+				# Native admin conversion likewise destroys family-only ruler titles.
+				if = { limit = { is_imprisoned = yes } release_from_prison = yes }
+				every_held_title = {
+					save_scope_as = hd_dong_guo_title
+					if = {
+						limit = { is_noble_family_title = yes }
+						character:guo_si = { destroy_title = scope:hd_dong_guo_title }
+					}
+					else = {
+						create_title_and_vassal_change = { type = granted save_scope_as = hd_dong_guo_title_change add_claim_on_loss = no }
+						change_title_holder_include_vassals = { holder = character:li_jue change = scope:hd_dong_guo_title_change }
+						resolve_title_and_vassal_change = scope:hd_dong_guo_title_change
+					}
+				}
+				set_employer = character:li_jue
+				if = { limit = { is_courtier_of = character:li_jue } set_knight_status = force }
+				else = { set_global_variable = hd_dong_settlement_partial debug_log = "HD_DONG GUO_COURT_ASSIGNMENT_FAILED" }
+			}
+		}
+	}
+	else = { set_global_variable = hd_dong_settlement_partial debug_log = "HD_DONG LI_JUE_SUCCESSION_ABORTED_ACTOR_DEAD" }
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_dong_settlement_partial }
+			title:d_jingzhao.holder = character:lv_bu
+			character:lv_bu = { liege = title:h_china.holder }
+			title:h_china.holder = { diarch = character:wang_yun has_diarchy_type = regency }
+			title:d_hongnong.holder = character:li_jue
+			character:li_jue = { is_independent_ruler = yes }
+		}
+		set_global_variable = hd_dong_settlement_completed
+		debug_log = "HD_DONG DEATH_SETTLEMENT_CONFIRMED"
+	}
+	else = { debug_log = "HD_DONG DEATH_SETTLEMENT_PARTIAL" }
+	debug_log = "HD_DONG DEATH_SETTLEMENT_PROCESSED"
+}
+
+hd_dong_release_ruler_effect = {
+	create_title_and_vassal_change = { type = independency save_scope_as = hd_dong_breakaway_change add_claim_on_loss = no }
+	becomes_independent = { change = scope:hd_dong_breakaway_change }
+	resolve_title_and_vassal_change = scope:hd_dong_breakaway_change
+	if = { limit = { is_independent_ruler = yes } debug_log = "HD_DONG RULER_INDEPENDENCE_CONFIRMED" }
+	else = { set_global_variable = hd_dong_settlement_partial debug_log = "HD_DONG RULER_INDEPENDENCE_FAILED" }
+}
+
+hd_dong_diaochan_union_effect = {
+	if = {
+		limit = { is_alive = yes exists = character:lv_bu character:lv_bu = { is_alive = yes } }
+		if = {
+			limit = { is_adult = yes }
+			if = { limit = { NOT = { is_concubine_of = character:lv_bu } } character:lv_bu = { make_concubine = character:diao_chan } }
+			remove_character_flag = hd_dong_diaochan_union_pending
+		}
+		else = {
+			add_character_flag = hd_dong_diaochan_union_pending
+			trigger_event = { id = hd_dong_aftermath.0004 months = 1 }
+		}
+	}
+	else = { remove_character_flag = hd_dong_diaochan_union_pending }
+}
+
+hd_li_jue_victory_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_li_jue_war_resolved }
+			exists = character:li_jue
+			exists = title:h_china.holder
+			character:li_jue = { is_alive = yes }
+			title:h_china.holder = { is_alive = yes }
+		}
+		title:h_china.holder = {
+			every_vassal = {
+				# Empire-tier ministers retain their offices and direct Han allegiance.
+				limit = { NOT = { this = character:li_jue } highest_held_title_tier < tier_empire }
+				add_to_list = hd_li_jue_han_vassals
+			}
+		}
+		character:wang_yun ?= {
+			every_close_or_extended_family_member = {
+				limit = { hd_dong_inside_realm_trigger = { RULER = title:h_china.holder } NOT = { this = character:lv_bu } }
+				add_to_list = hd_li_jue_wang_victims
+			}
+			every_spouse = {
+				limit = { hd_dong_inside_realm_trigger = { RULER = title:h_china.holder } NOT = { is_in_list = hd_li_jue_wang_victims } }
+				add_to_list = hd_li_jue_wang_victims
+			}
+			if = { limit = { is_alive = yes } add_to_list = hd_li_jue_wang_victims }
+		}
+		character:diao_chan ?= {
+			if = {
+				limit = { has_character_flag = hd_dong_diaochan_adopted hd_dong_inside_realm_trigger = { RULER = title:h_china.holder } NOT = { is_in_list = hd_li_jue_wang_victims } }
+				add_to_list = hd_li_jue_wang_victims
+			}
+		}
+		hd_dong_grant_duchy_effect = { DUCHY = d_jingzhao RECIPIENT = character:li_jue }
+		create_title_and_vassal_change = { type = conquest save_scope_as = hd_li_jue_victory_change add_claim_on_loss = no }
+		title:e_han = { change_title_holder = { holder = character:li_jue change = scope:hd_li_jue_victory_change } }
+		character:li_jue = { change_liege = { liege = title:h_china.holder change = scope:hd_li_jue_victory_change } }
+		every_in_list = {
+			list = hd_li_jue_han_vassals
+			limit = { is_alive = yes }
+			change_liege = { liege = character:li_jue change = scope:hd_li_jue_victory_change }
+		}
+		resolve_title_and_vassal_change = scope:hd_li_jue_victory_change
+		character:wang_yun ?= { if = { limit = { is_alive = yes } remove_character_flag = hd_current_han_regent remove_trait = kuzhu_empire_overseer } }
+		character:li_jue = {
+			set_realm_capital = title:c_uuii_p_867
+			hd_dong_install_regent_effect = yes
+		}
+		every_in_list = {
+			list = hd_li_jue_wang_victims
+			limit = { is_alive = yes }
+			hd_dc_begin_protection_reason_effect = { TARGET = this ACTOR = character:li_jue ACTION = execute REASON = has_execute_reason }
+			death = { death_reason = death_execution killer = character:li_jue }
+		}
+		debug_log = "HD_DONG LI_JUE_VICTORY_COMPLETED"
+	}
+	else = { debug_log = "HD_DONG LI_JUE_VICTORY_SKIPPED_RESOLVED_OR_ACTOR_MISSING" }
+	hd_li_jue_end_war_effect = yes
+}
+
+hd_li_jue_end_war_effect = {
+	remove_global_variable = hd_li_jue_war_pending
+	remove_global_variable = hd_li_jue_war_active
+	set_global_variable = hd_li_jue_war_resolved
+}

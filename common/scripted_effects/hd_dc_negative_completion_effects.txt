@@ -1,0 +1,102 @@
+﻿# Character scope is the actual recipient, even when the native roll is elsewhere.
+# BASE must be a scalar literal/value/saved value: never pass inline arithmetic.
+hd_dc_prepare_negative_completion_roll_effect = {
+	save_scope_value_as = { name = hd_dc_negative_chance value = $BASE$ }
+	save_scope_value_as = { name = hd_dc_negative_trait value = flag:$TRAIT$ }
+	if = {
+		limit = { exists = situation:dynastic_cycle any_character_situation = { this = situation:dynastic_cycle } }
+		if = {
+			limit = { hd_dc_negative_completion_eligible_trigger = yes }
+			save_scope_value_as = { name = hd_dc_hazard_base value = scope:hd_dc_negative_chance }
+			save_scope_value_as = { name = hd_dc_hazard_multiplier value = hd_dc_social_hazard_multiplier_value }
+			save_scope_value_as = { name = hd_dc_negative_chance value = hd_dc_hazard_probability_value }
+		}
+		else = { save_scope_value_as = { name = hd_dc_negative_chance value = 0 } }
+	}
+}
+
+# Native 100-weight pools with one eligible trait outcome and ordinary results.
+hd_dc_prepare_negative_completion_simple_pool_effect = {
+	hd_dc_prepare_negative_completion_roll_effect = { BASE = $BASE$ TRAIT = $TRAIT$ }
+	save_scope_value_as = { name = hd_dc_negative_bad_add value = { value = scope:hd_dc_negative_chance multiply = 1000 subtract = $BASE$ } }
+	save_scope_value_as = { name = hd_dc_negative_other_factor value = { value = 100 subtract = scope:hd_dc_negative_chance multiply = 1000 divide = $OTHER$ } }
+}
+
+# Chariot courtesan: preserve the separate disease branch's absolute chance.
+hd_dc_prepare_negative_completion_chariot_pool_effect = {
+	save_scope_value_as = { name = hd_dc_negative_chariot_disease value = 5 }
+	if = { limit = { learning > decent_skill_rating } save_scope_value_as = { name = hd_dc_negative_chariot_disease value = 0 } }
+	save_scope_value_as = { name = hd_dc_negative_chariot_bad value = 5 }
+	if = { limit = { intrigue > decent_skill_rating } save_scope_value_as = { name = hd_dc_negative_chariot_bad value = 0 } }
+	else_if = { limit = { intrigue <= low_skill_rating } save_scope_value_as = { name = hd_dc_negative_chariot_bad value = 10 } }
+	save_scope_value_as = { name = hd_dc_negative_chariot_total value = { value = 90 add = scope:hd_dc_negative_chariot_disease add = scope:hd_dc_negative_chariot_bad } }
+	save_scope_value_as = { name = hd_dc_negative_native_base value = { value = scope:hd_dc_negative_chariot_bad multiply = 100 divide = scope:hd_dc_negative_chariot_total } }
+	hd_dc_prepare_negative_completion_roll_effect = { BASE = scope:hd_dc_negative_native_base TRAIT = rakish }
+	save_scope_value_as = { name = hd_dc_negative_chariot_bad_weight value = { value = scope:hd_dc_negative_chariot_total multiply = scope:hd_dc_negative_chance multiply = 10 } }
+	# Outside the situation retain the exact original integer weights.
+	if = {
+		limit = { NOT = { exists = situation:dynastic_cycle any_character_situation = { this = situation:dynastic_cycle } } }
+		save_scope_value_as = { name = hd_dc_negative_chariot_bad_weight value = { value = scope:hd_dc_negative_chariot_bad multiply = 1000 } }
+	}
+	save_scope_value_as = { name = hd_dc_negative_chariot_bad_add value = { value = scope:hd_dc_negative_chariot_bad_weight subtract = 5 } }
+	save_scope_value_as = { name = hd_dc_negative_chariot_disease_add value = { value = scope:hd_dc_negative_chariot_disease multiply = 1000 subtract = 5 } }
+	save_scope_value_as = { name = hd_dc_negative_chariot_other_add value = { value = scope:hd_dc_negative_chariot_total subtract = scope:hd_dc_negative_chariot_disease multiply = 1000 subtract = scope:hd_dc_negative_chariot_bad_weight subtract = 90 } }
+}
+
+# Freeze the actual recipient before a duel; branch values read duel_value only
+# while the native engine evaluates that duel's existing outcome weights.
+hd_dc_prepare_negative_completion_dynamic_pool_effect = {
+	save_scope_value_as = { name = hd_dc_negative_pool value = flag:$POOL$ }
+	save_scope_value_as = { name = hd_dc_negative_trait value = flag:$TRAIT$ }
+	save_scope_value_as = { name = hd_dc_negative_pool_active value = 0 }
+	save_scope_value_as = { name = hd_dc_negative_pool_multiplier value = 1 }
+	if = {
+		limit = {
+			exists = situation:dynastic_cycle
+			any_character_situation = { this = situation:dynastic_cycle }
+			hd_dc_negative_completion_eligible_trigger = yes
+		}
+		save_scope_value_as = { name = hd_dc_negative_pool_active value = 1 }
+		save_scope_value_as = { name = hd_dc_negative_pool_multiplier value = hd_dc_social_hazard_multiplier_value }
+	}
+}
+
+# The existing guest's inner interesting-trait opportunity. Outer development
+# selection, marriage, skill, secret and combat branches remain native.
+hd_dc_prepare_negative_completion_guest_pool_effect = {
+	save_scope_value_as = { name = hd_dc_negative_pool value = flag:guest }
+	save_scope_value_as = { name = hd_dc_negative_pool_active value = 0 }
+	save_scope_value_as = { name = hd_dc_negative_pool_multiplier value = 1 }
+	save_scope_value_as = { name = hd_dc_negative_guest_bad value = 0 }
+	save_scope_value_as = { name = hd_dc_negative_guest_other value = 0 }
+	if = {
+		limit = { is_alive = yes exists = situation:dynastic_cycle any_character_situation = { this = situation:dynastic_cycle } }
+		save_scope_value_as = { name = hd_dc_negative_pool_active value = 1 }
+		save_scope_value_as = { name = hd_dc_negative_pool_multiplier value = hd_dc_social_hazard_multiplier_value }
+		if = { limit = { NOT = { has_trait = lunatic } } save_scope_value_as = { name = hd_dc_negative_guest_bad value = { value = scope:hd_dc_negative_guest_bad add = 1 } } }
+		if = { limit = { NOT = { has_trait = possessed } } save_scope_value_as = { name = hd_dc_negative_guest_bad value = { value = scope:hd_dc_negative_guest_bad add = 1 } } }
+		if = { limit = { can_be_drunkard = yes } save_scope_value_as = { name = hd_dc_negative_guest_bad value = { value = scope:hd_dc_negative_guest_bad add = 1 } } }
+		if = { limit = { can_be_rakish = yes } save_scope_value_as = { name = hd_dc_negative_guest_bad value = { value = scope:hd_dc_negative_guest_bad add = 1 } } }
+		if = { limit = { can_be_flagellant = yes } save_scope_value_as = { name = hd_dc_negative_guest_bad value = { value = scope:hd_dc_negative_guest_bad add = 1 } } }
+		if = { limit = { can_be_contrite = yes NOT = { has_trait = deceitful } } save_scope_value_as = { name = hd_dc_negative_guest_bad value = { value = scope:hd_dc_negative_guest_bad add = 1 } } }
+		if = { limit = { NOT = { has_trait = scarred } } save_scope_value_as = { name = hd_dc_negative_guest_other value = { value = scope:hd_dc_negative_guest_other add = 1 } } }
+		if = { limit = { NOT = { has_trait = lifestyle_poet } } save_scope_value_as = { name = hd_dc_negative_guest_other value = { value = scope:hd_dc_negative_guest_other add = 1 } } }
+		if = { limit = { NOT = { has_trait = journaller } } save_scope_value_as = { name = hd_dc_negative_guest_other value = { value = scope:hd_dc_negative_guest_other add = 1 } } }
+		# The two age branches are mutually exclusive and have the same weight.
+		if = { limit = { is_eunuch_trigger = no is_male = yes } save_scope_value_as = { name = hd_dc_negative_guest_other value = { value = scope:hd_dc_negative_guest_other add = 1 } } }
+		if = { limit = { NOT = { has_trait = blind } } save_scope_value_as = { name = hd_dc_negative_guest_other value = { value = scope:hd_dc_negative_guest_other add = 1 } } }
+		if = { limit = { NOR = { has_trait = intellect_bad has_trait = dull has_trait = shrewd } } save_scope_value_as = { name = hd_dc_negative_guest_other value = { value = scope:hd_dc_negative_guest_other add = 1 } } }
+		if = { limit = { NOR = { has_trait = weak has_trait = physique_bad has_trait = strong } } save_scope_value_as = { name = hd_dc_negative_guest_other value = { value = scope:hd_dc_negative_guest_other add = 1 } } }
+		if = { limit = { NOT = { has_trait = loyal } } save_scope_value_as = { name = hd_dc_negative_guest_other value = { value = scope:hd_dc_negative_guest_other add = 1 } } }
+		if = { limit = { NOT = { has_trait = disloyal } } save_scope_value_as = { name = hd_dc_negative_guest_other value = { value = scope:hd_dc_negative_guest_other add = 1 } } }
+	}
+}
+
+hd_dc_prepare_negative_completion_inspiration_teach_effect = {
+	save_scope_value_as = { name = hd_dc_negative_chance value = 33 }
+	save_scope_value_as = { name = hd_dc_negative_trait value = flag:$TRAIT$ }
+	if = {
+		limit = { OR = { scope:hd_dc_negative_trait = flag:drunkard scope:hd_dc_negative_trait = flag:hashishiyah scope:hd_dc_negative_trait = flag:rakish } }
+		scope:inspiration_owner = { hd_dc_prepare_negative_completion_roll_effect = { BASE = 33 TRAIT = $TRAIT$ } }
+	}
+}

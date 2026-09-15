@@ -1,4 +1,4 @@
-hd_dc_request_royal_protection_effect = {
+﻿hd_dc_request_royal_protection_effect = {
 	if = {
 		limit = { hd_dc_royal_offer_response_trigger = yes }
 		scope:hd_dc_support = {
@@ -84,6 +84,43 @@ hd_dc_begin_protection_reason_effect = {
 	hd_dc_capture_protection_reason_effect = { TARGET = $TARGET$ ACTOR = $ACTOR$ ACTION = $ACTION$ REASON = $REASON$ }
 }
 
+# Forced/rightful/war wrappers may supply a special basis outside personal
+# crime reasons. Capture positive personal evidence only; absence stays pending.
+hd_dc_begin_protection_positive_imprisonment_effect = {
+	$TARGET$ = { save_scope_as = hd_dc_protection_target }
+	$ACTOR$ = { save_scope_as = hd_dc_protection_actor }
+	scope:hd_dc_protection_target = { hd_dc_clear_protection_reason_effect = yes }
+	if = {
+		limit = { scope:hd_dc_protection_actor = { has_imprisonment_reason = scope:hd_dc_protection_target } }
+		hd_dc_capture_protection_reason_effect = { TARGET = scope:hd_dc_protection_target ACTOR = scope:hd_dc_protection_actor ACTION = imprison REASON = has_imprisonment_reason }
+	}
+	else_if = {
+		limit = {
+			exists = scope:hd_dc_protection_sexual_target exists = scope:hd_dc_protection_sexual_actor
+			scope:hd_dc_protection_sexual_target = scope:hd_dc_protection_target
+			scope:hd_dc_protection_sexual_actor = scope:hd_dc_protection_actor
+			scope:hd_dc_protection_target = { has_variable_list = hd_dc_protection_subjects }
+		}
+		hd_dc_capture_protection_reason_effect = { TARGET = scope:hd_dc_protection_target ACTOR = scope:hd_dc_protection_actor ACTION = imprison REASON = has_imprisonment_reason }
+		scope:hd_dc_protection_target = {
+			set_variable = { name = hd_dc_protection_check_legal value = yes }
+			set_variable = { name = hd_dc_protection_check_source value = flag:sexual_crime }
+		}
+	}
+}
+
+# Ritual and hostage rules can authorize an action without a personal crime.
+# Missing personal evidence is not a negative legal verdict for those paths.
+hd_dc_begin_protection_positive_execution_effect = {
+	$TARGET$ = { save_scope_as = hd_dc_protection_target }
+	$ACTOR$ = { save_scope_as = hd_dc_protection_actor }
+	scope:hd_dc_protection_target = { hd_dc_clear_protection_reason_effect = yes }
+	if = {
+		limit = { scope:hd_dc_protection_actor = { has_execute_reason = scope:hd_dc_protection_target } }
+		hd_dc_capture_protection_reason_effect = { TARGET = scope:hd_dc_protection_target ACTOR = scope:hd_dc_protection_actor ACTION = execute REASON = has_execute_reason }
+	}
+}
+
 hd_dc_capture_protection_reason_effect = {
 	if = {
 		limit = { $TARGET$ = { has_variable_list = hd_dc_protection_subjects } }
@@ -155,21 +192,35 @@ hd_dc_capture_protection_revocation_effect = {
 # the full native claim/government/religion test with its actual county scope,
 # and restore a pre-existing landed_title before returning to the caller.
 hd_dc_capture_protection_capital_revocation_effect = {
-	title:h_china.title_capital_county.holder = { hd_dc_clear_protection_reason_effect = yes }
+	hd_dc_capture_protection_direct_title_revocation_effect = { TITLE = title:h_china.title_capital_county ACTOR = $ACTOR$ RECEIVER = $ACTOR$ }
+}
+
+hd_dc_capture_protection_direct_title_revocation_effect = {
+	$TITLE$ = { save_scope_as = hd_dc_direct_revocation_title }
+	$ACTOR$ = { save_scope_as = hd_dc_capital_revocation_actor }
+	scope:hd_dc_direct_revocation_title = { hd_dc_clear_title_protection_reason_effect = yes }
+	scope:hd_dc_direct_revocation_title.holder = { hd_dc_clear_protection_reason_effect = yes }
 	if = {
 		limit = {
-			title:h_china.title_capital_county.holder = { has_variable_list = hd_dc_protection_subjects }
+			scope:hd_dc_direct_revocation_title.holder = { has_variable_list = hd_dc_protection_subjects }
 			NOT = { exists = scope:administrative_revocation }
 		}
 		if = { limit = { exists = scope:landed_title } scope:landed_title = { save_scope_as = hd_dc_previous_landed_title } }
-		title:h_china.title_capital_county = { save_scope_as = landed_title }
-		hd_dc_begin_protection_reason_effect = { TARGET = scope:landed_title.holder ACTOR = root ACTION = revoke REASON = has_revoke_title_reason }
+		scope:hd_dc_direct_revocation_title = { save_scope_as = landed_title }
+		hd_dc_begin_protection_reason_effect = { TARGET = scope:landed_title.holder ACTOR = scope:hd_dc_capital_revocation_actor ACTION = revoke REASON = has_revoke_title_reason }
 		scope:hd_dc_protection_target = {
 			set_variable = { name = hd_dc_protection_check_title value = scope:landed_title }
 			if = {
-				limit = { root = { NOT = { title_revocation_is_tyrannical_trigger = { VASSAL = scope:hd_dc_protection_target } } } }
+				limit = { scope:hd_dc_capital_revocation_actor = { NOT = { title_revocation_is_tyrannical_trigger = { VASSAL = scope:hd_dc_protection_target } } } }
 				set_variable = { name = hd_dc_protection_check_legal value = yes }
 			}
+		}
+		scope:hd_dc_direct_revocation_title = {
+			set_variable = { name = hd_dc_title_protection_actor value = scope:hd_dc_capital_revocation_actor }
+			set_variable = { name = hd_dc_title_protection_old_holder value = scope:hd_dc_protection_target }
+			set_variable = { name = hd_dc_title_protection_new_holder value = $RECEIVER$ }
+			set_variable = { name = hd_dc_title_protection_date value = current_date }
+			set_variable = { name = hd_dc_title_protection_legal value = scope:hd_dc_protection_target.var:hd_dc_protection_check_legal }
 		}
 		clear_saved_scope = landed_title
 		if = {
@@ -178,6 +229,16 @@ hd_dc_capture_protection_capital_revocation_effect = {
 			clear_saved_scope = hd_dc_previous_landed_title
 		}
 	}
+}
+
+hd_dc_clear_title_protection_reason_effect = {
+	if = { limit = { exists = var:hd_dc_title_protection_old_holder } var:hd_dc_title_protection_old_holder = { hd_dc_clear_protection_reason_effect = yes } }
+	remove_variable = hd_dc_title_protection_actor
+	remove_variable = hd_dc_title_protection_old_holder
+	remove_variable = hd_dc_title_protection_new_holder
+	remove_variable = hd_dc_title_protection_date
+	remove_variable = hd_dc_title_protection_legal
+	remove_variable = hd_dc_title_protection_consumed
 }
 
 # Protected person's actual native callback. A missing pre-action basis is
@@ -246,6 +307,28 @@ hd_dc_record_protection_unknown_death_effect = {
 	}
 }
 
+# Title loss exposes its receiver, not necessarily the person who ordered it.
+hd_dc_record_protection_unknown_revocation_effect = {
+	save_scope_as = hd_dc_protected_person
+	every_in_list = {
+		variable = hd_dc_protection_subjects
+		limit = {
+			var:hd_dc_protected_person = scope:hd_dc_protected_person
+			is_target_in_variable_list = { name = hd_dc_protected_titles target = scope:title }
+			var:hd_dc_protection_contract = { has_variable = hd_dc_protection_wait NOT = { has_variable = hd_dc_protection_result } }
+		}
+		set_variable = { name = hd_dc_protection_harm_kind value = flag:revoke }
+		set_variable = { name = hd_dc_protection_harm_date value = current_date }
+		set_variable = { name = hd_dc_protection_harm_title value = scope:title }
+		set_variable = { name = hd_dc_protection_harm_legal value = -1 }
+		set_variable = { name = hd_dc_protection_harm_source value = flag:unknown_actor }
+		remove_variable = hd_dc_protection_harm_actor
+		remove_variable = hd_dc_protection_harm_case_subject
+		hd_dc_consume_protection_harm_effect = yes
+	}
+	hd_dc_clear_protection_reason_effect = yes
+}
+
 hd_dc_consume_protection_harm_effect = {
 	save_scope_as = hd_dc_protected_subject
 	if = {
@@ -295,6 +378,13 @@ hd_dc_maintain_royal_protection_effect = {
 							death_reason = death_sacrificed_to_foreign_gods
 							death_reason = death_kennel
 							death_reason = death_kennel_killer
+							death_reason = death_ritually_hung_then_eaten
+							death_reason = death_ritually_hung
+							death_reason = death_ritually_eaten
+							death_reason = death_hostage_execution
+							death_reason = death_burned_witch
+							death_reason = death_crucified
+							death_reason = death_botched_decapitation
 						}
 					}
 				}
