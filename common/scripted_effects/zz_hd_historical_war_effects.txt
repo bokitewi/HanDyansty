@@ -1,4 +1,4 @@
-﻿# Phase 2 world-opportunity setup and actual-war terminal routing.
+# Phase 2 world-opportunity setup and actual-war terminal routing.
 
 # Force a historical companion out of landed or landless-title status before
 # employing them in Liu Bei's court.
@@ -65,6 +65,8 @@ hd_fengying_try_resolve_responses_effect = {
 	}
 }
 
+# Only shared world chains remain here.  Legacy Liu Bei LB-24/LB-25 cleanup
+# branches were removed together with those personal chains.
 hd_resolve_invalid_historical_world_chains_effect = {
 	if = {
 		limit = {
@@ -105,31 +107,11 @@ hd_resolve_invalid_historical_world_chains_effect = {
 		set_global_variable = hd_chain_terminal_alternate_failure
 		remove_global_variable = hd_chibi_world_open
 	}
-	if = {
-		limit = {
-			exists = global_var:hd_chibi_world_resolved
-			NOT = { exists = global_var:hd_lb24_world_resolved }
-			character:guan_yu = { is_alive = no }
-		}
-		set_global_variable = hd_lb24_world_resolved
-		set_global_variable = hd_chain_terminal_alternate_failure
-		remove_global_variable = hd_lb24_world_open
-	}
-	if = {
-		limit = {
-			exists = global_var:hd_lb24_world_resolved
-			NOT = { exists = global_var:hd_lb25_world_resolved }
-			OR = { character:liu_bei = { is_alive = no } character:sun_quan = { is_alive = no } }
-		}
-		hd_clear_yiling_risks_effect = yes
-		set_global_variable = hd_lb25_world_resolved
-		set_global_variable = hd_chain_terminal_alternate_failure
-		remove_global_variable = hd_lb25_world_open
-	}
 }
 
-# One idempotent entry point serves new games and later Liu Bei phase adapters.
-# The owned story is the source of truth.
+# Retained Liu Bei updater: it only owns the 184 Peach Garden opening.  Once
+# the global Yellow Turban campaign resolves, the old visible Liu Bei story is
+# ended and no postwar personal event is scheduled.
 hd_update_liu_bei_life_story_effect = {
 	if = {
 		limit = {
@@ -138,111 +120,59 @@ hd_update_liu_bei_life_story_effect = {
 		}
 		character:liu_bei = {
 			if = {
-				limit = {
-					NOT = {
-						any_owned_story = { type = hd_story_liu_bei_life }
-					}
-				}
-				create_story = {
+				limit = { exists = global_var:hd_yellow_turban_outcome_resolved }
+				random_owned_story = {
 					type = hd_story_liu_bei_life
+					end_story = yes
 				}
 			}
-
-			random_owned_story = {
-				type = hd_story_liu_bei_life
+			else = {
 				if = {
 					limit = {
-						OR = {
-							exists = global_var:hd_lb25_world_open
-							exists = global_var:hd_lb25_world_resolved
+						NOT = { any_owned_story = { type = hd_story_liu_bei_life } }
+					}
+					create_story = { type = hd_story_liu_bei_life }
+				}
+
+				random_owned_story = {
+					type = hd_story_liu_bei_life
+					if = {
+						limit = { NOT = { exists = var:hd_liu_bei_life_phase } }
+						set_variable = {
+							name = hd_liu_bei_life_phase
+							value = flag:hd_liu_bei_phase_rising
 						}
 					}
-					set_variable = {
-						name = hd_liu_bei_life_phase
-						value = flag:hd_liu_bei_phase_yiling
-					}
 				}
-				else_if = {
-					limit = {
-						OR = {
-							exists = global_var:hd_lb24_world_open
-							exists = global_var:hd_lb24_world_resolved
-						}
-					}
-					set_variable = {
-						name = hd_liu_bei_life_phase
-						value = flag:hd_liu_bei_phase_jingzhou
-					}
-				}
-				else_if = {
-					limit = { NOT = { exists = var:hd_liu_bei_life_phase } }
-					set_variable = {
-						name = hd_liu_bei_life_phase
-						value = flag:hd_liu_bei_phase_rising
-					}
-				}
-			}
-		}
 
-		# Story-scoped effects above can leave the execution context on the
-		# story object. Re-enter Liu Bei explicitly before character flags and
-		# character events are evaluated.
-		character:liu_bei = {
-			# The first repair build used a permanent pending flag. Convert any
-			# save made with that intermediate build before applying the timed lock.
-			if = {
-				limit = {
-					NOT = { has_character_flag = hd_liu_bei_dispatch_state_v2_migrated }
+				# Convert saves made with the intermediate permanent-pending build.
+				if = {
+					limit = { NOT = { has_character_flag = hd_liu_bei_dispatch_state_v2_migrated } }
+					remove_character_flag = hd_peach_garden_event_pending
+					add_character_flag = hd_liu_bei_dispatch_state_v2_migrated
 				}
-				remove_character_flag = hd_peach_garden_event_pending
-				add_character_flag = hd_liu_bei_dispatch_state_v2_migrated
-			}
 
-			# Mark dispatch before opening the event so concurrent entry points
-			# cannot create two Peach Garden windows.
-			if = {
-				limit = {
-					NOT = { has_character_flag = hd_peach_garden_oath_completed }
-					NOT = { has_character_flag = hd_peach_garden_oath_unavailable }
-					NOT = { has_character_flag = hd_peach_garden_event_pending }
-					NOT = { has_character_flag = hd_peach_garden_event_opened }
-				}
+				# Mark dispatch before opening the event so concurrent entry points
+				# cannot create two Peach Garden windows.
 				if = {
 					limit = {
-						character:guan_yu ?= {
-							is_alive = yes
-						}
-						character:zhang_fei ?= {
-							is_alive = yes
-						}
+						NOT = { has_character_flag = hd_peach_garden_oath_completed }
+						NOT = { has_character_flag = hd_peach_garden_oath_unavailable }
+						NOT = { has_character_flag = hd_peach_garden_event_pending }
+						NOT = { has_character_flag = hd_peach_garden_event_opened }
 					}
-					add_character_flag = {
-						flag = hd_peach_garden_event_pending
-						days = 60
-					}
-					trigger_event = hd_peach_garden.0001
+					if = {
+						limit = {
+							character:guan_yu ?= { is_alive = yes }
+							character:zhang_fei ?= { is_alive = yes }
+						}
+						add_character_flag = {
+							flag = hd_peach_garden_event_pending
+							days = 60
+						}
+						trigger_event = hd_peach_garden.0001
 					}
 					else = { add_character_flag = hd_peach_garden_oath_unavailable }
-				}
-
-			# An old save may already contain the resolved Yellow Turban state
-			# without the personal follow-up having been scheduled.
-			if = {
-				limit = {
-					exists = global_var:hd_yellow_turban_outcome_resolved
-					exists = global_var:hd_yellow_turban_han_survived
-					NOT = { has_character_flag = hd_liu_bei_aftermath_started }
-					NOT = { has_character_flag = hd_liu_bei_aftermath_pending }
-					NOT = { has_character_flag = hd_liu_bei_adventurer_path }
-					NOT = { has_character_flag = hd_liu_bei_received_anxi }
-				}
-				add_character_flag = {
-					flag = hd_liu_bei_aftermath_pending
-					days = 150
-				}
-				trigger_event = {
-					id = hd_liu_bei_aftermath.0001
-					months = 3
 				}
 			}
 		}
@@ -264,15 +194,11 @@ hd_cao_fengying_start_war_effect = {
 
 hd_open_fengying_world_opportunity_effect = {
 	if = {
-		limit = {
-			hd_fengying_world_ready_trigger = yes
-		}
+		limit = { hd_fengying_world_ready_trigger = yes }
 		set_global_variable = hd_fengying_world_open
 		character:liu_xie = { save_scope_as = hd_fengying_emperor }
 		if = {
-			limit = {
-				character:cao_cao = { is_alive = yes }
-			}
+			limit = { character:cao_cao = { is_alive = yes } }
 			character:cao_cao = {
 				random_owned_story = {
 					type = hd_story_cao_life
@@ -329,59 +255,7 @@ hd_open_chibi_world_opportunity_effect = {
 	}
 }
 
-hd_lb22_success_adapter_effect = {
-	if = {
-		limit = { hd_lb22_factual_yizhou_success_trigger = yes }
-		hd_update_liu_bei_life_story_effect = yes
-		character:liu_bei = {
-			random_owned_story = {
-				type = hd_story_liu_bei_life
-				set_variable = {
-					name = hd_liu_bei_life_phase
-					value = flag:hd_liu_bei_phase_yizhou
-				}
-			}
-		}
-		character:liu_bei = {
-			trigger_event = hd_liu_bei_late.2200
-		}
-	}
-}
-
-hd_open_lb24_world_opportunity_effect = {
-	hd_update_liu_bei_life_story_effect = yes
-	set_global_variable = hd_lb24_world_open
-	character:liu_bei = {
-		random_owned_story = {
-			type = hd_story_liu_bei_life
-			set_variable = {
-				name = hd_liu_bei_life_phase
-				value = flag:hd_liu_bei_phase_jingzhou
-			}
-		}
-	}
-	character:liu_bei = {
-		trigger_event = hd_liu_bei_late.2400
-	}
-}
-
-hd_open_lb25_world_opportunity_effect = {
-	hd_update_liu_bei_life_story_effect = yes
-	set_global_variable = hd_lb25_world_open
-	character:liu_bei = {
-		random_owned_story = {
-			type = hd_story_liu_bei_life
-			set_variable = {
-				name = hd_liu_bei_life_phase
-				value = flag:hd_liu_bei_phase_yiling
-			}
-		}
-	}
-	character:liu_bei = {
-		trigger_event = hd_liu_bei_late.2500
-	}
-}
-
+# Shared historical war terminal routing now covers only Guandu and Chibi.
 hd_historical_world_war_victory_effect = {
 	if = {
 		limit = { var:hd_world_war_kind = flag:guandu }
@@ -398,21 +272,6 @@ hd_historical_world_war_victory_effect = {
 		set_global_variable = hd_chain_terminal_nonhistorical
 		remove_global_variable = hd_chibi_world_active
 		scope:attacker = { trigger_event = hd_historical_world.0291 }
-	}
-	else_if = {
-		limit = { var:hd_world_war_kind = flag:lb24 }
-		set_global_variable = hd_lb24_world_resolved
-		set_global_variable = hd_chain_terminal_historical
-		remove_global_variable = hd_lb24_world_open
-		scope:attacker = { trigger_event = hd_liu_bei_late.2491 }
-	}
-	else_if = {
-		limit = { var:hd_world_war_kind = flag:lb25 }
-		hd_clear_yiling_risks_effect = yes
-		set_global_variable = hd_lb25_world_resolved
-		set_global_variable = hd_chain_terminal_nonhistorical
-		remove_global_variable = hd_lb25_world_open
-		scope:attacker = { trigger_event = hd_liu_bei_late.2591 }
 	}
 }
 
@@ -433,37 +292,40 @@ hd_historical_world_war_defeat_effect = {
 		remove_global_variable = hd_chibi_world_active
 		scope:defender = { trigger_event = hd_historical_world.0290 }
 	}
-	else_if = {
-		limit = { var:hd_world_war_kind = flag:lb24 }
-		set_global_variable = hd_lb24_world_resolved
-		set_global_variable = hd_chain_terminal_nonhistorical
-		remove_global_variable = hd_lb24_world_open
-		scope:defender = { trigger_event = hd_liu_bei_late.2492 }
-	}
-	else_if = {
-		limit = { var:hd_world_war_kind = flag:lb25 }
-		hd_clear_yiling_risks_effect = yes
-		set_global_variable = hd_lb25_world_resolved
-		set_global_variable = hd_chain_terminal_historical
-		remove_global_variable = hd_lb25_world_open
-		scope:defender = { trigger_event = hd_liu_bei_late.2590 }
-	}
 }
 
 hd_historical_world_war_white_peace_effect = {
-	set_global_variable = hd_chain_terminal_alternate_success
-	if = { limit = { var:hd_world_war_kind = flag:guandu } hd_clear_guandu_wuchao_effect = yes set_global_variable = hd_guandu_world_resolved remove_global_variable = hd_guandu_world_active }
-	else_if = { limit = { var:hd_world_war_kind = flag:chibi } hd_clear_chibi_risks_effect = yes set_global_variable = hd_chibi_world_resolved remove_global_variable = hd_chibi_world_active }
-	else_if = { limit = { var:hd_world_war_kind = flag:lb24 } set_global_variable = hd_lb24_world_resolved remove_global_variable = hd_lb24_world_open }
-	else_if = { limit = { var:hd_world_war_kind = flag:lb25 } hd_clear_yiling_risks_effect = yes set_global_variable = hd_lb25_world_resolved remove_global_variable = hd_lb25_world_open }
+	if = {
+		limit = { var:hd_world_war_kind = flag:guandu }
+		set_global_variable = hd_chain_terminal_alternate_success
+		hd_clear_guandu_wuchao_effect = yes
+		set_global_variable = hd_guandu_world_resolved
+		remove_global_variable = hd_guandu_world_active
+	}
+	else_if = {
+		limit = { var:hd_world_war_kind = flag:chibi }
+		set_global_variable = hd_chain_terminal_alternate_success
+		hd_clear_chibi_risks_effect = yes
+		set_global_variable = hd_chibi_world_resolved
+		remove_global_variable = hd_chibi_world_active
+	}
 }
 
 hd_historical_world_war_invalidated_effect = {
-	set_global_variable = hd_chain_terminal_alternate_failure
-	if = { limit = { var:hd_world_war_kind = flag:guandu } hd_clear_guandu_wuchao_effect = yes set_global_variable = hd_guandu_world_resolved remove_global_variable = hd_guandu_world_active }
-	else_if = { limit = { var:hd_world_war_kind = flag:chibi } hd_clear_chibi_risks_effect = yes set_global_variable = hd_chibi_world_resolved remove_global_variable = hd_chibi_world_active }
-	else_if = { limit = { var:hd_world_war_kind = flag:lb24 } set_global_variable = hd_lb24_world_resolved remove_global_variable = hd_lb24_world_open }
-	else_if = { limit = { var:hd_world_war_kind = flag:lb25 } hd_clear_yiling_risks_effect = yes set_global_variable = hd_lb25_world_resolved remove_global_variable = hd_lb25_world_open }
+	if = {
+		limit = { var:hd_world_war_kind = flag:guandu }
+		set_global_variable = hd_chain_terminal_alternate_failure
+		hd_clear_guandu_wuchao_effect = yes
+		set_global_variable = hd_guandu_world_resolved
+		remove_global_variable = hd_guandu_world_active
+	}
+	else_if = {
+		limit = { var:hd_world_war_kind = flag:chibi }
+		set_global_variable = hd_chain_terminal_alternate_failure
+		hd_clear_chibi_risks_effect = yes
+		set_global_variable = hd_chibi_world_resolved
+		remove_global_variable = hd_chibi_world_active
+	}
 }
 
 hd_clear_guandu_wuchao_effect = {
@@ -490,35 +352,4 @@ hd_clear_chibi_risks_effect = {
 	remove_global_variable = hd_chibi_risk_tied_ships
 	remove_global_variable = hd_chibi_risk_logistics
 	remove_global_variable = hd_chibi_risk_huang_gai
-}
-
-hd_set_yiling_risks_effect = {
-	set_global_variable = hd_yiling_risk_supply
-	add_character_modifier = { modifier = hd_yiling_risk_supply_modifier years = 3 }
-	set_global_variable = hd_yiling_risk_mountain
-	add_character_modifier = { modifier = hd_yiling_risk_mountain_modifier years = 3 }
-	set_global_variable = hd_yiling_risk_camps
-	add_character_modifier = { modifier = hd_yiling_risk_camps_modifier years = 3 }
-	if = {
-		limit = { character:lu_xun = { is_alive = yes } }
-		set_global_variable = hd_yiling_risk_lu_xun
-		add_character_modifier = { modifier = hd_yiling_risk_lu_xun_modifier years = 3 }
-	}
-	set_global_variable = hd_yiling_risk_heat
-	add_character_modifier = { modifier = hd_yiling_risk_heat_modifier years = 3 }
-}
-
-hd_clear_yiling_risks_effect = {
-	character:liu_bei = {
-		remove_character_modifier = hd_yiling_risk_supply_modifier
-		remove_character_modifier = hd_yiling_risk_mountain_modifier
-		remove_character_modifier = hd_yiling_risk_camps_modifier
-		remove_character_modifier = hd_yiling_risk_lu_xun_modifier
-		remove_character_modifier = hd_yiling_risk_heat_modifier
-	}
-	remove_global_variable = hd_yiling_risk_supply
-	remove_global_variable = hd_yiling_risk_mountain
-	remove_global_variable = hd_yiling_risk_camps
-	remove_global_variable = hd_yiling_risk_lu_xun
-	remove_global_variable = hd_yiling_risk_heat
 }
