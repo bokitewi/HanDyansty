@@ -1,0 +1,134 @@
+﻿# Character scope. Do not call the mod's force-independent-Celestial helper:
+# that helper converts government, which the immediate non-Celestial pass must
+# never do. Each transaction is resolved before checking its actual outcome.
+hd_qxzl_release_ruler_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			is_landed = yes
+			highest_held_title_tier >= tier_county
+			is_independent_ruler = no
+			exists = liege
+		}
+		create_title_and_vassal_change = {
+			type = independency
+			save_scope_as = hd_qxzl_independence_change
+			add_claim_on_loss = no
+		}
+		becomes_independent = { change = scope:hd_qxzl_independence_change }
+		resolve_title_and_vassal_change = scope:hd_qxzl_independence_change
+		if = {
+			limit = { is_independent_ruler = yes }
+			debug_log = "HD_QXZL INDEPENDENCE_CONFIRMED"
+		}
+		else = { debug_log = "HD_QXZL INDEPENDENCE_NOT_CONFIRMED" }
+	}
+}
+
+# Any scope. Build the COMPLETE snapshot before any feudal relation changes.
+# Iterating a live vassal tree while releasing its parents would lose children.
+hd_qxzl_release_non_celestial_effect = {
+	every_ruler = {
+		limit = { hd_qxzl_non_celestial_vassal_trigger = yes }
+		add_to_list = hd_qxzl_immediate_release_targets
+	}
+	every_in_list = {
+		list = hd_qxzl_immediate_release_targets
+		limit = { hd_qxzl_non_celestial_vassal_trigger = yes }
+		hd_qxzl_release_ruler_effect = yes
+	}
+	debug_log = "HD_QXZL IMMEDIATE_NON_CELESTIAL_PASS_COMPLETED"
+}
+
+# Any scope; called once by the founded coalition's terminal cleanup.
+# The static h_china title, NOT its holder, owns both delayed on_actions.
+# Death/deposition of Dong, the emperor or the league leader is not a timer.
+hd_qxzl_begin_effect = {
+	if = {
+		limit = {
+			exists = global_var:hd_anti_regent_chain_resolved
+			NOT = { exists = global_var:hd_qxzl_started }
+		}
+		set_global_variable = hd_qxzl_started
+		set_global_variable = { name = hd_qxzl_start_date value = current_date }
+		hd_qxzl_release_non_celestial_effect = yes
+		title:h_china = {
+			trigger_event = { on_action = hd_qxzl_scan_after_30_days days = 30 }
+			trigger_event = { on_action = hd_qxzl_close_distribution days = 366 }
+		}
+		debug_log = "HD_QXZL STARTED_SCAN_DUE_IN_30_DAYS"
+	}
+}
+
+# Any scope. ONE fresh current-ruler scan on D30, not a D0 ruler snapshot.
+# Only independent roots are geographically checked during this pass. Their
+# full vassal trees include indirect counts beneath current dukes.
+hd_qxzl_scan_current_rulers_effect = {
+	if = {
+		limit = {
+			exists = global_var:hd_qxzl_started
+			NOT = { exists = global_var:hd_qxzl_scan_done }
+		}
+		set_global_variable = hd_qxzl_scan_done
+		every_ruler = {
+			limit = { hd_qxzl_top_liege_eligible_trigger = yes }
+			every_vassal_or_below = {
+				limit = {
+					is_alive = yes
+					is_landed = yes
+					exists = primary_title
+					hd_qxzl_rank_eligible_trigger = yes
+					NOT = { has_character_flag = hd_qxzl_seen }
+					NOT = { has_character_flag = hd_qxzl_pending }
+				}
+				hd_qxzl_queue_current_ruler_effect = yes
+			}
+		}
+		debug_log = "HD_QXZL D30_FRESH_SCAN_COMPLETED"
+	}
+}
+
+# Character scope. Primary titles are stable queue identities across death.
+# The title's then-current holder is checked afresh when its timer fires.
+hd_qxzl_queue_current_ruler_effect = {
+	if = {
+		limit = { highest_held_title_tier = tier_duchy }
+		primary_title = {
+			if = {
+				limit = { NOT = { has_variable = hd_qxzl_ticket_queued } }
+				set_variable = hd_qxzl_ticket_queued
+				set_variable = hd_qxzl_duke_ticket
+				save_scope_as = hd_qxzl_ticket_title
+				# D31 through D197, inclusive, relative to terminal cleanup.
+				trigger_event = { on_action = hd_qxzl_deliver_duke_ticket days = { 1 167 } }
+			}
+		}
+	}
+	else_if = {
+		limit = { highest_held_title_tier = tier_county }
+		primary_title = {
+			if = {
+				limit = { NOT = { has_variable = hd_qxzl_ticket_queued } }
+				set_variable = hd_qxzl_ticket_queued
+				set_variable = hd_qxzl_count_ticket
+				save_scope_as = hd_qxzl_ticket_title
+				# D198 through D365: cannot overlap the duke dispatch window.
+				trigger_event = { on_action = hd_qxzl_deliver_count_ticket days = { 168 335 } }
+			}
+		}
+	}
+}
+
+# Character scope after a ticket's live-holder/rank/realm checks.
+# Mark pending BEFORE firing; inheritance of another queued title cannot open
+# another event in the same tick or while this event is already open.
+hd_qxzl_present_event_effect = {
+	if = {
+		limit = {
+			NOT = { has_character_flag = hd_qxzl_seen }
+			NOT = { has_character_flag = hd_qxzl_pending }
+		}
+		add_character_flag = hd_qxzl_pending
+		trigger_event = hd_qxzl.0001
+	}
+}
