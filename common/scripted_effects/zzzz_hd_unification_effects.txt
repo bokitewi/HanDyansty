@@ -26,45 +26,33 @@ hd_unification_ai_set_cooldown_effect = {
 	}
 }
 
-# The actor is saved explicitly: a story's root is not a character.
+# Character scope. Both CBs apply pair restrictions in native valid_to_start
+# using scope:attacker / scope:defender. Do not pass caller-saved scopes into
+# ai_start_best_war callbacks: candidate evaluation has its own context.
 hd_unification_ai_attempt_effect = {
 	if = {
 		limit = { hd_unification_ai_ready_trigger = yes }
-		save_scope_as = hd_unification_ai_actor
 		if = {
 			limit = { highest_held_title_tier >= tier_empire }
 			ai_start_best_war = {
 				cb = { hd_unification_cb }
-				is_valid = {
-					hd_unification_ai_pair_allowed_trigger = {
-						ATTACKER = scope:hd_unification_ai_actor
-						DEFENDER = scope:target_character
-					}
-				}
-				on_failure = {
-					scope:hd_unification_ai_actor = {
-						hd_unification_ai_try_regional_effect = yes
-					}
-				}
 			}
 		}
-		else = {
-			hd_unification_ai_try_regional_effect = yes
-		}
+		# A successful declaration sets the existing 30-day cooldown in
+		# on_declaration. The guarded helper then skips the regional search.
+		# On failure, an eligible actor gets exactly one regional attempt.
+		hd_unification_ai_try_regional_effect = yes
 	}
 }
 
-# ai_start_best_war uses the native valid-war/cost checks. Do not replace this
-# with unconditional start_war: that would need separate legality/payment code.
-# No peace, full-war-chest or enemy treasury comparison precedes this call.
+# Re-check readiness in the calling CHARACTER scope, never in a callback.
+# ai_start_best_war retains native valid-war/cost checks; do not replace it
+# with unconditional start_war or add peace/war-chest/treasury requirements.
 hd_unification_ai_try_regional_effect = {
-	ai_start_best_war = {
-		cb = { chinese_reunification_cb }
-		is_valid = {
-			hd_unification_ai_pair_allowed_trigger = {
-				ATTACKER = scope:hd_unification_ai_actor
-				DEFENDER = scope:target_character
-			}
+	if = {
+		limit = { hd_unification_ai_ready_trigger = yes }
+		ai_start_best_war = {
+			cb = { chinese_reunification_cb }
 		}
 	}
 }
