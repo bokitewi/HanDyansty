@@ -1,0 +1,106 @@
+# Character scope: Yuan. Existing 15-30-day historical controller calls this.
+# This is bootstrap/repair only: regional wars never start from this heartbeat.
+hd_yuan_expansion_legacy_tick_effect = {
+	if = {
+		limit = { game_start_date = 184.1.1 }
+		hd_yuan_expansion_bootstrap_effect = yes
+	}
+	else = { hd_historical_actor_story_tick_effect = yes }
+}
+
+hd_yuan_expansion_history_bridge_effect = {
+	if = {
+		limit = {
+			is_landed = yes
+			is_independent_ruler = yes
+			NOT = { has_character_flag = hd_yuan_expansion_history_checked }
+		}
+		add_character_flag = hd_yuan_expansion_history_checked
+		if = {
+			limit = { hd_yuan_expansion_can_queue_history_trigger = yes }
+			# Use the existing Han Fu/Gongsun Zan story. Never transfer its land here.
+			hd_yuan_jizhou_queue_effect = yes
+		}
+	}
+	if = {
+		limit = { exists = global_var:hd_yuan_jizhou_pending }
+		if = {
+			limit = { NOT = { has_character_flag = hd_yuan_expansion_history_observed } }
+			add_character_flag = hd_yuan_expansion_history_observed
+			add_character_flag = { flag = hd_yuan_expansion_history_grace days = 90 }
+		}
+		else_if = {
+			limit = {
+				NOT = { has_character_flag = hd_yuan_expansion_history_grace }
+				NOT = { exists = global_var:hd_yuan_jizhou_invite_waiting }
+				NOT = { exists = global_var:hd_yuan_jizhou_handover_waiting }
+				NOT = { hd_yuan_expansion_history_war_running_trigger = yes }
+			}
+			# Clear only a stale historical queue. The native cleanup changes no
+			# land and does not end wars. A live historical war NEVER times out.
+			hd_yuan_jizhou_end_effect = yes
+			debug_log = "HD_YUAN_EXPANSION STALE_HISTORY_PENDING_RELEASED"
+		}
+	}
+	else = {
+		remove_character_flag = hd_yuan_expansion_history_observed
+		remove_character_flag = hd_yuan_expansion_history_grace
+	}
+}
+
+hd_yuan_expansion_bootstrap_effect = {
+	if = {
+		limit = {
+			this = character:yuan_shao
+			is_alive = yes
+			game_start_date = 184.1.1
+			exists = global_var:hd_anti_regent_chain_resolved
+		}
+		hd_yuan_expansion_history_bridge_effect = yes
+		if = {
+			limit = {
+				is_landed = yes
+				is_independent_ruler = yes
+				NOT = { hd_yuan_expansion_history_blocked_trigger = yes }
+				NOT = { has_character_flag = hd_yuan_expansion_initialized }
+				NOT = { has_character_flag = hd_yuan_northern_expansion_complete }
+			}
+			add_character_flag = hd_yuan_expansion_initialized
+			if = {
+				limit = { NOT = { any_owned_story = { story_type = hd_story_yuan_life } } }
+				create_story = hd_story_yuan_life
+			}
+			hd_yuan_expansion_start_region_effect = { REGION = title:k_uuii_jizhou }
+		}
+		else_if = {
+			limit = {
+				has_variable = hd_yuan_expansion_region
+				NOT = { has_character_flag = hd_yuan_expansion_menu_pending }
+				NOT = { any_owned_story = { story_type = hd_story_yuan_expansion } }
+			}
+			hd_yuan_expansion_create_controller_effect = yes
+		}
+		# Repair a genuinely undelivered menu, not one already displayed.
+		if = {
+			limit = {
+				has_character_flag = hd_yuan_expansion_menu_pending
+				NOT = { has_character_flag = hd_yuan_expansion_menu_open }
+				NOT = { has_character_flag = hd_yuan_expansion_menu_queued }
+			}
+			hd_yuan_expansion_queue_menu_effect = yes
+		}
+	}
+}
+
+# Character scope. Recover only the original heartbeat, not a second timer.
+hd_yuan_expansion_ensure_heartbeat_effect = {
+	if = {
+		limit = {
+			this = character:yuan_shao
+			is_alive = yes
+			game_start_date = 184.1.1
+			NOT = { any_owned_story = { story_type = hd_story_historical_ai_controller } }
+		}
+		create_story = hd_story_historical_ai_controller
+	}
+}

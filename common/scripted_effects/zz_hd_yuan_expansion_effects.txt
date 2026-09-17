@@ -1,0 +1,285 @@
+# Character scope. REGION is a stable title scope supplied by an option.
+hd_yuan_expansion_start_region_effect = {
+	if = {
+		limit = {
+			this = character:yuan_shao
+			is_alive = yes
+			NOT = { has_character_flag = hd_yuan_northern_expansion_complete }
+			$REGION$ = { OR = { this = title:k_uuii_jizhou this = title:k_uuii_youzhou this = title:k_uuii_qingzhou } }
+		}
+		remove_character_flag = hd_yuan_expansion_menu_pending
+		remove_character_flag = hd_yuan_expansion_menu_open
+		remove_character_flag = hd_yuan_expansion_menu_queued
+		# Destroy any obsolete native timers BEFORE creating their replacement.
+		every_owned_story = {
+			limit = { story_type = hd_story_yuan_expansion }
+			end_story = yes
+		}
+		set_variable = { name = hd_yuan_expansion_region value = $REGION$ }
+		if = {
+			limit = { has_variable = hd_yuan_expansion_round }
+			change_variable = { name = hd_yuan_expansion_round add = 1 }
+		}
+		else = { set_variable = { name = hd_yuan_expansion_round value = 1 } }
+		if = {
+			limit = { NOT = { has_title = $REGION$ } NOT = { has_claim_on = $REGION$ } }
+			add_pressed_claim = $REGION$
+		}
+		hd_yuan_expansion_update_personal_story_effect = yes
+		hd_yuan_expansion_create_controller_effect = yes
+		debug_log = "HD_YUAN_EXPANSION REGION_STARTED"
+	}
+}
+
+hd_yuan_expansion_create_controller_effect = {
+	create_story = { type = hd_story_yuan_expansion save_scope_as = hd_yuan_expansion_new_controller }
+	set_variable = { name = hd_yuan_expansion_controller value = scope:hd_yuan_expansion_new_controller }
+}
+
+# Character scope entered from the regional story. The story saves an explicit
+# scope because ROOT is not guaranteed to be a character in story effects.
+hd_yuan_expansion_tick_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			this = character:yuan_shao
+			has_variable = hd_yuan_expansion_region
+			has_variable = hd_yuan_expansion_controller
+			var:hd_yuan_expansion_controller = scope:hd_yuan_expansion_tick_story
+			NOT = { has_character_flag = hd_yuan_expansion_menu_pending }
+		}
+		var:hd_yuan_expansion_region = { save_scope_as = hd_yuan_expansion_region_scope }
+		if = {
+			limit = { hd_yuan_expansion_controls_region_trigger = { REGION = scope:hd_yuan_expansion_region_scope } }
+			hd_yuan_expansion_finish_region_effect = { REASON = flag:hd_yuan_expansion_conquered }
+		}
+		else_if = {
+			limit = { hd_yuan_expansion_actor_ready_trigger = yes }
+			if = {
+				limit = {
+					hd_yuan_expansion_region_has_target_trigger = { REGION = scope:hd_yuan_expansion_region_scope }
+				}
+				if = {
+					limit = { is_ai = yes }
+					hd_yuan_expansion_try_war_effect = yes
+				}
+			}
+			else_if = {
+				limit = {
+					NOT = { hd_yuan_expansion_region_war_running_trigger = { REGION = scope:hd_yuan_expansion_region_scope } }
+				}
+				hd_yuan_expansion_finish_region_effect = { REASON = flag:hd_yuan_expansion_no_targets }
+			}
+		}
+		# Otherwise: pause. The SAME native story provides the next 60-day tick.
+	}
+	else = {
+		# An obsolete duplicate may end itself, never the authoritative story.
+		scope:hd_yuan_expansion_tick_story = { end_story = yes }
+	}
+}
+
+hd_yuan_expansion_try_war_effect = {
+	clear_saved_scope = hd_yuan_expansion_target
+	# Simple lists are event-context-local. Clear explicitly in case another
+	# callback reused this context, then deduplicate by realm owner, not county.
+	every_in_list = {
+		list = hd_yuan_expansion_candidates
+		remove_from_list = hd_yuan_expansion_candidates
+	}
+	scope:hd_yuan_expansion_region_scope = {
+		every_de_jure_county = {
+			limit = { exists = holder }
+			holder.top_liege = {
+				if = {
+					limit = {
+						hd_yuan_expansion_strategic_target_trigger = yes
+						NOT = { is_in_list = hd_yuan_expansion_candidates }
+					}
+					add_to_list = hd_yuan_expansion_candidates
+				}
+			}
+		}
+	}
+	random_in_list = {
+		list = hd_yuan_expansion_candidates
+		limit = {
+			NOT = { is_allied_to = character:yuan_shao }
+			NOT = { is_at_war_with = character:yuan_shao }
+			character:yuan_shao = {
+				NOT = { has_truce = prev }
+				can_declare_war = {
+					defender = prev
+					casus_belli = hd_yuan_expansion_cb
+					target_titles = { scope:hd_yuan_expansion_region_scope }
+				}
+			}
+		}
+		save_scope_as = hd_yuan_expansion_target
+	}
+	if = {
+		limit = {
+			is_ai = yes
+			hd_yuan_expansion_actor_ready_trigger = yes
+			exists = scope:hd_yuan_expansion_target
+			# Revalidate the exact pair and exact title immediately before starting.
+			scope:hd_yuan_expansion_target = { hd_yuan_expansion_strategic_target_trigger = yes }
+			can_declare_war = {
+				defender = scope:hd_yuan_expansion_target
+				casus_belli = hd_yuan_expansion_cb
+				target_titles = { scope:hd_yuan_expansion_region_scope }
+			}
+		}
+		start_war = {
+			cb = hd_yuan_expansion_cb
+			target = scope:hd_yuan_expansion_target
+			target_title = scope:hd_yuan_expansion_region_scope
+		}
+		# Only claim success in logs after finding the actual created war.
+		if = {
+			limit = {
+				any_character_war = {
+					using_cb = hd_yuan_expansion_cb
+					primary_attacker = character:yuan_shao
+					primary_defender = scope:hd_yuan_expansion_target
+				}
+			}
+			debug_log = "HD_YUAN_EXPANSION WAR_CONFIRMED"
+		}
+		else = { debug_log = "HD_YUAN_EXPANSION WAR_NOT_CREATED_RETRY_NEXT_TICK" }
+	}
+	# Truce, alliance, other engine restrictions or a failed declaration leave
+	# the story active. Do NOT advance the direction menu in this branch.
+}
+
+hd_yuan_expansion_finish_region_effect = {
+	if = {
+		limit = {
+			has_variable = hd_yuan_expansion_region
+			NOT = { has_character_flag = hd_yuan_expansion_menu_pending }
+		}
+		set_variable = { name = hd_yuan_expansion_last_region value = var:hd_yuan_expansion_region }
+		set_variable = { name = hd_yuan_expansion_last_reason value = $REASON$ }
+		set_variable = { name = hd_yuan_expansion_finished_round value = var:hd_yuan_expansion_round }
+		remove_variable = hd_yuan_expansion_region
+		remove_variable = hd_yuan_expansion_controller
+		add_character_flag = hd_yuan_expansion_menu_pending
+		hd_yuan_expansion_update_personal_story_effect = yes
+		# End FIRST; the following direction choice creates a fresh 60-day cycle.
+		scope:hd_yuan_expansion_tick_story = { end_story = yes }
+		hd_yuan_expansion_queue_menu_effect = yes
+		debug_log = "HD_YUAN_EXPANSION REGION_ENDED_MENU_QUEUED"
+	}
+}
+
+# Native owner-death callback. Nothing passes to Yuan's heir.
+hd_yuan_expansion_owner_death_effect = {
+	remove_variable = hd_yuan_expansion_region
+	remove_variable = hd_yuan_expansion_controller
+	remove_character_flag = hd_yuan_expansion_menu_pending
+	remove_character_flag = hd_yuan_expansion_menu_open
+	remove_character_flag = hd_yuan_expansion_menu_queued
+	every_owned_story = {
+		limit = { story_type = hd_story_yuan_expansion }
+		end_story = yes
+	}
+}
+
+# War/CB scope. Snapshot eligible counties before making any title change.
+# No other independent realm, ally, tributary or out-of-region land is taken.
+hd_yuan_expansion_victory_effect = {
+	every_in_list = { list = hd_yuan_expansion_prize_counties remove_from_list = hd_yuan_expansion_prize_counties }
+	every_in_list = {
+		list = target_titles
+		every_de_jure_county = {
+			limit = {
+				exists = holder
+				holder = {
+					OR = { this = scope:defender is_vassal_or_below_of = scope:defender }
+				}
+			}
+			add_to_list = hd_yuan_expansion_prize_counties
+		}
+	}
+	create_title_and_vassal_change = {
+		type = conquest
+		save_scope_as = hd_yuan_expansion_title_change
+		add_claim_on_loss = yes
+	}
+	every_in_list = {
+		list = hd_yuan_expansion_prize_counties
+		change_title_holder_include_vassals = {
+			holder = scope:attacker
+			change = scope:hd_yuan_expansion_title_change
+			take_baronies = no
+		}
+	}
+	resolve_title_and_vassal_change = scope:hd_yuan_expansion_title_change
+}
+
+# Queue lock is temporary; open-menu lock survives until an option is selected.
+hd_yuan_expansion_queue_menu_effect = {
+	if = {
+		limit = {
+			this = character:yuan_shao
+			is_alive = yes
+			has_character_flag = hd_yuan_expansion_menu_pending
+			NOT = { has_character_flag = hd_yuan_expansion_menu_open }
+			NOT = { has_character_flag = hd_yuan_expansion_menu_queued }
+		}
+		add_character_flag = { flag = hd_yuan_expansion_menu_queued days = 3 }
+		trigger_event = { id = hd_yuan_expansion.1000 days = 1 }
+	}
+}
+
+# Store expansion progress separately so Guandu's historical phase is not
+# overwritten by later regional choices. The visible story remains Yuan's.
+hd_yuan_expansion_update_personal_story_effect = {
+	every_owned_story = {
+		limit = { story_type = hd_story_yuan_life }
+		if = {
+			limit = { story_owner = { has_variable = hd_yuan_expansion_region } }
+			set_variable = { name = hd_yuan_expansion_story_region value = story_owner.var:hd_yuan_expansion_region }
+			if = {
+				limit = { story_owner.var:hd_yuan_expansion_region = title:k_uuii_jizhou }
+				set_variable = { name = hd_yuan_expansion_story_phase value = flag:hd_yuan_life_jizhou }
+			}
+			else_if = {
+				limit = { story_owner.var:hd_yuan_expansion_region = title:k_uuii_youzhou }
+				set_variable = { name = hd_yuan_expansion_story_phase value = flag:hd_yuan_life_youzhou }
+			}
+			else_if = {
+				limit = { story_owner.var:hd_yuan_expansion_region = title:k_uuii_qingzhou }
+				set_variable = { name = hd_yuan_expansion_story_phase value = flag:hd_yuan_life_qingzhou }
+			}
+		}
+		else = {
+			remove_variable = hd_yuan_expansion_story_region
+			set_variable = { name = hd_yuan_expansion_story_phase value = flag:hd_yuan_life_northern_choice }
+		}
+		set_variable = { name = hd_yuan_expansion_story_round value = story_owner.var:hd_yuan_expansion_round }
+	}
+}
+
+hd_yuan_expansion_complete_effect = {
+	if = {
+		limit = { hd_yuan_expansion_all_regions_controlled_trigger = yes }
+		remove_character_flag = hd_yuan_expansion_menu_pending
+		remove_character_flag = hd_yuan_expansion_menu_open
+		remove_character_flag = hd_yuan_expansion_menu_queued
+		remove_variable = hd_yuan_expansion_region
+		remove_variable = hd_yuan_expansion_controller
+		add_character_flag = hd_yuan_northern_expansion_complete
+		every_owned_story = { limit = { story_type = hd_story_yuan_expansion } end_story = yes }
+		every_owned_story = {
+			limit = { story_type = hd_story_yuan_life }
+			set_variable = { name = hd_yuan_expansion_story_phase value = flag:hd_yuan_life_northern_hegemon }
+			remove_variable = hd_yuan_expansion_story_region
+		}
+		debug_log = "HD_YUAN_EXPANSION THREE_REGIONS_COMPLETED"
+	}
+	else = {
+		remove_character_flag = hd_yuan_expansion_menu_open
+		hd_yuan_expansion_queue_menu_effect = yes
+	}
+}

@@ -1,0 +1,123 @@
+# Character scope. Every participating war counts, not just offensive wars.
+hd_yuan_expansion_has_war_slot_trigger = {
+	NOT = { any_character_war = { count >= 3 always = yes } }
+}
+
+hd_yuan_expansion_actor_ready_trigger = {
+	this = character:yuan_shao
+	is_alive = yes
+	is_landed = yes
+	is_independent_ruler = yes
+	is_imprisoned = no
+	hd_yuan_expansion_has_war_slot_trigger = yes
+	NOT = { hd_yuan_expansion_history_blocked_trigger = yes }
+	# Let the existing Guandu war have priority; do not cancel regional wars.
+	NOT = { exists = global_var:hd_guandu_world_active }
+}
+
+# A non-empty kingdom and actual county ownership, including nested vassals.
+hd_yuan_expansion_controls_region_trigger = {
+	$REGION$ = {
+		any_de_jure_county = { always = yes }
+		any_de_jure_county = {
+			count = all
+			exists = holder
+			holder = {
+				OR = { this = character:yuan_shao is_vassal_or_below_of = character:yuan_shao }
+			}
+		}
+	}
+}
+
+hd_yuan_expansion_all_regions_controlled_trigger = {
+	hd_yuan_expansion_controls_region_trigger = { REGION = title:k_uuii_jizhou }
+	hd_yuan_expansion_controls_region_trigger = { REGION = title:k_uuii_youzhou }
+	hd_yuan_expansion_controls_region_trigger = { REGION = title:k_uuii_qingzhou }
+}
+
+# Independent realm-owner scope. A capital outside the region is valid.
+# Truce/alliance/ongoing war are temporary legality gates, not conquest flags.
+hd_yuan_expansion_strategic_target_trigger = {
+	is_alive = yes
+	is_landed = yes
+	is_independent_ruler = yes
+	NOT = { this = character:yuan_shao }
+	NOT = { this = character:yuan_shao.top_liege }
+	current_military_strength <= hd_yuan_expansion_strength_ceiling
+	OR = {
+		exists = global_var:hd_guandu_world_open
+		exists = global_var:hd_guandu_world_active
+		exists = global_var:hd_guandu_world_resolved
+		character:cao_cao = { is_alive = no }
+		AND = {
+			NOT = { this = character:cao_cao }
+			NOT = { this = character:cao_cao.top_liege }
+		}
+	}
+}
+
+hd_yuan_expansion_region_has_target_trigger = {
+	$REGION$ = {
+		any_de_jure_county = {
+			exists = holder
+			holder.top_liege = { hd_yuan_expansion_strategic_target_trigger = yes }
+		}
+	}
+}
+
+# Inspect the real opponent, not a target_titles list outside CB scope.
+hd_yuan_expansion_region_war_running_trigger = {
+	character:yuan_shao = {
+		any_character_war = {
+			primary_attacker = character:yuan_shao
+			primary_defender = {
+				any_realm_county = { target_is_de_jure_liege_or_above = $REGION$ }
+			}
+		}
+	}
+}
+
+# War/CB scope; never use the mutable current-region variable here.
+hd_yuan_expansion_war_has_land_trigger = {
+	any_in_list = {
+		list = target_titles
+		any_de_jure_county = {
+			exists = holder
+			holder = { OR = { this = scope:defender is_vassal_or_below_of = scope:defender } }
+		}
+	}
+}
+
+# The original historical war may retain pending until its final peace.
+# A raw global war reference alone is not proof of a live war.
+hd_yuan_expansion_history_war_running_trigger = {
+	OR = {
+		character:gong_sun_zan = { any_character_war = { using_cb = hd_yuan_jizhou_cb } }
+		character:yuan_shao = { any_character_war = { using_cb = hd_yuan_jizhou_cb } }
+	}
+}
+
+hd_yuan_expansion_history_blocked_trigger = {
+	OR = {
+		exists = global_var:hd_yuan_jizhou_pending
+		hd_yuan_expansion_history_war_running_trigger = yes
+	}
+}
+
+# Only bridge a missing original queue when the original historical setup is
+# still meaningful. Failed/finished handovers are never replayed.
+hd_yuan_expansion_can_queue_history_trigger = {
+	exists = global_var:hd_anti_regent_first_war_confirmed
+	NOT = { exists = global_var:hd_yuan_jizhou_scheduled }
+	NOT = { exists = global_var:hd_yuan_jizhou_pending }
+	NOT = { exists = global_var:hd_yuan_jizhou_handover_started }
+	NOT = { exists = global_var:hd_yuan_jizhou_handover_complete }
+	NOT = { exists = global_var:hd_yuan_jizhou_realm_transferred }
+	NOT = { has_character_flag = hd_yuan_jizhou_claim_received }
+	NOT = { hd_yuan_expansion_history_war_running_trigger = yes }
+	character:yuan_shao = { is_alive = yes is_landed = yes is_independent_ruler = yes }
+	character:gong_sun_zan = { is_alive = yes is_landed = yes is_independent_ruler = yes }
+	character:han_fu = { is_alive = yes is_landed = yes is_independent_ruler = yes }
+	title:k_uuii_jizhou = { holder = character:han_fu }
+	NOT = { character:gong_sun_zan.top_liege = character:han_fu.top_liege }
+}

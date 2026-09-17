@@ -1,0 +1,91 @@
+# Character scope. All wars count, including defensive and allied wars.
+hd_cao_expansion_has_war_slot_trigger = {
+	NOT = {
+		any_character_war = {
+			count >= 3
+			always = yes
+		}
+	}
+}
+
+# Character scope. Being unlanded or imprisoned pauses an existing campaign.
+hd_cao_expansion_actor_ready_trigger = {
+	this = character:cao_cao
+	is_alive = yes
+	is_landed = yes
+	is_imprisoned = no
+	hd_cao_expansion_has_war_slot_trigger = yes
+}
+
+# REGION must resolve to a kingdom title. Actual ownership, not occupation,
+# not the county control statistic, and not ownership of the kingdom token.
+hd_cao_expansion_controls_region_trigger = {
+	$REGION$ = {
+		any_de_jure_county = { always = yes }
+		any_de_jure_county = {
+			count = all
+			exists = holder
+			holder = {
+				OR = {
+					this = character:cao_cao
+					is_vassal_or_below_of = character:cao_cao
+				}
+			}
+		}
+	}
+}
+
+# Character scope: an independent realm owner with land in the selected region.
+# A realm's capital need not lie in the region. Do not attack Cao's own overlord.
+# Truces/alliances/ongoing wars are handled later, not treated as conquered land.
+hd_cao_expansion_strategic_target_trigger = {
+	is_alive = yes
+	is_landed = yes
+	is_independent_ruler = yes
+	NOT = { this = character:cao_cao }
+	NOT = { this = character:cao_cao.top_liege }
+	current_military_strength <= hd_cao_expansion_strength_ceiling
+}
+
+hd_cao_expansion_region_has_target_trigger = {
+	$REGION$ = {
+		any_de_jure_county = {
+			exists = holder
+			holder.top_liege = { hd_cao_expansion_strategic_target_trigger = yes }
+		}
+	}
+}
+
+# A still-running offensive war for this region is not "no targets" merely
+# because the defender's current strength or political status has changed.
+hd_cao_expansion_region_war_running_trigger = {
+	character:cao_cao = {
+		any_character_war = {
+			primary_attacker = character:cao_cao
+			# target_titles is a CB callback list, not a general war-scope list.
+			# Inspect the live opponent's realm instead of relying on that list.
+			primary_defender = {
+				any_realm_county = {
+					target_is_de_jure_liege_or_above = $REGION$
+				}
+			}
+		}
+	}
+}
+
+# War/CB scope. This reads the war's immutable target_titles, never Cao's
+# mutable campaign-region variable. Switching regions cannot retarget a war.
+hd_cao_expansion_war_has_land_trigger = {
+	any_in_list = {
+		list = target_titles
+		any_de_jure_county = {
+			exists = holder
+			holder = {
+				OR = {
+					this = scope:defender
+					is_vassal_or_below_of = scope:defender
+				}
+			}
+		}
+	}
+}

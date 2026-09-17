@@ -1,0 +1,251 @@
+# Character scope: Cao Cao. Called by his EXISTING 15-30-day historical
+# heartbeat. It only bootstraps/repairs the 60-day story; it never runs a
+# regional declaration tick. No world-wide monthly pulse is required.
+hd_cao_expansion_legacy_tick_effect = {
+	save_scope_as = hd_historical_actor
+	hd_cao_expansion_bootstrap_effect = yes
+	# Preserve the separate Fengying-the-Emperor path, with the same war-slot
+	# ceiling. Ordinary old, peace/war-chest-gated Cao expansion is replaced.
+	if = {
+		limit = {
+			is_ai = yes
+			exists = global_var:hd_anti_regent_chain_resolved
+			hd_cao_expansion_has_war_slot_trigger = yes
+			hd_cao_fengying_can_declare_trigger = yes
+		}
+		hd_cao_fengying_start_war_effect = yes
+	}
+}
+
+hd_cao_expansion_bootstrap_effect = {
+	if = {
+		limit = {
+			this = character:cao_cao
+			is_alive = yes
+			is_landed = yes
+			game_start_date = 184.1.1
+			exists = global_var:hd_anti_regent_chain_resolved
+			NOT = { has_character_flag = hd_cao_expansion_initialized }
+		}
+		# Commit initialization BEFORE creating the story. Repeated callbacks
+		# (including duplicate old controllers in a save) cannot start it twice.
+		add_character_flag = hd_cao_expansion_initialized
+		hd_cao_expansion_start_region_effect = { REGION = title:k_uuii_yanzhou }
+	}
+	else_if = {
+		limit = {
+			this = character:cao_cao
+			is_alive = yes
+			has_variable = hd_cao_expansion_region
+			NOT = { has_character_flag = hd_cao_expansion_menu_pending }
+			NOT = { any_owned_story = { story_type = hd_story_cao_expansion } }
+		}
+		# Recover a missing controller without advancing the round, replaying
+		# a menu, or resetting a completed campaign to Yanzhou.
+		hd_cao_expansion_create_controller_effect = yes
+	}
+}
+
+# Character scope. REGION is a stable title scope supplied by an option.
+hd_cao_expansion_start_region_effect = {
+	if = {
+		limit = { this = character:cao_cao is_alive = yes }
+		remove_character_flag = hd_cao_expansion_menu_pending
+		remove_character_flag = hd_cao_expansion_finished
+		# Destroy any obsolete native timers BEFORE creating their replacement.
+		every_owned_story = {
+			limit = { story_type = hd_story_cao_expansion }
+			end_story = yes
+		}
+		set_variable = { name = hd_cao_expansion_region value = $REGION$ }
+		if = {
+			limit = { has_variable = hd_cao_expansion_round }
+			change_variable = { name = hd_cao_expansion_round add = 1 }
+		}
+		else = { set_variable = { name = hd_cao_expansion_round value = 1 } }
+		if = {
+			limit = { NOT = { has_title = $REGION$ } NOT = { has_claim_on = $REGION$ } }
+			add_pressed_claim = $REGION$
+		}
+		hd_cao_expansion_create_controller_effect = yes
+		debug_log = "HD_CAO_EXPANSION REGION_STARTED"
+	}
+}
+
+hd_cao_expansion_create_controller_effect = {
+	create_story = { type = hd_story_cao_expansion save_scope_as = hd_cao_expansion_new_controller }
+	set_variable = { name = hd_cao_expansion_controller value = scope:hd_cao_expansion_new_controller }
+}
+
+# Character scope entered from the regional story. The story saves an explicit
+# scope because ROOT is not guaranteed to be a character in story effects.
+hd_cao_expansion_tick_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			this = character:cao_cao
+			has_variable = hd_cao_expansion_region
+			has_variable = hd_cao_expansion_controller
+			var:hd_cao_expansion_controller = scope:hd_cao_expansion_tick_story
+			NOT = { has_character_flag = hd_cao_expansion_menu_pending }
+		}
+		var:hd_cao_expansion_region = { save_scope_as = hd_cao_expansion_region_scope }
+		if = {
+			limit = { hd_cao_expansion_controls_region_trigger = { REGION = scope:hd_cao_expansion_region_scope } }
+			hd_cao_expansion_finish_region_effect = { REASON = flag:hd_cao_expansion_conquered }
+		}
+		else_if = {
+			limit = { hd_cao_expansion_actor_ready_trigger = yes }
+			if = {
+				limit = {
+					hd_cao_expansion_region_has_target_trigger = { REGION = scope:hd_cao_expansion_region_scope }
+				}
+				if = {
+					limit = { is_ai = yes }
+					hd_cao_expansion_try_war_effect = yes
+				}
+			}
+			else_if = {
+				limit = {
+					NOT = { hd_cao_expansion_region_war_running_trigger = { REGION = scope:hd_cao_expansion_region_scope } }
+				}
+				hd_cao_expansion_finish_region_effect = { REASON = flag:hd_cao_expansion_no_targets }
+			}
+		}
+		# Otherwise: pause. The SAME native story provides the next 60-day tick.
+	}
+	else = {
+		# An obsolete duplicate may end itself, never the authoritative story.
+		scope:hd_cao_expansion_tick_story = { end_story = yes }
+	}
+}
+
+hd_cao_expansion_try_war_effect = {
+	clear_saved_scope = hd_cao_expansion_target
+	# Simple lists are event-context-local. Clear explicitly in case another
+	# callback reused this context, then deduplicate by realm owner, not county.
+	every_in_list = {
+		list = hd_cao_expansion_candidates
+		remove_from_list = hd_cao_expansion_candidates
+	}
+	scope:hd_cao_expansion_region_scope = {
+		every_de_jure_county = {
+			limit = { exists = holder }
+			holder.top_liege = {
+				if = {
+					limit = {
+						hd_cao_expansion_strategic_target_trigger = yes
+						NOT = { is_in_list = hd_cao_expansion_candidates }
+					}
+					add_to_list = hd_cao_expansion_candidates
+				}
+			}
+		}
+	}
+	random_in_list = {
+		list = hd_cao_expansion_candidates
+		limit = {
+			NOT = { is_allied_to = character:cao_cao }
+			NOT = { is_at_war_with = character:cao_cao }
+			character:cao_cao = {
+				NOT = { has_truce = prev }
+				can_declare_war = {
+					defender = prev
+					casus_belli = hd_cao_expansion_cb
+					target_titles = { scope:hd_cao_expansion_region_scope }
+				}
+			}
+		}
+		save_scope_as = hd_cao_expansion_target
+	}
+	if = {
+		limit = {
+			is_ai = yes
+			hd_cao_expansion_actor_ready_trigger = yes
+			exists = scope:hd_cao_expansion_target
+			# Revalidate the exact pair and exact title immediately before starting.
+			scope:hd_cao_expansion_target = { hd_cao_expansion_strategic_target_trigger = yes }
+			can_declare_war = {
+				defender = scope:hd_cao_expansion_target
+				casus_belli = hd_cao_expansion_cb
+				target_titles = { scope:hd_cao_expansion_region_scope }
+			}
+		}
+		start_war = {
+			cb = hd_cao_expansion_cb
+			target = scope:hd_cao_expansion_target
+			target_title = scope:hd_cao_expansion_region_scope
+		}
+		# Only claim success in logs after finding the actual created war.
+		if = {
+			limit = {
+				any_character_war = {
+					using_cb = hd_cao_expansion_cb
+					primary_attacker = character:cao_cao
+					primary_defender = scope:hd_cao_expansion_target
+				}
+			}
+			debug_log = "HD_CAO_EXPANSION WAR_CONFIRMED"
+		}
+		else = { debug_log = "HD_CAO_EXPANSION WAR_NOT_CREATED_RETRY_NEXT_TICK" }
+	}
+	# Truce, alliance, other engine restrictions or a failed declaration leave
+	# the story active. Do NOT advance the direction menu in this branch.
+}
+
+hd_cao_expansion_finish_region_effect = {
+	if = {
+		limit = {
+			has_variable = hd_cao_expansion_region
+			NOT = { has_character_flag = hd_cao_expansion_menu_pending }
+		}
+		set_variable = { name = hd_cao_expansion_last_region value = var:hd_cao_expansion_region }
+		set_variable = { name = hd_cao_expansion_last_reason value = $REASON$ }
+		set_variable = { name = hd_cao_expansion_finished_round value = var:hd_cao_expansion_round }
+		remove_variable = hd_cao_expansion_region
+		remove_variable = hd_cao_expansion_controller
+		add_character_flag = hd_cao_expansion_menu_pending
+		# End FIRST; the following direction choice creates a fresh 60-day cycle.
+		scope:hd_cao_expansion_tick_story = { end_story = yes }
+		trigger_event = { id = hd_cao_expansion.0001 days = 1 }
+		debug_log = "HD_CAO_EXPANSION REGION_ENDED_MENU_QUEUED"
+	}
+}
+
+# Native owner-death callback. Nothing passes to Cao's heir.
+hd_cao_expansion_owner_death_effect = {
+	remove_variable = hd_cao_expansion_region
+	remove_variable = hd_cao_expansion_controller
+	remove_character_flag = hd_cao_expansion_menu_pending
+}
+
+# War/CB scope. Snapshot eligible counties before making any title change.
+# No other independent realm, ally, tributary or out-of-region land is taken.
+hd_cao_expansion_victory_effect = {
+	every_in_list = {
+		list = target_titles
+		every_de_jure_county = {
+			limit = {
+				exists = holder
+				holder = {
+					OR = { this = scope:defender is_vassal_or_below_of = scope:defender }
+				}
+			}
+			add_to_list = hd_cao_expansion_prize_counties
+		}
+	}
+	create_title_and_vassal_change = {
+		type = conquest
+		save_scope_as = hd_cao_expansion_title_change
+		add_claim_on_loss = yes
+	}
+	every_in_list = {
+		list = hd_cao_expansion_prize_counties
+		change_title_holder_include_vassals = {
+			holder = scope:attacker
+			change = scope:hd_cao_expansion_title_change
+			take_baronies = no
+		}
+	}
+	resolve_title_and_vassal_change = scope:hd_cao_expansion_title_change
+}
