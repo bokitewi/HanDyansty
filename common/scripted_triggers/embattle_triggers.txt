@@ -1,24 +1,102 @@
-﻿embattle_has_valid_commander_trigger = {
-	scope:army.var:embattle_right_flank_commander ?= {
-		is_alive = yes
-		knight_army = scope:army
-	}
-	scope:army.var:embattle_left_flank_commander ?= {
-		is_alive = yes
-		knight_army = scope:army
-	}
+﻿# HanDynasty deputy performance patch. Army-scope predicates unless stated otherwise.
+# Do not use optional ?= scope checks to prove that a deputy exists.
+hd_embattle_left_valid_trigger = {
+    exists = var:embattle_left_flank_commander
+    var:embattle_left_flank_commander = {
+        is_alive = yes
+        is_commanding_army = no
+        exists = knight_army
+        knight_army = prev
+    }
 }
-
+hd_embattle_right_valid_trigger = {
+    exists = var:embattle_right_flank_commander
+    var:embattle_right_flank_commander = {
+        is_alive = yes
+        is_commanding_army = no
+        exists = knight_army
+        knight_army = prev
+    }
+    trigger_if = {
+        limit = { exists = var:embattle_left_flank_commander }
+        NOT = { var:embattle_right_flank_commander = var:embattle_left_flank_commander }
+    }
+}
+hd_embattle_both_valid_trigger = {
+    hd_embattle_left_valid_trigger = yes
+    hd_embattle_right_valid_trigger = yes
+}
+hd_embattle_auto_vacancy_trigger = {
+    OR = {
+        AND = {
+            hd_embattle_left_valid_trigger = no
+            NOT = { has_variable = hd_embattle_manual_empty_left }
+        }
+        AND = {
+            hd_embattle_right_valid_trigger = no
+            NOT = { has_variable = hd_embattle_manual_empty_right }
+        }
+    }
+}
+# Character scope; scope:hd_embattle_army is supplied by the caller.
+hd_embattle_candidate_trigger = {
+    exists = scope:hd_embattle_army
+    is_alive = yes
+    is_commanding_army = no
+    exists = knight_army
+    knight_army = scope:hd_embattle_army
+    trigger_if = {
+        limit = { exists = scope:hd_embattle_army.var:embattle_left_flank_commander }
+        NOT = { this = scope:hd_embattle_army.var:embattle_left_flank_commander }
+    }
+    trigger_if = {
+        limit = { exists = scope:hd_embattle_army.var:embattle_right_flank_commander }
+        NOT = { this = scope:hd_embattle_army.var:embattle_right_flank_commander }
+    }
+}
+# Character scope. Preserve baseline player-owned-army bonus eligibility.
+# involved_combat_side is the documented army -> combat_side scope link.
+hd_embattle_bonus_eligible_trigger = {
+    is_alive = yes
+    exists = commanding_army
+    commanding_army = {
+        exists = army_owner
+        army_owner = { is_ai = no }
+        exists = army_commander
+        army_commander = prev
+        exists = involved_combat_side
+        exists = involved_combat_side.combat
+    }
+}
+# Army scope. Used by the stock deputy GUI; never clears automatic AI appointments.
+hd_embattle_manual_allowed_trigger = {
+    exists = army_owner
+    army_owner = { is_ai = no }
+    exists = army_commander
+    OR = {
+        has_game_rule = embattle_side_commander_appointor_player_exempt
+        army_commander = army_owner
+    }
+}
+# Legacy public predicate retained for any existing consumers.
+embattle_has_valid_commander_trigger = {
+    exists = scope:army
+    scope:army = { hd_embattle_both_valid_trigger = yes }
+}
+# Legacy trait-sharing predicate; strict existence and current-army membership.
 embattle_commander_trait_can_be_seeded_trigger = {
-	scope:commander ?= {
-		NOT = { has_trait = $SEED_TRAIT$ }
-	}
-	OR = {
-		scope:army.var:embattle_left_flank_commander ?= {
-			has_trait = $SEED_TRAIT$
-		}
-		scope:army.var:embattle_right_flank_commander ?= {
-			has_trait = $SEED_TRAIT$
-		}
-	}
+    has_game_rule = embattle_side_commander_traits_sharing_enable
+    exists = scope:commander
+    exists = scope:army
+    scope:commander = { NOT = { has_trait = $SEED_TRAIT$ } }
+    OR = {
+        scope:army = {
+            hd_embattle_left_valid_trigger = yes
+            var:embattle_left_flank_commander = { has_trait = $SEED_TRAIT$ }
+        }
+        scope:army = {
+            hd_embattle_right_valid_trigger = yes
+            var:embattle_right_flank_commander = { has_trait = $SEED_TRAIT$ }
+        }
+    }
 }

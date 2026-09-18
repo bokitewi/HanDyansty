@@ -1,458 +1,472 @@
-﻿embattle_seed_commander_trait_effect_base = {
-	add_character_flag = embattle_temp_trait_seeded
-	add_trait = $SEED_TRAIT$
-	if = {
-		limit = {
-			OR = {
-				scope:army.var:embattle_left_flank_commander ?= {
-					has_trait_xp = {
-						trait = $TRAIT$
-						value >= 100
-					}
-				}
-				scope:army.var:embattle_right_flank_commander ?= {
-					has_trait_xp = {
-						trait = $TRAIT$
-						value >= 100
-					}
-				}
-			}
-		}
-		add_trait_xp = {
-			trait = $SEED_TRAIT$
-			value = 100
-		}
-	}
-	else_if = {
-		limit = {
-			OR = {
-				scope:army.var:embattle_left_flank_commander ?= {
-					has_trait_xp = {
-						trait = $TRAIT$
-						value >= 66
-					}
-				}
-				scope:army.var:embattle_right_flank_commander ?= {
-					has_trait_xp = {
-						trait = $TRAIT$
-						value >= 66
-					}
-				}
-			}
-		}
-		add_trait_xp = {
-			trait = $SEED_TRAIT$
-			value = 66
-		}
-	}
-	else_if = {
-		limit = {
-			OR = {
-				scope:army.var:embattle_left_flank_commander ?= {
-					has_trait_xp = {
-						trait = $TRAIT$
-						value >= 33
-					}
-				}
-				scope:army.var:embattle_right_flank_commander ?= {
-					has_trait_xp = {
-						trait = $TRAIT$
-						value >= 33
-					}
-				}
-			}
-		}
-		add_trait_xp = {
-			trait = $SEED_TRAIT$
-			value = 33
-		}
-	}
+﻿# All hd_embattle_*_army_effect / *_appointment_effect: army scope.
+# Normalization never scans knights. A failed search does not unlock itself.
+hd_embattle_normalize_army_effect = {
+    if = {
+        limit = {
+            has_variable = hd_embattle_complete
+            hd_embattle_both_valid_trigger = no
+            NOT = { has_variable = hd_embattle_retry_blocked }
+        }
+        remove_variable = hd_embattle_auto_done
+    }
+    if = {
+        limit = { hd_embattle_left_valid_trigger = no }
+        remove_variable = embattle_left_flank_commander
+    }
+    if = {
+        limit = { hd_embattle_right_valid_trigger = no }
+        remove_variable = embattle_right_flank_commander
+    }
+    if = {
+        limit = { hd_embattle_both_valid_trigger = yes }
+        set_variable = { name = hd_embattle_complete value = yes }
+        remove_variable = hd_embattle_retry_blocked
+    }
+    else = { remove_variable = hd_embattle_complete }
 }
 
+# Exactly one legal-candidate collection per permitted attempt, for players AND AI.
+hd_embattle_attempt_appointment_effect = {
+    save_scope_as = hd_embattle_army
+    # Lock BEFORE collection. Empty lists, no candidates, and partial success stay locked.
+    set_variable = { name = hd_embattle_auto_done value = yes }
+    clear_variable_list = hd_embattle_candidates
+    clear_variable_list = hd_embattle_shortlist
+    army_owner = {
+        every_knight = {
+            limit = { hd_embattle_candidate_trigger = yes }
+            scope:hd_embattle_army = {
+                add_to_variable_list = { name = hd_embattle_candidates target = prev }
+            }
+        }
+    }
+    random_list = {
+        1 = { set_variable = { name = hd_embattle_sort_mode value = 0 } }
+        1 = { set_variable = { name = hd_embattle_sort_mode value = 1 } }
+        1 = { set_variable = { name = hd_embattle_sort_mode value = 2 } }
+        1 = { set_variable = { name = hd_embattle_sort_mode value = 3 } }
+    }
+    # Preserve the four equal-weight baseline ranking modes and max=3 shortlist.
+    ordered_in_list = {
+        variable = hd_embattle_candidates
+        order_by = {
+            if = {
+                limit = { scope:hd_embattle_army.var:hd_embattle_sort_mode = 0 }
+                value = age
+            }
+            else_if = {
+                limit = { scope:hd_embattle_army.var:hd_embattle_sort_mode = 1 }
+                value = martial
+            }
+            else_if = {
+                limit = { scope:hd_embattle_army.var:hd_embattle_sort_mode = 2 }
+                value = highest_held_title_tier
+            }
+            else = { value = "opinion(scope:hd_embattle_army.army_commander)" }
+        }
+        max = 3
+        check_range_bounds = no
+        scope:hd_embattle_army = {
+            add_to_variable_list = { name = hd_embattle_shortlist target = prev }
+        }
+    }
+    if = {
+        limit = {
+            hd_embattle_right_valid_trigger = no
+            NOT = { has_variable = hd_embattle_manual_empty_right }
+        }
+        random_in_list = {
+            variable = hd_embattle_shortlist
+            limit = { hd_embattle_candidate_trigger = yes }
+            scope:hd_embattle_army = {
+                set_variable = { name = embattle_right_flank_commander value = prev }
+                remove_list_variable = { name = hd_embattle_shortlist target = prev }
+            }
+        }
+    }
+    if = {
+        limit = {
+            hd_embattle_left_valid_trigger = no
+            NOT = { has_variable = hd_embattle_manual_empty_left }
+        }
+        random_in_list = {
+            variable = hd_embattle_shortlist
+            limit = { hd_embattle_candidate_trigger = yes }
+            scope:hd_embattle_army = {
+                set_variable = { name = embattle_left_flank_commander value = prev }
+                remove_list_variable = { name = hd_embattle_shortlist target = prev }
+            }
+        }
+    }
+    clear_variable_list = hd_embattle_candidates
+    clear_variable_list = hd_embattle_shortlist
+    remove_variable = hd_embattle_sort_mode
+    if = {
+        limit = { hd_embattle_auto_vacancy_trigger = yes }
+        set_variable = { name = hd_embattle_retry_blocked value = yes }
+    }
+    else = { remove_variable = hd_embattle_retry_blocked }
+    if = {
+        limit = { hd_embattle_both_valid_trigger = yes }
+        set_variable = { name = hd_embattle_complete value = yes }
+    }
+    else = { remove_variable = hd_embattle_complete }
+}
+
+# Single-army entry. No province scan, army-count query, or recurring AI scheduler.
+hd_embattle_maintain_army_effect = {
+    save_scope_as = hd_embattle_army
+    if = {
+        limit = { exists = army_owner }
+        # A genuine owner change is a new appointment context, not a timed retry.
+        if = {
+            limit = {
+                exists = var:hd_embattle_seen_owner
+                NOT = { var:hd_embattle_seen_owner = army_owner }
+            }
+            remove_variable = hd_embattle_auto_done
+            remove_variable = hd_embattle_retry_blocked
+            remove_variable = hd_embattle_complete
+            remove_variable = hd_embattle_manual_empty_left
+            remove_variable = hd_embattle_manual_empty_right
+        }
+        if = {
+            limit = {
+                OR = {
+                    NOT = { has_variable = hd_embattle_seen_owner }
+                    trigger_if = {
+                        limit = { exists = var:hd_embattle_seen_owner }
+                        NOT = { var:hd_embattle_seen_owner = army_owner }
+                    }
+                }
+            }
+            set_variable = { name = hd_embattle_seen_owner value = army_owner }
+        }
+        hd_embattle_normalize_army_effect = yes
+        if = {
+            limit = {
+                NOT = { has_variable = hd_embattle_auto_done }
+                NOT = { has_variable = hd_embattle_retry_blocked }
+                exists = army_commander
+                army_commander = { is_alive = yes }
+            }
+            if = {
+                limit = { hd_embattle_auto_vacancy_trigger = yes }
+                hd_embattle_attempt_appointment_effect = yes
+            }
+            else = { set_variable = { name = hd_embattle_auto_done value = yes } }
+        }
+    }
+    hd_embattle_refresh_army_bonus_effect = yes
+}
+
+# Called only by a player action. A retry preserves legal deputies and opens vacancies.
+hd_embattle_retry_army_effect = {
+    remove_variable = hd_embattle_auto_done
+    remove_variable = hd_embattle_retry_blocked
+    remove_variable = hd_embattle_manual_empty_left
+    remove_variable = hd_embattle_manual_empty_right
+    hd_embattle_maintain_army_effect = yes
+}
+
+# Clean a former commander only if THIS army still owns their recorded bonus.
+hd_embattle_refresh_army_bonus_effect = {
+    save_scope_as = hd_embattle_army
+    if = {
+        limit = { exists = var:hd_embattle_last_buff_commander }
+        var:hd_embattle_last_buff_commander = {
+            if = {
+                limit = {
+                    has_variable = hd_embattle_buff_army
+                    var:hd_embattle_buff_army = scope:hd_embattle_army
+                    OR = {
+                        NOT = { exists = scope:hd_embattle_army.army_commander }
+                        AND = {
+                            exists = scope:hd_embattle_army.army_commander
+                            NOT = { this = scope:hd_embattle_army.army_commander }
+                        }
+                    }
+                }
+                hd_embattle_clear_bonus_effect = yes
+            }
+        }
+    }
+    if = {
+        limit = { exists = army_commander }
+        army_commander = {
+            if = {
+                limit = { hd_embattle_bonus_eligible_trigger = yes }
+                hd_embattle_sync_bonus_effect = yes
+            }
+            else_if = {
+                limit = {
+                    has_character_flag = hd_embattle_buff_active
+                    has_variable = hd_embattle_buff_army
+                    var:hd_embattle_buff_army = scope:hd_embattle_army
+                }
+                hd_embattle_clear_bonus_effect = yes
+            }
+        }
+    }
+}
+
+
+# Each call computes the desired SOURCE tier. Existing copied XP is never added twice.
+hd_embattle_sync_one_trait_effect = {
+    hd_embattle_sync_trait_copy_effect = { TRAIT = $TRAIT$ COPY = embattle_$TRAIT$ }
+}
+hd_embattle_sync_trait_copy_effect = {
+    if = {
+        limit = {
+            NOT = { has_trait = $TRAIT$ }
+            OR = {
+                scope:hd_embattle_army = {
+                    hd_embattle_left_valid_trigger = yes
+                    var:embattle_left_flank_commander = { has_trait = $TRAIT$ }
+                }
+                scope:hd_embattle_army = {
+                    hd_embattle_right_valid_trigger = yes
+                    var:embattle_right_flank_commander = { has_trait = $TRAIT$ }
+                }
+            }
+        }
+        save_scope_value_as = { name = hd_embattle_target_xp value = 0 }
+        if = {
+            limit = {
+                OR = {
+                    scope:hd_embattle_army = {
+                        hd_embattle_left_valid_trigger = yes
+                        var:embattle_left_flank_commander = {
+                            has_trait = $TRAIT$
+                            has_trait_xp = { trait = $TRAIT$ value >= 100 }
+                        }
+                    }
+                    scope:hd_embattle_army = {
+                        hd_embattle_right_valid_trigger = yes
+                        var:embattle_right_flank_commander = {
+                            has_trait = $TRAIT$
+                            has_trait_xp = { trait = $TRAIT$ value >= 100 }
+                        }
+                    }
+                }
+            }
+            save_scope_value_as = { name = hd_embattle_target_xp value = 100 }
+        }
+        else_if = {
+            limit = {
+                OR = {
+                    scope:hd_embattle_army = {
+                        hd_embattle_left_valid_trigger = yes
+                        var:embattle_left_flank_commander = {
+                            has_trait = $TRAIT$
+                            has_trait_xp = { trait = $TRAIT$ value >= 66 }
+                        }
+                    }
+                    scope:hd_embattle_army = {
+                        hd_embattle_right_valid_trigger = yes
+                        var:embattle_right_flank_commander = {
+                            has_trait = $TRAIT$
+                            has_trait_xp = { trait = $TRAIT$ value >= 66 }
+                        }
+                    }
+                }
+            }
+            save_scope_value_as = { name = hd_embattle_target_xp value = 66 }
+        }
+        else_if = {
+            limit = {
+                OR = {
+                    scope:hd_embattle_army = {
+                        hd_embattle_left_valid_trigger = yes
+                        var:embattle_left_flank_commander = {
+                            has_trait = $TRAIT$
+                            has_trait_xp = { trait = $TRAIT$ value >= 33 }
+                        }
+                    }
+                    scope:hd_embattle_army = {
+                        hd_embattle_right_valid_trigger = yes
+                        var:embattle_right_flank_commander = {
+                            has_trait = $TRAIT$
+                            has_trait_xp = { trait = $TRAIT$ value >= 33 }
+                        }
+                    }
+                }
+            }
+            save_scope_value_as = { name = hd_embattle_target_xp value = 33 }
+        }
+        if = {
+            limit = { NOT = { has_trait = $COPY$ } }
+            add_trait = $COPY$
+        }
+        if = {
+            limit = {
+                NOT = { has_trait_xp = { trait = $COPY$ value = scope:hd_embattle_target_xp } }
+            }
+            # Signed delta also handles decreases and retained XP after trait removal.
+            add_trait_xp = {
+                trait = $COPY$
+                value = {
+                    value = scope:hd_embattle_target_xp
+                    subtract = "has_trait_xp($COPY$)"
+                }
+            }
+        }
+    }
+    else_if = {
+        limit = { has_trait = $COPY$ }
+        remove_trait = $COPY$
+    }
+}
+
+hd_embattle_clear_shared_traits_effect = {
+    if = { limit = { has_trait = embattle_holy_warrior } remove_trait = embattle_holy_warrior }
+    if = { limit = { has_trait = embattle_aggressive_attacker } remove_trait = embattle_aggressive_attacker }
+    if = { limit = { has_trait = embattle_unyielding_defender } remove_trait = embattle_unyielding_defender }
+    if = { limit = { has_trait = embattle_flexible_leader } remove_trait = embattle_flexible_leader }
+    if = { limit = { has_trait = embattle_reckless } remove_trait = embattle_reckless }
+    if = { limit = { has_trait = embattle_cautious_leader } remove_trait = embattle_cautious_leader }
+    if = { limit = { has_trait = embattle_forest_fighter } remove_trait = embattle_forest_fighter }
+    if = { limit = { has_trait = embattle_open_terrain_expert } remove_trait = embattle_open_terrain_expert }
+    if = { limit = { has_trait = embattle_rough_terrain_expert } remove_trait = embattle_rough_terrain_expert }
+    if = { limit = { has_trait = embattle_desert_warrior } remove_trait = embattle_desert_warrior }
+    if = { limit = { has_trait = embattle_jungle_stalker } remove_trait = embattle_jungle_stalker }
+    if = { limit = { has_trait = embattle_winter_soldier } remove_trait = embattle_winter_soldier }
+    remove_character_flag = embattle_temp_trait_seeded
+}
+
+# Character scope. Do not clear the pending token here: a previously queued watcher
+# must either service the next battle or consume the token and stop, never duplicate.
+hd_embattle_clear_bonus_effect = {
+    remove_character_modifier = embattle_side_commander_advantage_modifier
+    hd_embattle_clear_shared_traits_effect = yes
+    remove_character_flag = hd_embattle_buff_active
+    remove_variable = hd_embattle_buff_army
+    remove_variable = hd_embattle_buff_combat
+}
+
+hd_embattle_sync_bonus_effect = {
+    if = {
+        limit = { hd_embattle_bonus_eligible_trigger = yes }
+        save_scope_as = hd_embattle_beneficiary
+        commanding_army = { save_scope_as = hd_embattle_army }
+        commanding_army.involved_combat_side.combat = { save_scope_as = hd_embattle_current_combat }
+        set_variable = { name = hd_embattle_buff_army value = scope:hd_embattle_army }
+        set_variable = { name = hd_embattle_buff_combat value = scope:hd_embattle_current_combat }
+        scope:hd_embattle_army = {
+            set_variable = { name = hd_embattle_last_buff_commander value = scope:hd_embattle_beneficiary }
+        }
+        # Registry includes replaced commanders, not just the eventual side_commander.
+        scope:hd_embattle_current_combat = {
+            if = {
+                limit = {
+                    NOT = {
+                        is_target_in_variable_list = {
+                            name = hd_embattle_buffed_commanders
+                            target = scope:hd_embattle_beneficiary
+                        }
+                    }
+                }
+                add_to_variable_list = {
+                    name = hd_embattle_buffed_commanders
+                    target = scope:hd_embattle_beneficiary
+                }
+            }
+        }
+        if = {
+            limit = { NOT = { has_character_modifier = embattle_side_commander_advantage_modifier } }
+            add_character_modifier = embattle_side_commander_advantage_modifier
+        }
+        if = {
+            limit = { has_game_rule = embattle_side_commander_traits_sharing_enable }
+            hd_embattle_sync_one_trait_effect = { TRAIT = holy_warrior }
+            hd_embattle_sync_one_trait_effect = { TRAIT = aggressive_attacker }
+            hd_embattle_sync_one_trait_effect = { TRAIT = unyielding_defender }
+            hd_embattle_sync_one_trait_effect = { TRAIT = flexible_leader }
+            hd_embattle_sync_one_trait_effect = { TRAIT = reckless }
+            hd_embattle_sync_one_trait_effect = { TRAIT = cautious_leader }
+            hd_embattle_sync_one_trait_effect = { TRAIT = forest_fighter }
+            hd_embattle_sync_one_trait_effect = { TRAIT = open_terrain_expert }
+            hd_embattle_sync_one_trait_effect = { TRAIT = rough_terrain_expert }
+            hd_embattle_sync_one_trait_effect = { TRAIT = desert_warrior }
+            hd_embattle_sync_one_trait_effect = { TRAIT = jungle_stalker }
+            hd_embattle_sync_one_trait_effect = { TRAIT = winter_soldier }
+            add_character_flag = embattle_temp_trait_seeded
+        }
+        else = { hd_embattle_clear_shared_traits_effect = yes }
+        add_character_flag = hd_embattle_buff_active
+        if = {
+            limit = { NOT = { has_character_flag = hd_embattle_watch_pending } }
+            add_character_flag = hd_embattle_watch_pending
+            trigger_event = { id = embattle_events.0100 days = 7 }
+        }
+    }
+}
+
+# Legacy public function names. No tactic function is dispatched by this patch.
 embattle_seed_commander_trait_effect = {
-	if = {
-		limit = {
-			embattle_commander_trait_can_be_seeded_trigger = { SEED_TRAIT = $TRAIT$ }
-		}
-		scope:commander = {
-			embattle_seed_commander_trait_effect_base = {
-				TRAIT = $TRAIT$
-				SEED_TRAIT = embattle_$TRAIT$ 
-			}
-		}
-	}
+    if = {
+        limit = {
+            exists = scope:commander
+            exists = scope:army
+            has_game_rule = embattle_side_commander_traits_sharing_enable
+            scope:commander = { hd_embattle_bonus_eligible_trigger = yes }
+        }
+        scope:army = { save_scope_as = hd_embattle_army }
+        scope:commander = { hd_embattle_sync_one_trait_effect = { TRAIT = $TRAIT$ } }
+    }
 }
-
+embattle_seed_commander_trait_effect_base = {
+    # Legacy parameter contract retained: TRAIT is the source, SEED_TRAIT is the copy.
+    if = {
+        limit = {
+            exists = scope:army
+            has_game_rule = embattle_side_commander_traits_sharing_enable
+            hd_embattle_bonus_eligible_trigger = yes
+        }
+        scope:army = { save_scope_as = hd_embattle_army }
+        hd_embattle_sync_trait_copy_effect = { TRAIT = $TRAIT$ COPY = $SEED_TRAIT$ }
+    }
+}
 embattle_remove_commander_trait_seeded_effect = {
-	remove_trait = $TRAIT$
+    if = { limit = { has_trait = $TRAIT$ } remove_trait = $TRAIT$ }
 }
+# Retired no-op compatibility endpoints; no weights, MAA loops, or scheduling.
+embattle_on_combat_start_tactic_polling_effect = { }
+embattle_set_general_tactic_effect_center = { }
 
-embattle_on_combat_start_tactic_polling_effect = {
-	save_scope_as = combat_side
-	side_commander = {
-		save_scope_as = commander
-		commanding_army = {
-			save_scope_as = army
-			army_owner = { 
-				save_scope_as = army_owner 
-			}
-		}
-	}
 
-	if = {
-		limit = {
-			scope:army_owner = { is_ai = no }
-		}
-		random_list = {
-		0 = { # 齐射
-			modifier = {
-				add = 10
-				scope:army = { # 1单位以上的弓箭手触发齐射
-					any_army_maa_regiment = {
-						is_unit_type = archers
-						maa_size >= 1
-					}
-				}
-			}
-
-			scope:commander = {
-				set_variable = {
-					name = volly_tactic
-					days = 2
-				}
-			}
-
-			scope:army_owner = {
-				send_interface_toast = {
-					type = embattle_tactic_activated_neutral
-					title = embattle_combat_tactic_mechanic_title_volly_tactic
-					left_icon = scope:commander
-					custom_tooltip = embattle_combat_tactic_mechanic_tt_volly_tactic
-				}
-			}
-
-			embattle_set_general_tactic_effect_center = {
-				TYPE = archers
-				TACTIC = volly_tactic
-			}
-		}
-
-		0 = { # 冲锋
-			modifier = {
-				add = 10
-				scope:army = { # 1单位以上的骑兵触发冲锋
-					any_army_maa_regiment = {
-						is_unit_type = heavy_cavalry
-						maa_size >= 1
-					}
-				}
-			}
-
-			scope:army_owner = {
-				send_interface_toast = {
-					type = embattle_tactic_activated_neutral
-					title = embattle_combat_tactic_mechanic_title_charge_tactic
-					left_icon = scope:commander
-					custom_tooltip = embattle_combat_tactic_mechanic_tt_charge_tactic
-				}
-			}
-
-			scope:commander = {
-				set_variable = {
-					name = charge_tactic
-					days = 2
-				}
-			}
-
-			embattle_set_general_tactic_effect_center = {
-				TYPE = heavy_cavalry
-				TACTIC = charge_tactic
-			}
-
-			embattle_set_general_tactic_effect_center = {
-				TYPE = light_cavalry
-				TACTIC = charge_tactic
-			}
-		}
-		
-		0 = { # 固守
-			modifier = {
-				add = 10
-				scope:army = { # 1单位以上的步兵触发固守
-					any_army_maa_regiment = {
-						is_unit_type = pikemen
-						maa_size >= 1
-					}
-				}
-			}
-
-			scope:army_owner = {
-				send_interface_toast = {
-					type = embattle_tactic_activated_neutral
-					title = embattle_combat_tactic_mechanic_title_stand_fast_tactic
-					left_icon = scope:commander
-					custom_tooltip = embattle_combat_tactic_mechanic_tt_stand_fast_tactic
-				}
-			}
-
-			scope:commander = {
-				set_variable = {
-					name = stand_fast_tactic
-					days = 2
-				}
-			}
-
-			embattle_set_general_tactic_effect_center = {
-				TYPE = pikemen
-				TACTIC = stand_fast_tactic
-			}
-
-			embattle_set_general_tactic_effect_center = {
-				TYPE = heavy_infantry
-				TACTIC = stand_fast_tactic
-			}
-		}
-
-		0 = { # 推进
-			modifier = {
-				add = 10
-				scope:army = { # 1单位以上的重步或散兵触发推进
-					OR = {
-						any_army_maa_regiment = {
-							is_unit_type = heavy_infantry
-							maa_size >= 1
-						}
-						any_army_maa_regiment = {
-							is_unit_type = skirmishers
-							maa_size >= 1
-						}
-					}
-				}
-			}
-
-			scope:army_owner = {
-				send_interface_toast = {
-					type = embattle_tactic_activated_neutral
-					title = embattle_combat_tactic_mechanic_title_advance_tactic
-					left_icon = scope:commander
-					custom_tooltip = embattle_combat_tactic_mechanic_tt_advance_tactic
-				}
-			}
-
-			scope:commander = {
-				set_variable = {
-					name = advance_tactic
-					days = 2
-				}
-			}
-
-			embattle_set_general_tactic_effect_center = {
-				TYPE = heavy_infantry
-				TACTIC = advance_tactic
-			}
-		}
-	
-		0 = { # 骚扰
-			modifier = {
-				add = 10
-				scope:army = { # 1单位以上的轻骑/弓骑触发冲锋
-					OR = {
-						any_army_maa_regiment = {
-							is_unit_type = light_cavalry
-							maa_size >= 1
-						}
-						any_army_maa_regiment = {
-							is_unit_type = archer_cavalry
-							maa_size >= 1
-						}
-					}
-				}
-			}
-
-			scope:army_owner = {
-				send_interface_toast = {
-					type = embattle_tactic_activated_neutral
-					title = embattle_combat_tactic_mechanic_title_harass_tactic
-					left_icon = scope:commander
-					custom_tooltip = embattle_combat_tactic_mechanic_tt_harass_tactic
-				}
-			}
-
-			scope:commander = {
-				set_variable = {
-					name = harass_tactic
-					days = 2
-				}
-			}
-
-			embattle_set_general_tactic_effect_center = {
-				TYPE = light_cavalry
-				TACTIC = harass_tactic
-			}
-
-			embattle_set_general_tactic_effect_center = {
-				TYPE = archer_cavalry
-				TACTIC = harass_tactic
-			}
-		}
-
-		0 = { # 胡乱射击
-			modifier = {
-				add = 10
-				scope:commander = {
-					is_target_in_variable_list = {
-						name = embattle_clumsy_tactic_group
-						target = flag:embattle_reckless_charge_tactic
-					}
-				}
-				scope:army = {
-					embattle_general_tactic_count_value < 3
-				}
-			}
-
-			scope:army_owner = {
-				send_interface_toast = {
-					type = embattle_tactic_activated_bad
-					title = embattle_combat_tactic_mechanic_title_potshots_tactic
-					left_icon = scope:commander
-					custom_tooltip = embattle_combat_tactic_mechanic_tt_potshots_tactic
-				}
-			}
-
-			scope:commander = {
-				add_character_modifier = {
-					modifier = embattle_potshots_tactic_modifier
-					days = 10
-				}
-			}
-		}
-
-		0 = { # 鲁莽冲锋
-			modifier = {
-				add = 10
-				scope:commander = {
-					is_target_in_variable_list = {
-						name = embattle_clumsy_tactic_group
-						target = flag:embattle_reckless_charge_tactic
-					}
-				}
-				scope:army = {
-					embattle_general_tactic_count_value < 3
-				}
-			}
-
-			scope:army_owner = {
-				send_interface_toast = {
-					type = embattle_tactic_activated_bad
-					title = embattle_combat_tactic_mechanic_title_reckless_charge_tactic
-					left_icon = scope:commander
-					custom_tooltip = embattle_combat_tactic_mechanic_tt_reckless_charge_tactic
-				}
-			}
-
-			scope:commander = {
-				add_character_modifier = {
-					modifier = embattle_reckless_charge_tactic_modifier
-					days = 10
-				}
-			}
-		}
-
-		0 = { # 军令费解
-			modifier = {
-				add = 10
-				scope:commander = {
-					is_target_in_variable_list = {
-						name = embattle_clumsy_tactic_group
-						target = flag:embattle_confused_orders_tactic
-					}
-				}
-				scope:army = {
-					embattle_general_tactic_count_value < 3
-				}
-			}
-
-			scope:army_owner = {
-				send_interface_toast = {
-					type = embattle_tactic_activated_bad
-					title = embattle_combat_tactic_mechanic_title_confused_orders_tactic
-					left_icon = scope:commander
-					custom_tooltip = embattle_combat_tactic_mechanic_tt_confused_orders_tactic
-				}
-			}
-
-			scope:commander = {
-				add_character_modifier = {
-					modifier = embattle_confused_orders_tactic_modifier
-					days = 10
-				}
-			}
-		}
-		
-		0 = { # 胆怯推进
-			modifier = {
-				add = 10
-				scope:commander = {
-					is_target_in_variable_list = {
-						name = embattle_clumsy_tactic_group
-						target = flag:embattle_timid_advance_tactic
-					}
-				}
-				scope:army = {
-					embattle_general_tactic_count_value < 3
-				}
-			}
-
-			scope:army_owner = {
-				send_interface_toast = {
-					type = embattle_tactic_activated_bad
-					title = embattle_combat_tactic_mechanic_title_timid_advance_tactic
-					left_icon = scope:commander
-					custom_tooltip = embattle_combat_tactic_mechanic_tt_timid_advance_tactic
-				}
-			}
-
-			scope:commander = {
-				add_character_modifier = {
-					modifier = embattle_timid_advance_tactic_modifier
-					days = 10
-				}
-			}
-		}
-
-		0 = { # 无组织骚扰
-			modifier = {
-				add = 10
-				scope:commander = {
-					is_target_in_variable_list = {
-						name = embattle_clumsy_tactic_group
-						target = flag:embattle_disorganised_harass_tactic
-					}
-				}
-				scope:army = {
-					embattle_general_tactic_count_value < 3
-				}
-			}
-
-			scope:army_owner = {
-				send_interface_toast = {
-					type = embattle_tactic_activated_bad
-					title = embattle_combat_tactic_mechanic_title_disorganised_harass_tactic
-					left_icon = scope:commander
-					custom_tooltip = embattle_combat_tactic_mechanic_tt_disorganised_harass_tactic
-				}
-			}
-
-			scope:commander = {
-				add_character_modifier = {
-					modifier = embattle_disorganised_harass_tactic_modifier
-					days = 10
-				}
-			}
-		}
-
-		}
-	}
-	
+# Original extra XP formulas and original player/AI eligibility are retained.
+# Character-scope helpers; callers only pass living, currently assigned deputies.
+hd_embattle_march_xp_effect = {
+    if = {
+        limit = { has_trait = logistician }
+        add_trait_xp = { trait = logistician value = hd_embattle_march_xp_value }
+    }
+    if = {
+        limit = { has_trait = organizer }
+        add_trait_xp = { trait = organizer value = hd_embattle_march_xp_value }
+    }
 }
-
+hd_embattle_siege_xp_effect = {
+    if = {
+        limit = {
+            exists = location
+            exists = location.barony
+            location.barony = scope:barony
+        }
+        if = {
+            limit = { has_trait = military_engineer }
+            add_trait_xp = { trait = military_engineer value = hd_embattle_siege_engineer_xp_value }
+        }
+        if = {
+            limit = { has_trait = reaver }
+            add_trait_xp = { trait = reaver value = hd_embattle_siege_reaver_xp_value }
+        }
+    }
+}
+hd_embattle_raid_xp_effect = {
+    if = {
+        limit = { has_trait = reaver }
+        add_trait_xp = { trait = reaver value = hd_embattle_raid_xp_value }
+    }
+}

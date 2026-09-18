@@ -1,197 +1,179 @@
-﻿### 检测两翼指挥官合法性 ###
+﻿# Preserve all public names used by existing army GUI files.
 embattle_valid_commander_detection = {
-	scope = army
-	
-	effect = {
-		if = { # 两翼指挥官被任命为总指挥官，移除其两翼指挥官
-			limit = {
-				var:embattle_left_flank_commander ?= army_commander
-			}
-			remove_variable = embattle_left_flank_commander
-		}
-		if = { # 两翼指挥官被任命为总指挥官，移除其两翼指挥官
-			limit = {
-				var:embattle_right_flank_commander ?= army_commander
-			}
-			remove_variable = embattle_right_flank_commander
-		}
-
-		if = {
-			limit = { # 两翼指挥官离队，移除其两翼指挥官
-				var:embattle_left_flank_commander ?= {
-					NOT = { knight_army = root }
-				}
-			}
-			remove_variable = embattle_left_flank_commander
-		}
-		if = {
-			limit = { # 两翼指挥官离队，移除其两翼指挥官
-				var:embattle_right_flank_commander ?= {
-					NOT = { knight_army = root }
-				}
-			}
-			remove_variable = embattle_right_flank_commander
-		}
-
-		if = {
-			limit = { # 玩家委任副将任免
-				has_game_rule = embattle_side_commander_appointor_ai_only_except_own_troop
-				army_commander != army_owner
-			}
-			remove_variable = embattle_left_flank_commander
-			remove_variable = embattle_right_flank_commander
-		}
-	}
+    scope = army
+    effect = {
+        hd_embattle_normalize_army_effect = yes
+        hd_embattle_refresh_army_bonus_effect = yes
+        # Opening/closing a selection window must not revoke legal automatic deputies.
+        clear_variable_list = armytest
+        remove_variable = hd_embattle_gui_candidate_count
+    }
+}
+embattle_set_army_commander_list = {
+    scope = army
+    effect = {
+        save_scope_as = hd_embattle_army
+        hd_embattle_normalize_army_effect = yes
+        clear_variable_list = armytest
+        set_variable = { name = hd_embattle_gui_candidate_count value = 0 }
+        if = {
+            limit = { exists = army_owner }
+            army_owner = {
+                every_knight = {
+                    limit = {
+                        is_alive = yes
+                        exists = knight_army
+                        knight_army = scope:hd_embattle_army
+                        is_commanding_army = no
+                    }
+                    scope:hd_embattle_army = {
+                        add_to_variable_list = { name = armytest target = prev }
+                        change_variable = { name = hd_embattle_gui_candidate_count add = 1 }
+                    }
+                }
+            }
+        }
+    }
 }
 
-embattle_set_army_commander_list = { # 构建两翼指挥官列表
-	scope = army
-	
-	effect = {
-		clear_variable_list = armytest # 重建列表以防合法角色变化，如骑士离队等
-
-		army_owner = {
-			every_knight = {
-				limit = { # 该军队的骑士都是潜在的两翼指挥官
-					knight_army = root
-				}
-				root = {
-					add_to_variable_list = {
-						name = armytest
-						target = prev
-					}
-				}
-			}
-		}
-		
-	}
+embattle_set_army_left_flank_commander = {
+    scope = army
+    is_valid = { hd_embattle_manual_allowed_trigger = yes }
+    effect = {
+        save_scope_as = hd_embattle_army
+        if = {
+            limit = {
+                hd_embattle_manual_allowed_trigger = yes
+                exists = scope:knight
+                scope:knight = { hd_embattle_candidate_trigger = yes }
+            }
+            set_variable = { name = embattle_left_flank_commander value = scope:knight }
+            remove_variable = hd_embattle_manual_empty_left
+            hd_embattle_normalize_army_effect = yes
+            hd_embattle_refresh_army_bonus_effect = yes
+        }
+    }
+}
+embattle_is_invalid_left_flank_commander_trigger = {
+    scope = army
+    is_valid = {
+        has_game_rule = embattle_side_commander_appointor_ai_only_except_own_troop
+        exists = army_owner
+        exists = army_commander
+        NOT = { army_commander = army_owner }
+    }
+    is_shown = {
+        has_variable = embattle_left_flank_commander
+        hd_embattle_left_valid_trigger = no
+    }
+}
+embattle_has_left_flank_commander_trigger = {
+    scope = army
+    is_shown = { has_variable = embattle_left_flank_commander }
+}
+embattle_clear_left_flank_commander = {
+    scope = army
+    is_valid = { hd_embattle_manual_allowed_trigger = yes }
+    effect = {
+        if = {
+            limit = { hd_embattle_manual_allowed_trigger = yes }
+            remove_variable = embattle_left_flank_commander
+            set_variable = { name = hd_embattle_manual_empty_left value = yes }
+            set_variable = { name = hd_embattle_auto_done value = yes }
+            remove_variable = hd_embattle_complete
+            hd_embattle_refresh_army_bonus_effect = yes
+        }
+    }
 }
 
-embattle_set_army_left_flank_commander = { # 设置左翼指挥官
-	scope = army
-
-	effect = {
-		set_variable = {
-			name = embattle_left_flank_commander
-			value = scope:knight
-		}
-	}
+embattle_set_army_right_flank_commander = {
+    scope = army
+    is_valid = { hd_embattle_manual_allowed_trigger = yes }
+    effect = {
+        save_scope_as = hd_embattle_army
+        if = {
+            limit = {
+                hd_embattle_manual_allowed_trigger = yes
+                exists = scope:knight
+                scope:knight = { hd_embattle_candidate_trigger = yes }
+            }
+            set_variable = { name = embattle_right_flank_commander value = scope:knight }
+            remove_variable = hd_embattle_manual_empty_right
+            hd_embattle_normalize_army_effect = yes
+            hd_embattle_refresh_army_bonus_effect = yes
+        }
+    }
 }
-embattle_set_army_right_flank_commander = { # 设置右翼指挥官
-	scope = army
-
-	effect = {
-		set_variable = {
-			name = embattle_right_flank_commander
-			value = scope:knight
-		}
-	}
+embattle_is_invalid_right_flank_commander_trigger = {
+    scope = army
+    is_valid = {
+        has_game_rule = embattle_side_commander_appointor_ai_only_except_own_troop
+        exists = army_owner
+        exists = army_commander
+        NOT = { army_commander = army_owner }
+    }
+    is_shown = {
+        has_variable = embattle_right_flank_commander
+        hd_embattle_right_valid_trigger = no
+    }
 }
-
-### 是否为指挥官 ###
-#character = scope:knight
-embattle_is_not_commanding_trigger = { # 是否为总指挥官或两翼指挥官，用于判断更换将领时能否选中
-	scope = army
-
-	is_shown = {
-		Or = {
-			army_commander ?= scope:knight
-			var:embattle_left_flank_commander ?= scope:knight
-			var:embattle_right_flank_commander ?= scope:knight
-		}
-	}
+embattle_has_right_flank_commander_trigger = {
+    scope = army
+    is_shown = { has_variable = embattle_right_flank_commander }
 }
-
-### 不合法指挥官 ###
-embattle_is_invalid_left_flank_commander_trigger = { # 不合法指挥官，用于红色文本提示
-	scope = army
-
-	is_valid = {
-		AND = {
-			has_game_rule = embattle_side_commander_appointor_ai_only_except_own_troop
-			army_commander != army_owner
-		}
-	}
-
-	is_shown = {
-		var:embattle_left_flank_commander ?= {
-			NOT = { knight_army = root }
-		}
-	}
-}
-embattle_is_invalid_right_flank_commander_trigger = { # 不合法指挥官，用于红色文本提示
-	scope = army
-
-	is_valid = {
-		AND = {
-			has_game_rule = embattle_side_commander_appointor_ai_only_except_own_troop
-			army_commander != army_owner
-		}
-	}
-
-	is_shown = {
-		var:embattle_right_flank_commander ?= {
-			NOT = { knight_army = root }
-		}
-	}
+embattle_clear_right_flank_commander = {
+    scope = army
+    is_valid = { hd_embattle_manual_allowed_trigger = yes }
+    effect = {
+        if = {
+            limit = { hd_embattle_manual_allowed_trigger = yes }
+            remove_variable = embattle_right_flank_commander
+            set_variable = { name = hd_embattle_manual_empty_right value = yes }
+            set_variable = { name = hd_embattle_auto_done value = yes }
+            remove_variable = hd_embattle_complete
+            hd_embattle_refresh_army_bonus_effect = yes
+        }
+    }
 }
 
-### 是否有两翼指挥官 ###
-embattle_has_left_flank_commander_trigger = { # 是否有两翼指挥官，用于判断能否移除指挥官
-	scope = army
-
-	is_shown = {
-		has_variable = embattle_left_flank_commander
-	}
+embattle_is_not_commanding_trigger = {
+    scope = army
+    is_shown = {
+        OR = {
+            AND = { exists = army_commander army_commander = scope:knight }
+            AND = {
+                exists = var:embattle_left_flank_commander
+                var:embattle_left_flank_commander = scope:knight
+            }
+            AND = {
+                exists = var:embattle_right_flank_commander
+                var:embattle_right_flank_commander = scope:knight
+            }
+            NOT = { hd_embattle_manual_allowed_trigger = yes }
+        }
+    }
 }
-embattle_has_right_flank_commander_trigger = { # 是否有两翼指挥官，用于判断能否移除指挥官
-	scope = army
-
-	is_shown = {
-		has_variable = embattle_right_flank_commander
-	}
-}
-
-### 移除指挥官 ###
-embattle_clear_left_flank_commander = { #移除指挥官
-	scope = army
-
-	effect = {
-		remove_variable = embattle_left_flank_commander
-	}
-}
-embattle_clear_right_flank_commander = { #移除指挥官
-	scope = army
-
-	effect = {
-		remove_variable = embattle_right_flank_commander
-	}
-}
-
-### window_combat在commander上存储Army ###
 embattle_window_combat_sgui = {
-	scope = character
-
-	effect = {
-		set_variable = {
-			name = embattle_army
-			value = this.commanding_army
-		}
-
-		scope:root2 = {
-			set_variable = {
-				name = embattle_army
-				value = this.commanding_army
-			}
-		}
-	}
+    scope = character
+    effect = {
+        if = {
+            limit = { exists = commanding_army }
+            set_variable = { name = embattle_army value = commanding_army }
+        }
+        else = { remove_variable = embattle_army }
+        if = {
+            limit = { exists = scope:root2 }
+            scope:root2 = {
+                if = {
+                    limit = { exists = commanding_army }
+                    set_variable = { name = embattle_army value = commanding_army }
+                }
+                else = { remove_variable = embattle_army }
+            }
+        }
+    }
 }
-
 embattle_is_trait = {
-	scope = trait
-
-	is_shown = {
-		has_trait_category = commander
-	}
+    scope = trait
+    is_shown = { has_trait_category = commander }
 }
-
