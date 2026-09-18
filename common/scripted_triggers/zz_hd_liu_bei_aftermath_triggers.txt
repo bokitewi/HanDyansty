@@ -1,0 +1,223 @@
+# Liu Bei rise, 184 bookmark. Each trigger documents its expected scope.
+# Character (Liu Bei). No assumptions about the caller's ROOT or PREV.
+hd_lb_actor_trigger = {
+	this = character:liu_bei
+	game_start_date = 184.1.1
+	is_alive = yes
+	is_adult = yes
+	is_ruler = yes
+	is_imprisoned = no
+}
+
+hd_lb_adventurer_trigger = {
+	hd_lb_actor_trigger = yes
+	has_government = landless_adventurer_government
+	exists = domicile
+	exists = domicile.domicile_location
+}
+
+# Character who may join a court. Never confiscate land or dissolve a camp.
+# A noble-family identity is not an ordinary landed domain.
+hd_lb_recruitable_trigger = {
+	is_alive = yes
+	is_adult = yes
+	is_landed = no
+	is_imprisoned = no
+	is_travelling = no
+	NOT = { has_government = landless_adventurer_government }
+	NOT = { any_held_title = { is_noble_family_title = no } }
+}
+
+# Province, actual subrealm (not the common Han top liege).
+hd_lb_gongsun_province_trigger = {
+	exists = county.holder
+	county.holder = {
+		OR = {
+			this = character:gong_sun_zan
+			is_vassal_or_below_of = character:gong_sun_zan
+		}
+	}
+}
+
+# Province, geographic Xuzhou. Occupation is not ownership.
+hd_lb_xuzhou_province_trigger = {
+	exists = county
+	county = { target_is_de_jure_liege_or_above = title:k_uuii_xuzhou }
+}
+
+# Province, owned by Tao or his own vassals, within geographic Xuzhou.
+hd_lb_tao_xuzhou_province_trigger = {
+	hd_lb_xuzhou_province_trigger = yes
+	exists = county.holder
+	county.holder = {
+		OR = {
+			this = character:tao_qian
+			is_vassal_or_below_of = character:tao_qian
+		}
+	}
+}
+
+# Liu Bei: camp position for adventurers; capital for landed rulers.
+hd_lb_in_xuzhou_trigger = {
+	hd_lb_actor_trigger = yes
+	OR = {
+		AND = {
+			has_government = landless_adventurer_government
+			exists = domicile.domicile_location
+			domicile.domicile_location = { hd_lb_xuzhou_province_trigger = yes }
+		}
+		AND = {
+			is_landed = yes
+			exists = capital_province
+			capital_province = { hd_lb_xuzhou_province_trigger = yes }
+		}
+	}
+}
+
+# Any scope: host and recipient are always resolved afresh.
+hd_lb_gongsun_offer_valid_trigger = {
+	exists = character:gong_sun_zan
+	exists = character:liu_bei
+	character:gong_sun_zan = {
+		is_alive = yes
+		is_landed = yes
+		is_imprisoned = no
+		exists = capital_province
+		capital_province = { hd_lb_gongsun_province_trigger = yes }
+		NOT = { is_at_war_with = character:liu_bei }
+	}
+	character:liu_bei = { hd_lb_actor_trigger = yes }
+}
+
+# Any scope. A wandering Zhao has no employer, so do not negate an optional ?= link.
+hd_lb_zhao_friend_trigger = {
+	exists = character:liu_bei
+	exists = character:zhao_yun
+	character:liu_bei = {
+		OR = {
+			has_relation_friend = character:zhao_yun
+			has_relation_best_friend = character:zhao_yun
+		}
+	}
+}
+
+hd_lb_meet_zhao_ready_trigger = {
+	hd_lb_gongsun_offer_valid_trigger = yes
+	character:liu_bei = {
+		hd_lb_adventurer_trigger = yes
+		has_character_flag = hd_lb_gongsun_accepted
+		is_travelling = no
+		domicile.domicile_location = { hd_lb_gongsun_province_trigger = yes }
+		NOT = { has_character_flag = hd_lb_zhao_meet_done }
+	}
+	exists = character:zhao_yun
+	character:zhao_yun = {
+		is_alive = yes
+		is_adult = yes
+		is_imprisoned = no
+		is_courtier_of = character:gong_sun_zan
+	}
+}
+
+hd_lb_zhao_join_ready_trigger = {
+	exists = character:liu_bei
+	character:liu_bei = { hd_lb_actor_trigger = yes }
+	hd_lb_zhao_friend_trigger = yes
+	character:zhao_yun = {
+		hd_lb_recruitable_trigger = yes
+		NOT = { is_courtier_of = character:gong_sun_zan }
+		NOT = { is_courtier_of = character:liu_bei }
+	}
+}
+
+# Title: holdership or subordination under Cao, not a shared top liege.
+hd_lb_cao_controls_title_trigger = {
+	exists = holder
+	holder = {
+		OR = { this = character:cao_cao is_vassal_or_below_of = character:cao_cao }
+	}
+}
+
+# Any scope: Yanzhou AND (Yuzhou OR Qingzhou).
+hd_lb_cao_threat_trigger = {
+	exists = character:cao_cao
+	character:cao_cao = { is_alive = yes is_landed = yes }
+	title:k_uuii_yanzhou = { hd_lb_cao_controls_title_trigger = yes }
+	OR = {
+		title:k_uuii_yuzhou = { hd_lb_cao_controls_title_trigger = yes }
+		title:k_uuii_qingzhou = { hd_lb_cao_controls_title_trigger = yes }
+	}
+}
+
+hd_lb_tao_offer_valid_trigger = {
+	exists = character:tao_qian
+	exists = character:liu_bei
+	character:liu_bei = { hd_lb_actor_trigger = yes }
+	character:tao_qian = {
+		is_alive = yes
+		is_landed = yes
+		is_imprisoned = no
+		has_title = title:k_uuii_xuzhou
+		NOT = { is_at_war_with = character:liu_bei }
+		any_sub_realm_county = {
+			target_is_de_jure_liege_or_above = title:k_uuii_xuzhou
+		}
+	}
+}
+
+hd_lb_tao_defense_ready_trigger = {
+	hd_lb_cao_threat_trigger = yes
+	hd_lb_tao_offer_valid_trigger = yes
+}
+
+# Character (candidate bride). Vanilla pairwise check includes marriage capacity,
+# marriage-disabling traits and consanguinity; additional guards protect betrothals.
+hd_lb_mi_bride_valid_trigger = {
+	is_alive = yes
+	is_female = yes
+	is_adult = yes
+	is_married = no
+	is_betrothed = no
+	is_concubine = no
+	is_imprisoned = no
+	is_landed = no
+	exists = house
+	exists = character:mi_zhu.house
+	house = character:mi_zhu.house
+	exists = character:liu_bei
+	character:liu_bei = {
+		is_alive = yes
+		is_adult = yes
+		is_imprisoned = no
+		is_betrothed = no
+	}
+	can_marry_character_trigger = { CHARACTER = character:liu_bei }
+}
+
+# Any scope. Illness is state-based, not the death date in character history.
+# A critically low health score (<= 2) is the explicit balance threshold.
+hd_lb_bequest_ready_trigger = {
+	exists = character:liu_bei
+	exists = character:tao_qian
+	character:liu_bei = {
+		hd_lb_in_xuzhou_trigger = yes
+		is_travelling = no
+	}
+	character:tao_qian = {
+		is_alive = yes
+		is_landed = yes
+		is_imprisoned = no
+		has_title = title:k_uuii_xuzhou
+		health <= 2
+		NOT = { is_at_war_with = character:liu_bei }
+		NOT = { is_vassal_or_below_of = character:liu_bei }
+		any_held_title = {
+			tier = tier_county
+			is_noble_family_title = no
+			is_landless_type_title = no
+			target_is_de_jure_liege_or_above = title:k_uuii_xuzhou
+		}
+	}
+	NOT = { exists = global_var:hd_lb_bequest_resolved }
+	NOT = { exists = global_var:hd_lb_bequest_failed }
+}

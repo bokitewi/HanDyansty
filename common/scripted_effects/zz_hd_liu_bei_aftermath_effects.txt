@@ -1,3 +1,563 @@
-# Legacy post-Yellow-Turban Liu Bei scripted effects intentionally removed.
-# Anxi title transfer and forced adventurer conversion are no longer part of
-# the active historical framework.
+# Rebuilt Liu Bei rise. Fixed historical actors; no global character scans.
+# Effects called from world hooks explicitly enter character:liu_bei.
+
+# Character: Liu Bei. One story, continuing beyond the Yellow Turbans.
+hd_lb_ensure_story_effect = {
+	if = {
+		limit = {
+			this = character:liu_bei
+			is_alive = yes
+			NOT = { any_owned_story = { type = hd_story_liu_bei_life } }
+		}
+		create_story = { type = hd_story_liu_bei_life }
+	}
+}
+
+hd_lb_sync_story_effect = {
+	character:liu_bei ?= {
+		if = {
+			limit = { is_alive = yes }
+			hd_lb_ensure_story_effect = yes
+			random_owned_story = {
+				type = hd_story_liu_bei_life
+				if = {
+					limit = { exists = global_var:hd_lb_bequest_completed }
+					set_variable = { name = hd_liu_bei_life_phase value = flag:hd_liu_bei_phase_xuzhou_lord }
+				}
+				else_if = {
+					limit = { story_owner = { OR = { has_character_flag = hd_lb_tao_accepted has_character_flag = hd_lb_mi_visit_done } } }
+					set_variable = { name = hd_liu_bei_life_phase value = flag:hd_liu_bei_phase_xuzhou }
+				}
+				else_if = {
+					limit = { story_owner = { has_character_flag = hd_lb_zhao_meet_done } }
+					set_variable = { name = hd_liu_bei_life_phase value = flag:hd_liu_bei_phase_zhao_yun }
+				}
+				else_if = {
+					limit = { story_owner = { has_character_flag = hd_lb_gongsun_accepted } }
+					set_variable = { name = hd_liu_bei_life_phase value = flag:hd_liu_bei_phase_gongsun }
+				}
+				else_if = {
+					limit = { story_owner = { has_character_flag = hd_lb_dong_accepted } }
+					set_variable = { name = hd_liu_bei_life_phase value = flag:hd_liu_bei_phase_anti_dong }
+				}
+				else_if = {
+					limit = { exists = global_var:hd_yellow_turban_outcome_resolved }
+					set_variable = { name = hd_liu_bei_life_phase value = flag:hd_liu_bei_phase_wandering }
+				}
+				else_if = {
+					limit = { story_owner = { has_character_flag = hd_lb_yellow_accepted } }
+					set_variable = { name = hd_liu_bei_life_phase value = flag:hd_liu_bei_phase_yellow_turban }
+				}
+			}
+		}
+	}
+}
+
+# War scope. Never add a ruler twice, to both sides, or against an existing co-belligerent.
+hd_lb_add_yellow_defender_effect = {
+	save_scope_as = hd_lb_join_war
+	if = {
+		limit = {
+			using_cb = hd_yellow_turban_rebellion_war
+			exists = primary_attacker
+			exists = primary_defender
+			character:liu_bei = {
+				hd_lb_actor_trigger = yes
+				has_character_flag = hd_lb_yellow_accepted
+				NOT = { is_participant_in_war = scope:hd_lb_join_war }
+				NOT = { is_at_war_with = scope:hd_lb_join_war.primary_defender }
+				NOT = { is_allied_to = scope:hd_lb_join_war.primary_attacker }
+			}
+		}
+		add_defender = character:liu_bei
+	}
+	if = {
+		limit = { character:liu_bei = { is_defender_in_war = scope:hd_lb_join_war } }
+		character:liu_bei = { add_character_flag = hd_lb_yellow_joined }
+	}
+}
+
+hd_lb_join_yellow_effect = {
+	title:e_han.holder ?= {
+		if = {
+			limit = { is_alive = yes }
+			every_character_war = {
+				limit = { using_cb = hd_yellow_turban_rebellion_war }
+				hd_lb_add_yellow_defender_effect = yes
+			}
+		}
+	}
+}
+
+hd_lb_yellow_open_effect = {
+	character:liu_bei ?= {
+		if = {
+			limit = {
+				hd_lb_actor_trigger = yes
+				NOT = { has_character_flag = hd_lb_yellow_seen }
+				NOT = { has_character_flag = hd_lb_yellow_pending }
+				exists = title:e_han.holder
+				title:e_han.holder = { any_character_war = { using_cb = hd_yellow_turban_rebellion_war } }
+			}
+			add_character_flag = hd_lb_yellow_pending
+			trigger_event = hd_liu_bei_rise.0100
+		}
+	}
+}
+
+# War scope. Liu is a secondary attacker, NOT a confederation member.
+hd_lb_add_dong_attacker_effect = {
+	save_scope_as = hd_lb_join_war
+	if = {
+		limit = {
+			using_cb = hd_anti_regent_punitive_cb
+			primary_defender = character:dong_zhuo_2
+			exists = primary_attacker
+			NOT = { exists = global_var:hd_anti_regent_chain_resolved }
+			character:liu_bei = {
+				hd_lb_actor_trigger = yes
+				has_character_flag = hd_lb_dong_accepted
+				NOT = { is_participant_in_war = scope:hd_lb_join_war }
+				NOT = { is_at_war_with = scope:hd_lb_join_war.primary_attacker }
+				NOT = { is_allied_to = character:dong_zhuo_2 }
+			}
+		}
+		add_attacker = character:liu_bei
+	}
+	if = {
+		limit = { character:liu_bei = { is_attacker_in_war = scope:hd_lb_join_war } }
+		character:liu_bei = {
+			add_character_flag = hd_lb_dong_joined
+			remove_character_flag = hd_lb_dong_join_pending
+		}
+	}
+}
+
+hd_lb_join_dong_effect = {
+	if = {
+		limit = { NOT = { exists = global_var:hd_anti_regent_chain_resolved } }
+		character:dong_zhuo_2 ?= {
+			if = {
+				limit = { is_alive = yes }
+				every_character_war = {
+					limit = { using_cb = hd_anti_regent_punitive_cb primary_defender = character:dong_zhuo_2 }
+					hd_lb_add_dong_attacker_effect = yes
+				}
+			}
+		}
+	}
+}
+
+hd_lb_dong_open_effect = {
+	character:liu_bei ?= {
+		if = {
+			limit = {
+				hd_lb_actor_trigger = yes
+				exists = global_var:hd_anti_regent_founded
+				NOT = { exists = global_var:hd_anti_regent_chain_resolved }
+				NOT = { has_character_flag = hd_lb_dong_seen }
+				NOT = { has_character_flag = hd_lb_dong_pending }
+			}
+			add_character_flag = hd_lb_dong_pending
+			trigger_event = hd_liu_bei_rise.0200
+		}
+	}
+}
+
+# Any scope. Called by the EXISTING D30 QXZL callback, never by the monthly tick.
+# The immutable h_china title already owns that timer; no duplicate timer is added.
+hd_lb_gongsun_d30_effect = {
+	if = {
+		limit = {
+			exists = global_var:hd_anti_regent_chain_resolved
+			exists = global_var:hd_qxzl_started
+			NOT = { exists = global_var:hd_lb_gongsun_d30_processed }
+		}
+		set_global_variable = hd_lb_gongsun_d30_processed
+		if = {
+			limit = { hd_lb_gongsun_offer_valid_trigger = yes }
+			character:gong_sun_zan = {
+				add_character_flag = hd_lb_gongsun_sender_pending
+				trigger_event = hd_liu_bei_rise.0300
+			}
+		}
+	}
+}
+
+hd_lb_gongsun_send_offer_effect = {
+	if = {
+		limit = { hd_lb_gongsun_offer_valid_trigger = yes }
+		character:liu_bei = {
+			if = {
+				limit = { NOT = { has_character_flag = hd_lb_gongsun_seen } NOT = { has_character_flag = hd_lb_gongsun_pending } }
+				add_character_flag = hd_lb_gongsun_pending
+				trigger_event = hd_liu_bei_rise.0301
+			}
+		}
+	}
+}
+
+# Liu Bei; target host is a CHARACTER, destination is resolved at execution time.
+hd_lb_alliance_effect = {
+	if = {
+		limit = { NOT = { is_allied_to = $HOST$ } NOT = { is_at_war_with = $HOST$ } }
+		create_alliance = {
+			target = $HOST$
+			allied_through_owner = character:liu_bei
+			allied_through_target = $HOST$
+		}
+	}
+}
+
+# Liu Bei: move the existing domicile only. Never recreate the camp or its army.
+# Active travel is not interrupted; the pending move waits for travel to finish.
+hd_lb_move_gongsun_effect = {
+	if = {
+		limit = {
+			has_character_flag = hd_lb_gongsun_move_pending
+			hd_lb_adventurer_trigger = yes
+			is_allied_to = character:gong_sun_zan
+			hd_lb_gongsun_offer_valid_trigger = yes
+			is_travelling = no
+		}
+		character:gong_sun_zan.capital_province = { save_scope_as = hd_lb_camp_destination }
+		domicile = { move_domicile = scope:hd_lb_camp_destination }
+		if = {
+			limit = { domicile.domicile_location = scope:hd_lb_camp_destination }
+			remove_character_flag = hd_lb_gongsun_move_pending
+			add_character_flag = hd_lb_gongsun_arrived
+		}
+	}
+}
+
+hd_lb_move_xuzhou_effect = {
+	if = {
+		limit = {
+			has_character_flag = hd_lb_tao_move_pending
+			hd_lb_adventurer_trigger = yes
+			is_allied_to = character:tao_qian
+			hd_lb_tao_offer_valid_trigger = yes
+			is_travelling = no
+		}
+		clear_saved_scope = hd_lb_camp_destination
+		character:tao_qian = {
+			if = {
+				limit = { exists = capital_province capital_province = { hd_lb_tao_xuzhou_province_trigger = yes } }
+				capital_province = { save_scope_as = hd_lb_camp_destination }
+			}
+			else = {
+				random_sub_realm_county = {
+					limit = { target_is_de_jure_liege_or_above = title:k_uuii_xuzhou }
+					title_province = { save_scope_as = hd_lb_camp_destination }
+				}
+			}
+		}
+		if = {
+			limit = { exists = scope:hd_lb_camp_destination }
+			domicile = { move_domicile = scope:hd_lb_camp_destination }
+			if = {
+				limit = { domicile.domicile_location = scope:hd_lb_camp_destination }
+				remove_character_flag = hd_lb_tao_move_pending
+				add_character_flag = hd_lb_tao_arrived
+			}
+		}
+	}
+}
+
+hd_lb_tao_prepare_effect = {
+	if = {
+		limit = { hd_lb_tao_defense_ready_trigger = yes }
+		character:tao_qian = {
+			every_sub_realm_county = {
+				limit = { target_is_de_jure_liege_or_above = title:k_uuii_xuzhou }
+				add_county_modifier = { modifier = hd_lb_xuzhou_prepared_defenses years = 5 }
+			}
+		}
+		character:liu_bei = {
+			if = {
+				limit = { NOT = { has_character_flag = hd_lb_tao_seen } NOT = { has_character_flag = hd_lb_tao_pending } }
+				add_character_flag = hd_lb_tao_pending
+				trigger_event = hd_liu_bei_rise.0501
+			}
+		}
+	}
+}
+
+# Character to recruit. Do not destroy noble-family identities or landed titles.
+hd_lb_join_liu_court_effect = {
+	if = {
+		limit = {
+			hd_lb_recruitable_trigger = yes
+			NOT = { is_courtier_of = character:liu_bei }
+			character:liu_bei = { hd_lb_actor_trigger = yes }
+		}
+		set_employer = character:liu_bei
+	}
+}
+
+# Any scope: isolate the optional marriage from the two recruitment attempts.
+hd_lb_mi_visit_effect = {
+	character:mi_zhu ?= { hd_lb_join_liu_court_effect = yes }
+	character:mi_fang ?= { hd_lb_join_liu_court_effect = yes }
+	clear_saved_scope = hd_lb_mi_bride
+	character:mi_huan ?= {
+		if = { limit = { hd_lb_mi_bride_valid_trigger = yes } save_scope_as = hd_lb_mi_bride }
+	}
+	if = {
+		limit = { NOT = { exists = scope:hd_lb_mi_bride } exists = character:mi_zhu.house }
+		character:mi_zhu.house = {
+			random_house_member = {
+				limit = { hd_lb_mi_bride_valid_trigger = yes }
+				save_scope_as = hd_lb_mi_bride
+			}
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_lb_mi_bride }
+		scope:hd_lb_mi_bride = {
+			if = {
+				limit = { hd_lb_mi_bride_valid_trigger = yes }
+				marry = character:liu_bei
+			}
+		}
+	}
+}
+
+# Any scope; a single pending lock serializes Tao/Liu player perspectives.
+hd_lb_open_bequest_effect = {
+	if = {
+		limit = {
+			hd_lb_bequest_ready_trigger = yes
+			NOT = { exists = global_var:hd_lb_bequest_pending }
+		}
+		set_global_variable = hd_lb_bequest_pending
+		if = {
+			limit = { character:tao_qian = { is_ai = no } }
+			character:tao_qian = { trigger_event = hd_liu_bei_rise.0700 }
+		}
+		else = {
+			set_global_variable = hd_lb_bequest_authorized
+			character:liu_bei = { trigger_event = hd_liu_bei_rise.0701 }
+		}
+	}
+}
+
+# Commit all normal titles in ONE transaction, then verify, then kill Tao.
+# This is not a natural-succession replacement and never kills before transfer.
+hd_lb_commit_bequest_effect = {
+	if = {
+		limit = {
+			hd_lb_bequest_ready_trigger = yes
+			exists = global_var:hd_lb_bequest_pending
+			exists = global_var:hd_lb_bequest_authorized
+		}
+		clear_saved_scope = hd_lb_tao_old_liege
+		clear_saved_scope = hd_lb_xuzhou_capital
+		character:tao_qian = {
+			liege ?= { save_scope_as = hd_lb_tao_old_liege }
+			# Snapshot direct vassals as well as titles; non-de-jure vassals must follow.
+			every_vassal = {
+				limit = { is_alive = yes NOT = { this = character:liu_bei } }
+				add_to_list = hd_lb_ceded_vassals
+			}
+			every_held_title = {
+				limit = { is_noble_family_title = no is_landless_type_title = no }
+				add_to_list = hd_lb_ceded_titles
+			}
+			random_held_title = {
+				limit = {
+					tier = tier_county
+					is_noble_family_title = no
+					is_landless_type_title = no
+					target_is_de_jure_liege_or_above = title:k_uuii_xuzhou
+				}
+				save_scope_as = hd_lb_xuzhou_capital
+			}
+			if = {
+				limit = {
+					exists = capital_county
+					capital_county = { holder = character:tao_qian target_is_de_jure_liege_or_above = title:k_uuii_xuzhou }
+				}
+				capital_county = { save_scope_as = hd_lb_xuzhou_capital }
+			}
+		}
+		character:liu_bei = {
+			every_courtier_or_guest = {
+				limit = { is_courtier_of = character:liu_bei }
+				add_to_list = hd_lb_existing_followers
+			}
+			if = { limit = { has_government = landless_adventurer_government } add_character_flag = hd_lb_was_adventurer }
+		}
+		create_title_and_vassal_change = {
+			type = granted
+			save_scope_as = hd_lb_bequest_change
+			add_claim_on_loss = no
+		}
+		every_in_list = {
+			list = hd_lb_ceded_titles
+			change_title_holder_include_vassals = { holder = character:liu_bei change = scope:hd_lb_bequest_change }
+		}
+		every_in_list = {
+			list = hd_lb_ceded_vassals
+			limit = { is_alive = yes NOT = { this = character:liu_bei } }
+			change_liege = { liege = character:liu_bei change = scope:hd_lb_bequest_change }
+		}
+		# A former adventurer takes Tao's political position when a higher liege exists.
+		if = {
+			limit = {
+				exists = scope:hd_lb_tao_old_liege
+				character:liu_bei = { OR = { has_character_flag = hd_lb_was_adventurer is_vassal_or_below_of = character:tao_qian } }
+				scope:hd_lb_tao_old_liege = { is_alive = yes highest_held_title_tier > tier_kingdom }
+			}
+			character:liu_bei = { change_liege = { liege = scope:hd_lb_tao_old_liege change = scope:hd_lb_bequest_change } }
+		}
+		else_if = {
+			limit = {
+				NOT = { exists = scope:hd_lb_tao_old_liege }
+				character:liu_bei = { is_vassal_or_below_of = character:tao_qian }
+			}
+			character:liu_bei = { becomes_independent = { change = scope:hd_lb_bequest_change } }
+		}
+		resolve_title_and_vassal_change = scope:hd_lb_bequest_change
+		if = {
+			limit = {
+				character:liu_bei = { is_alive = yes is_landed = yes has_title = title:k_uuii_xuzhou }
+				NOT = { any_in_list = { list = hd_lb_ceded_titles NOT = { holder = character:liu_bei } } }
+				NOT = { any_in_list = { list = hd_lb_ceded_vassals is_alive = yes NOT = { liege = character:liu_bei } } }
+				character:tao_qian = { is_alive = yes NOT = { any_held_title = { is_noble_family_title = no is_landless_type_title = no } } }
+			}
+			character:liu_bei = {
+				hd_force_celestial_effect = yes
+				if = {
+					limit = { exists = scope:hd_lb_xuzhou_capital scope:hd_lb_xuzhou_capital = { holder = character:liu_bei } }
+					set_realm_capital = scope:hd_lb_xuzhou_capital
+				}
+				remove_character_flag = hd_lb_gongsun_move_pending
+				remove_character_flag = hd_lb_tao_move_pending
+			}
+			every_in_list = { list = hd_lb_existing_followers hd_lb_join_liu_court_effect = yes }
+			set_global_variable = hd_lb_bequest_completed
+			set_global_variable = hd_lb_bequest_resolved
+			remove_global_variable = hd_lb_bequest_pending
+			remove_global_variable = hd_lb_bequest_authorized
+			# Ordinary succession now applies ONLY to the excluded family identities.
+			character:tao_qian = { death = { death_reason = death_ill } }
+			hd_lb_sync_story_effect = yes
+		}
+		else = {
+			# Do not repeat a partial transaction or kill its donor on failure.
+			set_global_variable = hd_lb_bequest_failed
+			remove_global_variable = hd_lb_bequest_pending
+			remove_global_variable = hd_lb_bequest_authorized
+			debug_log = "HD_LB BEQUEST_POSTCONDITION_FAILED_TAO_NOT_KILLED"
+		}
+		character:liu_bei ?= { remove_character_flag = hd_lb_was_adventurer }
+	}
+	else = {
+		remove_global_variable = hd_lb_bequest_pending
+		remove_global_variable = hd_lb_bequest_authorized
+		set_global_variable = hd_lb_bequest_resolved
+	}
+}
+
+# Mi recruits deferred by imprisonment/travel/landholding are retried silently.
+# Once recruited, never force a later voluntary departure back into Liu's court.
+hd_lb_mi_recruit_pending_effect = {
+	if = {
+		limit = { is_alive = yes NOT = { has_character_flag = hd_lb_mi_recruited } }
+		if = {
+			limit = { is_courtier_of = character:liu_bei }
+			add_character_flag = hd_lb_mi_recruited
+		}
+		else = {
+			hd_lb_join_liu_court_effect = yes
+			if = {
+				limit = { is_courtier_of = character:liu_bei }
+				add_character_flag = hd_lb_mi_recruited
+			}
+		}
+	}
+}
+
+# Liu Bei only; called by the mod's EXISTING historical monthly heartbeat.
+# No separate world scan, no independent scheduler, no per-character daily work.
+hd_lb_tick_effect = {
+	if = {
+		limit = { hd_lb_actor_trigger = yes }
+		hd_lb_yellow_open_effect = yes
+		if = { limit = { has_character_flag = hd_lb_yellow_accepted } hd_lb_join_yellow_effect = yes }
+		hd_lb_dong_open_effect = yes
+		if = {
+			limit = { has_character_flag = hd_lb_dong_accepted }
+			if = {
+				limit = { exists = global_var:hd_anti_regent_chain_resolved }
+				remove_character_flag = hd_lb_dong_join_pending
+			}
+			else = { hd_lb_join_dong_effect = yes }
+		}
+		hd_lb_move_gongsun_effect = yes
+		hd_lb_move_xuzhou_effect = yes
+		# Invalidated moves are cancelled, never converted into forced landlessness.
+		if = {
+			limit = { NOT = { has_government = landless_adventurer_government } }
+			remove_character_flag = hd_lb_gongsun_move_pending
+			remove_character_flag = hd_lb_tao_move_pending
+		}
+		if = {
+			limit = {
+				NOT = { has_character_flag = hd_lb_zhao_meet_done }
+				NOT = { has_character_flag = hd_lb_zhao_meet_pending }
+				hd_lb_meet_zhao_ready_trigger = yes
+			}
+			add_character_flag = hd_lb_zhao_meet_pending
+			trigger_event = hd_liu_bei_rise.0400
+		}
+		if = {
+			limit = { exists = character:zhao_yun character:zhao_yun = { is_alive = yes is_courtier_of = character:liu_bei } }
+			add_character_flag = hd_lb_zhao_join_seen
+			add_character_flag = hd_lb_zhao_joined
+		}
+		if = {
+			limit = {
+				NOT = { has_character_flag = hd_lb_zhao_join_seen }
+				NOT = { has_character_flag = hd_lb_zhao_join_pending }
+				hd_lb_zhao_join_ready_trigger = yes
+			}
+			add_character_flag = hd_lb_zhao_join_pending
+			trigger_event = hd_liu_bei_rise.0410
+		}
+		character:tao_qian ?= {
+			if = {
+				limit = {
+					is_alive = yes
+					NOT = { has_character_flag = hd_lb_tao_defense_seen }
+					NOT = { has_character_flag = hd_lb_tao_defense_pending }
+					hd_lb_tao_defense_ready_trigger = yes
+				}
+				add_character_flag = hd_lb_tao_defense_pending
+				trigger_event = hd_liu_bei_rise.0500
+			}
+		}
+		if = {
+			limit = {
+				NOT = { has_character_flag = hd_lb_mi_visit_done }
+				NOT = { has_character_flag = hd_lb_mi_pending }
+				hd_lb_in_xuzhou_trigger = yes
+				exists = character:mi_zhu
+				character:mi_zhu = { is_alive = yes }
+			}
+			add_character_flag = hd_lb_mi_pending
+			trigger_event = hd_liu_bei_rise.0600
+		}
+		if = {
+			limit = { has_character_flag = hd_lb_mi_visit_done }
+			character:mi_zhu ?= { hd_lb_mi_recruit_pending_effect = yes }
+			character:mi_fang ?= { hd_lb_mi_recruit_pending_effect = yes }
+		}
+		if = {
+			limit = { NOT = { has_character_flag = hd_lb_mi_pending } }
+			hd_lb_open_bequest_effect = yes
+		}
+	}
+	hd_lb_sync_story_effect = yes
+}
