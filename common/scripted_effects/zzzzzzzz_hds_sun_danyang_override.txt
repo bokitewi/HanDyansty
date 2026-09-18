@@ -1,0 +1,143 @@
+# Sun Ce phase heartbeat. The existing 60-day HDS scheduler remains authoritative.
+hds_sc_tick_effect = {
+	hds_retire_legacy_controller_effect = yes
+	hds_finish_title_transfer_effect = yes
+
+	if = {
+		limit = { has_character_flag = hds_sc_inherited NOT = { has_character_flag = hds_sc_inheritance_notice } }
+		hds_queue_event_effect = { EVENT = hds.4000 LEASE = hds_lease_4000 }
+	}
+	if = { limit = { hds_sc_depart_ready_trigger = yes } hds_queue_event_effect = { EVENT = hds.4001 LEASE = hds_lease_4001 } }
+
+	if = {
+		limit = { has_character_flag = hds_sc_departed }
+
+		# One-time save migration: an older save may have completed the former Wu-first phase.
+		# If Danyang is not actually controlled, reopen the first-campaign phase exactly once.
+		if = {
+			limit = { NOT = { has_character_flag = hds_sc_danyang_target_version } }
+			add_character_flag = hds_sc_danyang_target_version
+			if = {
+				limit = { has_character_flag = hds_sc_wu_complete NOT = { hds_sc_wu_control_trigger = yes } }
+				remove_character_flag = hds_sc_wu_complete
+				remove_character_flag = hds_sc_wu_notice
+			}
+		}
+
+		if = { limit = { NOT = { has_character_flag = hds_sc_wu_complete } } add_character_flag = sworn_peace }
+
+		# Rewards remain independent/idempotent.
+		hds_sc_seal_trade_effect = yes
+		hds_sc_reward_effect = yes
+		if = { limit = { hds_sc_zhou_ready_trigger = yes } hds_queue_event_effect = { EVENT = hds.4002 LEASE = hds_lease_4002 } }
+		if = { limit = { character:zhou_yu = { is_alive = no } } add_character_flag = hds_sc_zhou_unavailable }
+
+		# Danyang phase completes only after the whole duchy is politically controlled.
+		if = {
+			limit = { hds_sc_wu_control_trigger = yes NOT = { has_variable_list = hds_pending_titles } }
+			add_character_flag = hds_sc_wu_complete
+			remove_character_flag = sworn_peace
+		}
+
+		# Initial historical invasion keeps retrying until Danyang is complete.
+		if = {
+			limit = {
+				NOT = { has_character_flag = hds_sc_wu_complete }
+				hds_can_campaign_trigger = yes
+			}
+			if = {
+				limit = { has_character_flag = hds_sc_wu_authorized }
+				hds_try_wu_war_effect = yes
+			}
+			else = { hds_queue_event_effect = { EVENT = hds.4003 LEASE = hds_lease_4003 } }
+		}
+
+		# Once Danyang is secured, the same personal 60-day heartbeat becomes Sun Ce's
+		# historical Yangzhou offensive pulse, analogous in cadence to Cao/Yuan expansion.
+		if = {
+			limit = { has_character_flag = hds_sc_wu_complete }
+			if = { limit = { NOT = { has_character_flag = hds_sc_wu_notice } } hds_queue_event_effect = { EVENT = hds.4004 LEASE = hds_lease_4004 } }
+			hds_sc_yangzhou_historical_pulse_effect = yes
+		}
+	}
+}
+
+# Sun Ce receives the pressed Yangzhou claim, then immediately queues the Danyang campaign.
+hds_sc_depart_effect = {
+	if = {
+		limit = { hds_sc_depart_ready_trigger = yes }
+		hds_release_effect = yes
+		if = {
+			limit = { is_independent_ruler = yes hds_sun_estate_inherited_trigger = yes }
+			if = { limit = { NOT = { has_title = title:k_uuii_yangzhou } } add_pressed_claim = title:k_uuii_yangzhou }
+			add_character_flag = hds_sc_departed
+			add_character_flag = hds_sc_danyang_target_version
+			add_character_flag = sworn_peace
+			add_character_flag = hd_sun_ce_story_active
+			hds_qxzl_protect_effect = yes
+			hds_sc_seal_trade_effect = yes
+			hds_sc_reward_effect = yes
+			if = {
+				limit = { hds_can_campaign_trigger = yes }
+				hds_queue_event_effect = { EVENT = hds.4003 LEASE = hds_lease_4003 }
+			}
+		}
+	}
+}
+
+# Legacy effect name retained; campaign target changed from Wu to Danyang.
+hds_try_wu_war_effect = {
+	if = {
+		limit = {
+			this = character:sun_ce
+			hds_can_campaign_trigger = yes
+			has_character_flag = hds_sc_departed
+			has_character_flag = hds_sc_wu_authorized
+			NOT = { has_character_flag = hds_sc_wu_complete }
+		}
+		remove_character_flag = sworn_peace
+		save_scope_as = hds_campaign_actor
+		clear_saved_scope = hds_target_enemy
+		title:d_danyang = { save_scope_as = hds_target_duchy }
+		set_variable = { name = hds_requested_duchy value = title:d_danyang }
+		add_character_flag = { flag = hds_launch_authorized days = 1 }
+		title:d_danyang = {
+			random_de_jure_county = {
+				limit = {
+					exists = holder
+					holder.top_liege = {
+						hds_candidate_enemy_trigger = yes
+						character:sun_ce = {
+							can_declare_war = {
+								defender = prev
+								casus_belli = hds_wu_invasion_cb
+								target_titles = { title:d_danyang }
+							}
+						}
+					}
+				}
+				holder.top_liege = { save_scope_as = hds_target_enemy }
+			}
+		}
+		hds_launch_selected_effect = { CB = hds_wu_invasion_cb }
+		remove_character_flag = hds_launch_authorized
+		remove_variable = hds_requested_duchy
+		add_character_flag = sworn_peace
+	}
+}
+
+# AI-only historical offensive detector. The surrounding HDS controller calls this every 60 days.
+hds_sc_yangzhou_historical_pulse_effect = {
+	if = {
+		limit = {
+			this = character:sun_ce
+			is_ai = yes
+			has_character_flag = hds_sc_wu_complete
+		}
+		hds_claim_owned_duchies_effect = { KINGDOM = title:k_uuii_yangzhou }
+		if = {
+			limit = { hds_can_campaign_trigger = yes }
+			hds_try_regional_war_effect = { KINGDOM = title:k_uuii_yangzhou }
+		}
+	}
+}
