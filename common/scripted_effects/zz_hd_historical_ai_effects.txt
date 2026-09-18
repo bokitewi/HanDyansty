@@ -1,4 +1,4 @@
-# Idempotent 184 setup for visible stories and their hidden AI controllers.
+﻿# Idempotent 184 setup for visible stories and their hidden AI controllers.
 hd_setup_historical_ai_stories_effect = {
 	character:cao_cao ?= {
 		if = { limit = { is_alive = yes NOT = { any_owned_story = { type = hd_story_historical_ai_controller } } } create_story = { type = hd_story_historical_ai_controller } }
@@ -34,6 +34,9 @@ hd_setup_historical_ai_stories_effect = {
 # Shared story heartbeat. Historical state applies to all owners; automatic
 # schemes and wars are restricted to AI characters.
 hd_historical_actor_story_tick_effect = {
+	if = {
+		limit = { NOT = { hds_southern_actor_trigger = yes } }
+
 	save_scope_as = hd_historical_actor
 	if = {
 		limit = { this = character:gong_sun_zan exists = global_var:hd_anti_regent_chain_resolved NOT = { has_character_flag = hd_gongsun_youzhou_claim_received } }
@@ -66,6 +69,8 @@ hd_historical_actor_story_tick_effect = {
 		else_if = { limit = { this = character:sun_ce has_character_flag = hd_sun_ce_story_active } hd_sun_ce_ai_war_effect = yes }
 		else_if = { limit = { this = character:wang_yun exists = global_var:hd_anti_regent_chain_resolved } hd_wang_yun_ai_scheme_effect = yes }
 		else_if = { limit = { this = character:yuan_shu has_character_flag = hd_yuan_shu_story_activated } hd_yuan_shu_ai_effect = yes }
+	}
+
 	}
 }
 
@@ -118,19 +123,8 @@ hd_cao_cao_ai_war_effect = {
 }
 
 hd_sun_ce_ai_war_effect = {
-	if = {
-		limit = { hd_historical_ai_can_start_extreme_war_trigger = yes }
-		ai_start_best_war = {
-			cb = { claim_cb duchy_conquest_cb vassalization_cb individual_duchy_de_jure_cb county_conquest_cb individual_county_de_jure_cb }
-			is_valid = { scope:target_character = { capital_county = { target_is_de_jure_liege_or_above = title:k_uuii_yangzhou } } }
-			on_failure = {
-				ai_start_best_war = {
-					cb = { claim_cb duchy_conquest_cb vassalization_cb individual_duchy_de_jure_cb county_conquest_cb individual_county_de_jure_cb }
-					is_valid = { scope:target_character = { capital_province = { geographical_region = china_south_world } } }
-				}
-			}
-		}
-	}
+	# Legacy callers may repair the scheduler, never launch a second campaign.
+	hds_bootstrap_effect = yes
 }
 
 hd_wang_yun_ai_scheme_effect = {
@@ -144,62 +138,6 @@ hd_wang_yun_ai_scheme_effect = {
 }
 
 hd_yuan_shu_ai_effect = {
-	# Political title acquisition takes precedence over ordinary hostile schemes.
-	if = {
-		limit = { NOT = { any_scheme = { OR = { scheme_type = murder scheme_type = fabricate_hook scheme_type = claim_throne } } } }
-		random_neighboring_and_across_water_top_liege_realm_owner = {
-			limit = { is_alive = yes exists = primary_heir primary_heir = scope:hd_historical_actor scope:hd_historical_actor = { can_start_scheme = { type = murder target_character = prev } } }
-			save_scope_as = hd_yuan_shu_inheritance_target
-		}
-	}
-	if = {
-		limit = { exists = liege liege = { is_alive = yes } can_start_scheme = { type = claim_throne target_character = liege } NOT = { any_scheme = { type = claim_throne } } }
-		start_scheme = { type = claim_throne target_character = liege }
-	}
-	else_if = {
-		limit = { exists = scope:hd_yuan_shu_inheritance_target }
-		start_scheme = { type = murder target_character = scope:hd_yuan_shu_inheritance_target }
-	}
-	else_if = {
-		limit = { NOT = { any_scheme = { OR = { scheme_type = murder scheme_type = fabricate_hook scheme_type = claim_throne } } } }
-		random_vassal = {
-			limit = { is_alive = yes highest_held_title_tier >= tier_county scope:hd_historical_actor = { can_start_scheme = { type = fabricate_hook target_character = prev } } }
-			weight = { base = 1 modifier = { add = 100 is_powerful_vassal = yes } modifier = { add = 100 joined_faction ?= { faction_power >= faction_power_halfway_threshold } } }
-			scope:hd_historical_actor = { start_scheme = { type = fabricate_hook target_character = prev } }
-		}
-	}
-	# Sway weak neighboring rulers so the normal offer-vassalization AI can act.
-	if = {
-		limit = { NOT = { any_scheme = { type = sway } } }
-		random_neighboring_and_across_water_top_liege_realm_owner = {
-			limit = { highest_held_title_tier < scope:hd_historical_actor.highest_held_title_tier OR = { capital_county = { target_is_de_jure_liege_or_above = title:k_uuii_yuzhou } capital_county = { target_is_de_jure_liege_or_above = title:k_uuii_yangzhou } } scope:hd_historical_actor = { can_start_scheme = { type = sway target_character = prev } } }
-			weight = { base = 1 modifier = { add = 100 current_military_strength < scope:hd_historical_actor.current_military_strength } }
-			scope:hd_historical_actor = { start_scheme = { type = sway target_character = prev } }
-		}
-	}
-	if = {
-		limit = { hd_historical_ai_can_start_extreme_war_trigger = yes }
-		ai_start_best_war = {
-			cb = { vassalization_cb tribal_subjugation_cb sovereignty_cb }
-			is_valid = { scope:target_character = { capital_county = { target_is_de_jure_liege_or_above = title:k_uuii_yuzhou } } }
-			on_failure = {
-				ai_start_best_war = {
-					cb = { vassalization_cb tribal_subjugation_cb sovereignty_cb }
-					is_valid = { scope:target_character = { capital_county = { target_is_de_jure_liege_or_above = title:k_uuii_yangzhou } } }
-					on_failure = {
-						ai_start_best_war = {
-							cb = { claim_cb duchy_conquest_cb individual_duchy_de_jure_cb county_conquest_cb individual_county_de_jure_cb }
-							is_valid = { scope:target_character = { capital_county = { target_is_de_jure_liege_or_above = title:k_uuii_yuzhou } } }
-							on_failure = {
-								ai_start_best_war = {
-									cb = { claim_cb duchy_conquest_cb individual_duchy_de_jure_cb county_conquest_cb individual_county_de_jure_cb }
-									is_valid = { scope:target_character = { capital_county = { target_is_de_jure_liege_or_above = title:k_uuii_yangzhou } } }
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-	}
+	# Legacy callers may repair the scheduler, never launch a second campaign.
+	hds_bootstrap_effect = yes
 }

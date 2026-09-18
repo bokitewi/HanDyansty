@@ -1,0 +1,112 @@
+﻿hds_liu_tick_effect = {
+ hds_retire_legacy_controller_effect = yes
+ if = { limit = { hds_liu_ready_trigger = yes } hds_queue_event_effect = { EVENT = hds.1000 LEASE = hds_lease_1000 } }
+ if = {
+  limit = { has_character_flag = hds_liu_established }
+  add_character_flag = sworn_peace
+  hds_finish_title_transfer_effect = yes
+  if = {
+   limit = { title:h_china = { NOT = { has_variable = hds_integration_grace } } }
+   if = {
+    limit = { character:kuai_yue = { is_alive = yes } NOT = { has_character_flag = hds_liu_kuai_received } }
+    hds_queue_event_effect = { EVENT = hds.1001 LEASE = hds_lease_1001 }
+   }
+   if = {
+    limit = { character:cai_mao = { is_alive = yes } NOT = { has_character_flag = hds_liu_cai_received } }
+    hds_queue_event_effect = { EVENT = hds.1002 LEASE = hds_lease_1002 }
+   }
+   # Refresh the reason, not the entire relationship or title grant.
+   hds_liu_maintain_alliance_effect = { ALLY = character:kuai_yue }
+   hds_liu_maintain_alliance_effect = { ALLY = character:cai_mao }
+   if = {
+    limit = { NOT = { has_character_flag = hds_liu_complete } }
+    hds_claim_owned_duchies_effect = { KINGDOM = title:k_uuii_jingzhou }
+    if = {
+     limit = { hds_liu_complete_trigger = yes }
+     add_character_flag = hds_liu_complete
+     add_character_modifier = { modifier = hds_liu_guarding_jingzhou }
+     random_owned_story = { type = hd_story_liu_biao_life set_variable = { name = hd_liu_biao_life_phase value = flag:hd_story_phase_guarding_jingzhou } }
+    }
+    else_if = {
+     limit = { hds_can_campaign_trigger = yes }
+     hds_try_regional_war_effect = { KINGDOM = title:k_uuii_jingzhou }
+    }
+   }
+  }
+  if = {
+   limit = { has_character_flag = hds_liu_complete NOT = { has_character_flag = hds_liu_guard_notice } }
+   hds_queue_event_effect = { EVENT = hds.1003 LEASE = hds_lease_1003 }
+  }
+ }
+}
+hds_liu_establish_effect = {
+ if = {
+  limit = { hds_liu_ready_trigger = yes }
+  create_title_and_vassal_change = { type = granted save_scope_as = hds_liu_setup add_claim_on_loss = no }
+  if = {
+   limit = { NOT = { any_held_title = { tier = tier_county is_noble_family_title = no is_landless_type_title = no } } }
+   title:k_uuii_jingzhou.title_capital_county = {
+    change_title_holder = { holder = character:liu_biao change = scope:hds_liu_setup take_baronies = yes }
+   }
+  }
+  title:k_uuii_jingzhou = { change_title_holder = { holder = character:liu_biao change = scope:hds_liu_setup } }
+  resolve_title_and_vassal_change = scope:hds_liu_setup
+  hds_release_effect = yes
+  if = {
+   limit = { has_title = title:k_uuii_jingzhou is_landed = yes is_independent_ruler = yes }
+   add_character_flag = hds_liu_established
+   add_character_flag = hd_liu_biao_jingzhou_completed
+   remove_character_flag = hd_liu_biao_jingzhou_scheduled
+   add_character_flag = sworn_peace
+   remove_character_modifier = hd_liu_biao_stable_ai
+   hds_protect_vassals_effect = yes
+   if = { limit = { NOT = { any_owned_story = { type = hd_story_liu_biao_life } } } create_story = { type = hd_story_liu_biao_life } }
+  }
+ }
+}
+hds_liu_receive_ally_effect = {
+ if = {
+  limit = { hds_liu_ally_ready_trigger = { ALLY = $ALLY$ } }
+  $ALLY$ = {
+   if = {
+    limit = {
+     NOT = { is_landed = yes }
+     # Use a county Liu Biao can actually grant; never steal third-party land.
+     character:liu_biao = { any_held_title = { tier = tier_county is_noble_family_title = no is_landless_type_title = no NOT = { this = character:liu_biao.capital_county } } }
+    }
+    character:liu_biao = {
+     random_held_title = {
+      limit = { tier = tier_county is_noble_family_title = no is_landless_type_title = no NOT = { this = character:liu_biao.capital_county } }
+      save_scope_as = hds_ally_county
+     }
+    }
+    create_title_and_vassal_change = { type = granted save_scope_as = hds_ally_grant add_claim_on_loss = no }
+    scope:hds_ally_county = { change_title_holder = { holder = $ALLY$ change = scope:hds_ally_grant take_baronies = yes } }
+    resolve_title_and_vassal_change = scope:hds_ally_grant
+   }
+   hds_join_liege_effect = { LIEGE = character:liu_biao }
+  }
+  hds_liu_maintain_alliance_effect = { ALLY = $ALLY$ }
+  if = {
+   limit = { $ALLY$ = { is_vassal_or_below_of = character:liu_biao is_allied_to = character:liu_biao } }
+   add_character_flag = $RECEIPT$
+  }
+ }
+}
+hds_liu_maintain_alliance_effect = {
+ if = {
+  limit = {
+   character:liu_biao = { is_alive = yes }
+   $ALLY$ = { is_alive = yes is_vassal_or_below_of = character:liu_biao }
+  }
+  character:liu_biao = {
+   if = {
+    limit = { NOT = { is_allied_to = $ALLY$ } }
+    # The vanilla is_alliance_valid rule recognizes this negotiated reason.
+    add_opinion = { modifier = event_negotiated_alliance_opinion target = $ALLY$ }
+    $ALLY$ = { add_opinion = { modifier = event_negotiated_alliance_opinion target = character:liu_biao } }
+    create_alliance = { target = $ALLY$ allied_through_owner = character:liu_biao allied_through_target = $ALLY$ }
+   }
+  }
+ }
+}

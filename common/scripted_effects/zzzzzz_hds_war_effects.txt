@@ -1,0 +1,213 @@
+﻿# Recover/create a duchy only when its counties are already politically ours.
+# This is a title-repair operation, not the Liu Biao completion predicate.
+hds_claim_owned_duchies_effect = {
+ save_scope_as = hds_campaign_actor
+ $KINGDOM$ = {
+  every_in_de_jure_hierarchy = {
+   limit = {
+    tier = tier_duchy hds_target_not_owned_trigger = yes
+    any_de_jure_county = { always = yes }
+    NOT = {
+     any_de_jure_county = {
+      NOT = { AND = { exists = holder holder = { OR = { this = scope:hds_campaign_actor is_vassal_or_below_of = scope:hds_campaign_actor } } } }
+     }
+    }
+   }
+   create_title_and_vassal_change = { type = granted save_scope_as = hds_duchy_repair add_claim_on_loss = no }
+   change_title_holder = { holder = scope:hds_campaign_actor change = scope:hds_duchy_repair }
+   resolve_title_and_vassal_change = scope:hds_duchy_repair
+  }
+ }
+}
+hds_try_regional_war_effect = {
+ if = {
+  limit = { hds_can_campaign_trigger = yes hds_regional_actor_trigger = yes }
+  save_scope_as = hds_campaign_actor
+  clear_saved_scope = hds_target_duchy
+  clear_saved_scope = hds_target_enemy
+  # Liu Biao is barred from ordinary wars; open only this synchronous path.
+  if = { limit = { this = character:liu_biao } remove_character_flag = sworn_peace }
+  $KINGDOM$ = {
+   random_in_de_jure_hierarchy = {
+    limit = {
+     tier = tier_duchy
+     trigger_if = {
+      limit = { scope:hds_campaign_actor = character:liu_biao }
+      hds_target_not_owned_trigger = yes
+     }
+     any_de_jure_county = { exists = holder holder.top_liege = { hds_candidate_enemy_trigger = yes } }
+    }
+    save_scope_as = hds_target_duchy
+   }
+  }
+  if = {
+   limit = { exists = scope:hds_target_duchy }
+   set_variable = { name = hds_requested_duchy value = scope:hds_target_duchy }
+   add_character_flag = { flag = hds_launch_authorized days = 1 }
+   scope:hds_target_duchy = {
+    random_de_jure_county = {
+     limit = {
+      exists = holder
+      holder.top_liege = {
+       hds_candidate_enemy_trigger = yes
+       scope:hds_campaign_actor = {
+        can_declare_war = { defender = prev casus_belli = hds_regional_cb target_titles = { scope:hds_target_duchy } }
+       }
+      }
+     }
+     holder.top_liege = { save_scope_as = hds_target_enemy }
+    }
+   }
+   hds_launch_selected_effect = { CB = hds_regional_cb }
+  }
+  remove_character_flag = hds_launch_authorized
+  remove_variable = hds_requested_duchy
+  if = { limit = { this = character:liu_biao } add_character_flag = sworn_peace }
+ }
+}
+hds_try_wu_war_effect = {
+ if = {
+  limit = {
+   this = character:sun_ce hds_can_campaign_trigger = yes
+   has_character_flag = hds_sc_departed
+   has_character_flag = hds_sc_wu_authorized
+   NOT = { has_character_flag = hds_sc_wu_complete }
+  }
+  remove_character_flag = sworn_peace
+  save_scope_as = hds_campaign_actor
+  clear_saved_scope = hds_target_enemy
+  title:d_wujun = { save_scope_as = hds_target_duchy }
+  set_variable = { name = hds_requested_duchy value = title:d_wujun }
+  add_character_flag = { flag = hds_launch_authorized days = 1 }
+  title:d_wujun = {
+   random_de_jure_county = {
+    limit = {
+     exists = holder
+     holder.top_liege = {
+      hds_candidate_enemy_trigger = yes
+      character:sun_ce = { can_declare_war = { defender = prev casus_belli = hds_wu_invasion_cb target_titles = { title:d_wujun } } }
+     }
+    }
+    holder.top_liege = { save_scope_as = hds_target_enemy }
+   }
+  }
+  hds_launch_selected_effect = { CB = hds_wu_invasion_cb }
+  remove_character_flag = hds_launch_authorized
+  remove_variable = hds_requested_duchy
+  add_character_flag = sworn_peace
+ }
+}
+hds_launch_selected_effect = {
+ if = {
+  limit = {
+   exists = scope:hds_target_enemy exists = scope:hds_target_duchy
+   hds_can_campaign_trigger = yes
+   can_declare_war = { defender = scope:hds_target_enemy casus_belli = $CB$ target_titles = { scope:hds_target_duchy } }
+  }
+  start_war = { cb = $CB$ target = scope:hds_target_enemy target_title = scope:hds_target_duchy }
+  if = {
+   limit = { any_character_war = { using_cb = $CB$ primary_attacker = scope:hds_campaign_actor primary_defender = scope:hds_target_enemy } }
+   random_character_war = {
+    limit = { using_cb = $CB$ primary_attacker = scope:hds_campaign_actor primary_defender = scope:hds_target_enemy }
+    save_scope_as = hds_real_war
+   }
+   set_variable = { name = hds_current_war value = scope:hds_real_war }
+  }
+  else = {
+   # Never mark the campaign complete merely because start_war was attempted.
+   add_character_flag = { flag = hds_war_cooldown days = 60 }
+  }
+ }
+}
+# Snapshot precisely the enemy's titles inside the target duchy. The operation
+# intentionally does not seize an enemy duke's unrelated titles elsewhere.
+hds_cb_victory_effect = {
+ scope:attacker = {
+  clear_variable_list = hds_pending_titles
+  set_variable = { name = hds_pending_defender value = scope:defender }
+ }
+ every_in_list = {
+  list = target_titles
+  save_scope_as = hds_victory_duchy
+  every_de_jure_county = {
+   limit = { exists = holder holder = { OR = { this = scope:defender is_vassal_or_below_of = scope:defender } } }
+   save_scope_as = hds_victory_title
+   holder = { save_scope_as = hds_original_owner }
+   set_variable = { name = hds_transfer_old_owner value = scope:hds_original_owner }
+   set_variable = { name = hds_transfer_to value = scope:attacker }
+   scope:attacker = { add_to_variable_list = { name = hds_pending_titles target = scope:hds_victory_title } }
+  }
+  if = {
+   limit = {
+    OR = {
+     NOT = { exists = holder }
+     holder = { OR = { this = scope:defender is_vassal_or_below_of = scope:defender } }
+    }
+   }
+   if = { limit = { exists = holder } holder = { save_scope_as = hds_duchy_old_owner } set_variable = { name = hds_transfer_old_owner value = scope:hds_duchy_old_owner } }
+   set_variable = { name = hds_transfer_to value = scope:attacker }
+   scope:attacker = { add_to_variable_list = { name = hds_pending_titles target = scope:hds_victory_duchy } }
+  }
+ }
+ scope:attacker = {
+  hds_finish_title_transfer_effect = yes
+  remove_variable = hds_current_war
+  add_character_flag = { flag = hds_war_cooldown days = 60 }
+ }
+}
+# Idempotent post-victory reconciliation. Already transferred titles are skipped.
+# If a genuinely new third party has acquired a title, do not seize their land;
+# remove that stale ticket and leave the region available to a future real war.
+hds_finish_title_transfer_effect = {
+ if = {
+  limit = { has_variable_list = hds_pending_titles is_alive = yes }
+  save_scope_as = hds_transfer_recipient
+  create_title_and_vassal_change = { type = conquest save_scope_as = hds_victory_change add_claim_on_loss = no }
+  every_in_list = {
+   variable = hds_pending_titles
+   limit = {
+    var:hds_transfer_to = scope:hds_transfer_recipient
+    NOT = { holder = scope:hds_transfer_recipient }
+    OR = {
+     AND = { exists = holder holder = var:hds_transfer_old_owner }
+     AND = { NOT = { exists = holder } tier = tier_duchy }
+    }
+   }
+   change_title_holder = { holder = scope:hds_transfer_recipient change = scope:hds_victory_change take_baronies = yes }
+  }
+  resolve_title_and_vassal_change = scope:hds_victory_change
+  every_in_list = {
+   variable = hds_pending_titles
+   save_scope_as = hds_finished_ticket
+   if = {
+    limit = {
+     OR = {
+      holder = scope:hds_transfer_recipient
+      NOT = { var:hds_transfer_to = scope:hds_transfer_recipient }
+      AND = { exists = holder NOT = { holder = var:hds_transfer_old_owner } }
+     }
+    }
+    if = {
+     limit = { var:hds_transfer_to = scope:hds_transfer_recipient }
+     remove_variable = hds_transfer_to remove_variable = hds_transfer_old_owner
+    }
+    scope:hds_transfer_recipient = { remove_list_variable = { name = hds_pending_titles target = scope:hds_finished_ticket } }
+   }
+  }
+  if = {
+   limit = { NOT = { any_in_list = { variable = hds_pending_titles always = yes } } }
+   clear_variable_list = hds_pending_titles
+   remove_variable = hds_pending_defender
+  }
+  hds_protect_vassals_effect = yes
+ }
+}
+hds_cb_retry_effect = {
+ scope:attacker = {
+  remove_variable = hds_current_war
+  remove_variable = hds_requested_duchy
+  remove_character_flag = hds_launch_authorized
+  add_character_flag = { flag = hds_war_cooldown days = 180 }
+  # A lost, white-peaced or invalid war is not a completed Wu campaign.
+ }
+}

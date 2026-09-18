@@ -1,0 +1,174 @@
+﻿# HanDynasty southern personal stories, CK3 1.19.0.6.
+# Native event/war callbacks use their own built-in scopes; no saved AI scope
+# is referenced from a can_declare_war callback.
+hds_southern_actor_trigger = {
+ OR = { this = character:liu_biao this = character:yuan_shu this = character:sun_jian this = character:sun_ce }
+}
+hds_managed_war_actor_trigger = {
+ OR = {
+  AND = { this = character:liu_biao has_character_flag = hds_liu_established }
+  AND = { this = character:yuan_shu has_character_flag = hds_yuan_independent }
+  AND = { this = character:sun_ce has_character_flag = hds_sc_departed }
+ }
+}
+hds_living_actor_trigger = { is_alive = yes is_imprisoned = no }
+hds_estate_ruler_trigger = {
+ is_alive = yes
+ is_ruler = yes
+ exists = domicile
+ any_held_title = { is_noble_family_title = yes }
+}
+hds_sun_estate_inherited_trigger = {
+ this = character:sun_ce
+ is_alive = yes
+ exists = title:h_china.var:hds_sun_original_estate
+ exists = title:h_china.var:hds_sun_family_title
+ exists = domicile
+ domicile = title:h_china.var:hds_sun_original_estate
+ title:h_china.var:hds_sun_family_title = { holder = character:sun_ce }
+}
+# User's completion definition: all de-jure DUCHIES, not all counties.
+# An uncreated/unheld duchy is deliberately a failing member of the set.
+hds_liu_complete_trigger = {
+ this = character:liu_biao
+ title:k_uuii_jingzhou = {
+  any_in_de_jure_hierarchy = { tier = tier_duchy }
+  NOT = {
+   any_in_de_jure_hierarchy = {
+    tier = tier_duchy
+    NOT = {
+     AND = {
+      exists = holder
+      holder = { OR = { this = character:liu_biao is_vassal_or_below_of = character:liu_biao } }
+     }
+    }
+   }
+  }
+ }
+}
+hds_liu_ready_trigger = {
+ this = character:liu_biao
+ hds_living_actor_trigger = yes
+ exists = global_var:hds_coalition_ended
+ NOT = { has_character_flag = hds_liu_established }
+}
+hds_liu_ally_ready_trigger = {
+ character:liu_biao = {
+  is_alive = yes has_character_flag = hds_liu_established
+  has_title = title:k_uuii_jingzhou
+ }
+ title:h_china = { NOT = { has_variable = hds_integration_grace } }
+ $ALLY$ = { is_alive = yes is_imprisoned = no }
+}
+hds_yuan_flee_ready_trigger = {
+ this = character:yuan_shu
+ hds_living_actor_trigger = yes
+ exists = global_var:hds_dong_entered
+ NOT = { has_character_flag = hds_yuan_fled }
+}
+hds_yuan_coup_ready_trigger = {
+ this = character:yuan_shu
+ hds_living_actor_trigger = yes
+ has_character_flag = hds_yuan_fled
+ NOT = { has_character_flag = hds_sun_joined_yuan }
+ character:sun_jian = { hds_living_actor_trigger = yes }
+}
+hds_yuan_split_ready_trigger = {
+ this = character:yuan_shu
+ hds_living_actor_trigger = yes
+ has_character_flag = hds_nanyang_acquired
+ exists = global_var:hds_coalition_ended
+ NOT = { has_character_flag = hds_yuan_independent }
+}
+hds_sun_seal_ready_trigger = {
+ this = character:sun_jian
+ hds_living_actor_trigger = yes
+ exists = global_var:hds_coalition_ended
+ exists = global_var:hds_sun_qualified_victory
+ NOT = { has_character_flag = hds_sun_seal_received }
+}
+hds_sc_depart_ready_trigger = {
+ this = character:sun_ce
+ hds_living_actor_trigger = yes
+ is_adult = yes
+ hds_sun_estate_inherited_trigger = yes
+ has_character_flag = hds_sc_inherited
+ character:sun_jian = { is_alive = no }
+ NOT = { has_character_flag = hds_sc_departed }
+}
+hds_sc_zhou_ready_trigger = {
+ this = character:sun_ce
+ hds_living_actor_trigger = yes
+ has_character_flag = hds_sc_departed
+ NOT = { has_character_flag = hds_sc_zhou_arrived }
+ character:zhou_yu = { is_alive = yes is_imprisoned = no }
+}
+hds_can_campaign_trigger = {
+ hds_living_actor_trigger = yes
+ is_adult = yes
+ is_ruler = yes
+ is_independent_ruler = yes
+ NOT = { has_character_flag = hds_war_cooldown }
+ NOT = { has_variable_list = hds_pending_titles }
+ NOT = { any_character_war = { count >= 3 always = yes } }
+ NOT = { any_character_war = { OR = { using_cb = hds_regional_cb using_cb = hds_wu_invasion_cb } primary_attacker = prev } }
+ OR = {
+  is_landed = yes
+  AND = { this = character:sun_ce hds_sun_estate_inherited_trigger = yes }
+ }
+}
+# In CB context. Uses persistent character variables, not caller-local scopes.
+hds_regional_actor_trigger = {
+ OR = {
+  AND = { this = character:liu_biao has_character_flag = hds_liu_established NOT = { has_character_flag = hds_liu_complete } }
+  AND = { this = character:yuan_shu has_character_flag = hds_yuan_independent }
+  AND = { this = character:sun_ce has_character_flag = hds_sc_wu_complete }
+ }
+}
+hds_cb_target_region_trigger = {
+ tier = tier_duchy
+ OR = {
+  AND = { scope:attacker = character:liu_biao target_is_de_jure_liege_or_above = title:k_uuii_jingzhou }
+  AND = { scope:attacker = character:yuan_shu target_is_de_jure_liege_or_above = title:k_uuii_yuzhou }
+  AND = { scope:attacker = character:sun_ce target_is_de_jure_liege_or_above = title:k_uuii_yangzhou }
+ }
+}
+hds_enemy_holds_target_trigger = {
+ OR = {
+  AND = {
+   exists = holder
+   holder = { OR = { this = scope:defender is_vassal_or_below_of = scope:defender } }
+  }
+  any_de_jure_county = {
+   exists = holder
+   holder = { OR = { this = scope:defender is_vassal_or_below_of = scope:defender } }
+  }
+ }
+}
+hds_candidate_enemy_trigger = {
+ is_alive = yes is_landed = yes is_independent_ruler = yes
+ NOT = { this = scope:hds_campaign_actor }
+ current_military_strength <= hds_strength_ceiling
+ NOT = { is_allied_to = scope:hds_campaign_actor }
+ NOT = { is_at_war_with = scope:hds_campaign_actor }
+ scope:hds_campaign_actor = {
+  NOT = { has_truce = prev }
+  NOT = { is_allied_in_war = prev }
+ }
+}
+hds_target_not_owned_trigger = {
+ NOT = {
+  AND = { exists = holder holder = { OR = { this = scope:hds_campaign_actor is_vassal_or_below_of = scope:hds_campaign_actor } } }
+ }
+}
+hds_sc_wu_control_trigger = {
+ this = character:sun_ce
+ has_title = title:d_wujun
+ is_landed = yes
+ title:d_wujun = {
+  any_de_jure_county = {
+   exists = holder
+   holder = { OR = { this = character:sun_ce is_vassal_or_below_of = character:sun_ce } }
+  }
+ }
+}

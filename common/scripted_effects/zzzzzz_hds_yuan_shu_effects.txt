@@ -1,0 +1,169 @@
+﻿hds_yuan_tick_effect = {
+ hds_retire_legacy_controller_effect = yes
+ if = { limit = { hds_yuan_flee_ready_trigger = yes } hds_queue_event_effect = { EVENT = hds.2000 LEASE = hds_lease_2000 } }
+ if = { limit = { hds_yuan_coup_ready_trigger = yes } hds_queue_event_effect = { EVENT = hds.2001 LEASE = hds_lease_2001 } }
+ if = { limit = { hds_yuan_split_ready_trigger = yes } hds_queue_event_effect = { EVENT = hds.2002 LEASE = hds_lease_2002 } }
+ if = {
+  limit = { has_character_flag = hds_yuan_independent }
+  hds_finish_title_transfer_effect = yes
+  if = {
+   limit = { title:h_china = { NOT = { has_variable = hds_integration_grace } } }
+   hds_claim_owned_duchies_effect = { KINGDOM = title:k_uuii_yuzhou }
+   if = { limit = { hds_can_campaign_trigger = yes } hds_try_regional_war_effect = { KINGDOM = title:k_uuii_yuzhou } }
+  }
+ }
+}
+hds_yuan_flee_effect = {
+ if = {
+  limit = { hds_yuan_flee_ready_trigger = yes }
+  hds_ensure_estate_effect = yes
+  if = {
+   limit = { exists = domicile }
+   domicile = { move_domicile = title:c_uuii_p_1733.title_province }
+   set_location = { location = title:c_uuii_p_1733.title_province stick_to_location = yes }
+   if = {
+    limit = { domicile = { domicile_location = title:c_uuii_p_1733.title_province } }
+    add_character_flag = hds_yuan_fled
+   }
+  }
+ }
+}
+hds_yuan_coup_effect = {
+ if = {
+  limit = { hds_yuan_coup_ready_trigger = yes }
+  character:sun_jian = { hds_ensure_estate_effect = yes }
+  hds_sun_snapshot_living_effect = yes
+  if = {
+   limit = { character:sun_jian = { hds_estate_ruler_trigger = yes } }
+   if = {
+    limit = { NOT = { has_character_flag = hds_nanyang_acquired } }
+    clear_saved_scope = hds_nanyang_old_governor
+    if = {
+     limit = { NOT = { has_variable = hds_nanyang_victim } exists = title:d_nanyang.holder }
+     title:d_nanyang.holder = {
+      if = {
+       limit = { is_alive = yes NOT = { this = character:yuan_shu } NOT = { this = character:sun_jian } }
+       save_scope_as = hds_nanyang_old_governor
+      }
+     }
+     if = { limit = { exists = scope:hds_nanyang_old_governor } set_variable = { name = hds_nanyang_victim value = scope:hds_nanyang_old_governor } }
+    }
+    # Transfer first; execute only the captured victim after a verified grant.
+    create_title_and_vassal_change = { type = granted save_scope_as = hds_nanyang_change add_claim_on_loss = no }
+    title:c_uuii_p_1733 = { change_title_holder = { holder = character:yuan_shu change = scope:hds_nanyang_change take_baronies = yes } }
+    title:d_nanyang = { change_title_holder = { holder = character:yuan_shu change = scope:hds_nanyang_change } }
+    if = {
+     limit = { exists = var:hds_nanyang_victim }
+     var:hds_nanyang_victim = {
+      every_held_title = {
+       limit = { tier = tier_county target_is_de_jure_liege_or_above = title:d_nanyang }
+       change_title_holder = { holder = character:yuan_shu change = scope:hds_nanyang_change take_baronies = yes }
+      }
+     }
+    }
+    resolve_title_and_vassal_change = scope:hds_nanyang_change
+    if = {
+     limit = { has_title = title:d_nanyang has_title = title:c_uuii_p_1733 }
+     add_character_flag = hds_nanyang_acquired
+     set_realm_capital = title:c_uuii_p_1733
+     if = {
+      limit = { exists = var:hds_nanyang_victim NOT = { has_character_flag = hds_nanyang_execution_done } }
+      # The receipt precedes this irreversible native death; it is never retargeted.
+      add_character_flag = hds_nanyang_execution_done
+      var:hds_nanyang_victim = {
+       if = {
+        limit = { is_alive = yes NOT = { this = character:yuan_shu } NOT = { this = character:sun_jian } }
+        hd_dc_begin_protection_reason_effect = { TARGET = this ACTOR = character:sun_jian ACTION = execute REASON = has_execute_reason }
+        death = { death_reason = death_execution killer = character:sun_jian }
+       }
+      }
+     }
+    }
+   }
+   if = {
+    limit = { has_character_flag = hds_nanyang_acquired has_title = title:d_nanyang }
+    character:sun_jian = { hds_sun_surrender_land_effect = yes }
+    character:sun_jian = {
+     if = {
+      limit = { NOT = { any_held_title = { is_noble_family_title = no is_landless_type_title = no } } }
+      hds_join_liege_effect = { LIEGE = character:yuan_shu }
+      domicile ?= { move_domicile = title:c_uuii_p_1733.title_province }
+      set_location = { location = title:c_uuii_p_1733.title_province stick_to_location = yes }
+      if = {
+       limit = {
+        liege = character:yuan_shu
+        exists = domicile
+        domicile = title:h_china.var:hds_sun_original_estate
+        domicile = { domicile_location = title:c_uuii_p_1733.title_province }
+       }
+       add_character_flag = hds_sun_under_yuan
+       character:yuan_shu = { add_character_flag = hds_sun_joined_yuan }
+      }
+     }
+    }
+   }
+  }
+ }
+}
+hds_sun_surrender_land_effect = {
+ if = {
+  limit = { hds_estate_ruler_trigger = yes any_held_title = { is_noble_family_title = no is_landless_type_title = no } }
+  if = {
+   limit = { NOT = { exists = var:hds_sun_local_successor } }
+   clear_saved_scope = hds_local_successor
+   random_vassal = {
+    limit = { is_alive = yes is_adult = yes is_landed = yes NOT = { this = character:sun_ce } }
+    save_scope_as = hds_local_successor
+   }
+   if = {
+    limit = { NOT = { exists = scope:hds_local_successor } }
+    random_courtier_or_guest = {
+     limit = { is_alive = yes is_adult = yes is_female = no is_imprisoned = no NOT = { this = character:sun_ce } NOT = { this = character:yuan_shu } NOT = { this = character:zhou_yu } }
+     save_scope_as = hds_local_successor
+    }
+   }
+   if = {
+    limit = { NOT = { exists = scope:hds_local_successor } }
+    create_character = { age = 35 gender = male culture = character:sun_jian.culture faith = character:sun_jian.faith random_traits = yes save_scope_as = hds_local_successor }
+   }
+   if = { limit = { exists = scope:hds_local_successor } set_variable = { name = hds_sun_local_successor value = scope:hds_local_successor } }
+  }
+  if = {
+   limit = { exists = var:hds_sun_local_successor var:hds_sun_local_successor = { is_alive = yes } }
+   var:hds_sun_local_successor = { save_scope_as = hds_local_successor }
+   if = { limit = { exists = liege } liege = { save_scope_as = hds_sun_old_liege } }
+   create_title_and_vassal_change = { type = granted save_scope_as = hds_sun_land_change add_claim_on_loss = no }
+   every_held_title = {
+    limit = { is_noble_family_title = no is_landless_type_title = no }
+    change_title_holder = { holder = scope:hds_local_successor change = scope:hds_sun_land_change take_baronies = yes }
+   }
+   resolve_title_and_vassal_change = scope:hds_sun_land_change
+   scope:hds_local_successor = {
+    if = { limit = { exists = scope:hds_sun_old_liege } hds_join_liege_effect = { LIEGE = scope:hds_sun_old_liege } }
+   }
+   every_vassal = {
+    limit = { is_alive = yes is_landed = yes NOT = { this = scope:hds_local_successor } }
+    hds_join_liege_effect = { LIEGE = scope:hds_local_successor }
+   }
+  }
+  else_if = {
+   limit = { exists = var:hds_sun_local_successor var:hds_sun_local_successor = { is_alive = no } }
+   remove_variable = hds_sun_local_successor
+  }
+ }
+}
+hds_yuan_split_effect = {
+ if = {
+  limit = { hds_yuan_split_ready_trigger = yes is_landed = yes }
+  hds_release_effect = yes
+  if = {
+   limit = { is_independent_ruler = yes }
+   if = { limit = { NOT = { has_title = title:k_uuii_yuzhou } } add_pressed_claim = title:k_uuii_yuzhou }
+   if = { limit = { NOT = { has_title = title:k_uuii_yangzhou } } add_pressed_claim = title:k_uuii_yangzhou }
+   add_character_flag = hds_yuan_independent
+   add_character_flag = hd_yuan_shu_story_activated
+   add_character_modifier = { modifier = hds_southern_campaign_ai }
+   hds_protect_vassals_effect = yes
+  }
+ }
+}

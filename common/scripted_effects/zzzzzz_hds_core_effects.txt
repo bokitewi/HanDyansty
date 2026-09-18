@@ -1,0 +1,144 @@
+﻿# A title-scope heartbeat survives the deaths of individual story owners.
+# No daily global character scan. Popup leases expire; substantive receipts do not.
+hds_bootstrap_effect = {
+ if = {
+  limit = { game_start_date = 184.1.1 }
+  title:h_china = {
+   if = {
+    limit = { NOT = { has_variable = hds_installed } }
+    set_variable = hds_installed
+    # An existing QXZL dispatch is durable evidence of actual dissolution.
+    if = {
+     limit = { exists = global_var:hd_qxzl_scan_done NOT = { exists = global_var:hds_coalition_ended } }
+     hds_coalition_dissolved_effect = yes
+    }
+   }
+   hds_schedule_effect = yes
+  }
+  hds_sun_snapshot_living_effect = yes
+  hds_best_friend_setup_effect = yes
+ }
+}
+hds_schedule_effect = {
+ if = {
+  limit = {
+   NOT = { has_variable = hds_tick_queued }
+   OR = {
+    character:liu_biao = { is_alive = yes }
+    character:yuan_shu = { is_alive = yes }
+    character:sun_jian = { is_alive = yes }
+    character:sun_ce = { is_alive = yes }
+   }
+  }
+  set_variable = { name = hds_tick_queued value = yes days = 61 }
+  trigger_event = { on_action = hds_heartbeat days = 60 }
+ }
+}
+hds_tick_effect = {
+ hds_best_friend_setup_effect = yes
+ hds_sun_snapshot_living_effect = yes
+ hds_sun_succession_effect = yes
+ character:liu_biao ?= { if = { limit = { is_alive = yes } hds_liu_tick_effect = yes } }
+ character:yuan_shu ?= { if = { limit = { is_alive = yes } hds_yuan_tick_effect = yes } }
+ character:sun_jian ?= { if = { limit = { is_alive = yes } hds_sun_tick_effect = yes } }
+ character:sun_ce ?= { if = { limit = { is_alive = yes } hds_sc_tick_effect = yes } }
+}
+hds_dong_arrived_effect = {
+ if = {
+  limit = { this = character:dong_zhuo_2 is_alive = yes has_title = title:k_uuii_sili }
+  set_global_variable = hds_dong_entered
+  hds_bootstrap_effect = yes
+  character:yuan_shu ?= { if = { limit = { is_alive = yes } hds_yuan_tick_effect = yes } }
+ }
+}
+hds_coalition_dissolved_effect = {
+ if = {
+  limit = { NOT = { exists = global_var:hds_coalition_ended } }
+  set_global_variable = hds_coalition_ended
+  set_global_variable = hds_dong_entered
+  title:h_china = { set_variable = { name = hds_integration_grace value = yes days = 61 } }
+ }
+ hds_bootstrap_effect = yes
+}
+# Called from the ACTUAL victory callback, never from generic coalition cleanup.
+hds_dong_victory_effect = {
+ save_scope_as = hds_actual_dong_victor
+ set_global_variable = hds_dong_victory
+ if = {
+  limit = {
+   character:sun_jian = {
+    has_character_flag = hds_sun_dong_participant
+    exists = var:hds_sun_dong_war
+    var:hds_sun_dong_war = {
+     using_cb = hd_anti_regent_punitive_cb
+     primary_attacker = scope:hds_actual_dong_victor
+     primary_defender = character:dong_zhuo_2
+     is_attacker = character:sun_jian
+    }
+   }
+  }
+  set_global_variable = hds_sun_qualified_victory
+ }
+}
+hds_release_effect = {
+ if = {
+  limit = { is_alive = yes exists = liege NOT = { liege = this } }
+  create_title_and_vassal_change = { type = independency save_scope_as = hds_release_change add_claim_on_loss = no }
+  becomes_independent = { change = scope:hds_release_change }
+  resolve_title_and_vassal_change = scope:hds_release_change
+ }
+}
+hds_join_liege_effect = {
+ if = {
+  limit = {
+   is_alive = yes is_ruler = yes
+   $LIEGE$ = { is_alive = yes is_landed = yes }
+   highest_held_title_tier < $LIEGE$.highest_held_title_tier
+   NOT = { liege = $LIEGE$ }
+  }
+  create_title_and_vassal_change = { type = swear_fealty save_scope_as = hds_join_change add_claim_on_loss = no }
+  change_liege = { liege = $LIEGE$ change = scope:hds_join_change }
+  resolve_title_and_vassal_change = scope:hds_join_change
+ }
+ if = { limit = { is_vassal_or_below_of = $LIEGE$ } hds_qxzl_protect_effect = yes }
+}
+hds_qxzl_protect_effect = {
+ add_character_flag = hds_qxzl_protected
+ add_character_flag = hd_qxzl_seen
+ remove_character_flag = hd_qxzl_pending
+}
+hds_protect_vassals_effect = {
+ hds_qxzl_protect_effect = yes
+ every_vassal_or_below = {
+  limit = { is_alive = yes }
+  hds_qxzl_protect_effect = yes
+ }
+}
+hds_best_friend_setup_effect = {
+ if = {
+  limit = {
+   NOT = { exists = global_var:hds_sc_zhou_friendship_done }
+   character:sun_ce = { is_alive = yes }
+   character:zhou_yu = { is_alive = yes }
+  }
+  character:sun_ce = {
+   if = { limit = { NOT = { has_relation_best_friend = character:zhou_yu } } set_relation_best_friend = character:zhou_yu }
+   if = { limit = { has_relation_best_friend = character:zhou_yu } set_global_variable = hds_sc_zhou_friendship_done }
+  }
+ }
+}
+# Only old controllers for these named southern actors are retired.
+hds_retire_legacy_controller_effect = {
+ every_owned_story = {
+  type = hd_story_historical_ai_controller
+  end_story = yes
+ }
+}
+
+hds_queue_event_effect = {
+ if = {
+  limit = { is_alive = yes NOT = { has_character_flag = $LEASE$ } }
+  add_character_flag = { flag = $LEASE$ days = 180 }
+  trigger_event = { id = $EVENT$ days = 1 }
+ }
+}

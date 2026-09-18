@@ -1,0 +1,136 @@
+﻿# Estates are inherited through their existing noble-family title/house.
+# Never replace Sun Jian's estate with a new domicile or an adventurer camp.
+hds_ensure_estate_effect = {
+ if = {
+  limit = {
+   is_alive = yes
+   NOT = { any_held_title = { is_noble_family_title = yes } }
+   exists = house
+  }
+  # Native helper preserves the mod's noble-family rule and house checks.
+  create_noble_family_effect = { GOVERNMENT_GIVER = this }
+ }
+}
+hds_sun_snapshot_living_effect = {
+ character:sun_jian ?= {
+  if = {
+   limit = { is_alive = yes }
+   if = {
+    limit = { any_held_title = { is_noble_family_title = yes } exists = domicile }
+    random_held_title = {
+     limit = { is_noble_family_title = yes }
+     save_scope_as = hds_original_family
+     # Keep the original estate-bearing title intact across this handover.
+     set_destroy_if_invalid_heir = no
+     set_destroy_on_succession = no
+    }
+    domicile = { save_scope_as = hds_original_estate }
+    title:h_china = {
+     if = {
+      limit = { NOT = { has_variable = hds_sun_family_title } }
+      set_variable = { name = hds_sun_family_title value = scope:hds_original_family }
+      set_variable = { name = hds_sun_original_estate value = scope:hds_original_estate }
+     }
+    }
+    if = {
+     limit = { character:sun_ce = { is_alive = yes } }
+     # Designation precedes death, including when the heir is a minor.
+     set_designated_heir_unsafe = character:sun_ce
+    }
+   }
+  }
+ }
+}
+hds_sun_snapshot_death_effect = {
+ # This hook runs with the dying Sun Jian in character scope.
+ if = {
+  limit = { this = character:sun_jian NOT = { exists = global_var:hds_sun_death_captured } }
+  if = {
+   limit = { exists = domicile any_held_title = { is_noble_family_title = yes } }
+   domicile = { save_scope_as = hds_death_estate }
+   random_held_title = { limit = { is_noble_family_title = yes } save_scope_as = hds_death_family }
+   title:h_china = {
+    set_variable = { name = hds_sun_family_title value = scope:hds_death_family }
+    set_variable = { name = hds_sun_original_estate value = scope:hds_death_estate }
+   }
+  }
+  if = { limit = { exists = house } house = { save_scope_as = hds_death_house } title:h_china = { set_variable = { name = hds_sun_house value = scope:hds_death_house } } }
+  title:h_china = { clear_variable_list = hds_sun_death_titles }
+  every_held_title = {
+   # Barony ownership follows the parent county in the native transaction.
+   limit = { tier >= tier_county }
+   save_scope_as = hds_death_title
+   title:h_china = { add_to_variable_list = { name = hds_sun_death_titles target = scope:hds_death_title } }
+  }
+  every_character_artifact = {
+   limit = { has_variable = han_artifact_imperial_seal }
+   save_scope_as = hds_sun_death_seal
+   title:h_china = { set_variable = { name = hds_sun_inheritance_seal value = scope:hds_sun_death_seal } }
+  }
+  set_global_variable = hds_sun_death_captured
+ }
+}
+hds_sun_succession_effect = {
+ if = {
+  limit = {
+   character:sun_jian = { is_alive = no }
+   character:sun_ce = { is_alive = yes }
+   exists = title:h_china.var:hds_sun_family_title
+   exists = title:h_china.var:hds_sun_original_estate
+   NOT = { character:sun_ce = { has_character_flag = hds_sc_inherited } }
+  }
+  character:sun_ce = {
+   # Native death inheritance gets two days first. Only captured assets are
+   # reconciled here; a committed title grant is not replayed for an artifact.
+   if = {
+    limit = { NOT = { has_character_flag = hds_sc_titles_inherited } }
+    if = {
+     limit = { exists = title:h_china.var:hds_sun_house }
+     title:h_china.var:hds_sun_house = { set_house_head = character:sun_ce }
+    }
+    create_title_and_vassal_change = { type = granted save_scope_as = hds_sun_inheritance_change add_claim_on_loss = no }
+    title:h_china = {
+     every_in_list = {
+      variable = hds_sun_death_titles
+      limit = { NOT = { holder = character:sun_ce } }
+      change_title_holder = { holder = character:sun_ce change = scope:hds_sun_inheritance_change take_baronies = yes }
+     }
+     var:hds_sun_family_title = {
+      if = {
+       limit = { NOT = { holder = character:sun_ce } }
+       change_title_holder = { holder = character:sun_ce change = scope:hds_sun_inheritance_change }
+      }
+     }
+    }
+    resolve_title_and_vassal_change = scope:hds_sun_inheritance_change
+    if = {
+     limit = {
+      title:h_china.var:hds_sun_family_title = { holder = character:sun_ce }
+      title:h_china = { NOT = { any_in_list = { variable = hds_sun_death_titles NOT = { holder = character:sun_ce } } } }
+     }
+     add_character_flag = hds_sc_titles_inherited
+    }
+   }
+   if = {
+    limit = { exists = title:h_china.var:hds_sun_inheritance_seal }
+    title:h_china.var:hds_sun_inheritance_seal = {
+     if = { limit = { NOT = { owner = character:sun_ce } } set_owner = character:sun_ce }
+    }
+   }
+   if = {
+    limit = {
+     hds_sun_estate_inherited_trigger = yes
+     has_character_flag = hds_sc_titles_inherited
+     OR = {
+      NOT = { exists = title:h_china.var:hds_sun_inheritance_seal }
+      title:h_china.var:hds_sun_inheritance_seal = { owner = character:sun_ce }
+     }
+    }
+    add_character_flag = hds_sc_inherited
+    title:h_china.var:hds_sun_family_title = { set_destroy_if_invalid_heir = yes }
+    hds_retire_legacy_controller_effect = yes
+    if = { limit = { NOT = { has_character_flag = hds_sc_inheritance_notice } } hds_queue_event_effect = { EVENT = hds.4000 LEASE = hds_lease_4000 } }
+   }
+  }
+ }
+}

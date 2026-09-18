@@ -1,0 +1,221 @@
+﻿# Participation is recorded only after actual enrollment in the real punitive war.
+hds_sun_join_dong_effect = {
+ if = {
+  limit = { character:sun_jian = { is_alive = yes is_ruler = yes } }
+  clear_saved_scope = hds_dong_war
+  character:dong_zhuo_2 ?= {
+   random_character_war = {
+    limit = { using_cb = hd_anti_regent_punitive_cb primary_defender = character:dong_zhuo_2 }
+    save_scope_as = hds_dong_war
+   }
+  }
+  if = {
+   limit = { exists = scope:hds_dong_war }
+   # A still-landed Sun may have joined the original coalition himself.
+   if = {
+    limit = { scope:hds_dong_war = { is_attacker = character:sun_jian } }
+    character:sun_jian = { add_character_flag = hds_sun_dong_participant set_variable = { name = hds_sun_dong_war value = scope:hds_dong_war } }
+   }
+   else_if = {
+    limit = {
+     character:sun_jian = { has_character_flag = hds_sun_under_yuan is_vassal_or_below_of = character:yuan_shu }
+     scope:hds_dong_war = { is_attacker = character:yuan_shu }
+    }
+    scope:hds_dong_war = { add_attacker = character:sun_jian }
+    if = {
+     limit = { scope:hds_dong_war = { is_attacker = character:sun_jian } }
+     character:sun_jian = { add_character_flag = hds_sun_dong_participant set_variable = { name = hds_sun_dong_war value = scope:hds_dong_war } }
+    }
+   }
+  }
+ }
+}
+hds_sun_tick_effect = {
+ hds_retire_legacy_controller_effect = yes
+ hds_sun_join_dong_effect = yes
+ if = { limit = { hds_sun_seal_ready_trigger = yes } hds_queue_event_effect = { EVENT = hds.3000 LEASE = hds_lease_3000 } }
+}
+# A cached artifact object follows ownership changes without searching characters.
+# A one-time old-save discovery is separate from the normal 60-day heartbeat.
+hds_find_seal_effect = {
+ if = {
+  limit = { NOT = { exists = global_var:hds_imperial_seal } NOT = { exists = global_var:hds_seal_search_lease } }
+  set_global_variable = { name = hds_seal_search_lease value = yes days = 180 }
+  every_living_character = {
+   every_character_artifact = {
+    limit = { has_variable = han_artifact_imperial_seal NOT = { exists = global_var:hds_imperial_seal } }
+    set_global_variable = { name = hds_imperial_seal value = this }
+   }
+  }
+  # Startup has already made the unique seal. Never synthesize a second one
+  # merely because a save lacks the cache or inheritance is still in flight.
+  if = {
+   limit = { NOT = { exists = global_var:hd_han_treasures_initialized } NOT = { exists = global_var:hds_imperial_seal } }
+   hd_han_create_imperial_seal_effect = { OWNER = character:sun_jian }
+   character:sun_jian = {
+    random_character_artifact = {
+     limit = { has_variable = han_artifact_imperial_seal }
+     set_global_variable = { name = hds_imperial_seal value = this }
+    }
+   }
+  }
+ }
+}
+hds_sun_receive_seal_effect = {
+ if = {
+  limit = { hds_sun_seal_ready_trigger = yes }
+  hds_find_seal_effect = yes
+  if = {
+   limit = { exists = global_var:hds_imperial_seal }
+   global_var:hds_imperial_seal = { set_owner = character:sun_jian }
+   if = {
+    limit = { global_var:hds_imperial_seal = { owner = character:sun_jian } }
+    add_character_flag = hds_sun_seal_received
+   }
+  }
+ }
+}
+hds_sc_tick_effect = {
+ hds_retire_legacy_controller_effect = yes
+ hds_finish_title_transfer_effect = yes
+ if = {
+  limit = { has_character_flag = hds_sc_inherited NOT = { has_character_flag = hds_sc_inheritance_notice } }
+  hds_queue_event_effect = { EVENT = hds.4000 LEASE = hds_lease_4000 }
+ }
+ if = { limit = { hds_sc_depart_ready_trigger = yes } hds_queue_event_effect = { EVENT = hds.4001 LEASE = hds_lease_4001 } }
+ if = {
+  limit = { has_character_flag = hds_sc_departed }
+  if = { limit = { NOT = { has_character_flag = hds_sc_wu_complete } } add_character_flag = sworn_peace }
+  # Rewards are separate commits. A failed army-location check never repeats
+  # artifact delivery, and a successful army grant never repeats on retry.
+  hds_sc_seal_trade_effect = yes
+  hds_sc_reward_effect = yes
+  if = { limit = { hds_sc_zhou_ready_trigger = yes } hds_queue_event_effect = { EVENT = hds.4002 LEASE = hds_lease_4002 } }
+  if = { limit = { character:zhou_yu = { is_alive = no } } add_character_flag = hds_sc_zhou_unavailable }
+  if = {
+   limit = { hds_sc_wu_control_trigger = yes NOT = { has_variable_list = hds_pending_titles } }
+   add_character_flag = hds_sc_wu_complete
+   remove_character_flag = sworn_peace
+  }
+  if = {
+   limit = {
+    NOT = { has_character_flag = hds_sc_wu_complete }
+    # Optional Zhou Yu arrival may retry independently; never deadlock Wu.
+    hds_can_campaign_trigger = yes
+   }
+   if = {
+    limit = { has_character_flag = hds_sc_wu_authorized }
+    hds_try_wu_war_effect = yes
+   }
+   else = { hds_queue_event_effect = { EVENT = hds.4003 LEASE = hds_lease_4003 } }
+  }
+  if = {
+   limit = { has_character_flag = hds_sc_wu_complete }
+   if = { limit = { NOT = { has_character_flag = hds_sc_wu_notice } } hds_queue_event_effect = { EVENT = hds.4004 LEASE = hds_lease_4004 } }
+   hds_claim_owned_duchies_effect = { KINGDOM = title:k_uuii_yangzhou }
+   if = { limit = { hds_can_campaign_trigger = yes } hds_try_regional_war_effect = { KINGDOM = title:k_uuii_yangzhou } }
+  }
+ }
+}
+hds_sc_depart_effect = {
+ if = {
+  limit = { hds_sc_depart_ready_trigger = yes }
+  hds_release_effect = yes
+  if = {
+   limit = { is_independent_ruler = yes hds_sun_estate_inherited_trigger = yes }
+   if = { limit = { NOT = { has_title = title:k_uuii_yangzhou } } add_pressed_claim = title:k_uuii_yangzhou }
+   add_character_flag = hds_sc_departed
+   add_character_flag = sworn_peace
+   add_character_flag = hd_sun_ce_story_active
+   hds_qxzl_protect_effect = yes
+   hds_sc_seal_trade_effect = yes
+   hds_sc_reward_effect = yes
+  }
+ }
+}
+hds_sc_seal_trade_effect = {
+ if = {
+  limit = {
+   has_character_flag = hds_sc_departed
+   NOT = { has_character_flag = hds_sc_seal_delivered }
+   character:yuan_shu = { is_alive = yes }
+   any_character_artifact = { has_variable = han_artifact_imperial_seal }
+  }
+  random_character_artifact = {
+   limit = { has_variable = han_artifact_imperial_seal }
+   save_scope_as = hds_traded_seal
+  }
+  scope:hds_traded_seal = { set_owner = character:yuan_shu }
+  if = {
+   limit = { scope:hds_traded_seal = { owner = character:yuan_shu } }
+   add_character_flag = hds_sc_seal_delivered
+   set_variable = { name = hds_sc_traded_seal value = scope:hds_traded_seal }
+  }
+ }
+}
+hds_sc_reward_effect = {
+ if = {
+  limit = { is_alive = yes is_ruler = yes exists = domicile.domicile_location }
+  if = {
+   limit = { has_character_flag = hds_sc_seal_delivered NOT = { has_character_flag = hds_sc_heavy_paid } }
+   # spawn_army also creates unraised special regiments at peace. Its saved
+   # army scope is NOT a success test outside wartime. Validate inputs first.
+   spawn_army = {
+    name = hds_sc_heavy_army
+    men_at_arms = { type = armored_footmen men = 5000 }
+    location = domicile.domicile_location
+    uses_supply = yes inheritable = yes
+   }
+   add_character_flag = hds_sc_heavy_paid
+  }
+  if = {
+   limit = { has_character_flag = hds_sc_zhou_arrived NOT = { has_character_flag = hds_sc_light_paid } }
+   spawn_army = {
+    name = hds_sc_light_army
+    men_at_arms = { type = light_footmen men = 2000 }
+    location = domicile.domicile_location
+    uses_supply = yes inheritable = yes
+   }
+   add_character_flag = hds_sc_light_paid
+  }
+ }
+}
+# Zhou Yu may have acquired an office/estate before this event. Hand it to
+# his real living primary heir first; never destroy an estate or invent a heir.
+# An absent heir or captivity pauses this optional node, not Sun Ce's campaign.
+hds_zhou_relinquish_effect = {
+ if = {
+  limit = {
+   this = character:zhou_yu is_alive = yes is_imprisoned = no is_ruler = yes
+   exists = primary_heir
+   primary_heir = { is_alive = yes NOT = { this = character:zhou_yu } NOT = { this = character:sun_ce } }
+  }
+  primary_heir = { save_scope_as = hds_zhou_successor }
+  if = {
+   limit = { exists = house any_held_title = { is_noble_family_title = yes } }
+   house = { set_house_head = scope:hds_zhou_successor }
+  }
+  create_title_and_vassal_change = { type = granted save_scope_as = hds_zhou_handover add_claim_on_loss = no }
+  every_held_title = {
+   change_title_holder_include_vassals = { holder = scope:hds_zhou_successor change = scope:hds_zhou_handover take_baronies = yes }
+  }
+  resolve_title_and_vassal_change = scope:hds_zhou_handover
+ }
+}
+hds_sc_receive_zhou_effect = {
+ if = {
+  limit = { hds_sc_zhou_ready_trigger = yes }
+  character:zhou_yu = {
+   hds_zhou_relinquish_effect = yes
+   if = {
+    limit = { is_landed = no is_ruler = no }
+    if = { limit = { NOT = { employer = character:sun_ce } } set_employer = character:sun_ce }
+    if = {
+     limit = { employer = character:sun_ce }
+     character:sun_ce = { add_character_flag = hds_sc_zhou_arrived }
+    }
+   }
+  }
+  hds_sc_reward_effect = yes
+ }
+}
