@@ -1,0 +1,303 @@
+﻿# NEW effects only. Existing HD war effects/CBs are neither copied nor replaced.
+
+# Interaction scope. Locks are applied only after the engine actually sends.
+hd_submission_request_sent_effect = {
+    scope:actor = {
+        add_character_flag = { flag = hd_submission_outgoing_pending days = 120 }
+        add_character_flag = { flag = hd_submission_request_issued days = 1 }
+        set_variable = { name = hd_submission_outgoing_target value = scope:recipient days = 120 }
+    }
+    scope:recipient = {
+        add_character_flag = { flag = hd_submission_incoming_pending days = 120 }
+        set_variable = { name = hd_submission_incoming_actor value = scope:actor days = 120 }
+        if = {
+            limit = { is_ai = no }
+            add_character_flag = { flag = hd_submission_player_inbox_cooldown days = 365 }
+        }
+    }
+}
+
+# Only clear locks belonging to THIS pair. Old cancelled messages must not
+# unlock somebody else's later pending request.
+hd_submission_clear_request_effect = {
+    if = {
+        limit = { exists = scope:actor }
+        scope:actor = {
+            if = {
+                limit = {
+                    exists = var:hd_submission_outgoing_target
+                    var:hd_submission_outgoing_target = scope:recipient
+                }
+                remove_variable = hd_submission_outgoing_target
+                remove_character_flag = hd_submission_outgoing_pending
+            }
+        }
+    }
+    if = {
+        limit = { exists = scope:recipient }
+        scope:recipient = {
+            if = {
+                limit = {
+                    exists = var:hd_submission_incoming_actor
+                    var:hd_submission_incoming_actor = scope:actor
+                }
+                remove_variable = hd_submission_incoming_actor
+                remove_character_flag = hd_submission_incoming_pending
+            }
+        }
+    }
+}
+
+hd_submission_request_accepted_effect = {
+    if = {
+        limit = {
+            exists = scope:actor
+            exists = scope:recipient
+            scope:recipient = {
+                hd_submission_recipient_legal_trigger = { LIEGE = scope:actor }
+                NOT = { hd_submission_ai_refuses_trigger = { LIEGE = scope:actor } }
+                exists = var:hd_submission_incoming_actor
+                var:hd_submission_incoming_actor = scope:actor
+            }
+            scope:actor = {
+                exists = var:hd_submission_outgoing_target
+                var:hd_submission_outgoing_target = scope:recipient
+            }
+        }
+        # The native effect creates ONE swear_fealty title/vassal transaction,
+        # preserves the subject's titles/sub-vassals and handles contract options.
+        offer_vassalization_interaction_effect = yes
+        if = {
+            limit = { scope:recipient = { exists = liege liege = scope:actor } }
+            scope:recipient = {
+                add_character_modifier = { modifier = hd_submission_recently_submitted years = 5 }
+                if = { limit = { is_ai = yes } add_faction_cooldown_effect = { YEARS = 5 } }
+            }
+            scope:actor = {
+                add_prestige = 50
+                # A submission maintains existing momentum, but NEVER adds a level.
+                if = {
+                    limit = { has_variable = hd_submission_momentum var:hd_submission_momentum > 0 }
+                    add_character_flag = { flag = hd_submission_recent_success years = 3 }
+                }
+                remove_character_flag = hd_submission_action_cooldown
+                hd_submission_queue_followup_effect = { DELAY = { 90 150 } }
+                if = {
+                    limit = { is_ai = no }
+                    send_interface_toast = {
+                        type = event_toast_effect_good
+                        title = hd_sub_success_title
+                        left_icon = scope:recipient
+                        right_icon = scope:actor
+                    }
+                }
+            }
+        }
+    }
+    else = {
+        if = {
+            limit = { exists = scope:actor }
+            scope:actor = {
+                if = {
+                    limit = { is_alive = yes is_ai = no }
+                    send_interface_toast = {
+                        type = event_toast_effect_neutral
+                        title = hd_sub_cancelled_title
+                        desc = hd_sub_cancelled_desc
+                        left_icon = scope:actor
+                    }
+                }
+                hd_submission_queue_followup_effect = { DELAY = { 90 180 } }
+            }
+        }
+    }
+    hd_submission_clear_request_effect = yes
+}
+
+hd_submission_request_declined_effect = {
+    if = {
+        limit = { exists = scope:recipient exists = scope:actor }
+        scope:recipient = {
+            set_variable = { name = hd_submission_declined_liege value = scope:actor years = 2 }
+        }
+        scope:actor = {
+            hd_submission_queue_followup_effect = { DELAY = { 90 180 } }
+            if = {
+                limit = { is_alive = yes is_ai = no }
+                send_interface_toast = {
+                    type = event_toast_effect_neutral
+                    title = hd_sub_declined_title
+                    left_icon = scope:recipient
+                    right_icon = scope:actor
+                }
+            }
+        }
+    }
+    hd_submission_clear_request_effect = yes
+}
+
+# Character scope. The single queued event has a finite watchdog lock. Its event
+# has no restrictive top-level trigger, so changing liege/government clears it.
+hd_submission_queue_followup_effect = {
+    if = {
+        limit = {
+            is_alive = yes
+            is_ai = yes
+            is_landed = yes
+            is_independent_ruler = yes
+            government_has_flag = government_is_celestial
+            NOT = { has_character_flag = hd_submission_followup_pending }
+        }
+        add_character_flag = { flag = hd_submission_followup_pending days = 240 }
+        trigger_event = { id = hd_submission.0001 days = $DELAY$ }
+    }
+}
+
+# Actor scope. Never pass hd_submission_actor into an ai_start_best_war callback.
+# The new system invokes only the existing, scope-safe HD war-selection effect.
+hd_submission_dispatch_effect = {
+    if = {
+        limit = { hd_submission_ai_can_scan_trigger = yes }
+        save_scope_as = hd_submission_actor
+        # Counts keep their old war route; only dukes+ can ask for vassals.
+        if = {
+            limit = { hd_submission_liege_trigger = yes }
+            # A local neighbor snapshot: no every_ruler / province / army scan here.
+            every_neighboring_top_liege_realm_owner = {
+                limit = {
+                    is_landed = yes
+                    is_independent_ruler = yes
+                    highest_held_title_tier < scope:hd_submission_actor.highest_held_title_tier
+                    hd_submission_inbox_free_trigger = { LIEGE = scope:hd_submission_actor }
+                    hd_submission_recipient_legal_trigger = { LIEGE = scope:hd_submission_actor }
+                    NOT = { hd_submission_ai_refuses_trigger = { LIEGE = scope:hd_submission_actor } }
+                    OR = {
+                        AND = {
+                            is_ai = yes
+                            scope:hd_submission_actor = {
+                                is_character_interaction_potentially_accepted = {
+                                    recipient = prev
+                                    interaction = hd_warlord_offer_vassalization_interaction
+                                }
+                            }
+                        }
+                        AND = {
+                            is_ai = no
+                            sub_realm_size <= 5
+                        }
+                    }
+                }
+                add_to_list = hd_submission_candidates
+            }
+            if = {
+                limit = { any_in_list = { list = hd_submission_candidates always = yes } }
+                ordered_in_list = {
+                    list = hd_submission_candidates
+                    order_by = { value = sub_realm_size multiply = -1 }
+                    max = 3
+                    check_range_bounds = no
+                    # Native cooldown checks may reject a candidate. At most three
+                    # valid candidates are attempted, with at most ONE actual request.
+                    if = {
+                        limit = { scope:hd_submission_actor = { NOT = { has_character_flag = hd_submission_request_issued } } }
+                        if = {
+                            limit = { is_ai = no }
+                            run_interaction = {
+                                interaction = hd_warlord_offer_vassalization_interaction
+                                actor = scope:hd_submission_actor
+                                recipient = this
+                                send_threshold = decline
+                            }
+                        }
+                        else = {
+                            run_interaction = {
+                                interaction = hd_warlord_offer_vassalization_interaction
+                                actor = scope:hd_submission_actor
+                                recipient = this
+                                send_threshold = accept
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if = {
+            limit = { NOT = { has_character_flag = hd_submission_request_issued } }
+            if = {
+                limit = { hd_submission_war_ready_trigger = yes }
+                # Keeps current local CBs and all historical war-management guards.
+                hd_unification_ai_attempt_effect = yes
+            }
+            # This also backs off when the engine has no legal/affordable CB.
+            add_character_flag = { flag = hd_submission_action_cooldown days = 180 }
+        }
+    }
+}
+
+hd_submission_refresh_momentum_modifier_effect = {
+    remove_character_modifier = hd_submission_momentum_1
+    remove_character_modifier = hd_submission_momentum_2
+    remove_character_modifier = hd_submission_momentum_3
+    remove_character_modifier = hd_submission_momentum_4
+    remove_character_modifier = hd_submission_momentum_5
+    if = {
+        limit = { has_variable = hd_submission_momentum }
+        if = { limit = { var:hd_submission_momentum >= 5 } set_variable = { name = hd_submission_momentum value = 5 } add_character_modifier = { modifier = hd_submission_momentum_5 } }
+        else_if = { limit = { var:hd_submission_momentum = 4 } add_character_modifier = { modifier = hd_submission_momentum_4 } }
+        else_if = { limit = { var:hd_submission_momentum = 3 } add_character_modifier = { modifier = hd_submission_momentum_3 } }
+        else_if = { limit = { var:hd_submission_momentum = 2 } add_character_modifier = { modifier = hd_submission_momentum_2 } }
+        else_if = { limit = { var:hd_submission_momentum = 1 } add_character_modifier = { modifier = hd_submission_momentum_1 } }
+        else = { remove_variable = hd_submission_momentum remove_character_flag = hd_submission_recent_success }
+    }
+}
+
+hd_submission_momentum_victory_effect = {
+    if = { limit = { NOT = { has_variable = hd_submission_momentum } } set_variable = { name = hd_submission_momentum value = 0 } }
+    if = { limit = { var:hd_submission_momentum < 5 } change_variable = { name = hd_submission_momentum add = 1 } }
+    add_character_flag = { flag = hd_submission_recent_success years = 3 }
+    hd_submission_refresh_momentum_modifier_effect = yes
+    remove_character_flag = hd_submission_action_cooldown
+    hd_submission_queue_followup_effect = { DELAY = { 60 120 } }
+}
+
+hd_submission_momentum_defeat_effect = {
+    if = {
+        limit = { has_variable = hd_submission_momentum }
+        if = { limit = { var:hd_submission_momentum >= 2 } change_variable = { name = hd_submission_momentum add = -2 } }
+        else = { set_variable = { name = hd_submission_momentum value = 0 } }
+        hd_submission_refresh_momentum_modifier_effect = yes
+    }
+    remove_character_flag = hd_submission_action_cooldown
+    hd_submission_queue_followup_effect = { DELAY = { 120 180 } }
+}
+
+hd_submission_momentum_white_peace_effect = {
+    if = {
+        limit = { has_variable = hd_submission_momentum }
+        if = { limit = { var:hd_submission_momentum > 0 } change_variable = { name = hd_submission_momentum add = -1 } }
+        hd_submission_refresh_momentum_modifier_effect = yes
+    }
+    remove_character_flag = hd_submission_action_cooldown
+    hd_submission_queue_followup_effect = { DELAY = { 120 180 } }
+}
+
+hd_submission_yearly_maintenance_effect = {
+    if = {
+        limit = { has_variable = hd_submission_momentum }
+        if = {
+            limit = { NOT = { has_character_flag = hd_submission_recent_success } var:hd_submission_momentum > 0 }
+            change_variable = { name = hd_submission_momentum add = -1 }
+        }
+        hd_submission_refresh_momentum_modifier_effect = yes
+    }
+    # One annual lightweight recovery for old saves/new independent rulers.
+    # The existing helper prevents duplicate stories.
+    if = {
+        limit = {
+            is_ai = yes
+            is_independent_ruler = yes
+            government_has_flag = government_is_celestial
+        }
+        hd_unification_ai_ensure_story_effect = yes
+    }
+}

@@ -1,0 +1,208 @@
+﻿# HD submission v1.0 -- character scopes unless stated otherwise.
+# Parameters are explicit: LIEGE is a CHARACTER, never a title/culture/story.
+# No historical-character protection, fixed character ID, culture ID or faith ID.
+
+hd_submission_world_active_trigger = {
+    OR = {
+        exists = global_var:hd_anti_regent_chain_resolved
+        exists = global_var:hd_qxzl_started
+    }
+}
+
+hd_submission_liege_trigger = {
+    is_alive = yes
+    is_landed = yes
+    is_independent_ruler = yes
+    highest_held_title_tier >= tier_duchy
+    government_has_flag = government_is_celestial
+    NOT = { government_has_flag = cannot_be_vassal_or_liege }
+    is_confederation_member = no
+    is_tributary = no
+    exists = primary_title
+    exists = capital_county
+    exists = culture
+    exists = faith
+    hd_unification_realm_in_china_trigger = yes
+}
+
+# Recipient scope. Player recipients are NEVER vetoed by personality/relation.
+hd_submission_ai_refuses_trigger = {
+    is_ai = yes
+    exists = $LIEGE$
+    OR = {
+        has_relation_rival = $LIEGE$
+        has_relation_nemesis = $LIEGE$
+        AND = {
+            has_trait = zealous
+            OR = {
+                NOT = { faith = $LIEGE$.faith }
+                NOT = { culture = { has_same_culture_heritage = $LIEGE$.culture } }
+            }
+        }
+    }
+}
+
+# Recipient scope. Only stable legal state: deliberately excludes request locks.
+# This is checked BOTH before sending and again in on_accept.
+hd_submission_recipient_legal_trigger = {
+    trigger_if = {
+        limit = { exists = $LIEGE$ }
+        hd_submission_world_active_trigger = yes
+        is_alive = yes
+        is_landed = yes
+        is_playable_character = yes
+        is_independent_ruler = yes
+        this != $LIEGE$
+        is_tributary = no
+        is_confederation_member = no
+        is_at_war = no
+        exists = primary_title
+        exists = capital_county
+        exists = culture
+        exists = faith
+        highest_held_title_tier >= tier_county
+        highest_held_title_tier < $LIEGE$.highest_held_title_tier
+        NOR = {
+            government_has_flag = cannot_be_vassal_or_liege
+            government_has_flag = government_is_herder
+        }
+        hd_unification_realm_in_china_trigger = yes
+        character_is_land_realm_neighbor = $LIEGE$
+        NOT = {
+            has_opinion_modifier = {
+                modifier = granted_independence_opinion
+                target = $LIEGE$
+            }
+        }
+        # Native Celestial advancement restriction must also hold at acceptance.
+        trigger_if = {
+            limit = {
+                $LIEGE$ = { has_title = title:h_china }
+                exists = situation:dynastic_cycle
+                situation:dynastic_cycle = {
+                    situation_current_phase = situation_dynastic_cycle_phase_stability_advancement
+                }
+            }
+            government_has_flag = government_is_celestial
+        }
+        $LIEGE$ = {
+            hd_submission_liege_trigger = yes
+            vassal_limit_available >= 1
+            trigger_if = {
+                limit = { has_title = title:h_china }
+                situation:dynastic_cycle ?= {
+                    NOT = { situation_current_phase = situation_dynastic_cycle_phase_instability }
+                }
+            }
+        }
+    }
+    trigger_else = { always = no }
+}
+
+# Recipient scope: cheap locks, before the costlier geography/acceptance checks.
+hd_submission_inbox_free_trigger = {
+    NOT = { has_character_flag = hd_submission_incoming_pending }
+    NOT = { has_character_flag = hd_submission_player_inbox_cooldown }
+    trigger_if = {
+        limit = { exists = var:hd_submission_declined_liege }
+        NOT = { var:hd_submission_declined_liege = $LIEGE$ }
+    }
+}
+
+# Interaction scope: direct rightful-liege bonus and higher-level bonus do NOT stack.
+hd_submission_higher_de_jure_trigger = {
+    NOT = { scope:actor = { is_rightful_liege_of = scope:recipient } }
+    scope:recipient = {
+        OR = {
+            AND = {
+                exists = primary_title.de_jure_liege.de_jure_liege.holder
+                primary_title.de_jure_liege.de_jure_liege.holder = scope:actor
+            }
+            AND = {
+                exists = primary_title.de_jure_liege.de_jure_liege.de_jure_liege.holder
+                primary_title.de_jure_liege.de_jure_liege.de_jure_liege.holder = scope:actor
+            }
+            AND = {
+                exists = primary_title.de_jure_liege.de_jure_liege.de_jure_liege.de_jure_liege.holder
+                primary_title.de_jure_liege.de_jure_liege.de_jure_liege.de_jure_liege.holder = scope:actor
+            }
+        }
+    }
+}
+
+# Interaction scope. Requiring an actual land border prevents empty-neighbor
+# lists / islands from being incorrectly treated as encircled.
+hd_submission_encircled_trigger = {
+    scope:recipient = {
+        character_is_land_realm_neighbor = scope:actor
+        NOT = {
+            any_neighboring_top_liege_realm_owner = { this != scope:actor }
+        }
+        NOT = { any_sub_realm_county = { is_coastal_county = yes } }
+    }
+}
+
+# Actor scope. A single cheap idle guard serves the story AND the delayed event.
+hd_submission_ai_can_scan_trigger = {
+    is_ai = yes
+    is_physically_able_adult = yes
+    is_independent_ruler = yes
+    government_has_flag = government_is_celestial
+    NOT = { has_character_flag = hd_submission_followup_pending }
+    NOT = { has_character_flag = hd_submission_action_cooldown }
+    NOT = { has_character_flag = hd_submission_outgoing_pending }
+    NOT = { has_character_flag = hd_unification_ai_cooldown }
+    NOT = { any_character_war = { primary_attacker = prev } }
+    NOT = { any_character_war = { primary_defender = prev } }
+    hd_submission_world_active_trigger = yes
+    hd_unification_celestial_attacker_trigger = yes
+}
+
+# Actor scope. No war-chest / enemy-treasury / full replenishment requirement.
+# The existing HD war effect remains responsible for CB validity, actual cost,
+# truces, alliances, enemy strength and historical storyline exclusions.
+hd_submission_war_ready_trigger = {
+    current_military_strength > 0
+    current_military_strength >= hd_submission_minimum_army_value
+    gold >= -100
+    NOT = { any_character_war = { primary_attacker = prev } }
+    NOT = { any_character_war = { primary_defender = prev } }
+}
+
+# Native war on_action scope. We tag wars ONCE, at declaration, not each tick.
+# Expanding external wars are recognized by their result, avoiding hardcoded CB
+# IDs and avoiding restoration of a locally removed chinese_reunification_cb.
+hd_submission_can_track_war_trigger = {
+    exists = scope:war
+    exists = scope:attacker
+    exists = scope:defender
+    hd_submission_world_active_trigger = yes
+    scope:war = {
+        NOT = { has_variable = hd_submission_war_actor }
+        using_civil_war_cb_trigger = no
+    }
+    scope:attacker = {
+        is_alive = yes
+        is_independent_ruler = yes
+        government_has_flag = government_is_celestial
+        hd_unification_realm_in_china_trigger = yes
+    }
+    scope:defender = {
+        is_alive = yes
+        is_independent_ruler = yes
+        hd_unification_realm_in_china_trigger = yes
+        NOT = { government_has_flag = cannot_be_vassal_or_liege }
+    }
+}
+
+hd_submission_tracked_war_unsettled_trigger = {
+    exists = scope:war
+    exists = scope:attacker
+    scope:war = {
+        exists = var:hd_submission_war_actor
+        has_variable = hd_submission_war_start_size
+        NOT = { has_variable = hd_submission_war_scored }
+        var:hd_submission_war_actor = scope:attacker
+    }
+    scope:attacker = { is_alive = yes }
+}
