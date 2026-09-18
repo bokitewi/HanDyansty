@@ -25,21 +25,57 @@ hds_try_regional_war_effect = {
   save_scope_as = hds_campaign_actor
   clear_saved_scope = hds_target_duchy
   clear_saved_scope = hds_target_enemy
+
+  # Land-adjacent targets have a hard first priority. The simple list stores
+  # only duchies that currently contain at least one legal independent enemy
+  # whose top-liege realm directly borders the actor's top-liege realm.
+  every_in_list = {
+   list = hds_adjacent_duchy_candidates
+   remove_from_list = hds_adjacent_duchy_candidates
+  }
+
   # Liu Biao is barred from ordinary wars; open only this synchronous path.
   if = { limit = { this = character:liu_biao } remove_character_flag = sworn_peace }
+
   $KINGDOM$ = {
-   random_in_de_jure_hierarchy = {
+   every_in_de_jure_hierarchy = {
     limit = {
      tier = tier_duchy
      trigger_if = {
       limit = { scope:hds_campaign_actor = character:liu_biao }
       hds_target_not_owned_trigger = yes
      }
-     any_de_jure_county = { exists = holder holder.top_liege = { hds_candidate_enemy_trigger = yes } }
     }
-    save_scope_as = hds_target_duchy
+    save_scope_as = hds_adjacent_scan_duchy
+    if = {
+     limit = {
+      any_de_jure_county = {
+       exists = holder
+       holder.top_liege = {
+        hds_candidate_enemy_trigger = yes
+        any_neighboring_top_liege_realm_owner = {
+         this = scope:hds_campaign_actor
+        }
+        scope:hds_campaign_actor = {
+         can_declare_war = {
+          defender = prev
+          casus_belli = hds_regional_cb
+          target_titles = { scope:hds_adjacent_scan_duchy }
+         }
+        }
+       }
+      }
+     }
+     add_to_list = hds_adjacent_duchy_candidates
+    }
    }
   }
+
+  random_in_list = {
+   list = hds_adjacent_duchy_candidates
+   save_scope_as = hds_target_duchy
+  }
+
   if = {
    limit = { exists = scope:hds_target_duchy }
    set_variable = { name = hds_requested_duchy value = scope:hds_target_duchy }
@@ -50,16 +86,83 @@ hds_try_regional_war_effect = {
       exists = holder
       holder.top_liege = {
        hds_candidate_enemy_trigger = yes
+       any_neighboring_top_liege_realm_owner = {
+        this = scope:hds_campaign_actor
+       }
        scope:hds_campaign_actor = {
-        can_declare_war = { defender = prev casus_belli = hds_regional_cb target_titles = { scope:hds_target_duchy } }
+        can_declare_war = {
+         defender = prev
+         casus_belli = hds_regional_cb
+         target_titles = { scope:hds_target_duchy }
+        }
        }
       }
      }
      holder.top_liege = { save_scope_as = hds_target_enemy }
     }
    }
+  }
+
+  # Fallback: only when no legal land-adjacent pair was found. Restore the
+  # original region-wide selection so temporary truces/alliances do not stall
+  # the historical campaign permanently.
+  if = {
+   limit = { NOT = { exists = scope:hds_target_enemy } }
+   clear_saved_scope = hds_target_duchy
+   clear_saved_scope = hds_target_enemy
+   remove_character_flag = hds_launch_authorized
+   remove_variable = hds_requested_duchy
+
+   $KINGDOM$ = {
+    random_in_de_jure_hierarchy = {
+     limit = {
+      tier = tier_duchy
+      trigger_if = {
+       limit = { scope:hds_campaign_actor = character:liu_biao }
+       hds_target_not_owned_trigger = yes
+      }
+      any_de_jure_county = {
+       exists = holder
+       holder.top_liege = { hds_candidate_enemy_trigger = yes }
+      }
+     }
+     save_scope_as = hds_target_duchy
+    }
+   }
+
+   if = {
+    limit = { exists = scope:hds_target_duchy }
+    set_variable = { name = hds_requested_duchy value = scope:hds_target_duchy }
+    add_character_flag = { flag = hds_launch_authorized days = 1 }
+    scope:hds_target_duchy = {
+     random_de_jure_county = {
+      limit = {
+       exists = holder
+       holder.top_liege = {
+        hds_candidate_enemy_trigger = yes
+        scope:hds_campaign_actor = {
+         can_declare_war = {
+          defender = prev
+          casus_belli = hds_regional_cb
+          target_titles = { scope:hds_target_duchy }
+         }
+        }
+       }
+      }
+      holder.top_liege = { save_scope_as = hds_target_enemy }
+     }
+    }
+   }
+  }
+
+  if = {
+   limit = {
+    exists = scope:hds_target_enemy
+    exists = scope:hds_target_duchy
+   }
    hds_launch_selected_effect = { CB = hds_regional_cb }
   }
+
   remove_character_flag = hds_launch_authorized
   remove_variable = hds_requested_duchy
   if = { limit = { this = character:liu_biao } add_character_flag = sworn_peace }
