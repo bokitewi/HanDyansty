@@ -123,29 +123,23 @@ hd_cao_expansion_tick_effect = {
 
 hd_cao_expansion_try_war_effect = {
 	clear_saved_scope = hd_cao_expansion_target
+
 	# Simple lists are event-context-local. Clear explicitly in case another
 	# callback reused this context, then deduplicate by realm owner, not county.
 	every_in_list = {
 		list = hd_cao_expansion_candidates
 		remove_from_list = hd_cao_expansion_candidates
 	}
-	scope:hd_cao_expansion_region_scope = {
-		every_de_jure_county = {
-			limit = { exists = holder }
-			holder.top_liege = {
-				if = {
-					limit = {
-						hd_cao_expansion_strategic_target_trigger = yes
-						NOT = { is_in_list = hd_cao_expansion_candidates }
-					}
-					add_to_list = hd_cao_expansion_candidates
-				}
-			}
-		}
-	}
-	random_in_list = {
-		list = hd_cao_expansion_candidates
+
+	# First priority: a legal independent realm directly bordering Cao Cao's
+	# top-liege realm and holding land inside the current campaign region.
+	# Across-water realms are not treated as adjacent.
+	random_neighboring_top_liege_realm_owner = {
 		limit = {
+			hd_cao_expansion_strategic_target_trigger = yes
+			any_realm_county = {
+				target_is_de_jure_liege_or_above = scope:hd_cao_expansion_region_scope
+			}
 			NOT = { is_allied_to = character:cao_cao }
 			NOT = { is_at_war_with = character:cao_cao }
 			character:cao_cao = {
@@ -159,6 +153,45 @@ hd_cao_expansion_try_war_effect = {
 		}
 		save_scope_as = hd_cao_expansion_target
 	}
+
+	# Fallback: only when no legal adjacent target exists, use the original
+	# region-wide realm-owner scan.
+	if = {
+		limit = {
+			NOT = { exists = scope:hd_cao_expansion_target }
+		}
+		scope:hd_cao_expansion_region_scope = {
+			every_de_jure_county = {
+				limit = { exists = holder }
+				holder.top_liege = {
+					if = {
+						limit = {
+							hd_cao_expansion_strategic_target_trigger = yes
+							NOT = { is_in_list = hd_cao_expansion_candidates }
+						}
+						add_to_list = hd_cao_expansion_candidates
+					}
+				}
+			}
+		}
+		random_in_list = {
+			list = hd_cao_expansion_candidates
+			limit = {
+				NOT = { is_allied_to = character:cao_cao }
+				NOT = { is_at_war_with = character:cao_cao }
+				character:cao_cao = {
+					NOT = { has_truce = prev }
+					can_declare_war = {
+						defender = prev
+						casus_belli = hd_cao_expansion_cb
+						target_titles = { scope:hd_cao_expansion_region_scope }
+					}
+				}
+			}
+			save_scope_as = hd_cao_expansion_target
+		}
+	}
+
 	if = {
 		limit = {
 			is_ai = yes
