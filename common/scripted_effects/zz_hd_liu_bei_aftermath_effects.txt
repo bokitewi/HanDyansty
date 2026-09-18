@@ -164,34 +164,139 @@ hd_lb_dong_open_effect = {
 	}
 }
 
-# Any scope. Called by the EXISTING D30 QXZL callback, never by the monthly tick.
-# The immutable h_china title already owns that timer; no duplicate timer is added.
+# Any scope. The existing QXZL D30 callback opens the invitation window.
+# This legacy variable now records elapsed time, not successful completion.
+# Retry only the fixed historical pair through Liu Bei's existing heartbeat.
 hd_lb_gongsun_d30_effect = {
 	if = {
 		limit = {
 			exists = global_var:hd_anti_regent_chain_resolved
 			exists = global_var:hd_qxzl_started
-			NOT = { exists = global_var:hd_lb_gongsun_d30_processed }
 		}
 		set_global_variable = hd_lb_gongsun_d30_processed
-		if = {
-			limit = { hd_lb_gongsun_offer_valid_trigger = yes }
-			character:gong_sun_zan = {
-				add_character_flag = hd_lb_gongsun_sender_pending
-				trigger_event = hd_liu_bei_rise.0300
-			}
-		}
+		hd_lb_gongsun_progress_effect = yes
 	}
 }
 
 hd_lb_gongsun_send_offer_effect = {
 	if = {
-		limit = { hd_lb_gongsun_offer_valid_trigger = yes }
+		limit = {
+			hd_lb_gongsun_attempt_valid_trigger = yes
+			character:gong_sun_zan ?= { has_character_flag = hd_lb_gongsun_sender_approved }
+		}
 		character:liu_bei = {
 			if = {
-				limit = { NOT = { has_character_flag = hd_lb_gongsun_seen } NOT = { has_character_flag = hd_lb_gongsun_pending } }
-				add_character_flag = hd_lb_gongsun_pending
-				trigger_event = hd_liu_bei_rise.0301
+				limit = { NOT = { has_character_flag = hd_lb_gongsun_accepted } }
+				if = {
+					limit = { is_ai = yes }
+					# AI consent is deterministic; no event-option lottery or UI wait.
+					remove_character_flag = hd_lb_gongsun_pending
+					add_character_flag = hd_lb_gongsun_accept_requested
+					hd_lb_gongsun_accept_effect = yes
+				}
+				else_if = {
+					limit = { has_character_flag = hd_lb_gongsun_accept_requested }
+					hd_lb_gongsun_accept_effect = yes
+				}
+				else_if = {
+					limit = {
+						NOT = { has_character_flag = hd_lb_gongsun_seen }
+						NOT = { has_character_flag = hd_lb_gongsun_pending }
+					}
+					add_character_flag = hd_lb_gongsun_pending
+					trigger_event = hd_liu_bei_rise.0301
+				}
+			}
+		}
+	}
+}
+
+# Any scope. Reuse the existing monthly updater; never scan other characters.
+# Existing AI saves with stale seen/pending flags can resume after D30.
+# A human's legacy seen flag without recorded consent is preserved conservatively.
+hd_lb_gongsun_progress_effect = {
+	if = {
+		limit = { hd_lb_gongsun_attempt_valid_trigger = yes }
+		character:liu_bei = {
+			if = {
+				limit = {
+					NOT = { has_character_flag = hd_lb_gongsun_accepted }
+					OR = {
+						is_ai = yes
+						has_character_flag = hd_lb_gongsun_accept_requested
+						NOT = { has_character_flag = hd_lb_gongsun_seen }
+					}
+				}
+				if = {
+					limit = { has_character_flag = hd_lb_gongsun_accept_requested }
+					hd_lb_gongsun_accept_effect = yes
+				}
+				else_if = {
+					limit = { character:gong_sun_zan ?= { has_character_flag = hd_lb_gongsun_sender_approved } }
+					hd_lb_gongsun_send_offer_effect = yes
+				}
+				else_if = {
+					limit = { character:gong_sun_zan = { is_ai = yes } }
+					character:gong_sun_zan = {
+						remove_character_flag = hd_lb_gongsun_sender_pending
+						add_character_flag = hd_lb_gongsun_sender_seen
+						add_character_flag = hd_lb_gongsun_sender_approved
+					}
+					hd_lb_gongsun_send_offer_effect = yes
+				}
+				else_if = {
+					limit = {
+						character:gong_sun_zan = {
+							NOT = { has_character_flag = hd_lb_gongsun_sender_seen }
+							NOT = { has_character_flag = hd_lb_gongsun_sender_pending }
+						}
+					}
+					character:gong_sun_zan = {
+						add_character_flag = hd_lb_gongsun_sender_pending
+						trigger_event = hd_liu_bei_rise.0300
+					}
+				}
+			}
+			else_if = {
+				limit = {
+					is_ai = yes
+					has_character_flag = hd_lb_gongsun_accepted
+					NOT = { has_character_flag = hd_lb_gongsun_arrived }
+					has_government = landless_adventurer_government
+				}
+				# Recover an old accepted AI state that had no domicile at that time.
+				add_character_flag = hd_lb_gongsun_move_pending
+			}
+		}
+	}
+}
+
+# Any scope. Consent is durable, but success is recorded only after an alliance
+# actually exists. A failed native alliance operation remains retryable.
+hd_lb_gongsun_accept_effect = {
+	if = {
+		limit = { hd_lb_gongsun_attempt_valid_trigger = yes }
+		character:liu_bei = {
+			if = {
+				limit = {
+					has_character_flag = hd_lb_gongsun_accept_requested
+					NOT = { has_character_flag = hd_lb_gongsun_accepted }
+				}
+				hd_lb_alliance_effect = { HOST = character:gong_sun_zan }
+				if = {
+					limit = { is_allied_to = character:gong_sun_zan }
+					remove_character_flag = hd_lb_gongsun_pending
+					remove_character_flag = hd_lb_gongsun_accept_requested
+					add_character_flag = hd_lb_gongsun_seen
+					add_character_flag = hd_lb_gongsun_accepted
+					if = {
+						limit = { has_government = landless_adventurer_government }
+						# Do not recreate a missing camp; keep the existing move task.
+						add_character_flag = hd_lb_gongsun_move_pending
+						hd_lb_move_gongsun_effect = yes
+					}
+					hd_lb_sync_story_effect = yes
+				}
 			}
 		}
 	}
@@ -215,17 +320,23 @@ hd_lb_move_gongsun_effect = {
 	if = {
 		limit = {
 			has_character_flag = hd_lb_gongsun_move_pending
+			has_character_flag = hd_lb_gongsun_accepted
+			NOT = { has_character_flag = hd_lb_gongsun_arrived }
+			hd_lb_gongsun_attempt_valid_trigger = yes
 			hd_lb_adventurer_trigger = yes
-			is_allied_to = character:gong_sun_zan
-			hd_lb_gongsun_offer_valid_trigger = yes
 			is_travelling = no
 		}
-		character:gong_sun_zan.capital_province = { save_scope_as = hd_lb_camp_destination }
-		domicile = { move_domicile = scope:hd_lb_camp_destination }
+		# Only maintain the promised alliance until the one-time move finishes.
+		hd_lb_alliance_effect = { HOST = character:gong_sun_zan }
 		if = {
-			limit = { domicile.domicile_location = scope:hd_lb_camp_destination }
-			remove_character_flag = hd_lb_gongsun_move_pending
-			add_character_flag = hd_lb_gongsun_arrived
+			limit = { is_allied_to = character:gong_sun_zan }
+			character:gong_sun_zan.capital_province = { save_scope_as = hd_lb_camp_destination }
+			domicile = { move_domicile = scope:hd_lb_camp_destination }
+			if = {
+				limit = { domicile.domicile_location = scope:hd_lb_camp_destination }
+				remove_character_flag = hd_lb_gongsun_move_pending
+				add_character_flag = hd_lb_gongsun_arrived
+			}
 		}
 	}
 }
@@ -495,6 +606,7 @@ hd_lb_tick_effect = {
 			}
 			else = { hd_lb_join_dong_effect = yes }
 		}
+		hd_lb_gongsun_progress_effect = yes
 		hd_lb_move_gongsun_effect = yes
 		hd_lb_move_xuzhou_effect = yes
 		# Invalidated moves are cancelled, never converted into forced landlessness.
