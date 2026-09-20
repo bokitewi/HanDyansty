@@ -1,0 +1,375 @@
+# HanDynasty / CK3 1.19.0.6: Lu Bu's defeat at Chang'an.
+# All entry points are fixed-character or the exact historical CB; no world scans.
+# Camp creation, troop grants and each recruitment have separate commit markers.
+
+# Character scope: one named retainer already in Lu Bu's old court.
+# Detach BEFORE native title-loss/camp cleanup; the recruitment steps restore them.
+hd_lbx_preserve_old_retainer_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			has_dlc_feature = roads_to_power
+			is_courtier_of = character:lv_bu
+			is_landed = no
+			is_ruler = no
+			is_travelling = no
+		}
+		if = { limit = { is_imprisoned = yes } release_from_prison = yes }
+		move_to_pool = yes
+	}
+}
+
+# Character scope: Lu Bu. Only the historical CB's victory block sets the entry flag.
+hd_lbx_begin_exile_effect = {
+	if = {
+		limit = {
+			this = character:lv_bu
+			is_alive = yes
+			has_character_flag = hd_lbx_defeated_at_changan
+			NOT = { has_character_flag = hd_lbx_completed }
+			NOT = { has_character_flag = hd_lbx_exile_started }
+		}
+		add_character_flag = hd_lbx_exile_started
+		add_character_flag = hd_lbx_exile_pending
+		if = {
+			limit = { NOT = { any_owned_story = { type = hd_story_lubu_exile } } }
+			create_story = { type = hd_story_lubu_exile }
+		}
+	}
+	if = {
+		limit = {
+			this = character:lv_bu
+			is_alive = yes
+			has_character_flag = hd_lbx_exile_pending
+			NOT = { has_character_flag = hd_lbx_completed }
+		}
+		hd_lbx_progress_effect = yes
+	}
+}
+
+# Character scope: Lu Bu. Strip PRE-EXILE titles only until that step commits.
+# An adventurer title automatically made by the native land-loss hook is retained.
+# Noble-family/office titles are destroyed; normal titles and vassals go to Li Jue.
+hd_lbx_prepare_camp_effect = {
+	if = {
+		limit = {
+			this = character:lv_bu
+			is_alive = yes
+			has_dlc_feature = roads_to_power
+			NOT = { has_character_flag = hd_lbx_camp_prepared }
+		}
+		if = { limit = { is_imprisoned = yes } release_from_prison = yes }
+		if = {
+			limit = {
+				NOT = { has_character_flag = hd_lbx_titles_relinquished }
+				exists = character:li_jue
+				character:li_jue = { is_alive = yes }
+			}
+			# Remove non-territorial titles without granting another family's estate.
+			every_held_title = {
+				limit = {
+					OR = { is_noble_family_title = yes is_landless_type_title = yes }
+					NOT = { has_variable = adventurer_creation_reason }
+				}
+				save_scope_as = hd_lbx_old_office
+				character:lv_bu = { destroy_title = scope:hd_lbx_old_office }
+			}
+			create_title_and_vassal_change = {
+				type = conquest
+				save_scope_as = hd_lbx_title_loss_change
+				add_claim_on_loss = no
+			}
+			every_held_title = {
+				limit = {
+					is_noble_family_title = no
+					is_landless_type_title = no
+					NOT = { has_variable = adventurer_creation_reason }
+				}
+				change_title_holder_include_vassals = {
+					holder = character:li_jue
+					change = scope:hd_lbx_title_loss_change
+				}
+			}
+			every_vassal = {
+				limit = { NOT = { this = character:li_jue } }
+				change_liege = { liege = character:li_jue change = scope:hd_lbx_title_loss_change }
+			}
+			resolve_title_and_vassal_change = scope:hd_lbx_title_loss_change
+			if = {
+				limit = {
+					is_landed = no
+					NOT = { any_held_title = { NOT = { has_variable = adventurer_creation_reason } } }
+				}
+				add_character_flag = hd_lbx_titles_relinquished
+			}
+		}
+		if = {
+			limit = { has_character_flag = hd_lbx_titles_relinquished is_landed = no }
+			if = {
+				limit = {
+					OR = {
+						NOT = { has_government = landless_adventurer_government }
+						NOT = { any_held_title = { has_variable = adventurer_creation_reason } }
+					}
+				}
+				if = { limit = { is_ruler = no } move_to_pool = yes }
+				# Undo the old Chang'an stick_to_location setting before native exile.
+				set_location = { location = title:c_uuii_p_867.title_province stick_to_location = no }
+				create_landless_adventurer_title_effect = {
+					REASON = flag:conquest
+					FLAVOR_CHAR = character:li_jue
+				}
+			}
+			if = {
+				limit = { is_ruler = yes is_independent_ruler = no has_government = landless_adventurer_government }
+				create_title_and_vassal_change = { type = independency save_scope_as = hd_lbx_independence_change add_claim_on_loss = no }
+				becomes_independent = { change = scope:hd_lbx_independence_change }
+				resolve_title_and_vassal_change = scope:hd_lbx_independence_change
+			}
+			if = {
+				limit = {
+					has_government = landless_adventurer_government
+					is_landed = no
+					is_independent_ruler = yes
+					exists = domicile
+					exists = domicile.domicile_location
+					NOT = { any_held_title = { NOT = { has_variable = adventurer_creation_reason } } }
+				}
+				set_location = { location = domicile.domicile_location stick_to_location = no }
+				add_character_flag = hd_lbx_camp_prepared
+			}
+		}
+	}
+}
+
+# Character scope: one named follower, never Lu Bu.
+# A still-landed follower relinquishes land to their old liege, or the Han ruler
+# when independent. This avoids giving land to the new adventurer camp.
+# No character is killed, cloned, resurrected, or continuously recalled.
+hd_lbx_join_camp_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			NOT = { this = character:lv_bu }
+			NOT = { has_character_flag = hd_lbx_joined_camp }
+			character:lv_bu = {
+				is_alive = yes
+				has_character_flag = hd_lbx_camp_prepared
+				has_government = landless_adventurer_government
+				exists = domicile.domicile_location
+			}
+		}
+		if = { limit = { is_imprisoned = yes } release_from_prison = yes }
+		if = {
+			limit = { NOT = { is_courtier_of = character:lv_bu } is_travelling = no }
+			save_scope_as = hd_lbx_recruit
+			clear_saved_scope = hd_lbx_recruit_recipient
+			liege ?= {
+				if = {
+					limit = { is_alive = yes NOT = { this = character:lv_bu } }
+					save_scope_as = hd_lbx_recruit_recipient
+				}
+			}
+			if = {
+				limit = { NOT = { exists = scope:hd_lbx_recruit_recipient } }
+				title:h_china.holder ?= {
+					if = {
+						limit = { is_alive = yes NOT = { this = scope:hd_lbx_recruit } NOT = { this = character:lv_bu } }
+						save_scope_as = hd_lbx_recruit_recipient
+					}
+				}
+			}
+			if = {
+				limit = {
+					OR = {
+						exists = scope:hd_lbx_recruit_recipient
+						NOT = { any_held_title = { is_noble_family_title = no is_landless_type_title = no } }
+					}
+				}
+				every_held_title = {
+					limit = { OR = { is_noble_family_title = yes is_landless_type_title = yes } }
+					save_scope_as = hd_lbx_recruit_office
+					scope:hd_lbx_recruit = { destroy_title = scope:hd_lbx_recruit_office }
+				}
+				if = {
+					limit = { exists = scope:hd_lbx_recruit_recipient }
+					create_title_and_vassal_change = { type = granted save_scope_as = hd_lbx_recruit_change add_claim_on_loss = no }
+					every_held_title = {
+						limit = { is_noble_family_title = no is_landless_type_title = no }
+						change_title_holder_include_vassals = { holder = scope:hd_lbx_recruit_recipient change = scope:hd_lbx_recruit_change }
+					}
+					every_vassal = {
+						limit = { NOT = { this = scope:hd_lbx_recruit_recipient } }
+						change_liege = { liege = scope:hd_lbx_recruit_recipient change = scope:hd_lbx_recruit_change }
+					}
+					resolve_title_and_vassal_change = scope:hd_lbx_recruit_change
+				}
+				if = {
+					limit = { is_landed = no is_ruler = no NOT = { any_held_title = { always = yes } } }
+					set_employer = character:lv_bu
+				}
+			}
+		}
+		if = {
+			limit = { is_courtier_of = character:lv_bu }
+			add_character_flag = hd_lbx_joined_camp
+		}
+	}
+}
+
+# Character scope: Lu Bu. Distinguish successful recruitment from a dead/missing
+# named actor. The latter is skipped once, without blocking the remaining actors.
+hd_lbx_attempt_follower_effect = {
+	if = {
+		limit = { NOT = { has_character_flag = $STATUS$ } }
+		if = {
+			limit = { NOT = { exists = $FOLLOWER$ } }
+			add_character_flag = $UNAVAILABLE$
+			add_character_flag = $STATUS$
+		}
+		else_if = {
+			limit = { $FOLLOWER$ = { is_alive = no } }
+			add_character_flag = $UNAVAILABLE$
+			add_character_flag = $STATUS$
+		}
+		else = {
+			$FOLLOWER$ = { hd_lbx_join_camp_effect = yes }
+			if = {
+				limit = { $FOLLOWER$ = { has_character_flag = hd_lbx_joined_camp } }
+				add_character_flag = $STATUS$
+			}
+		}
+	}
+}
+
+# Character scope: Lu Bu. Event troops are not attached to the concluded war.
+# armored_footmen: 100 men/stack; 30 stacks = 3,000 men.
+hd_lbx_spawn_troops_effect = {
+	if = {
+		limit = {
+			this = character:lv_bu
+			is_alive = yes
+			has_character_flag = hd_lbx_camp_prepared
+			has_government = landless_adventurer_government
+			exists = domicile.domicile_location
+			NOT = { has_character_flag = hd_lbx_event_troops_received }
+		}
+		spawn_army = {
+			name = hd_lbx_event_troops
+			location = domicile.domicile_location
+			origin = domicile.domicile_location
+			men_at_arms = { type = armored_footmen stacks = 30 }
+			inheritable = no
+			uses_supply = yes
+		}
+		add_character_flag = hd_lbx_event_troops_received
+	}
+}
+
+hd_lbx_check_complete_effect = {
+	if = {
+		limit = {
+			has_character_flag = hd_lbx_camp_prepared
+			has_character_flag = hd_lbx_ai_story_started
+			has_character_flag = hd_lbx_event_troops_received
+			has_character_flag = hd_lbx_zhang_resolved
+			has_character_flag = hd_lbx_gao_resolved
+			has_character_flag = hd_lbx_chen_resolved
+		}
+		add_character_flag = hd_lbx_completed
+		remove_character_flag = hd_lbx_exile_pending
+		remove_character_flag = hd_lbx_chen_event_queued
+	}
+}
+
+# Only the hidden arrival event calls this effect. No visible choice can veto it.
+hd_lbx_chen_arrival_effect = {
+	hd_lbx_attempt_follower_effect = {
+		FOLLOWER = character:chen_gong
+		STATUS = hd_lbx_chen_resolved
+		UNAVAILABLE = hd_lbx_chen_unavailable
+	}
+	hd_lbx_check_complete_effect = yes
+}
+
+# Character scope: Lu Bu, run synchronously on defeat, then by his own story.
+# Once the camp is prepared, future land acquisitions are NEVER stripped again.
+hd_lbx_progress_effect = {
+	if = {
+		limit = {
+			this = character:lv_bu
+			is_alive = yes
+			has_character_flag = hd_lbx_exile_pending
+			NOT = { has_character_flag = hd_lbx_completed }
+			has_dlc_feature = roads_to_power
+		}
+		if = {
+			limit = { NOT = { has_character_flag = hd_lbx_camp_prepared } }
+			hd_lbx_prepare_camp_effect = yes
+		}
+		if = {
+			limit = {
+				has_character_flag = hd_lbx_camp_prepared
+				has_government = landless_adventurer_government
+				is_landed = no
+				exists = domicile.domicile_location
+			}
+			# Native on_setup dereferences the camp province's de jure kingdom.
+			if = {
+				limit = {
+					exists = domicile.domicile_location.kingdom
+					NOT = { any_owned_story = { type = story_adventurer_ai } }
+				}
+				create_story = { type = story_adventurer_ai }
+			}
+			if = {
+				limit = { any_owned_story = { type = story_adventurer_ai } }
+				add_character_flag = hd_lbx_ai_story_started
+			}
+			hd_lbx_attempt_follower_effect = {
+				FOLLOWER = character:zhang_liao
+				STATUS = hd_lbx_zhang_resolved
+				UNAVAILABLE = hd_lbx_zhang_unavailable
+			}
+			hd_lbx_attempt_follower_effect = {
+				FOLLOWER = character:gao_shun
+				STATUS = hd_lbx_gao_resolved
+				UNAVAILABLE = hd_lbx_gao_unavailable
+			}
+			character:zhang_liao ?= {
+				if = { limit = { is_alive = yes is_adult = yes is_courtier_of = character:lv_bu } set_knight_status = force }
+			}
+			character:gao_shun ?= {
+				if = { limit = { is_alive = yes is_adult = yes is_courtier_of = character:lv_bu } set_knight_status = force }
+			}
+			hd_lbx_spawn_troops_effect = yes
+			if = {
+				limit = {
+					has_character_flag = hd_lbx_zhang_resolved
+					has_character_flag = hd_lbx_gao_resolved
+					has_character_flag = hd_lbx_event_troops_received
+					NOT = { has_character_flag = hd_lbx_chen_resolved }
+					NOT = { has_character_flag = hd_lbx_chen_event_queued }
+				}
+				add_character_flag = { flag = hd_lbx_chen_event_queued days = 2 }
+				trigger_event = { id = hd_lubu_exile.0002 days = 1 }
+			}
+			if = {
+				limit = {
+					has_character_flag = hd_lbx_event_troops_received
+					NOT = { has_character_flag = hd_lbx_intro_shown }
+					NOT = { has_character_flag = hd_lbx_intro_queued }
+				}
+				add_character_flag = { flag = hd_lbx_intro_queued days = 2 }
+				trigger_event = { id = hd_lubu_exile.0001 days = 1 }
+			}
+			hd_lbx_check_complete_effect = yes
+		}
+		else_if = {
+			limit = { has_character_flag = hd_lbx_camp_prepared is_landed = yes }
+			# A later conquest/inheritance is not a second defeat at Chang'an.
+			remove_character_flag = hd_lbx_exile_pending
+			add_character_flag = hd_lbx_exile_superseded
+		}
+	}
+}
