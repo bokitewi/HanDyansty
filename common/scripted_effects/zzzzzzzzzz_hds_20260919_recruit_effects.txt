@@ -1,0 +1,182 @@
+# HanDyansty southern-story patch. Base: 9230e81ef7ee657daab8b85b2b61633da76c7814
+# Additive late-loaded override; no GitHub writes.
+
+# ROOT is Yuan Shu. Start once, on actual d_nanyang acquisition; watchdog for old saves.
+hds_nr_watch_yuan_effect = {
+    if = {
+        limit = { is_alive = yes this = character:yuan_shu }
+        if = {
+            limit = {
+                has_title = title:d_nanyang
+                NOT = { has_character_flag = hds_nr_nanyang_seen }
+            }
+            add_character_flag = hds_nr_nanyang_seen
+            add_character_flag = { flag = hds_nr_first_wait days = 30 }
+            add_character_flag = { flag = hds_nr_first_queued days = 31 }
+            trigger_event = { id = hds_nr.1 days = 30 }
+        }
+        else_if = {
+            limit = {
+                has_title = title:d_nanyang
+                is_landed = yes
+                has_character_flag = hds_nr_nanyang_seen
+                NOT = { has_character_flag = hds_nr_first_wait }
+                NOT = { has_character_flag = hds_nr_first_queued }
+                NOT = { has_character_flag = hds_nr_army_paid }
+            }
+            add_character_flag = { flag = hds_nr_first_queued days = 2 }
+            trigger_event = { id = hds_nr.1 days = 1 }
+        }
+        if = {
+            limit = { has_character_flag = hds_nr_army_paid }
+            hds_nr_recruit_first_effect = yes
+            if = {
+                limit = { NOT = { has_character_flag = hds_nr_second_scheduled } }
+                hds_nr_schedule_second_effect = yes
+            }
+            if = {
+                limit = {
+                    NOT = { has_character_flag = hds_nr_second_wait }
+                    NOT = { has_character_flag = hds_nr_second_queued }
+                    NOT = { has_character_flag = hds_nr_second_fired }
+                }
+                add_character_flag = { flag = hds_nr_second_queued days = 2 }
+                trigger_event = { id = hds_nr.2 days = 1 }
+            }
+        }
+        if = {
+            limit = { has_character_flag = hds_nr_second_fired }
+            hds_nr_recruit_second_effect = yes
+        }
+    }
+}
+hds_nr_schedule_second_effect = {
+    if = {
+        limit = { is_alive = yes NOT = { has_character_flag = hds_nr_second_scheduled } }
+        add_character_flag = hds_nr_second_scheduled
+        add_character_flag = { flag = hds_nr_second_wait days = 20 }
+        add_character_flag = { flag = hds_nr_second_queued days = 21 }
+        trigger_event = { id = hds_nr.2 days = 20 }
+    }
+}
+# Recipient stays in ROOT; named candidate is passed as an explicit parameter.
+# Never set an imprisoned or landed ruler's employer directly.
+hds_nr_recruit_one_effect = {
+    if = {
+        limit = {
+            is_alive = yes
+            is_ruler = yes
+            NOT = { has_character_flag = $RECEIPT$ }
+            exists = character:$ID$
+            character:$ID$ ?= { is_alive = yes is_imprisoned = no }
+        }
+        save_scope_as = hds_nr_patron
+        character:$ID$ ?= {
+            if = {
+                limit = { is_alive = yes is_imprisoned = no }
+                # Existing estate-safe title relinquishment, also valid for non-Zhou Yu candidates.
+                if = { limit = { is_ruler = yes } hds_nr_relinquish_effect = yes }
+                if = {
+                    limit = {
+                        is_alive = yes is_imprisoned = no
+                        is_landed = no is_ruler = no
+                        scope:hds_nr_patron ?= { is_alive = yes is_ruler = yes }
+                    }
+                    set_employer = scope:hds_nr_patron
+                }
+                if = {
+                    limit = {
+                        is_alive = yes is_landed = no is_ruler = no
+                        exists = employer
+                        employer = scope:hds_nr_patron
+                    }
+                    scope:hds_nr_patron ?= {
+                        if = { limit = { is_alive = yes } add_character_flag = $RECEIPT$ }
+                    }
+                }
+            }
+        }
+    }
+}
+# Do not annex the recruit's realm to Yuan Shu. Pass titles to a living successor.
+# If no safe successor exists, the watchdog retries rather than deleting titles.
+# ROOT is the recruit. Keep the old realm intact under another living ruler.
+hds_nr_relinquish_effect = {
+    if = {
+        limit = { is_alive = yes is_imprisoned = no is_ruler = yes }
+        save_scope_as = hds_nr_recruit
+        clear_saved_scope = hds_nr_title_successor
+        if = {
+            limit = { exists = primary_heir primary_heir ?= { hds_nr_successor_eligible_trigger = yes } }
+            primary_heir ?= { save_scope_as = hds_nr_title_successor }
+        }
+        if = {
+            limit = { NOT = { exists = scope:hds_nr_title_successor } }
+            random_courtier = {
+                limit = { hds_nr_successor_eligible_trigger = yes }
+                save_scope_as = hds_nr_title_successor
+            }
+        }
+        if = {
+            limit = { NOT = { exists = scope:hds_nr_title_successor } }
+            create_character = {
+                age = 35 gender = male
+                faith = scope:hds_nr_recruit.faith
+                culture = scope:hds_nr_recruit.culture
+                save_scope_as = hds_nr_title_successor
+            }
+        }
+        if = {
+            limit = { exists = scope:hds_nr_title_successor scope:hds_nr_title_successor ?= { is_alive = yes } }
+            if = {
+                limit = { exists = house any_held_title = { is_noble_family_title = yes } }
+                house ?= { set_house_head = scope:hds_nr_title_successor }
+            }
+            create_title_and_vassal_change = {
+                type = granted save_scope_as = hds_nr_recruit_transfer add_claim_on_loss = no
+            }
+            every_held_title = {
+                change_title_holder = {
+                    holder = scope:hds_nr_title_successor
+                    change = scope:hds_nr_recruit_transfer
+                    take_baronies = yes
+                }
+            }
+            resolve_title_and_vassal_change = scope:hds_nr_recruit_transfer
+        }
+    }
+}
+
+hds_nr_recruit_first_effect = {
+    # 刘辟
+    hds_nr_recruit_one_effect = { ID = liu_pi RECEIPT = hds_nr_joined_liu_pi }
+    # 黄邵
+    hds_nr_recruit_one_effect = { ID = huang_shao RECEIPT = hds_nr_joined_huang_shao }
+    # 何仪
+    hds_nr_recruit_one_effect = { ID = he_yi RECEIPT = hds_nr_joined_he_yi }
+    # 何曼
+    hds_nr_recruit_one_effect = { ID = he_man RECEIPT = hds_nr_joined_he_man }
+}
+
+hds_nr_recruit_second_effect = {
+    # 纪灵
+    hds_nr_recruit_one_effect = { ID = ji_ling RECEIPT = hds_nr_joined_ji_ling }
+    # 张勋
+    hds_nr_recruit_one_effect = { ID = zhang_xun RECEIPT = hds_nr_joined_zhang_xun }
+    # 桥蕤
+    hds_nr_recruit_one_effect = { ID = qiao_rui RECEIPT = hds_nr_joined_qiao_rui }
+    # 杨奉
+    hds_nr_recruit_one_effect = { ID = yang_feng RECEIPT = hds_nr_joined_yang_feng }
+    # 韩暹
+    hds_nr_recruit_one_effect = { ID = han_xian RECEIPT = hds_nr_joined_han_xian }
+    # 李丰
+    hds_nr_recruit_one_effect = { ID = li_feng_2 RECEIPT = hds_nr_joined_li_feng_2 }
+    # 乐就
+    hds_nr_recruit_one_effect = { ID = yue_jiu RECEIPT = hds_nr_joined_yue_jiu }
+    # 梁纲
+    hds_nr_recruit_one_effect = { ID = liang_gang RECEIPT = hds_nr_joined_liang_gang }
+    # 阎象
+    hds_nr_recruit_one_effect = { ID = yan_xiang_1 RECEIPT = hds_nr_joined_yan_xiang_1 }
+    # 韩胤
+    hds_nr_recruit_one_effect = { ID = han_yin RECEIPT = hds_nr_joined_han_yin }
+}

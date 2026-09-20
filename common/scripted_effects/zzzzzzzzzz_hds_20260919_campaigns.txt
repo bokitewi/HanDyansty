@@ -1,0 +1,118 @@
+# HanDyansty southern-story patch. Base: 9230e81ef7ee657daab8b85b2b61633da76c7814
+# Additive late-loaded override; no GitHub writes.
+
+# ROOT = actor. Test each potential duchy only AFTER setting the CB's authorization/target.
+hds_nr_scan_regional_pairs_effect = {
+    $KINGDOM$ = {
+        every_in_de_jure_hierarchy = {
+            limit = {
+                tier = tier_duchy
+                NOT = { exists = scope:hds_target_enemy }
+                trigger_if = {
+                    limit = { scope:hds_campaign_actor = character:liu_biao }
+                    hds_target_not_owned_trigger = yes
+                }
+            }
+            save_scope_as = hds_nr_scan_duchy
+            scope:hds_campaign_actor ?= {
+                if = {
+                    limit = { is_alive = yes }
+                set_variable = { name = hds_requested_duchy value = scope:hds_nr_scan_duchy }
+                add_character_flag = { flag = hds_launch_authorized days = 1 }
+                }
+            }
+            random_de_jure_county = {
+                limit = {
+                    exists = holder
+                    holder ?= { is_alive = yes exists = top_liege }
+                    holder.top_liege ?= {
+                        hds_candidate_enemy_trigger = yes
+                        trigger_if = {
+                            limit = { always = $ADJACENT$ }
+                            any_neighboring_top_liege_realm_owner = { this = scope:hds_campaign_actor }
+                        }
+                        scope:hds_campaign_actor ?= {
+                            is_alive = yes
+                            can_declare_war = {
+                                defender = prev
+                                casus_belli = hds_regional_cb
+                                target_titles = { scope:hds_nr_scan_duchy }
+                            }
+                        }
+                    }
+                }
+                holder.top_liege ?= { save_scope_as = hds_target_enemy }
+                scope:hds_nr_scan_duchy = { save_scope_as = hds_target_duchy }
+            }
+        }
+    }
+}
+hds_try_regional_war_effect = {
+    if = {
+        limit = { is_alive = yes hds_can_campaign_trigger = yes hds_regional_actor_trigger = yes }
+        save_scope_as = hds_campaign_actor
+        clear_saved_scope = hds_target_duchy
+        clear_saved_scope = hds_target_enemy
+        clear_saved_scope = hds_nr_scan_duchy
+        if = { limit = { this = character:liu_biao } remove_character_flag = sworn_peace }
+        hds_nr_scan_regional_pairs_effect = { KINGDOM = $KINGDOM$ ADJACENT = yes }
+        if = {
+            limit = { NOT = { exists = scope:hds_target_enemy } }
+            hds_nr_scan_regional_pairs_effect = { KINGDOM = $KINGDOM$ ADJACENT = no }
+        }
+        if = {
+            limit = { exists = scope:hds_target_enemy exists = scope:hds_target_duchy }
+            set_variable = { name = hds_requested_duchy value = scope:hds_target_duchy }
+            add_character_flag = { flag = hds_launch_authorized days = 1 }
+            hds_launch_selected_effect = { CB = hds_regional_cb }
+        }
+        remove_character_flag = hds_launch_authorized
+        remove_variable = hds_requested_duchy
+        clear_saved_scope = hds_nr_scan_duchy
+        if = { limit = { this = character:liu_biao } add_character_flag = sworn_peace }
+    }
+}
+hds_try_wu_war_effect = {
+    if = {
+        limit = {
+            exists = character:sun_ce this = character:sun_ce is_alive = yes
+            hds_can_campaign_trigger = yes
+            has_character_flag = hds_sc_departed
+            has_character_flag = hds_sc_wu_authorized
+            NOT = { has_character_flag = hds_sc_wu_complete }
+        }
+        remove_character_flag = sworn_peace
+        save_scope_as = hds_campaign_actor
+        clear_saved_scope = hds_target_enemy
+        title:d_danyang = { save_scope_as = hds_target_duchy }
+        set_variable = { name = hds_requested_duchy value = title:d_danyang }
+        add_character_flag = { flag = hds_launch_authorized days = 1 }
+        title:d_danyang = {
+            random_de_jure_county = {
+                limit = {
+                    exists = holder
+                    holder ?= { is_alive = yes exists = top_liege }
+                    holder.top_liege ?= {
+                        hds_candidate_enemy_trigger = yes
+                        scope:hds_campaign_actor ?= {
+                            is_alive = yes
+                            can_declare_war = {
+                                defender = prev
+                                casus_belli = hds_wu_invasion_cb
+                                target_titles = { title:d_danyang }
+                            }
+                        }
+                    }
+                }
+                holder.top_liege ?= { save_scope_as = hds_target_enemy }
+            }
+        }
+        if = {
+            limit = { exists = scope:hds_target_enemy }
+            hds_launch_selected_effect = { CB = hds_wu_invasion_cb }
+        }
+        remove_character_flag = hds_launch_authorized
+        remove_variable = hds_requested_duchy
+        add_character_flag = sworn_peace
+    }
+}

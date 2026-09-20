@@ -1,0 +1,130 @@
+# HanDyansty southern-story patch. Base: 9230e81ef7ee657daab8b85b2b61633da76c7814
+# Additive late-loaded override; no GitHub writes.
+
+hds_sc_tick_effect = {
+    if = {
+        limit = { exists = character:sun_ce this = character:sun_ce is_alive = yes }
+        hds_retire_legacy_controller_effect = yes
+        hds_finish_title_transfer_effect = yes
+        if = {
+            limit = { has_character_flag = hds_sc_inherited NOT = { has_character_flag = hds_sc_inheritance_notice } }
+            hds_queue_event_effect = { EVENT = hds.4000 LEASE = hds_lease_4000 }
+        }
+        if = {
+            limit = { hds_sc_depart_ready_trigger = yes }
+            hds_queue_event_effect = { EVENT = hds.4001 LEASE = hds_lease_4001 }
+        }
+        if = {
+            limit = { has_character_flag = hds_sc_departed }
+            # Repairs an old completed-Wu save once; later lost land is not reset forever.
+            if = {
+                limit = { NOT = { has_character_flag = hds_nr_danyang_control_migrated } }
+                add_character_flag = hds_nr_danyang_control_migrated
+                add_character_flag = hds_sc_danyang_target_version
+                if = {
+                    limit = { has_character_flag = hds_sc_wu_complete NOT = { hds_sc_wu_control_trigger = yes } }
+                    remove_character_flag = hds_sc_wu_complete
+                    remove_character_flag = hds_sc_wu_notice
+                }
+            }
+            # A previously departed actor may have been re-vassalized by another integration pulse.
+            # The story already committed to independence, so restore it while the living adult is free.
+            if = {
+                limit = { is_adult = yes is_imprisoned = no exists = liege NOT = { is_independent_ruler = yes } }
+                hds_release_effect = yes
+            }
+            if = { limit = { NOT = { has_character_flag = hds_sc_wu_complete } } add_character_flag = sworn_peace }
+            hds_sc_seal_trade_effect = yes
+            hds_sc_reward_effect = yes
+            if = {
+                limit = { hds_sc_zhou_ready_trigger = yes }
+                hds_queue_event_effect = { EVENT = hds.4002 LEASE = hds_lease_4002 }
+            }
+            if = {
+                limit = { exists = character:zhou_yu character:zhou_yu ?= { is_alive = no } }
+                add_character_flag = hds_sc_zhou_unavailable
+            }
+            # Title repair only for counties already controlled; never hands over enemy territory for free.
+            if = {
+                limit = { is_landed = yes NOT = { has_variable_list = hds_pending_titles } }
+                hds_claim_owned_duchies_effect = { KINGDOM = title:k_uuii_yangzhou }
+            }
+            if = {
+                limit = { hds_sc_wu_control_trigger = yes NOT = { has_variable_list = hds_pending_titles } }
+                add_character_flag = hds_sc_wu_complete
+                remove_character_flag = sworn_peace
+            }
+            if = {
+                limit = { NOT = { has_character_flag = hds_sc_wu_complete } hds_can_campaign_trigger = yes }
+                if = {
+                    limit = { has_character_flag = hds_sc_wu_authorized }
+                    hds_try_wu_war_effect = yes
+                }
+                else = { hds_queue_event_effect = { EVENT = hds.4003 LEASE = hds_lease_4003 } }
+            }
+            if = {
+                limit = { has_character_flag = hds_sc_wu_complete }
+                if = {
+                    limit = { NOT = { has_character_flag = hds_sc_wu_notice } }
+                    hds_queue_event_effect = { EVENT = hds.4004 LEASE = hds_lease_4004 }
+                }
+                hds_sc_yangzhou_historical_pulse_effect = yes
+            }
+        }
+    }
+}
+hds_sc_depart_effect = {
+    if = {
+        limit = { hds_sc_depart_ready_trigger = yes }
+        hds_release_effect = yes
+        if = {
+            limit = { is_alive = yes is_independent_ruler = yes hds_sun_estate_inherited_trigger = yes }
+            if = { limit = { NOT = { has_title = title:k_uuii_yangzhou } } add_pressed_claim = title:k_uuii_yangzhou }
+            add_character_flag = hds_sc_departed
+            add_character_flag = hds_sc_danyang_target_version
+            add_character_flag = sworn_peace
+            add_character_flag = hd_sun_ce_story_active
+            hds_qxzl_protect_effect = yes
+            hds_sc_seal_trade_effect = yes
+            hds_sc_reward_effect = yes
+            if = {
+                limit = { hds_can_campaign_trigger = yes }
+                hds_queue_event_effect = { EVENT = hds.4003 LEASE = hds_lease_4003 }
+            }
+        }
+    }
+}
+hds_sc_seal_trade_effect = {
+    if = {
+        limit = {
+            is_alive = yes this = character:sun_ce
+            has_character_flag = hds_sc_departed
+            NOT = { has_character_flag = hds_sc_seal_delivered }
+            exists = character:yuan_shu
+            character:yuan_shu ?= { is_alive = yes }
+            any_character_artifact = { has_variable = han_artifact_imperial_seal }
+        }
+        random_character_artifact = {
+            limit = { has_variable = han_artifact_imperial_seal }
+            save_scope_as = hds_nr_traded_seal
+            set_owner = character:yuan_shu
+        }
+        if = {
+            limit = { scope:hds_nr_traded_seal = { owner = character:yuan_shu } }
+            add_character_flag = hds_sc_seal_delivered
+            set_variable = { name = hds_sc_traded_seal value = scope:hds_nr_traded_seal }
+        }
+    }
+}
+# Once the player/AI accepted the departure/invasion story, both continue the same historical sequence.
+# No bypass of native can_declare_war, no artificial victory, no mandatory date-of-death.
+hds_sc_yangzhou_historical_pulse_effect = {
+    if = {
+        limit = { this = character:sun_ce is_alive = yes has_character_flag = hds_sc_wu_complete }
+        hds_claim_owned_duchies_effect = { KINGDOM = title:k_uuii_yangzhou }
+        if = {
+            limit = { hds_can_campaign_trigger = yes }
+            hds_try_regional_war_effect = { KINGDOM = title:k_uuii_yangzhou }
+        }
+    }
+}
