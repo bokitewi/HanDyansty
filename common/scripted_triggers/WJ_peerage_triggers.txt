@@ -1,0 +1,85 @@
+﻿
+# Recipient scope. Source close-kin rule, not all members of the imperial dynasty.
+WJ_peer_royal_kin = { OR = { house = $EMPEROR$.house AND = { dynasty = $EMPEROR$.dynasty house = { has_house_modifier = SanGong_SeparatedCloseKin_modifier } } } }
+WJ_peer_base_candidate = {
+ is_alive = yes top_liege = $EMPEROR$ NOT = { this = $EMPEROR$ }
+ NOR = { has_variable = wj_peer_rank has_trait = WJ_peerage_trait has_trait = SanGong_Taizi }
+ OR = { AND = { is_male = yes WJ_peer_royal_kin = { EMPEROR = $EMPEROR$ } } AND = { NOT = { dynasty = $EMPEROR$.dynasty } has_trait = WJ_mingshi_trait OR = { has_trait_xp = { trait = WJ_mingshi_trait track = jungong value >= 25 } has_trait_xp = { trait = WJ_mingshi_trait track = zhengji value >= 25 } } } }
+}
+# Root is the issuing emperor throughout the event chain; each option checks the ticket again.
+WJ_peer_flow_valid = {
+ trigger_if = { limit = { exists = var:wj_peer_target has_variable = wj_peer_ticket exists = scope:wj_peer_ticket }
+ WJ_inner_emperor_trigger = yes exists = var:wj_peer_target
+ exists = scope:wj_peer_ticket var:wj_peer_ticket = scope:wj_peer_ticket
+ var:wj_peer_target = { WJ_peer_base_candidate = { EMPEROR = root } }
+ }
+ trigger_else = { always = no }
+}
+WJ_peer_rank_allowed = {
+ trigger_if = { limit = { WJ_peer_flow_valid = yes has_variable = wj_peer_pending_rank }
+ WJ_peer_flow_valid = yes
+ OR = {
+  AND = { var:wj_peer_pending_rank >= 4 var:wj_peer_target = { is_male = yes WJ_peer_royal_kin = { EMPEROR = root } } gold >= 50 piety >= 50 influence >= 50 prestige >= 50 }
+  AND = { var:wj_peer_pending_rank <= 3 var:wj_peer_target = { NOT = { dynasty = root.dynasty } trigger_if = { limit = { root = { var:wj_peer_pending_rank = 1 } } OR = { has_trait_xp = { trait = WJ_mingshi_trait track = jungong value >= 25 } has_trait_xp = { trait = WJ_mingshi_trait track = zhengji value >= 25 } } }
+trigger_if = { limit = { root = { var:wj_peer_pending_rank = 2 } } OR = { has_trait_xp = { trait = WJ_mingshi_trait track = jungong value >= 50 } has_trait_xp = { trait = WJ_mingshi_trait track = zhengji value >= 50 } } }
+trigger_if = { limit = { root = { var:wj_peer_pending_rank = 3 } } OR = { has_trait_xp = { trait = WJ_mingshi_trait track = jungong value >= 75 } has_trait_xp = { trait = WJ_mingshi_trait track = zhengji value >= 75 } } } } }
+ }
+ }
+ trigger_else = { always = no }
+}
+WJ_peer_valid = {
+ trigger_if = { limit = { exists = var:wj_peer_realm.holder exists = var:wj_peer_name exists = var:wj_peer_food has_variable = wj_peer_rank }
+ is_alive = yes has_trait = WJ_peerage_trait has_variable = wj_peer_rank
+ exists = var:wj_peer_realm.holder exists = var:wj_peer_name exists = var:wj_peer_food
+ top_liege = var:wj_peer_realm.holder NOT = { this = var:wj_peer_realm.holder }
+ var:wj_peer_realm.holder = { WJ_inner_emperor_trigger = yes }
+ var:wj_peer_name = { var:wj_peer_name_owner = prev }
+ var:wj_peer_food = { var:wj_peer_food_owner = prev }
+ }
+ trigger_else = { always = no }
+}
+# Title scope. Occupancy is title-bound: no global character scan and no actual-control restriction.
+WJ_peer_county_free = {
+ tier = tier_county NOT = { has_variable = wj_peer_food_owner }
+ NOT = { any_direct_de_jure_vassal_title = { has_variable = wj_peer_food_owner } }
+}
+WJ_peer_barony_free = {
+ tier = tier_barony NOT = { has_variable = wj_peer_food_owner }
+ county = { NOT = { has_variable = wj_peer_food_owner } }
+}
+WJ_peer_place_available = {
+ any_this_title_or_de_jure_above = { this = title:h_china }
+ trigger_if = { limit = { tier = tier_kingdom }
+  trigger_if = { limit = { root = { var:wj_peer_pending_rank = 5 } } NOT = { has_variable = wj_peer_name_owner } }
+  any_de_jure_county = { OR = { AND = { root = { var:wj_peer_pending_rank = 1 } any_direct_de_jure_vassal_title = { WJ_peer_barony_free = yes NOT = { has_variable = wj_peer_name_owner } } } AND = { root = { var:wj_peer_pending_rank >= 2 } WJ_peer_county_free = yes } } }
+ }
+ trigger_if = { limit = { tier = tier_duchy }
+  trigger_if = { limit = { root = { var:wj_peer_pending_rank >= 3 var:wj_peer_pending_rank <= 4 } } NOT = { has_variable = wj_peer_name_owner } }
+  any_de_jure_county = { OR = { AND = { root = { var:wj_peer_pending_rank = 1 } any_direct_de_jure_vassal_title = { WJ_peer_barony_free = yes NOT = { has_variable = wj_peer_name_owner } } } AND = { root = { var:wj_peer_pending_rank >= 2 } WJ_peer_county_free = yes } } }
+ }
+ trigger_if = { limit = { tier = tier_county }
+  trigger_if = { limit = { root = { var:wj_peer_pending_rank = 1 } } any_direct_de_jure_vassal_title = { WJ_peer_barony_free = yes NOT = { has_variable = wj_peer_name_owner } } }
+  trigger_else = { WJ_peer_county_free = yes }
+  trigger_if = { limit = { root = { var:wj_peer_pending_rank = 2 } } NOT = { has_variable = wj_peer_name_owner } }
+ }
+ trigger_if = { limit = { tier = tier_barony } WJ_peer_barony_free = yes NOT = { has_variable = wj_peer_name_owner } }
+}
+WJ_peer_commit_valid = {
+ trigger_if = { limit = { WJ_peer_rank_allowed = yes exists = var:wj_peer_pending_name exists = var:wj_peer_pending_food }
+ WJ_peer_rank_allowed = yes exists = var:wj_peer_pending_name exists = var:wj_peer_pending_food
+ var:wj_peer_pending_name = { NOT = { has_variable = wj_peer_name_owner } any_this_title_or_de_jure_above = { this = title:h_china } }
+ var:wj_peer_pending_food = { WJ_peer_place_available = yes }
+ OR = {
+  AND = { var:wj_peer_pending_rank = 1 var:wj_peer_pending_name = var:wj_peer_pending_food var:wj_peer_pending_food = { tier = tier_barony } }
+  AND = { var:wj_peer_pending_rank = 2 var:wj_peer_pending_name = var:wj_peer_pending_food var:wj_peer_pending_food = { tier = tier_county } }
+  AND = { var:wj_peer_pending_rank >= 3 var:wj_peer_pending_rank <= 4 var:wj_peer_pending_name = { tier = tier_duchy } var:wj_peer_pending_food = { tier = tier_county duchy = root.var:wj_peer_pending_name } }
+  AND = { var:wj_peer_pending_rank = 5 var:wj_peer_pending_name = { tier = tier_kingdom } var:wj_peer_pending_food = { tier = tier_county kingdom = root.var:wj_peer_pending_name } }
+ }
+ }
+ trigger_else = { always = no }
+}
+WJ_peer_heir_candidate = {
+ is_alive = yes is_male = yes NOT = { has_variable = wj_peer_rank } NOT = { has_trait = WJ_peerage_trait }
+ dynasty = scope:wj_peer_deceased.dynasty top_liege = scope:wj_peer_deceased.var:wj_peer_realm.holder
+ NOT = { this = top_liege } NOT = { has_trait = incapable }
+}

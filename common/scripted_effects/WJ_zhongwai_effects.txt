@@ -1,0 +1,79 @@
+﻿# Private setter gate exists only during the atomic script operation, never in UI.
+WJ_zw_clear = {
+ WJ_mt_clear_draft = yes
+ remove_variable = wj_mt_mode
+ remove_variable = wj_mt_title_source remove_variable = wj_mt_title_receiver
+ remove_variable = wj_mt_private_source remove_variable = wj_mt_private_receiver
+ if = {
+  limit = { exists = var:wj_zw_emperor }
+  save_scope_as = wj_zw_departing
+  var:wj_zw_emperor = {
+   if = { limit = { exists = var:wj_zw_holder var:wj_zw_holder = scope:wj_zw_departing } remove_variable = wj_zw_holder }
+  }
+ }
+ remove_trait = WJ_zhongwai
+ if = {
+  limit = { vassal_contract_obligation_level:WJ_huangyue > 0 }
+  set_variable = { name = wj_zw_contract_write value = yes }
+  vassal_contract_set_obligation_level = { type = WJ_huangyue level = 0 }
+  remove_variable = wj_zw_contract_write
+ }
+ remove_variable = wj_zw_emperor
+}
+WJ_zw_reconcile = {
+ if = {
+  limit = { OR = { has_trait = WJ_zhongwai has_variable = wj_zw_emperor vassal_contract_obligation_level:WJ_huangyue > 0 } }
+  if = { limit = { NOT = { WJ_zw_valid = yes } } WJ_zw_clear = yes }
+  else = {
+   # Native succession may replace the emperor while leaving the actual regency.
+   save_scope_as = wj_zw_holder
+   if = {
+    limit = { exists = var:wj_zw_emperor NOT = { var:wj_zw_emperor = liege } }
+    var:wj_zw_emperor = { if = { limit = { exists = var:wj_zw_holder var:wj_zw_holder = scope:wj_zw_holder } remove_variable = wj_zw_holder } }
+   }
+   set_variable = { name = wj_zw_emperor value = liege }
+   liege = { set_variable = { name = wj_zw_holder value = scope:wj_zw_holder } }
+  }
+ }
+}
+# Caller may be the emperor or an official; retain the emperor fallback.
+WJ_save_military_handler = {
+ top_liege = {
+  save_scope_as = $SCOPE$
+  if = {
+   limit = { WJ_han_jin_law_trigger = yes }
+   if = { limit = { exists = diarch diarch = { WJ_zw_valid = yes } } diarch = { save_scope_as = $SCOPE$ } }
+  }
+  else_if = {
+   limit = { tgp_has_access_to_ministry_trigger = yes exists = title:e_minister_of_war.holder title:e_minister_of_war.holder.top_liege = this }
+   title:e_minister_of_war.holder = { save_scope_as = $SCOPE$ }
+  }
+ }
+}
+WJ_zw_grant = {
+ if = {
+  limit = { WJ_zw_can_acquire = yes }
+  save_scope_as = wj_zw_holder
+  liege = { save_scope_as = wj_zw_emperor set_variable = { name = wj_zw_holder value = scope:wj_zw_holder } }
+  set_variable = { name = wj_zw_emperor value = liege }
+  add_trait = WJ_zhongwai
+  if = { limit = { has_subject_contract_group = celestial_vassal }
+   set_variable = { name = wj_zw_contract_write value = yes }
+   vassal_contract_set_obligation_level = { type = WJ_huangyue level = 1 }
+   remove_variable = wj_zw_contract_write
+  }
+  if = { limit = { vassal_contract_obligation_level:WJ_huangyue = 1 }
+   scope:wj_zw_emperor = {
+   if = { limit = { is_ai = no } trigger_event = WJ_zhongwai.0002 }
+   every_vassal_or_below = {
+    limit = { is_ai = no NOT = { this = scope:wj_zw_holder } }
+    trigger_event = WJ_zhongwai.0002
+   }
+  }
+  }
+  else = {
+   WJ_zw_clear = yes
+   send_interface_message = { type = event_generic_bad title = WJ_zw_grant_failed desc = WJ_zw_grant_failed_desc }
+  }
+ }
+}

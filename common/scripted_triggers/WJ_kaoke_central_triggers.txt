@@ -1,0 +1,222 @@
+﻿WJ_kaoke_table_viewer_trigger = {
+ is_alive = yes
+ exists = top_liege
+ top_liege = {
+  is_alive = yes
+  government_has_flag = government_is_celestial
+  WJ_han_jin_law_trigger = yes
+  highest_held_title_tier >= tier_empire
+ }
+}
+# Candidate scope; viewer captured once by the roster filter. No recursive mufu walk.
+WJ_kaoke_close_relation_trigger = {
+ OR = {
+  AND = { exists = dynasty exists = scope:wj_kaoke_filter_viewer.dynasty dynasty = scope:wj_kaoke_filter_viewer.dynasty }
+  scope:wj_kaoke_filter_viewer = { has_relation_disciple = prev }
+  AND = { has_variable = wj_mufu_owner var:wj_mufu_owner = scope:wj_kaoke_filter_viewer }
+ }
+}
+WJ_kaoke_operator_trigger = {
+ is_ai = no
+ WJ_kaoke_table_viewer_trigger = yes
+ OR = {
+  this = top_liege
+  AND = { has_council_position = minister_personnel is_councillor_of = top_liege }
+ }
+}
+# 当前朝廷卡输入；不为外国朝廷路由或赋权。
+WJ_kaoke_court_entry_trigger = {
+ WJ_kaoke_table_viewer_trigger = yes
+ exists = scope:wj_kaoke_court
+ scope:wj_kaoke_court = top_liege
+}
+# Root 始终为查看者。此处存临时scope仅供本次只读判定使用。
+WJ_kaoke_draft_entry_valid_trigger = {
+ save_temporary_scope_as = wj_kaoke_check_entry
+ story_owner = root
+ exists = var:wj_kaoke_target
+ has_variable = wj_kaoke_delta
+ NOT = { var:wj_kaoke_delta = 0 }
+ WJ_kaoke_delta_abs_value = WJ_kaoke_delta_steps_value
+ var:wj_kaoke_target = {
+  WJ_kaoke_eligible_trigger = yes
+  top_liege = root.top_liege
+  var:wj_kaoke_window_epoch = scope:wj_kaoke_check_entry.var:wj_kaoke_epoch
+  var:wj_kaoke_start = scope:wj_kaoke_check_entry.var:wj_kaoke_start
+  var:wj_kaoke_realm = scope:wj_kaoke_check_entry.var:wj_kaoke_realm
+  var:wj_kaoke_realm = top_liege.primary_title
+ }
+ story_owner = {
+  NOT = {
+   any_in_list = {
+    variable = wj_kaoke_drafts
+    count > 1
+    var:wj_kaoke_target = scope:wj_kaoke_check_entry.var:wj_kaoke_target
+   }
+  }
+ }
+}
+WJ_kaoke_draft_valid_trigger = {
+ WJ_kaoke_operator_trigger = yes
+ has_variable = wj_kaoke_table_visible
+ var:wj_kaoke_draft_emperor = top_liege
+ var:wj_kaoke_draft_realm = top_liege.primary_title
+ NOT = { has_variable = wj_kaoke_central_cooldown }
+ WJ_kaoke_batch_count_value <= 10
+ WJ_kaoke_batch_m_value <= 100
+ NOT = {
+  any_in_list = {
+   variable = wj_kaoke_drafts
+   NOT = { WJ_kaoke_draft_entry_valid_trigger = yes }
+  }
+ }
+}
+WJ_kaoke_preview_target_trigger = {
+ WJ_kaoke_draft_valid_trigger = yes
+ exists = scope:target
+ scope:target = {
+  WJ_kaoke_eligible_trigger = yes
+  top_liege = root.top_liege
+  has_variable = wj_kaoke_window_epoch
+  has_variable = wj_kaoke_start
+  var:wj_kaoke_realm = top_liege.primary_title
+ }
+}
+WJ_kaoke_batch_ready_trigger = {
+ WJ_kaoke_draft_valid_trigger = yes
+ WJ_kaoke_batch_m_value > 0
+}
+WJ_kaoke_confirm_valid_trigger = {
+ WJ_kaoke_batch_ready_trigger = yes
+ has_variable = wj_kaoke_confirm_version
+ var:wj_kaoke_confirm_version = var:wj_kaoke_draft_version
+ var:wj_kaoke_confirm_m = WJ_kaoke_batch_m_value
+ var:wj_kaoke_confirm_risk = WJ_kaoke_batch_risk_value
+}
+WJ_kaoke_row_visible_trigger = {
+ WJ_kaoke_table_viewer_trigger = yes
+ exists = scope:target
+ scope:target = { WJ_kaoke_eligible_trigger = yes top_liege = root.top_liege }
+ OR = {
+  var:wj_kaoke_filter_tier = 0
+  scope:target = { highest_held_title_tier = root.var:wj_kaoke_filter_tier }
+ }
+ OR = {
+  var:wj_kaoke_filter_grade = 0
+  scope:target = { WJ_kaoke_grade_value = root.var:wj_kaoke_filter_grade }
+ }
+}
+# 已公开案卷使用曝光时保存的人物+代次；不依赖公开后可能失效的secret指针。
+WJ_kaoke_case_valid_trigger = {
+ WJ_kaoke_table_viewer_trigger = yes
+ this = top_liege
+ this = scope:wj_kaoke_injured_emperor
+ exists = scope:wj_kaoke_offender
+ scope:wj_kaoke_offender = {
+  is_alive = yes
+  top_liege = scope:wj_kaoke_injured_emperor
+  var:wj_kaoke_case_victim = scope:wj_kaoke_injured_emperor
+  var:wj_kaoke_case_realm = scope:wj_kaoke_injured_emperor.primary_title
+  var:wj_kaoke_case_epoch = scope:wj_kaoke_case_epoch
+  has_variable = wj_kaoke_case_pending
+ }
+ has_opinion_modifier = { target = scope:wj_kaoke_offender modifier = WJ_kaoke_malpractice_opinion }
+}
+WJ_kaoke_case_arrest_valid_trigger = {
+ WJ_kaoke_case_valid_trigger = yes
+ has_imprisonment_reason = scope:wj_kaoke_offender
+ is_character_interaction_valid = { recipient = scope:wj_kaoke_offender interaction = imprison_interaction }
+}
+
+# Task3：请求独立于主动事务；作用域为交互actor/recipient。
+WJ_kaoke_request_participants_trigger = {
+ exists = scope:actor
+ exists = scope:recipient
+ scope:actor = {
+  WJ_kaoke_eligible_trigger = yes
+  WJ_kaoke_table_viewer_trigger = yes
+  this != scope:recipient
+ }
+ scope:recipient = {
+  is_alive = yes
+  top_liege = scope:actor.top_liege
+ }
+ WJ_kaoke_request_reviewer_trigger = yes
+}
+WJ_kaoke_request_period_trigger = {
+ scope:actor = {
+  var:wj_kaoke_schema_version = 2
+  has_variable = wj_kaoke_start
+  has_variable = wj_kaoke_window_epoch
+  var:wj_kaoke_realm = top_liege.primary_title
+  var:wj_kaoke_start <= current_date
+  WJ_kaoke_days_value < 1825
+  NOT = { has_variable = wj_kaoke_central_request_used }
+ }
+}
+WJ_kaoke_request_influence_access_trigger = {
+ scope:actor.top_liege = scope:recipient.top_liege
+ scope:actor = { government_has_mechanic = administrative }
+ scope:recipient = {
+  OR = {
+   government_has_mechanic = administrative
+   AND = { exists = host host = { government_has_mechanic = administrative } }
+   AND = { highest_held_title_tier = tier_barony exists = liege liege = { government_has_mechanic = administrative } }
+  }
+ }
+}
+WJ_kaoke_request_gift_valid_trigger = {
+ scope:actor.gold >= 1
+}
+WJ_kaoke_request_offer_hook_valid_trigger = {
+ scope:offer_hook_strong = no
+ scope:recipient = { NOT = { has_hook = scope:actor } }
+}
+WJ_kaoke_request_offer_hook_strong_valid_trigger = {
+ scope:offer_hook = no
+ scope:actor = { has_trait_with_flag = can_offer_strong_hook_to_agents }
+ scope:recipient = { NOT = { has_strong_hook = scope:actor } }
+}
+WJ_kaoke_request_hook_valid_trigger = {
+ scope:actor = { has_usable_hook = scope:recipient }
+}
+WJ_kaoke_request_prestige_valid_trigger = {
+ scope:actor.prestige >= prestige_bribe_value
+}
+WJ_kaoke_request_influence_valid_trigger = {
+ WJ_kaoke_request_influence_access_trigger = yes
+ scope:actor.influence >= influence_bribe_value
+}
+WJ_kaoke_request_options_valid_trigger = {
+ custom_tooltip = {
+  text = WJ_kaoke_request_one_score_tt
+  WJ_kaoke_request_selection_count_value = 1
+ }
+ trigger_if = { limit = { scope:gift = yes } WJ_kaoke_request_gift_valid_trigger = yes }
+ trigger_if = { limit = { scope:offer_hook = yes } WJ_kaoke_request_offer_hook_valid_trigger = yes }
+ trigger_if = { limit = { scope:offer_hook_strong = yes } WJ_kaoke_request_offer_hook_strong_valid_trigger = yes }
+ trigger_if = { limit = { scope:hook = yes } WJ_kaoke_request_hook_valid_trigger = yes }
+ trigger_if = { limit = { scope:prestige = yes } WJ_kaoke_request_prestige_valid_trigger = yes }
+ trigger_if = { limit = { scope:influence = yes } WJ_kaoke_request_influence_valid_trigger = yes }
+}
+WJ_kaoke_request_can_send_trigger = {
+ WJ_kaoke_request_participants_trigger = yes
+ custom_tooltip = { text = WJ_ai_kaoke_just_tt NOT = { scope:recipient = { is_ai = yes has_trait = just } } }
+ custom_tooltip = { text = WJ_kaoke_request_period_tt WJ_kaoke_request_period_trigger = yes }
+ WJ_kaoke_request_options_valid_trigger = yes
+ custom_tooltip = { text = WJ_kaoke_request_willingness_tt WJ_kaoke_request_willingness_value >= 0 }
+}
+WJ_kaoke_request_success_valid_trigger = {
+ WJ_kaoke_request_can_send_trigger = yes
+ exists = scope:wj_kaoke_request_epoch
+ exists = scope:wj_kaoke_request_start
+ exists = scope:wj_kaoke_request_realm
+ exists = scope:wj_kaoke_request_emperor
+ scope:actor = {
+  var:wj_kaoke_window_epoch = scope:wj_kaoke_request_epoch
+  var:wj_kaoke_start = scope:wj_kaoke_request_start
+  var:wj_kaoke_realm = scope:wj_kaoke_request_realm
+  top_liege = scope:wj_kaoke_request_emperor
+  liege = scope:wj_kaoke_request_liege
+ }
+}

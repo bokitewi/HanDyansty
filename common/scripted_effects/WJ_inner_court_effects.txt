@@ -1,0 +1,102 @@
+﻿# All operations run from actual emperor/member scopes. No title/council reassignment.
+# GUI-only sorting. Native ordered_vassal + inline order_by; honor state is untouched.
+WJ_dasima_sort_candidates_effect = {
+ clear_variable_list = wj_dasima_candidates
+ save_scope_as = wj_inner_emperor
+ if = {
+  limit = { WJ_inner_emperor_trigger = yes }
+  ordered_vassal = {
+   # Ordered iterators otherwise select only the first result. Count the source
+   # population; the unchanged limit below still decides appointment eligibility.
+   max = { value = 0 every_vassal = { add = 1 } }
+   check_range_bounds = no
+   limit = { WJ_dasima_candidate_trigger = yes WJ_dasima_candidate_filter_trigger = yes }
+   order_by = WJ_dasima_sort_key_value
+   scope:wj_inner_emperor = { add_to_variable_list = { name = wj_dasima_candidates target = prev } }
+  }
+ }
+}
+WJ_dasima_build_candidates_effect = {
+ clear_variable_list = wj_dasima_candidates
+ save_scope_as = wj_inner_emperor
+ if = {
+  limit = { WJ_inner_emperor_trigger = yes }
+  every_vassal = {
+   limit = { WJ_dasima_candidate_trigger = yes WJ_dasima_candidate_filter_trigger = yes }
+   scope:wj_inner_emperor = { add_to_variable_list = { name = wj_dasima_candidates target = prev } }
+  }
+ }
+}
+WJ_dasima_clear_effect = {
+ if = {
+  limit = { exists = var:wj_dasima_emperor }
+  save_scope_as = wj_departing_dasima
+  var:wj_dasima_emperor = {
+   if = {
+    limit = {
+     exists = var:wj_dasima_holder
+     trigger_if = { limit = { exists = var:wj_dasima_holder } var:wj_dasima_holder = scope:wj_departing_dasima }
+    }
+    remove_variable ?= wj_dasima_holder
+   }
+  }
+ }
+ remove_variable ?= wj_dasima_emperor
+ remove_variable ?= wj_dasima_realm
+}
+WJ_dasima_revoke_effect = {
+ if = {
+  limit = { WJ_inner_emperor_trigger = yes exists = var:wj_dasima_holder }
+  save_scope_as = wj_inner_emperor
+  var:wj_dasima_holder = {
+   if = { limit = { is_alive = yes } add_opinion = { target = scope:wj_inner_emperor modifier = WJ_dasima_removed_opinion } }
+   WJ_dasima_clear_effect = yes
+  }
+  remove_variable ?= wj_dasima_holder
+ }
+}
+WJ_dasima_appoint_effect = {
+ save_scope_as = wj_inner_emperor
+ if = {
+  limit = {
+   WJ_inner_emperor_trigger = yes
+   exists = scope:candidate
+   scope:candidate = { WJ_dasima_candidate_trigger = yes }
+   trigger_if = {
+    limit = { exists = var:wj_dasima_holder }
+    NOT = { var:wj_dasima_holder = scope:candidate }
+   }
+  }
+  WJ_dasima_revoke_effect = yes
+  scope:candidate = { WJ_dasima_clear_effect = yes }
+  set_variable = { name = wj_dasima_holder value = scope:candidate }
+  scope:candidate = {
+   set_variable = { name = wj_dasima_emperor value = scope:wj_inner_emperor }
+   set_variable = { name = wj_dasima_realm value = scope:wj_inner_emperor.primary_title }
+   add_opinion = { target = scope:wj_inner_emperor modifier = WJ_dasima_granted_opinion }
+  }
+ }
+}
+WJ_dasima_reconcile_effect = {
+ if = {
+  limit = { has_variable = wj_dasima_emperor }
+  if = {
+   limit = { WJ_dasima_retention_trigger = yes }
+   save_scope_as = wj_continuing_dasima
+   # Deceased emperor's realm now held by the direct successor; no new award.
+   if = {
+    limit = { NOT = { var:wj_dasima_emperor = top_liege } }
+    WJ_dasima_clear_effect = yes
+    set_variable = { name = wj_dasima_emperor value = top_liege }
+    set_variable = { name = wj_dasima_realm value = top_liege.primary_title }
+    top_liege = { set_variable = { name = wj_dasima_holder value = scope:wj_continuing_dasima } }
+   }
+   else = {
+    # Keep the succession anchor current when the same emperor changes primary title.
+    set_variable = { name = wj_dasima_realm value = top_liege.primary_title }
+    top_liege = { set_variable = { name = wj_dasima_holder value = scope:wj_continuing_dasima } }
+   }
+  }
+  else = { WJ_dasima_clear_effect = yes }
+ }
+}

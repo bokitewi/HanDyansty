@@ -1,0 +1,155 @@
+﻿WJ_mt_clear_draft = {
+ clear_variable_list = wj_mt_pending clear_variable_list = wj_mt_available
+ clear_variable_list = wj_mt_titles_a clear_variable_list = wj_mt_titles_b
+ clear_variable_list = wj_mt_before clear_variable_list = wj_mt_created
+ remove_variable = wj_mt_title_a remove_variable = wj_mt_title_b
+ remove_variable = wj_mt_open remove_variable = wj_mt_a remove_variable = wj_mt_b
+ remove_variable = wj_mt_count remove_variable = wj_mt_cost
+ remove_variable = wj_mt_chance remove_variable = wj_mt_source_troops remove_variable = wj_mt_pending_troops
+ remove_variable = wj_mt_success remove_variable = wj_mt_broken
+}
+WJ_mt_finish = {
+ if = { limit = { var:wj_mt_mode = 1 } remove_variable = wj_mt_title_source remove_variable = wj_mt_title_receiver }
+ else = { remove_variable = wj_mt_private_source remove_variable = wj_mt_private_receiver }
+ WJ_mt_clear_draft = yes remove_variable = wj_mt_mode
+}
+# Rebuild live source list; keep pending references so stale regiments invalidate the whole order.
+WJ_mt_refresh = {
+ save_temporary_scope_as = wj_mt_operator
+ clear_variable_list = wj_mt_available
+ set_variable = { name = wj_mt_source_troops value = 0 }
+ set_variable = { name = wj_mt_pending_troops value = 0 }
+ set_variable = { name = wj_mt_count value = 0 }
+ if = {
+  limit = { WJ_mt_pair_valid = yes }
+  if = { limit = { var:wj_mt_mode = 1 WJ_mt_title_a_valid = yes }
+   var:wj_mt_title_a = {
+    every_owned_title_maa_regiment = {
+     limit = { WJ_mt_source_regiment = { OP = scope:wj_mt_operator } }
+     WJ_mt_collect_source = yes
+    }
+   }
+  }
+  else_if = { limit = { var:wj_mt_mode = 2 }
+   var:wj_mt_a = { every_maa_regiment = { limit = { WJ_mt_source_regiment = { OP = scope:wj_mt_operator } } WJ_mt_collect_source = yes } }
+  }
+  every_in_list = { variable = wj_mt_pending
+   scope:wj_mt_operator = {
+    change_variable = { name = wj_mt_count add = 1 }
+    change_variable = { name = wj_mt_pending_troops add = prev.maa_current_troops_count }
+   }
+  }
+ }
+ set_variable = { name = wj_mt_cost value = WJ_mt_cost }
+ set_variable = { name = wj_mt_chance value = WJ_mt_acceptance }
+}
+# Regiment scope, never modifies a regiment.
+WJ_mt_collect_source = {
+ scope:wj_mt_operator = {
+  change_variable = { name = wj_mt_source_troops add = prev.maa_current_troops_count }
+  if = { limit = { NOT = { is_target_in_variable_list = { name = wj_mt_pending target = prev } } } add_to_variable_list = { name = wj_mt_available target = prev } }
+ }
+}
+WJ_mt_open = {
+ WJ_mt_clear_draft = yes
+ set_variable = { name = wj_mt_mode value = $MODE$ }
+ if = { limit = { var:wj_mt_mode = 1 }
+  set_variable = { name = wj_mt_a value = var:wj_mt_title_source }
+  set_variable = { name = wj_mt_b value = var:wj_mt_title_receiver }
+ }
+ else = {
+  set_variable = { name = wj_mt_a value = var:wj_mt_private_source }
+  set_variable = { name = wj_mt_b value = var:wj_mt_private_receiver }
+ }
+ if = { limit = { WJ_mt_pair_valid = yes }
+  save_temporary_scope_as = wj_mt_operator
+  var:wj_mt_a = { every_held_title = { limit = { WJ_mt_title_legal = yes }
+   scope:wj_mt_operator = { add_to_variable_list = { name = wj_mt_titles_a target = prev } }
+  } }
+  var:wj_mt_b = { every_held_title = { limit = { WJ_mt_title_legal = yes }
+   scope:wj_mt_operator = { add_to_variable_list = { name = wj_mt_titles_b target = prev } }
+  } }
+  set_variable = { name = wj_mt_open value = yes }
+  WJ_mt_refresh = yes
+ }
+}
+WJ_mt_preview_all = {
+ WJ_mt_refresh = yes
+ every_in_list = { variable = wj_mt_available
+  scope:wj_mt_operator = { add_to_variable_list = { name = wj_mt_pending target = prev } }
+ }
+ WJ_mt_refresh = yes
+}
+# Copy first. Only after every new regiment exists with the same size/strength do we delete A's originals.
+WJ_mt_commit = {
+ if = { limit = { has_variable = wj_mt_open }
+ save_scope_value_as = { name = wj_mt_expected_count value = var:wj_mt_count }
+ save_scope_value_as = { name = wj_mt_expected_cost value = var:wj_mt_cost }
+ save_scope_value_as = { name = wj_mt_expected_chance value = var:wj_mt_chance }
+ WJ_mt_refresh = yes
+ if = { limit = {
+  WJ_mt_order_valid = yes
+  var:wj_mt_count = scope:wj_mt_expected_count
+  var:wj_mt_cost = scope:wj_mt_expected_cost
+  var:wj_mt_chance = scope:wj_mt_expected_chance
+ }
+  save_scope_as = wj_mt_operator
+  var:wj_mt_a = { save_scope_as = wj_mt_source }
+  var:wj_mt_b = { save_scope_as = wj_mt_receiver }
+  var:wj_mt_title_b = { save_scope_as = wj_mt_destination }
+  remove_variable = wj_mt_success
+  if = { limit = { var:wj_mt_a = this } set_variable = { name = wj_mt_success value = yes } }
+  else = { random = { chance = WJ_mt_acceptance set_variable = { name = wj_mt_success value = yes } } }
+  if = { limit = { has_variable = wj_mt_success }
+   clear_variable_list = wj_mt_before clear_variable_list = wj_mt_created remove_variable = wj_mt_broken
+   scope:wj_mt_destination = { every_owned_title_maa_regiment = { scope:wj_mt_operator = { add_to_variable_list = { name = wj_mt_before target = prev } } } }
+   every_in_list = { variable = wj_mt_pending
+    save_scope_as = wj_mt_original
+    scope:wj_mt_receiver = {
+     # Creation accepts a literal size; copy the dynamic size through the native resize effect below.
+     create_maa_regiment = { type_of = scope:wj_mt_original check_can_recruit = no title = scope:wj_mt_destination size = 1 }
+    }
+    scope:wj_mt_destination = {
+     every_owned_title_maa_regiment = {
+      limit = {
+       scope:wj_mt_operator = {
+        NOT = { is_target_in_variable_list = { name = wj_mt_before target = prev } }
+        NOT = { is_target_in_variable_list = { name = wj_mt_created target = prev } }
+       }
+      }
+      change_maa_regiment_size = scope:wj_mt_original.maa_size
+      change_maa_regiment_size = -1
+      change_maa_troops_count = { value = scope:wj_mt_original.maa_current_troops_count subtract = maa_current_troops_count }
+      if = { limit = { OR = { NOT = { maa_size = scope:wj_mt_original.maa_size } NOT = { maa_current_troops_count = scope:wj_mt_original.maa_current_troops_count } } }
+       scope:wj_mt_operator = { set_variable = { name = wj_mt_broken value = yes } }
+      }
+      scope:wj_mt_operator = { add_to_variable_list = { name = wj_mt_created target = prev } }
+     }
+    }
+   }
+   if = { limit = { NOT = { has_variable = wj_mt_broken } variable_list_size = { name = wj_mt_created value = var:wj_mt_count } }
+    # No cap checks: over-cap reception is explicitly permitted.
+    every_in_list = { variable = wj_mt_pending destroy_maa_regiment = yes }
+    if = { limit = { var:wj_mt_mode = 2 }
+     add_treasury = { value = var:wj_mt_cost multiply = -1 }
+     scope:wj_mt_source = { add_gold = scope:wj_mt_operator.var:wj_mt_cost }
+    }
+    send_interface_message = { type = event_generic_good title = WJ_mt_success_title desc = WJ_mt_success_desc left_icon = scope:wj_mt_source right_icon = scope:wj_mt_receiver }
+   }
+   else = {
+    every_in_list = { variable = wj_mt_created destroy_maa_regiment = yes }
+    send_interface_message = { type = event_generic_bad title = WJ_mt_invalid_title desc = WJ_mt_copy_failed }
+   }
+  }
+  else = {
+   if = { limit = { NOT = { scope:wj_mt_source = top_liege } }
+    scope:wj_mt_source = { set_variable = { name = wj_dd_crime_realm value = top_liege.primary_title } add_character_modifier = { modifier = WJ_dd_public_crime_modifier } }
+   }
+   send_interface_message = { type = event_generic_bad title = WJ_mt_declined_title desc = WJ_mt_declined_desc right_icon = scope:wj_mt_source }
+  }
+ }
+ else = { send_interface_message = { type = event_generic_bad title = WJ_mt_invalid_title desc = WJ_mt_invalid_desc } }
+ # Also clears an invalid/failed confirmation; no stale order can be resubmitted.
+ WJ_mt_finish = yes
+ }
+}

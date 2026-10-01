@@ -1,0 +1,98 @@
+﻿# Native random_list offers; do not charge the optional consideration before success.
+WJ_ai_choose_offer = {
+ if = {
+  limit = { scope:actor.gold >= 300 scope:recipient = { NOT = { has_hook = scope:actor } } }
+  random_list = {
+   1 = { save_scope_value_as = { name = wj_ai_offer value = 1 } }
+   1 = { save_scope_value_as = { name = wj_ai_offer value = 2 } }
+  }
+ }
+ else_if = { limit = { scope:actor.gold >= 300 } save_scope_value_as = { name = wj_ai_offer value = 1 } }
+ else = { save_scope_value_as = { name = wj_ai_offer value = 2 } }
+}
+WJ_ai_pay_offer = {
+ if = {
+  limit = { scope:wj_ai_offer = 1 }
+  scope:actor = { add_gold = -300 }
+  scope:recipient = { add_gold = 300 }
+ }
+ else_if = {
+  limit = { scope:wj_ai_offer = 2 }
+  scope:recipient = { add_hook = { type = favor_hook target = scope:actor } }
+ }
+}
+WJ_ai_bizhao_complete = {
+ if = {
+  limit = {
+   WJ_ai_bizhao_valid = yes WJ_mufu_selected_empty = yes
+   trigger_if = { limit = { scope:recipient = { is_ai = no } } WJ_ai_bizhao_reply_valid = yes }
+  }
+  WJ_mufu_attach = yes
+  if = {
+   limit = { scope:recipient = { exists = var:wj_mufu_owner var:wj_mufu_owner = scope:actor } }
+   scope:actor = { set_variable = { name = wj_ai_bizhao_month value = 1 months = 1 } }
+   if = { limit = { scope:recipient = { is_ai = no } } WJ_ai_pay_offer = yes }
+  }
+ }
+}
+WJ_ai_bizhao_clear = {
+ scope:actor ?= {
+  if = { limit = { var:wj_ai_bizhao_serial ?= scope:wj_ai_serial } remove_variable = wj_ai_bizhao_pending }
+ }
+}
+# Redirect a self-targeted AI request along its own actual chain only.
+WJ_ai_find_recommender = {
+ scope:actor = {
+  every_liege_or_above = {
+   limit = {
+    is_alive = yes is_landed = yes government_has_flag = government_is_celestial
+    WJ_ai_recommender_$ROAD$ = yes
+    is_imprisoned = no is_incapable = no
+    NOR = { has_character_flag = wj_$ROAD$_nomination_yearly_quota has_character_flag = wj_$ROAD$_nomination_pending }
+    scope:actor = { WJ_can_be_recommended_$ROAD$_candidate_trigger = { RECOMMENDER = prev } }
+   }
+   add_to_list = wj_ai_recommenders
+  }
+  employer ?= {
+   every_liege_or_above = {
+    limit = {
+     is_alive = yes is_landed = yes government_has_flag = government_is_celestial
+     WJ_ai_recommender_$ROAD$ = yes is_imprisoned = no is_incapable = no
+     NOR = { has_character_flag = wj_$ROAD$_nomination_yearly_quota has_character_flag = wj_$ROAD$_nomination_pending }
+     scope:actor = { WJ_can_be_recommended_$ROAD$_candidate_trigger = { RECOMMENDER = prev } }
+    }
+    add_to_list = wj_ai_recommenders
+   }
+   if = {
+    limit = {
+     is_landed = yes is_alive = yes WJ_ai_recommender_$ROAD$ = yes
+     government_has_flag = government_is_celestial is_imprisoned = no is_incapable = no
+     NOR = { has_character_flag = wj_$ROAD$_nomination_yearly_quota has_character_flag = wj_$ROAD$_nomination_pending }
+     scope:actor = { WJ_can_be_recommended_$ROAD$_candidate_trigger = { RECOMMENDER = prev } }
+    }
+    add_to_list = wj_ai_recommenders
+   }
+  }
+ }
+ random_in_list = { list = wj_ai_recommenders save_scope_as = recipient }
+}
+WJ_ai_nomination_grant = {
+ if = {
+  limit = {
+   WJ_ai_nomination_valid = { ROAD = $ROAD$ }
+   trigger_if = { limit = { scope:recipient = { is_ai = no } } WJ_ai_nomination_reply_valid = { ROAD = $ROAD$ } }
+  }
+  scope:actor = { WJ_grant_road_$ROAD$_effect = yes }
+  scope:recipient = { add_character_flag = { flag = wj_$ROAD$_nomination_yearly_quota years = 1 } }
+  if = { limit = { scope:recipient = { is_ai = no } } WJ_ai_pay_offer = yes }
+ }
+}
+WJ_ai_nomination_clear = {
+ scope:recipient ?= {
+  if = {
+   limit = { var:wj_ai_$ROAD$_serial ?= scope:wj_ai_nomination_serial var:wj_ai_$ROAD$_requester ?= scope:actor }
+   remove_variable = wj_ai_$ROAD$_requester
+   remove_character_flag = wj_$ROAD$_nomination_pending
+  }
+ }
+}

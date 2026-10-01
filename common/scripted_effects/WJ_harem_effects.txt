@@ -1,0 +1,153 @@
+﻿# Member scope. The registry lives on the issuing title and survives a normal succession.
+WJ_harem_remove_ranks_effect = {
+ remove_trait = SanGong_GongWei_1
+ remove_trait = WJ_harem_guiren remove_trait = WJ_harem_meiren
+ remove_trait = WJ_harem_gongren remove_trait = WJ_harem_cainv
+}
+WJ_harem_clear_effect = {
+ save_scope_as = wj_harem_removing
+ if = { limit = { exists = var:wj_harem_realm }
+  var:wj_harem_realm = { remove_list_variable = { name = wj_harem_members target = scope:wj_harem_removing } }
+ }
+ WJ_harem_remove_ranks_effect = yes
+ remove_trait = SanGong_Taihou remove_trait = SanGong_TaiHuangTaihou
+ remove_variable = wj_harem_realm remove_variable = wj_harem_widow
+}
+WJ_harem_register_effect = {
+ set_variable = { name = wj_harem_realm value = $EMPEROR$.primary_title }
+ save_scope_as = wj_harem_registered
+ $EMPEROR$.primary_title = {
+  if = { limit = { NOT = { is_target_in_variable_list = { name = wj_harem_members target = scope:wj_harem_registered } } }
+   add_to_variable_list = { name = wj_harem_members target = scope:wj_harem_registered }
+  }
+ }
+}
+# Emperor scope + huanghou. Source .012 awards, once and only after a valid appointment.
+WJ_harem_crown_effect = {
+ if = {
+  limit = { WJ_harem_can_crown = yes }
+  save_scope_as = HuangDi
+  if = {
+   limit = { exists = primary_spouse NOT = { primary_spouse = scope:huanghou } }
+   primary_spouse = { save_scope_as = wj_old_spouse }
+   divorce_effect = { DIVORCER = scope:HuangDi DIVORCEE = scope:wj_old_spouse }
+   make_concubine = scope:wj_old_spouse
+   scope:wj_old_spouse = { WJ_harem_remove_ranks_effect = yes add_trait = WJ_harem_guiren WJ_harem_register_effect = { EMPEROR = scope:HuangDi } }
+  }
+  if = { limit = { NOT = { primary_spouse = scope:huanghou } } marry = scope:huanghou }
+  scope:huanghou = {
+   WJ_harem_remove_ranks_effect = yes add_trait = SanGong_GongWei_1
+   WJ_harem_register_effect = { EMPEROR = scope:HuangDi }
+   add_stress = -66
+  }
+  add_prestige = 150 change_influence = 150 add_legitimacy = 150
+  trigger_event = WJ_harem.002
+ }
+}
+WJ_harem_assign_effect = {
+ save_scope_as = HuangDi
+ if = { limit = { WJ_inner_emperor_trigger = yes scope:recipient = { WJ_harem_candidate = { EMPEROR = scope:HuangDi } NOT = { has_trait = SanGong_GongWei_1 } } }
+  if = { limit = { scope:recipient = { NOT = { is_consort_of = scope:HuangDi } } } make_concubine = scope:recipient }
+  scope:recipient = {
+   WJ_harem_remove_ranks_effect = yes add_trait = $RANK$
+   WJ_harem_register_effect = { EMPEROR = scope:HuangDi }
+  }
+  if = { limit = { is_ai = no } send_interface_toast = { type = event_toast_effect_good title = WJ_harem_rank_notice right_icon = scope:recipient custom_tooltip = WJ_harem_rank_notice_desc } }
+ }
+}
+# Current emperor/old registered household. No forced relocation, executions or new marriages.
+WJ_harem_succession_effect = {
+ save_scope_as = wj_harem_emperor
+ primary_title = {
+  if = { limit = { exists = var:wj_harem_emperor NOT = { var:wj_harem_emperor = scope:wj_harem_emperor } }
+   var:wj_harem_emperor = { save_scope_as = wj_harem_previous }
+   every_in_list = {
+    variable = wj_harem_members
+    limit = { is_alive = yes }
+    if = { limit = { scope:wj_harem_previous = { dynasty = scope:wj_harem_emperor.dynasty } }
+     # Keep source palace migration for unlanded widows; never strip a ruler's lands.
+     if = { limit = { is_ruler = no } scope:wj_harem_emperor = { add_courtier = prev } }
+     if = { limit = { has_trait = SanGong_Taihou } remove_trait = SanGong_Taihou add_trait = SanGong_TaiHuangTaihou }
+     else_if = { limit = { has_trait = SanGong_GongWei_1 } remove_trait = SanGong_GongWei_1 add_trait = SanGong_Taihou }
+     else_if = { limit = { NOT = { has_trait = SanGong_TaiHuangTaihou } } set_variable = wj_harem_widow }
+    }
+    else = { WJ_harem_remove_ranks_effect = yes remove_trait = SanGong_Taihou remove_trait = SanGong_TaiHuangTaihou remove_variable = wj_harem_realm remove_variable = wj_harem_widow }
+   }
+   if = { limit = { scope:wj_harem_previous = { NOT = { dynasty = scope:wj_harem_emperor.dynasty } } } clear_variable_list = wj_harem_members }
+  }
+  set_variable = { name = wj_harem_emperor value = scope:wj_harem_emperor }
+ }
+ mother ?= {
+  if = { limit = { is_alive = yes top_liege = scope:wj_harem_emperor NOT = { has_trait = SanGong_TaiHuangTaihou } } 
+   WJ_harem_remove_ranks_effect = yes remove_variable = wj_harem_widow add_trait = SanGong_Taihou
+   WJ_harem_register_effect = { EMPEROR = scope:wj_harem_emperor }
+  }
+ }
+ every_consort = {
+  limit = { is_alive = yes is_female = yes WJ_harem_has_role = no }
+  add_trait = WJ_harem_guiren WJ_harem_register_effect = { EMPEROR = scope:wj_harem_emperor }
+ }
+ # Formal investiture is a real event/interaction, not just primary-spouse text.
+ if = { limit = { is_ai = yes exists = primary_spouse primary_spouse = { is_adult = yes } NOT = { any_consort = { has_trait = SanGong_GongWei_1 } } }
+  primary_spouse = { save_scope_as = huanghou }
+  WJ_harem_crown_effect = yes
+ }
+}
+# Source's three dowager posts; refresh only empty/invalid seats, not yearly reappointments.
+WJ_harem_update_dowager_posts = {
+ save_scope_as = wj_post_emperor
+ if = { limit = { exists = court_position:DongGongTaiHou_court_position court_position:DongGongTaiHou_court_position = { OR = { WJ_harem_member = no NOT = { has_trait = SanGong_Taihou } this = scope:wj_post_emperor.mother } } }
+  revoke_court_position = { recipient = court_position:DongGongTaiHou_court_position court_position = DongGongTaiHou_court_position }
+ }
+ if = { limit = { exists = court_position:XiGongTaiHou_court_position court_position:XiGongTaiHou_court_position = { OR = { WJ_harem_member = no NOT = { has_trait = SanGong_Taihou } NOT = { this = scope:wj_post_emperor.mother } } } }
+  revoke_court_position = { recipient = court_position:XiGongTaiHou_court_position court_position = XiGongTaiHou_court_position }
+ }
+ if = { limit = { exists = court_position:TaiHuangTaiHou_court_position court_position:TaiHuangTaiHou_court_position = { OR = { WJ_harem_member = no NOT = { has_trait = SanGong_TaiHuangTaihou } } } }
+  revoke_court_position = { recipient = court_position:TaiHuangTaiHou_court_position court_position = TaiHuangTaiHou_court_position }
+ }
+ if = { limit = { NOT = { exists = court_position:XiGongTaiHou_court_position } mother = { WJ_harem_member = yes has_trait = SanGong_Taihou } }
+  appoint_court_position = { recipient = mother court_position = XiGongTaiHou_court_position }
+ }
+ if = { limit = { NOT = { exists = court_position:DongGongTaiHou_court_position } }
+  ordered_courtier = { limit = { WJ_harem_member = yes has_trait = SanGong_Taihou NOT = { this = scope:wj_post_emperor.mother } } order_by = age max = 1
+   save_scope_as = wj_post_member
+   scope:wj_post_emperor = { appoint_court_position = { recipient = scope:wj_post_member court_position = DongGongTaiHou_court_position } }
+  }
+ }
+ if = { limit = { NOT = { exists = court_position:TaiHuangTaiHou_court_position } }
+  ordered_courtier = { limit = { WJ_harem_member = yes has_trait = SanGong_TaiHuangTaihou } order_by = age max = 1
+   save_scope_as = wj_post_member
+   scope:wj_post_emperor = { appoint_court_position = { recipient = scope:wj_post_member court_position = TaiHuangTaiHou_court_position } }
+  }
+ }
+}
+# Source creates 20 candidates; retain count and native court membership, no separate window/global selection.
+WJ_harem_create_candidate_effect = {
+ create_character = {
+  location = root.location culture = root.culture rite = root.rite
+  gender = female age = { 18 25 } random_traits = yes
+  trait = WJ_harem_cainv save_scope_as = wj_harem_candidate
+ }
+ add_courtier = scope:wj_harem_candidate
+ scope:wj_harem_candidate = { WJ_harem_register_effect = { EMPEROR = root } }
+}
+
+# Source noble selection; only living adult AI fathers, one daughter per house candidate round.
+WJ_harem_create_noble_candidate_effect = {
+ if = { limit = { any_vassal_or_below = { is_alive = yes is_male = yes is_ai = yes age >= 40 highest_held_title_tier >= tier_county exists = house NOT = { dynasty = root.dynasty } NOT = { has_character_flag = XiuNv_Flag } } }
+  random_vassal_or_below = {
+   limit = { is_alive = yes is_male = yes is_ai = yes age >= 40 highest_held_title_tier >= tier_county exists = house NOT = { dynasty = root.dynasty } NOT = { has_character_flag = XiuNv_Flag } }
+   add_character_flag = { flag = XiuNv_Flag years = 10 }
+   save_scope_as = wj_selection_father
+  }
+  create_character = {
+   location = root.location culture = scope:wj_selection_father.culture rite = scope:wj_selection_father.rite
+   dynasty_house = scope:wj_selection_father.house father = scope:wj_selection_father
+   gender = female age = { 18 25 } random_traits = yes
+   trait = WJ_harem_cainv save_scope_as = wj_harem_candidate
+  }
+  add_courtier = scope:wj_harem_candidate
+  scope:wj_harem_candidate = { WJ_harem_register_effect = { EMPEROR = root } }
+ }
+ else = { WJ_harem_create_candidate_effect = yes }
+}

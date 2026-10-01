@@ -1,0 +1,326 @@
+﻿# Native frontier commission adapted for Han/Jin; companion override keeps its non-Han path.
+# Requires a real district; no separate conquest privilege or troop transfer.
+WJ_conquest_commission_interaction = {
+	category = interaction_category_diplomacy
+	interface_priority = 80
+	icon = icon_coax_to_war
+	desc = WJ_conquest_commission_interaction_desc
+	filter_tags = { admin_governor }
+
+	is_highlighted = { WJ_conquest_commission_parties_trigger = yes }
+
+	target_type = title
+	target_filter = secondary_recipient_de_jure_titles
+	can_be_picked_title = { WJ_conquest_target_trigger = yes }
+
+	populate_recipient_list = {
+		scope:recipient = {
+			every_character_to_title_neighboring_duchy = {
+				limit = {
+					holder ?= { top_liege != scope:actor.top_liege }
+				}
+				holder ?= { add_to_list = characters }
+			}
+		}
+	}
+	redirect = {
+		scope:recipient = {
+			random_character_to_title_neighboring_duchy = {
+				limit = {
+					holder ?= { top_liege != scope:actor.top_liege }
+				}
+				holder = { save_scope_as = secondary_recipient }
+			}
+		}
+	}
+	has_valid_target = { WJ_conquest_target_trigger = yes }
+
+	ai_min_reply_days = 3
+	ai_max_reply_days = 9
+	popup_on_receive = yes
+	ai_maybe = yes
+	can_send_despite_rejection = yes
+	greeting = positive
+	notification_text = WJ_conquest_commission_proposal
+	pre_answer_yes_key = ACCEPT
+	pre_answer_no_key = DECLINE
+	cooldown_against_recipient = { years = 10 }
+
+	is_shown = {
+		scope:actor = { WJ_conquest_commander_trigger = yes }
+		scope:recipient = {
+			WJ_conquest_authorized_governor_trigger = yes
+			top_liege = scope:actor.top_liege
+		}
+		scope:actor != scope:recipient
+	}
+	is_valid_showing_failures_only = {
+		WJ_conquest_commission_parties_trigger = yes
+		custom_tooltip = {
+			text = WJ_conquest_no_target_tt
+			scope:recipient = {
+				any_character_to_title_neighboring_duchy = {
+					is_title_created = yes
+					exists = holder
+					holder = { top_liege != scope:actor.top_liege }
+				}
+			}
+		}
+	}
+
+	send_options_exclusive = no
+	# Native optional aid; Grand Marshal may commission a war but cannot pledge troops.
+
+	send_option = {
+		is_valid = { scope:actor = { has_usable_hook = scope:recipient } }
+		flag = hook
+		localization = GENERIC_SPEND_A_HOOK
+		can_invalidate_interaction = yes
+	}
+	should_use_extra_icon = { scope:actor = { has_usable_hook = scope:recipient } }
+	extra_icon = "gfx/interface/icons/character_interactions/hook_icon.dds"
+	auto_accept = {
+		custom_description = {
+			text = "spending_hook"
+			subject = scope:actor
+			object = scope:recipient
+			scope:hook = yes
+			scope:actor = { has_usable_hook = scope:recipient }
+		}
+	}
+
+	on_send = {
+		scope:recipient.primary_title = { save_scope_as = WJ_conquest_core }
+		scope:actor.top_liege = { save_scope_as = WJ_conquest_court }
+		# Preserve allegiance only; the native war effect resolves the defender.
+		scope:secondary_recipient.top_liege = { save_scope_as = WJ_conquest_enemy_realm }
+		scope:target.holder.top_liege = { save_scope_as = WJ_conquest_target_realm }
+
+	}
+	on_accept = {
+		custom_tooltip = WJ_conquest_commission_accept_tt
+		hidden_effect = { WJ_conquest_accept_effect = yes }
+	}
+	on_decline = {
+		custom_tooltip = WJ_conquest_commission_decline_tt
+		hidden_effect = { WJ_conquest_decline_effect = yes }
+	}
+
+	cost = {
+		prestige = {
+			# BASE COSTS
+			add = {
+				value = massive_prestige_value
+				desc = BASE
+			}
+			# DOMINANT FAMILY DISCOUNTS
+			if = {
+				limit = { scope:actor.house ?= { is_dominant_family = yes } }
+				multiply = {
+					value = 0.75
+					desc = DOMINANT_FAMILY_DISCOUNT
+				}
+			}
+			# DOMICILE BUILDING DISCOUNTS
+		}
+	}
+
+	ai_potential = { scope:actor = { WJ_conquest_commander_trigger = yes } }
+	ai_targets = { ai_recipients = realm_characters }
+
+	ai_accept = {
+		base = 0
+		modifier = { # My house is powerful
+			add = -10
+			desc = MY_HOUSE_IS_POWERFUL
+			house ?= { is_powerful_family = yes }
+		}
+		modifier = { # My house is dominant
+			add = -25
+			desc = MY_HOUSE_IS_DOMINANT
+			house ?= { is_dominant_family = yes }
+		}
+		modifier = {
+			scope:actor.house = { is_powerful_family = yes }
+			add = 10
+			desc = YOUR_FAMILY_IS_POWERFUL
+		}
+		modifier = {
+			scope:actor.house = { is_dominant_family = yes }
+			add = 25
+			desc = YOUR_FAMILY_IS_DOMINANT
+		}
+		opinion_modifier = {
+			opinion_target = scope:actor
+			multiplier = 0.5
+		}
+		modifier = { # You're my friend :)
+			add = 10
+			desc = youre_my_friend_tt
+			has_relation_friend = scope:actor
+		}
+		modifier = { # You're my guardian
+			add = 10
+			desc = youre_my_guardian_tt
+			has_relation_guardian = scope:actor
+		}
+		modifier = {
+			exists = scope:actor.house
+			exists = scope:recipient.house
+			house.house_head.top_liege ?= scope:actor.house.house_head.top_liege
+			add = {
+				value = scope:actor.house.house_power_score
+				subtract = scope:recipient.house.house_power_score
+			}
+			desc = RELATIVE_FAMILY_RATING
+		}
+		modifier = {
+			exists = scope:actor.house
+			exists = house
+			scope:recipient.dynasty.dynasty_prestige_level != scope:actor.dynasty.dynasty_prestige_level
+			add = {
+				value = scope:actor.dynasty.dynasty_prestige_level
+				subtract = scope:recipient.dynasty.dynasty_prestige_level
+				multiply = 10
+			}
+			desc = RELATIVE_FAMILY_RENOWN
+		}
+		modifier = {
+			faith = {
+				faith_hostility_level = {
+					target = scope:actor.faith
+					value >= faith_astray_level
+				}
+			}
+			add = {
+				value = "faith.faith_hostility_level(scope:actor.faith)"
+				multiply = -10
+			}
+			desc = FAITH_HOSTILITY_LEVEL
+		}
+		modifier = {
+			exists = scope:actor.top_liege.primary_title.state_faith
+			faith = {
+				faith_hostility_level = {
+					target = scope:actor.top_liege.primary_title.state_faith
+					value >= faith_astray_level
+				}
+			}
+			add = {
+				value = "faith.faith_hostility_level(scope:actor.top_liege.primary_title.state_faith)"
+				multiply = -5
+			}
+			desc = FAITH_HOSTILITY_LEVEL_STATE_FAITH
+		}
+		modifier = {
+			culture != scope:actor.culture
+			"scope:recipient.culture.cultural_acceptance(scope:actor.culture)" < 50
+			add = {
+				value = 50
+				subtract = "scope:recipient.culture.cultural_acceptance(scope:actor.culture)"
+				multiply = -0.25
+				round = yes
+			}
+			desc = CULTURAL_ACCEPTANCE
+		}
+		modifier = {
+			culture != scope:actor.culture
+			"scope:recipient.culture.cultural_acceptance(scope:actor.culture)" >= 50
+			add = {
+				value = "scope:recipient.culture.cultural_acceptance(scope:actor.culture)"
+				subtract = 50
+				multiply = 0.25
+				round = yes
+			}
+			desc = CULTURAL_ACCEPTANCE
+		}
+		modifier = {
+			add = scope:recipient.current_military_strength
+			desc = RECIPIENT_MILITARY_STRENGTH
+		}
+
+		modifier = {
+			add = {
+				value = scope:secondary_recipient.top_liege.current_military_strength
+				multiply = -1
+			}
+			desc = SECONDARY_RECIPIENT_MILITARY_STRENGTH
+		}
+		modifier = { # Must not be at war already
+			is_at_war = yes
+			add = -1000
+			desc = ALREADY_AT_WAR
+		}
+	}
+
+	ai_frequency_by_tier = {
+		barony = 0
+		county = 0
+		duchy = 0
+		kingdom = 120
+		empire = 120
+		hegemony = 120
+	}
+
+	ai_will_do = {
+		base = 50
+		modifier = { # The AI will only use a Hook if they couldn't otherwise do this
+			scope:hook = yes
+			add = -1
+		}
+		modifier = { # My house needs more members
+			add = 100
+			scope:actor.house = {
+				any_house_member = {
+					count < 3
+					save_temporary_scope_as = house_member_temp
+					NOT = {
+						scope:actor.top_liege.faith = { has_dominant_ruling_gender = scope:house_member_temp }
+					}
+				}
+			}
+		}
+		opinion_modifier = { # Opinion
+			opinion_target = scope:recipient
+			multiplier = 0.5
+		}
+		modifier = { # My rival
+			add = -25
+			scope:actor = { has_relation_rival = scope:recipient }
+		}
+		modifier = { # My friend
+			add = 25
+			scope:actor = { has_relation_friend = scope:recipient }
+		}
+		modifier = { # My ward
+			add = 25
+			scope:actor = { has_relation_guardian = scope:recipient }
+		}
+		modifier = { # I care about bloodlines and dynasties and whatnot
+			add = -25
+			scope:actor = {
+				OR = {
+					has_trait = arrogant
+					has_trait = callous
+				}
+			}
+		}
+		modifier = { # I will not adopt filthy filthy heretics
+			factor = 0
+			ai_zeal >= medium_positive_ai_value
+			faith = {
+				faith_hostility_level = {
+					target = scope:recipient.faith
+					value >= faith_astray_level
+				}
+			}
+		}
+		modifier = { # I'll not make them start a war they'll surely lose
+			factor = 0
+			scope:recipient.current_military_strength < {
+				value = scope:secondary_recipient.current_military_strength
+				multiply = 0.75
+			}
+		}
+	}
+}

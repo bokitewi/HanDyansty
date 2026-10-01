@@ -1,0 +1,98 @@
+﻿# Independent Han/Jin contract privilege. Native is_governor is widened to
+# celestial county offices by ACTIVE/zz_WJ_celestial_county_eligibility.txt.
+# No province identity test here: Sili supplies celestial_military_appointment.
+WJ_conquest_eligible_governor_trigger = {
+	is_alive = yes
+	WJ_han_jin_law_trigger = yes
+	government_has_flag = government_is_celestial
+	is_governor = yes
+	has_subject_contract_group = celestial_vassal
+	vassal_contract_has_flag = celestial_military_appointment
+	save_temporary_scope_as = WJ_conquest_border_governor
+	# Native celestial province border test, against actual subrealm counties.
+	any_sub_realm_county = {
+		any_neighboring_county = {
+			holder = {
+				top_liege != scope:WJ_conquest_border_governor.top_liege
+			}
+		}
+	}
+}
+
+WJ_conquest_authorized_governor_trigger = {
+	WJ_conquest_eligible_governor_trigger = yes
+	WJ_dd_head_trigger = yes
+}
+
+# Called only in the native declare-war interaction (actor character scope).
+# It is neither a CB nor a blanket override of internal wars or engine gates.
+
+
+WJ_conquest_commander_trigger = {
+	is_alive = yes
+	WJ_han_jin_law_trigger = yes
+	# Native minister OR branch is identified by office, not personal government.
+	WJ_zw_not_superseded = yes
+	top_liege = { government_has_flag = government_is_celestial }
+	OR = {
+		top_liege = this
+		WJ_zw_valid = yes
+		AND = {
+			exists = title:e_minister_grand_marshal.holder
+			this = title:e_minister_grand_marshal.holder
+		}
+	}
+}
+
+# Interaction scopes: actor = emperor/current Grand Marshal; recipient = governor.
+WJ_conquest_commission_parties_trigger = {
+	exists = scope:actor
+	exists = scope:recipient
+	scope:actor = { WJ_conquest_commander_trigger = yes }
+	scope:actor != scope:recipient
+	scope:recipient = {
+		WJ_conquest_authorized_governor_trigger = yes
+		top_liege = scope:actor.top_liege
+		is_adult = yes
+		is_at_war = no
+	}
+}
+
+# Native protectorate branch: created land-adjacent duchy outside our court.
+# start_war and influence_war_cb own defender resolution and war/territory rules.
+WJ_conquest_target_trigger = {
+	exists = scope:target
+	exists = scope:secondary_recipient
+	scope:secondary_recipient = {
+		is_alive = yes
+		top_liege != scope:recipient.top_liege
+	}
+	scope:target = {
+		is_title_created = yes
+		tier = tier_duchy
+		holder.top_liege != scope:recipient.top_liege
+	}
+	scope:recipient = {
+		any_character_to_title_neighboring_duchy = { this = scope:target }
+	}
+}
+
+WJ_conquest_request_still_valid_trigger = {
+	WJ_conquest_commission_parties_trigger = yes
+	scope:recipient.primary_title = scope:WJ_conquest_core
+	exists = scope:WJ_conquest_court
+	exists = scope:WJ_conquest_enemy_realm
+	exists = scope:WJ_conquest_target_realm
+	scope:actor.top_liege = scope:WJ_conquest_court
+	scope:recipient.top_liege = scope:WJ_conquest_court
+	WJ_conquest_target_trigger = yes
+	# These are allegiance snapshots only, never a guess at the war defender.
+	scope:secondary_recipient.top_liege = scope:WJ_conquest_enemy_realm
+	scope:target.holder.top_liege = scope:WJ_conquest_target_realm
+	trigger_if = {
+		limit = { scope:hook = yes }
+		scope:actor = { has_usable_hook = scope:recipient }
+	}
+
+}
+

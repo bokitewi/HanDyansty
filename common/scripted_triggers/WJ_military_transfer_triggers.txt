@@ -1,0 +1,77 @@
+﻿# All operation state belongs to the issuing player, never to A or B.
+WJ_mt_authority = {
+ is_alive = yes is_ai = no WJ_han_jin_law_trigger = yes
+ custom_tooltip = { text = WJ_mt_zhongwai_exclusive_tt OR = { WJ_zw_valid = yes NOT = { WJ_zw_realm_taken_over = yes } } }
+ OR = { WJ_zw_valid = yes AND = { WJ_dd_head_trigger = yes vassal_contract_obligation_level:WJ_sanjie > 0 NOT = { primary_title = { has_variable = wj_dd_grant_pending } } NOT = { is_at_war_with = top_liege } } }
+}
+WJ_mt_military_person = {
+ OR = {
+  WJ_contract_sanjie_visible_trigger = yes
+  has_title = title:e_minister_grand_marshal
+  AND = { exists = top_liege.var:wj_dasima_holder top_liege.var:wj_dasima_holder = this }
+ }
+}
+WJ_mt_person_allowed = {
+ is_alive = yes
+ OR = { is_landed = yes any_held_title = { WJ_mt_title_legal = yes } }
+ top_liege = $OP$.top_liege
+ $OP$ = { WJ_mt_authority = yes }
+ OR = {
+  this = $OP$
+  AND = {
+   $OP$ = { WJ_zw_valid = yes }
+   OR = { this = $OP$.liege WJ_mt_military_person = yes }
+  }
+  AND = {
+   $OP$ = { WJ_dd_head_trigger = yes }
+   WJ_contract_sanjie_visible_trigger = yes
+   WJ_dd_member_of_core_trigger = { CORE = $OP$.primary_title }
+   OR = {
+    AND = { highest_held_title_tier <= tier_kingdom $OP$ = { vassal_contract_has_flag = WJ_shichijie } }
+    AND = {
+     highest_held_title_tier <= tier_duchy
+     $OP$ = { OR = { vassal_contract_has_flag = WJ_chijie AND = { vassal_contract_has_flag = WJ_jiajie is_at_war = yes } } }
+    }
+   }
+  }
+ }
+}
+WJ_mt_title_legal = { tier >= tier_duchy is_noble_family_title = no exists = holder }
+WJ_mt_pair_valid = {
+ WJ_mt_authority = yes
+ exists = var:wj_mt_a exists = var:wj_mt_b
+ var:wj_mt_a = {
+  WJ_mt_person_allowed = { OP = root }
+  trigger_if = { limit = { root = { var:wj_mt_mode = 1 } } highest_held_title_tier >= tier_duchy }
+ }
+ var:wj_mt_b = { WJ_mt_person_allowed = { OP = root } highest_held_title_tier >= tier_duchy }
+}
+WJ_mt_title_a_valid = {
+ WJ_mt_pair_valid = yes
+ exists = var:wj_mt_title_a
+ var:wj_mt_title_a = { WJ_mt_title_legal = yes holder = root.var:wj_mt_a }
+}
+WJ_mt_title_b_valid = {
+ WJ_mt_pair_valid = yes
+ exists = var:wj_mt_title_b
+ var:wj_mt_title_b = { WJ_mt_title_legal = yes holder = root.var:wj_mt_b }
+ trigger_if = { limit = { var:wj_mt_mode = 1 exists = var:wj_mt_title_a } NOT = { var:wj_mt_title_a = var:wj_mt_title_b } }
+}
+# Regiment scope. Raised regiments must first be disbanded: no deleting units in a battle.
+WJ_mt_source_regiment = {
+ is_raised = no
+ regiment_owner = $OP$.var:wj_mt_a
+ trigger_if = {
+  limit = { $OP$ = { var:wj_mt_mode = 1 } }
+  is_title_maa_regiment = yes
+  regiment_owning_title = $OP$.var:wj_mt_title_a
+ }
+ trigger_else = { is_title_maa_regiment = no is_regular_maa_regiment = yes }
+}
+WJ_mt_order_valid = {
+ WJ_mt_pair_valid = yes WJ_mt_title_b_valid = yes
+ trigger_if = { limit = { var:wj_mt_mode = 1 } WJ_mt_title_a_valid = yes }
+ variable_list_size = { name = wj_mt_pending value > 0 }
+ any_in_list = { variable = wj_mt_pending count = all WJ_mt_source_regiment = { OP = root } }
+ trigger_if = { limit = { var:wj_mt_mode = 2 } treasury >= WJ_mt_cost }
+}

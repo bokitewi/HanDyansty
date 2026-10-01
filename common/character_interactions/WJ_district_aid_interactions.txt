@@ -1,0 +1,117 @@
+﻿# Native request lifecycle; random answer means personal service, never denial of aid.
+wj_dd_request_aid_interaction = {
+ filter_tags = { wj_district_management }
+ icon = icon_soldier_survivor category = interaction_category_wj_district common_interaction = yes
+ desc = wj_dd_request_aid_interaction_desc
+ greeting = positive notification_text = WJ_dd_aid_request_notification
+ options_heading = WJ_dd_aid_options
+ popup_on_receive = yes pause_on_receive = yes
+ cooldown = { days = 30 }
+ ai_maybe = yes ai_min_reply_days = 1 ai_max_reply_days = 3
+ can_send_despite_rejection = yes
+ is_shown = {
+  scope:actor = { WJ_dd_member_trigger = yes NOT = { WJ_dd_head_trigger = yes } this != scope:recipient }
+  scope:recipient = { WJ_dd_head_trigger = yes top_liege = scope:actor.top_liege }
+  scope:actor = { WJ_dd_member_of_core_trigger = { CORE = scope:recipient.primary_title } }
+ }
+ is_valid_showing_failures_only = {
+  custom_tooltip = { text = WJ_dd_aid_available_tt WJ_dd_request_available_trigger = yes }
+ }
+ can_send = { WJ_dd_request_available_trigger = yes }
+ send_options_exclusive = no
+ send_option = {
+  flag = wj_dd_personal localization = WJ_dd_request_personal
+  is_valid = { scope:recipient = { WJ_dd_aid_joiner_trigger = { BENEFICIARY = scope:actor } } }
+ }
+ auto_accept = {
+  OR = { scope:wj_dd_personal = no scope:recipient = { is_ai = no } }
+ }
+ on_accept = { WJ_dd_answer_aid_effect = yes }
+ on_decline = {
+  scope:actor = { save_scope_as = wj_dd_beneficiary }
+  scope:recipient = { save_scope_as = wj_dd_commander }
+  WJ_dd_dispatch_request_effect = yes
+ }
+ ai_accept = {
+  base = 50
+  opinion_modifier = { opinion_target = scope:actor who = scope:recipient multiplier = 0.25 }
+  modifier = { add = 20 scope:recipient = { has_relation_disciple = scope:actor } desc = WJ_dd_personal_disciple_reason }
+  modifier = { add = 15 scope:actor = { WJ_mufu_member_valid = yes var:wj_mufu_owner = scope:recipient } desc = WJ_dd_personal_staff_reason }
+  modifier = { add = 10 scope:recipient = { has_relation_friend = scope:actor } desc = WJ_dd_personal_friend_reason }
+  modifier = { add = -20 scope:recipient = { has_relation_rival = scope:actor } desc = WJ_dd_personal_rival_reason }
+  modifier = { add = -15 scope:recipient = { is_at_war = yes } desc = WJ_dd_personal_busy_reason }
+  modifier = { WJ_dd_personal_raw_value < 10 add = WJ_dd_personal_floor_adjustment desc = WJ_dd_personal_floor_reason }
+  modifier = { WJ_dd_personal_raw_value > 100 add = WJ_dd_personal_ceiling_adjustment desc = WJ_dd_personal_ceiling_reason }
+ }
+ ai_potential = { scope:actor = { WJ_dd_member_trigger = yes is_at_war = yes NOT = { WJ_dd_head_trigger = yes } } }
+ ai_frequency = 3
+ ai_targets = { ai_recipients = realm_characters }
+ ai_will_do = {
+  base = 10
+  modifier = { add = 100 scope:actor = { NOT = { any_war_ally = { always = yes } } } }
+  modifier = { add = 30 scope:actor = { any_war_enemy = { current_military_strength > scope:actor.current_military_strength } } }
+  modifier = { add = 15 scope:wj_dd_personal = yes scope:recipient = { is_at_war = no } }
+ }
+}
+wj_dd_pardon_interaction = {
+ filter_tags = { wj_district_management }
+ icon = icon_contract_modification_single category = interaction_category_wj_district
+ common_interaction = yes auto_accept = yes desc = wj_dd_pardon_interaction_desc
+ is_shown = {
+  scope:actor = { WJ_dd_pardon_authority_trigger = yes }
+  scope:recipient = { is_alive = yes top_liege = scope:actor.top_liege has_variable = wj_dd_crime_realm var:wj_dd_crime_realm = top_liege.primary_title }
+ }
+ is_valid_showing_failures_only = {
+  scope:actor = { WJ_dd_pardon_authority_trigger = yes }
+  scope:recipient = { is_alive = yes top_liege = scope:actor.top_liege has_variable = wj_dd_crime_realm var:wj_dd_crime_realm = top_liege.primary_title }
+ }
+ on_accept = {
+  if = {
+   limit = {
+    scope:actor = { WJ_dd_pardon_authority_trigger = yes }
+    scope:recipient = { top_liege = scope:actor.top_liege has_variable = wj_dd_crime_realm var:wj_dd_crime_realm = top_liege.primary_title }
+   }
+   scope:recipient = { remove_variable = wj_dd_crime_realm remove_character_modifier = WJ_dd_public_crime_modifier }
+  }
+ }
+ ai_frequency = 12
+ ai_targets = { ai_recipients = realm_characters }
+ ai_potential = { scope:actor = { WJ_dd_pardon_authority_trigger = yes } }
+ ai_will_do = { base = 1 }
+}
+wj_dd_request_pardon_interaction = {
+ filter_tags = { wj_district_management }
+ icon = icon_contract_modification_single category = interaction_category_wj_district
+ common_interaction = yes desc = wj_dd_request_pardon_interaction_desc
+ # Imperial/regent requests normally go to the current justice minister.
+ # Their separate direct-pardon interaction remains fully authoritative.
+ redirect = {
+  if = {
+   limit = {
+    scope:recipient = { WJ_dd_pardon_authority_trigger = yes NOT = { has_council_position = minister_justice } }
+    exists = scope:actor.top_liege.cp:minister_justice
+    scope:actor.top_liege.cp:minister_justice = { is_alive = yes is_imprisoned = no is_councillor_of = scope:actor.top_liege this != scope:actor }
+   }
+   scope:recipient = { save_scope_as = wj_dd_pardon_entry }
+   scope:actor.top_liege.cp:minister_justice = { save_scope_as = recipient }
+  }
+ }
+ is_shown = {
+  scope:actor = { is_alive = yes has_variable = wj_dd_crime_realm var:wj_dd_crime_realm = top_liege.primary_title }
+  scope:recipient = { WJ_dd_pardon_authority_trigger = yes top_liege = scope:actor.top_liege this != scope:actor }
+ }
+ on_accept = {
+  if = {
+   limit = {
+    scope:actor = { is_alive = yes has_variable = wj_dd_crime_realm var:wj_dd_crime_realm = top_liege.primary_title }
+    scope:recipient = { WJ_dd_pardon_authority_trigger = yes top_liege = scope:actor.top_liege }
+   }
+   scope:actor = { remove_variable = wj_dd_crime_realm remove_character_modifier = WJ_dd_public_crime_modifier }
+  }
+ }
+ ai_accept = { base = 0 }
+ ai_frequency = 12
+ ai_targets = { ai_recipients = realm_characters }
+ ai_potential = { scope:actor = { has_variable = wj_dd_crime_realm var:wj_dd_crime_realm = top_liege.primary_title } }
+ ai_will_do = { base = 10 }
+}

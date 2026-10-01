@@ -1,0 +1,408 @@
+﻿# Original definitions preserved; only the district acceptance modifier is inserted.
+
+start_teach_governor_interaction = {
+	icon = icon_teach_governor
+	interface_priority = 20
+	category = interaction_category_vassal
+	filter_tags = { admin_governor }
+	send_name = START_SCHEME 
+	scheme = teach_governor
+	ai_targets = {
+		ai_recipients = peer_vassals
+		max = 20
+	}
+	ai_targets = {
+		ai_recipients = vassals
+		max = 10
+	}
+
+	ai_frequency_by_tier = {
+		barony = 0
+		county = 60
+		duchy = 60
+		kingdom = 60
+		empire = 60
+		hegemony = 60
+	}
+
+	notification_text = TEACH_GOVERNOR_NOTIFICATION
+	ai_min_reply_days = 4
+	ai_max_reply_days = 9
+
+	cooldown_against_recipient = { years = 15 }
+
+	is_shown = {
+		scope:actor = { government_has_mechanic = administrative }
+		scope:recipient != scope:actor
+		scope:recipient = {
+			is_alive = yes
+			top_liege = scope:actor.top_liege
+			in_diplomatic_range = scope:actor
+		}
+
+		scope:actor = {
+			exists = domicile
+			domicile = { has_domicile_parameter = estate_unlock_teach_governor_interaction }
+		}
+	}
+
+	is_valid_showing_failures_only = {
+		scope:actor = {
+			can_start_scheme = {
+				type = teach_governor
+				target_character = scope:recipient
+			}
+			custom_tooltip = {
+				text = teach_governor_maximum_xp_tt
+				scope:recipient = { has_trait_xp = { trait = governor value < 95 } }
+			}
+			custom_tooltip = {
+				text = teach_governor_minimum_xp_tt
+				scope:recipient = {
+					trigger_if = {
+						limit = { has_trait_xp = { trait = governor value >= 100 } }
+						scope:actor = { has_trait_xp = { trait = governor value >= 75 } }
+					}
+					trigger_else_if = {
+						limit = { has_trait_xp = { trait = governor value >= 75 } }
+						scope:actor = { has_trait_xp = { trait = governor value >= 50 } }
+					}
+					trigger_else_if = {
+						limit = { has_trait_xp = { trait = governor value >= 50 } }
+						scope:actor = { has_trait_xp = { trait = governor value >= 25 } }
+					}
+					trigger_else = { always = yes }
+				}
+			}
+		}
+	}
+
+	desc = start_teach_governor_interaction_desc
+
+	cost = {
+		influence = { add = scope:actor.minor_influence_gain }
+	}
+
+	on_accept = {
+		scope:actor = {
+			custom_tooltip = teach_governor_actor_reward_tt
+			stress_impact = {
+				humble = minor_stress_impact_gain
+				lazy = medium_stress_impact_gain
+			}
+			trigger_event = scheme_critical_moments.8045
+		}
+		scope:actor = {
+			send_interface_toast = {
+				type = event_toast_effect_neutral
+				title = start_teach_governor_notification
+				left_icon = scope:recipient					
+				right_icon = scope:recipient.primary_title
+				scope:recipient = {
+					send_interface_toast = {
+						type = event_toast_effect_bad
+						title = start_teach_governor_notification
+						left_icon = scope:actor					
+						right_icon = scope:actor.primary_title
+						scope:actor = {
+							begin_scheme_basic_effect = {
+								SCHEME_TYPE = teach_governor
+								TARGET_TYPE = target_character
+								TARGET_SCOPE = scope:recipient
+							}
+						}
+					}
+				}
+			}
+			# Scheme progress bonus from education
+			education_5_scheme_progress_effect = { SKILL = stewardship }
+			# Scheme bonuses from being the emperor/dominant family/powerful family
+			ep3_actor_scheme_modifier_effect = yes
+		}
+		scope:recipient = {
+			if = {
+				limit = { is_ai = yes }
+				add_opinion = {
+					target = scope:actor
+					modifier = mentoring_governor_opinion
+				}
+			}
+			custom_tooltip = teach_governor_recipient_reward_tt
+		}
+	}
+
+	on_decline = {
+		scope:actor = {
+			if = {
+				limit = { is_ai = yes }
+				add_opinion = {
+					target = scope:recipient
+					modifier = insulted_opinion
+					opinion = -10
+				}
+			}
+			else = { trigger_event = scheme_critical_moments.8046 }
+		}
+	}
+
+	ai_potential = {
+		NOR = {
+			has_trait = lazy
+			scheme_generic_ai_blocker_trigger = yes
+		}
+		is_governor = yes
+	}
+
+	ai_accept = {
+		WJ_dd_jie_acceptance_modifier = yes
+		base = 0
+		opinion_modifier = {
+			who = scope:recipient
+			opinion_target = scope:actor
+			multiplier = 0.25
+		}
+		# Experience
+		modifier = {
+			desc = RELATIVE_GOVERNOR_EFFICIENCY
+			add = {
+				value = ep3_actor_recipient_governor_trait_level_diff_value
+				subtract = 1
+				multiply = 15
+			}
+		}
+		modifier = { # If you are from a powerful family, and they are not, they are more likely to accept
+			scope:actor.house ?= { is_powerful_family = yes }
+			house ?= {
+				is_powerful_family = no
+				is_dominant_family = no
+			}
+			add = 15
+			desc = your_house_is_powerful_reason
+		}
+		modifier = { # If you are from a dominant family, and they are not, they are more likely to accept
+			scope:actor.house ?= { is_dominant_family = yes }
+			house ?= { is_dominant_family = no }
+			add = 25
+			desc = your_house_is_dominant_reason
+		}
+		modifier = { # If they are from a powerful family, and you are not, they are more likely to refuse
+			house ?= { is_powerful_family = yes }
+			scope:actor.house ?= {
+				is_powerful_family = no
+				is_dominant_family = no
+			}
+			add = -15
+			desc = their_house_is_powerful_reason
+		}
+		modifier = { # If they are from a dominant family, and you are not, they are more likely to refuse
+			house ?= { is_dominant_family = yes }
+			scope:actor.house ?= { is_dominant_family = no }
+			add = -25
+			desc = their_house_is_dominant_reason
+		}
+		modifier = { # Difference in influence level
+			influence_level != scope:actor.influence_level
+			add = {
+				add = {
+					add = 10
+					multiply = scope:recipient.influence_level
+				}
+				subtract = {
+					add = 10
+					multiply = scope:actor.influence_level
+				}
+			}
+			desc = difference_in_influence_level_reason
+		}
+		modifier = {
+			exists = scope:actor.house
+			exists = scope:recipient.house
+			house.house_head.top_liege ?= scope:actor.house.house_head.top_liege
+			add = {
+				value = scope:actor.house.house_power_score
+				subtract = scope:recipient.house.house_power_score
+				divide = 4
+				floor = yes
+			}
+			desc = RELATIVE_FAMILY_RATING
+		}
+		# Relations
+		modifier = { # Friend
+			desc = offer_vassalization_interaction_aibehavior_friend_tt
+			has_relation_friend = scope:actor
+			NOT = { has_relation_best_friend = scope:actor }
+			add = 15
+		}
+		modifier = { # Best Friend
+			desc = offer_vassalization_interaction_aibehavior_best_friend_tt
+			has_relation_best_friend = scope:actor
+			add = 30
+		}
+		modifier = { # Rival 
+			desc = offer_vassalization_interaction_aibehavior_rival_tt
+			has_relation_rival = scope:actor
+			NOT = { has_relation_nemesis = scope:actor }
+			add = -25
+		}
+		modifier = { # Nemesis
+			desc = offer_vassalization_interaction_aibehavior_nemesis_tt
+			has_relation_nemesis = scope:actor
+			add = -50
+		}
+		modifier = {
+			is_close_family_of = scope:actor
+			add = 50
+			desc = CLOSE_FAMILY_REASON
+		}
+		modifier = {
+			is_extended_family_of = scope:actor
+			add = 25
+			desc = EXTENDED_FAMILY_REASON
+		}
+		modifier = {
+			NOR = {
+				is_close_family_of = scope:actor
+				is_extended_family_of = scope:actor
+			}
+			house ?= scope:actor.house
+			add = 5
+			desc = YOU_ARE_MY_HOUSE_MEMBER
+		}
+		#Age
+		modifier = {
+			desc = AGE_DIFFERENCE
+			add = {
+				value = scope:actor.age
+				add = {
+					value = scope:recipient.age
+					multiply = -1
+				}
+			}
+		}
+		# Traits
+		modifier = {
+			has_trait = ambitious
+			add = 10
+			desc = INTERACTION_AMBITIOUS
+		}
+		modifier = {
+			has_trait = diligent
+			add = 10
+			desc = INTERACTION_DILIGENT
+		}
+		modifier = {
+			has_trait = humble
+			add = 10
+			desc = INTERACTION_HUMBLE
+		}
+		modifier = {
+			has_trait = content
+			add = -10
+			desc = INTERACTION_CONTENT
+		}
+		modifier = {
+			has_trait = lazy
+			add = -10
+			desc = INTERACTION_LAZY
+		}
+		modifier = {
+			has_trait = arrogant
+			add = -10
+			desc = INTERACTION_ARROGANT
+		}
+		#Feuds
+		modifier = {
+			house_has_feud_relation_with_trigger = { TARGET = scope:actor }
+			add = -50
+		}
+		modifier = {
+			add = 10
+			scope:recipient = {
+				has_relation_elder = scope:actor
+			}
+			desc = AI_YOUR_DISCIPLE
+		}
+	}
+
+	ai_will_do = {
+		base = -25
+		#Personality
+		modifier = {
+			has_trait = diligent
+			add = 15
+		}
+		modifier = {
+			has_trait = generous
+			add = 15
+		}
+		modifier = {
+			has_trait = lazy
+			add = -15
+		}
+		modifier = {
+			has_trait = greedy
+			add = -15
+		}
+		# Relationships
+		modifier = {
+			add = 25
+			has_any_moderate_good_relationship_with_character_trigger = { CHARACTER = scope:recipient }
+		}
+		modifier = {
+			add = 50
+			has_any_best_good_relationship_with_character_trigger = { CHARACTER = scope:recipient }
+		}
+		modifier = {
+			add = -15
+			has_any_mild_bad_relationship_with_character_trigger = { CHARACTER = scope:recipient }
+		}
+		modifier = {
+			add = -25
+			has_any_moderate_bad_relationship_with_character_trigger = { CHARACTER = scope:recipient }
+		}
+		modifier = {
+			add = -50
+			has_any_worst_bad_relationship_with_character_trigger = { CHARACTER = scope:recipient }
+		}
+		# House
+		modifier = {
+			add = 5
+			scope:recipient.house ?= scope:actor.house
+		}
+		# Family
+		modifier = {
+			add = 10
+			scope:actor = { is_parent_of = scope:recipient }
+		}
+		modifier = {
+			add = 5
+			scope:actor = { is_close_family_of = scope:recipient }
+		}
+		#Feuds
+		modifier = {
+			house_has_feud_relation_with_trigger = { TARGET = scope:recipient }
+
+			add = -50
+		}
+		
+		modifier = {
+			add = 10
+			scope:actor = {
+				has_relation_disciple = scope:recipient
+			}
+		}
+		# Prefer to help your fellow movement members
+		modifier = {
+			factor = {
+				value = 1.2
+				if = {
+					limit = {
+						is_in_pro_hegemon_or_hegemon_movement = yes
+					}
+					multiply = 1.5
+				}
+			}
+			is_in_same_movement_as = { TARGET = scope:recipient }
+		}
+	}
+}
