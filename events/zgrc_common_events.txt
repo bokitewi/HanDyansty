@@ -33,7 +33,13 @@ zgrc_common.0002 = {
 					culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue }
 				}
 			}
+			# 祖风 · 先记录入乡前的旧文化大区（须在改文化之前）
+			zgrc_zufeng_set_origin_effect = yes
 			set_culture = capital_county.culture
+			# 祖风 · 清旧祖风（全量、有则移除），避免多次迁居在 30 年内叠加
+			zgrc_zufeng_clear_effect = yes
+			# 祖风 · 跨大区迁居者挂「某祖风」；同大区跨风俗则不计
+			zgrc_zufeng_apply_effect = yes
 		}
 
 		ai_chance = {
@@ -77,339 +83,298 @@ zgrc_common.0002 = {
 }
 
 # ============================================================
-# 厚生慎死·极端爆发 —— 非常时期人物响应（场景表态）
+# 天下响应 —— 非常时期封臣表态（文化体验事件）
 # 入口：on_war_started → zgrc_tianxia_xiangying_effect → 本事件
-# 传参：var zgrc_extreme_war（战争）/ zgrc_extreme_liege（领主）/ zgrc_extreme_attacker（来犯者）
-# 选项：A 食汉禄勤王 / B 王侯将相宁有种乎（独立起义）/ C 苟全无事
+# 传参：var zgrc_luanshi_war（战争）
+# desc 两变体：胡骑叩关（来犯者非华夏礼乐）/ 同室操戈（双方皆华夏礼乐）
+# 选项始终可见：条件不足者灰显，并以 name 变体说明缘由
 # ============================================================
 
-# 1001 —— 场景1：农民起义（四方民变）
-zgrc_common.1001 = {
+# 1010 —— 天下响应：勤王 / 举义 / 观望
+zgrc_common.1010 = {
 	type = character_event
-	title = zgrc_common.1001.t
-	desc = zgrc_common.1001.desc
+	title = zgrc_common.1010.t
+	desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = {
+					NOT = {
+						root.var:zgrc_luanshi_war.primary_attacker = {
+							culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue }
+						}
+					}
+				}
+				desc = zgrc_common.1010.desc_foreign
+			}
+			desc = zgrc_common.1010.desc_civil
+		}
+	}
 	theme = war
 
 	left_portrait = {
 		character = root
 		animation = thinking
 	}
+	right_portrait = {
+		character = root.var:zgrc_luanshi_war.primary_attacker
+		animation = aggressive_sword
+	}
 
+	# —— A 勤王：散家财、起乡勇，奔赴君父之难 ——
 	option = {
-		name = zgrc_common.1001.a
-		zgrc_extreme_loyal_response_effect = yes
-		remove_variable = zgrc_extreme_war
-		remove_variable = zgrc_extreme_liege
-		remove_variable = zgrc_extreme_attacker
+		trigger = { gold >= zgrc_luanshi_muster_cost }
+		show_as_unavailable = { always = yes }
+		name = {
+			trigger = { gold < zgrc_luanshi_muster_cost }
+			text = zgrc_common.1010.a_locked
+		}
+		name = {
+			trigger = { gold >= zgrc_luanshi_muster_cost }
+			text = zgrc_common.1010.a
+		}
+		zgrc_luanshi_muster_effect = yes
 		ai_chance = {
-			base = 50
+			base = 10
+			# 贤能品级：食君之禄，忠君之事
+			modifier = {
+				add = 25
+				merit_level >= 5
+			}
+			modifier = {
+				add = 12
+				merit_level >= 2
+				merit_level < 5
+			}
+			modifier = {
+				add = -10
+				merit_level < 2
+			}
+			# 与君父的关系（好感愈厚愈肯毁家纾难）
+			modifier = {
+				add = 20
+				opinion = { target = root.top_liege value >= 50 }
+			}
+			modifier = {
+				add = 5
+				opinion = { target = root.top_liege value >= 0 }
+			}
+			modifier = {
+				add = -20
+				opinion = { target = root.top_liege value < 0 }
+			}
+			modifier = {
+				factor = 0.3
+				opinion = { target = root.top_liege value <= -75 }
+			}
+			# 见用与否
+			modifier = {
+				add = 15
+				has_relation_friend = root.top_liege
+			}
+			modifier = {
+				add = 10
+				is_councillor = yes
+			}
+			# 天性
+			modifier = {
+				add = 20
+				has_trait = loyal
+			}
+			modifier = {
+				factor = 0.5
+				has_trait = craven
+			}
+			modifier = {
+				factor = 0.6
+				has_trait = ambitious
+			}
+			modifier = {
+				factor = 0.6
+				has_trait = greedy
+			}
+			# 义声之地：乡里有忠烈/怀仁之祠者，闻风思奋
+			modifier = {
+				add = 15
+				capital_county = {
+					OR = {
+						has_county_modifier = zgrc_ci_zhong
+						has_county_modifier = zgrc_ci_ren
+					}
+				}
+			}
 		}
 	}
 
+	# —— B 举义：义旗在手，与来犯者共击旧主（须有本钱，且战火临近） ——
 	option = {
-		name = zgrc_common.1001.b
 		trigger = {
-			highest_held_title_tier >= tier_kingdom
-			NOT = { government_has_mechanic = administrative }
-			NOT = { is_at_war_with = root.var:zgrc_extreme_liege }
+			# 须有实土（持有「有地」头衔；无地/titular 头衔不算），且握有本钱
+			is_landed = yes
+			current_military_strength >= zgrc_luanshi_rebel_min_strength
+			capital_province = {
+				squared_distance = {
+					target = root.top_liege.capital_province
+					value <= squared_distance_small
+				}
+			}
+			NOT = { is_at_war_with = root.top_liege }
 		}
-		zgrc_extreme_rebel_response_effect = yes
-		remove_variable = zgrc_extreme_war
-		remove_variable = zgrc_extreme_liege
-		remove_variable = zgrc_extreme_attacker
+		show_as_unavailable = { always = yes }
+		name = {
+			trigger = {
+				OR = {
+					current_military_strength < zgrc_luanshi_rebel_min_strength
+					NOT = {
+						capital_province = {
+							squared_distance = {
+								target = root.top_liege.capital_province
+								value <= squared_distance_small
+							}
+						}
+					}
+				}
+			}
+			text = zgrc_common.1010.b_locked
+		}
+		name = {
+			trigger = {
+				current_military_strength >= zgrc_luanshi_rebel_min_strength
+				capital_province = {
+					squared_distance = {
+						target = root.top_liege.capital_province
+						value <= squared_distance_small
+					}
+				}
+			}
+			text = zgrc_common.1010.b
+		}
+		zgrc_luanshi_rebel_effect = yes
 		ai_chance = {
-			base = 50
+			base = 5
+			# 怨望：关系愈差愈想反
+			modifier = {
+				add = 15
+				opinion = { target = root.top_liege value <= -25 }
+			}
+			modifier = {
+				add = 25
+				opinion = { target = root.top_liege value <= -75 }
+			}
+			modifier = {
+				add = 20
+				has_relation_rival = root.top_liege
+			}
+			# 天命之想
+			modifier = {
+				add = 25
+				has_claim_on = root.top_liege.primary_title
+			}
+			# 头衔愈高，愈有异心
+			modifier = {
+				add = 25
+				highest_held_title_tier >= tier_kingdom
+			}
+			modifier = {
+				add = 12
+				highest_held_title_tier = tier_duchy
+			}
+			modifier = {
+				add = -8
+				highest_held_title_tier <= tier_county
+			}
+			# 郁郁不得志：高爵而低位（不受赏识）
+			modifier = {
+				add = 15
+				merit_level < 2
+				highest_held_title_tier >= tier_duchy
+			}
+			modifier = {
+				add = 10
+				is_councillor = no
+				highest_held_title_tier >= tier_duchy
+			}
+			modifier = {
+				factor = 0.3
+				is_councillor = yes
+			}
+			# 天性
+			modifier = {
+				add = 15
+				has_trait = ambitious
+			}
+			modifier = {
+				add = 20
+				has_trait = disloyal
+			}
+			modifier = {
+				factor = 0.3
+				has_trait = just
+			}
+			modifier = {
+				factor = 0
+				has_trait = content
+			}
+			modifier = {
+				factor = 0
+				has_trait = loyal
+			}
+			# 罪像之警：乡里有罪像者，不敢轻举
+			modifier = {
+				factor = 0.5
+				capital_county = {
+					OR = {
+						has_county_modifier = zgrc_xiang_zui
+						has_county_modifier = zgrc_xiang_ni
+					}
+				}
+			}
 		}
 	}
 
+	# —— C 观望：苟全性命于乱世 ——
 	option = {
-		name = zgrc_common.1001.c
+		name = zgrc_common.1010.c
 		add_character_modifier = {
 			modifier = zgrc_gouquan_modifier
 			years = 5
 		}
-		remove_variable = zgrc_extreme_war
-		remove_variable = zgrc_extreme_liege
-		remove_variable = zgrc_extreme_attacker
+		remove_variable = zgrc_luanshi_war
 		ai_chance = {
-			base = 0
+			base = 35
+			# 头衔愈低，愈易保全自身
+			modifier = {
+				add = 20
+				highest_held_title_tier <= tier_county
+			}
+			modifier = {
+				add = 5
+				highest_held_title_tier = tier_duchy
+			}
+			modifier = {
+				factor = 0.5
+				highest_held_title_tier >= tier_kingdom
+			}
+			# 君恩深者，难以坐视
+			modifier = {
+				add = -10
+				opinion = { target = root.top_liege value >= 50 }
+			}
+			# 天性
+			modifier = {
+				add = 20
+				has_trait = craven
+			}
+			modifier = {
+				factor = 0.5
+				has_trait = brave
+			}
+			modifier = {
+				factor = 0.5
+				has_trait = loyal
+			}
 		}
 	}
 }
-
-# 1002 —— 场景2：民粹起义（苗、越土司作乱）
-zgrc_common.1002 = {
-	type = character_event
-	title = zgrc_common.1002.t
-	desc = zgrc_common.1002.desc
-	theme = war
-
-	left_portrait = {
-		character = root
-		animation = thinking
-	}
-
-	option = {
-		name = zgrc_common.1002.a
-		zgrc_extreme_loyal_response_effect = yes
-		remove_variable = zgrc_extreme_war
-		remove_variable = zgrc_extreme_liege
-		remove_variable = zgrc_extreme_attacker
-		ai_chance = {
-			base = 50
-		}
-	}
-
-	option = {
-		name = zgrc_common.1002.b
-		trigger = {
-			highest_held_title_tier >= tier_kingdom
-			NOT = { government_has_mechanic = administrative }
-			NOT = { is_at_war_with = root.var:zgrc_extreme_liege }
-		}
-		zgrc_extreme_rebel_response_effect = yes
-		remove_variable = zgrc_extreme_war
-		remove_variable = zgrc_extreme_liege
-		remove_variable = zgrc_extreme_attacker
-		ai_chance = {
-			base = 50
-		}
-	}
-
-	option = {
-		name = zgrc_common.1002.c
-		add_character_modifier = {
-			modifier = zgrc_gouquan_modifier
-			years = 5
-		}
-		remove_variable = zgrc_extreme_war
-		remove_variable = zgrc_extreme_liege
-		remove_variable = zgrc_extreme_attacker
-		ai_chance = {
-			base = 0
-		}
-	}
-}
-
-# 1003 —— 场景3：外敌入侵（蛮夷犯境）
-zgrc_common.1003 = {
-	type = character_event
-	title = zgrc_common.1003.t
-	desc = zgrc_common.1003.desc
-	theme = war
-
-	left_portrait = {
-		character = root
-		animation = thinking
-	}
-
-	option = {
-		name = zgrc_common.1003.a
-		zgrc_extreme_loyal_response_effect = yes
-		remove_variable = zgrc_extreme_war
-		remove_variable = zgrc_extreme_liege
-		remove_variable = zgrc_extreme_attacker
-		ai_chance = {
-			base = 50
-		}
-	}
-
-	option = {
-		name = zgrc_common.1003.b
-		trigger = {
-			highest_held_title_tier >= tier_kingdom
-			NOT = { government_has_mechanic = administrative }
-			NOT = { is_at_war_with = root.var:zgrc_extreme_liege }
-		}
-		zgrc_extreme_rebel_response_effect = yes
-		remove_variable = zgrc_extreme_war
-		remove_variable = zgrc_extreme_liege
-		remove_variable = zgrc_extreme_attacker
-		ai_chance = {
-			base = 50
-		}
-	}
-
-	option = {
-		name = zgrc_common.1003.c
-		add_character_modifier = {
-			modifier = zgrc_gouquan_modifier
-			years = 5
-		}
-		remove_variable = zgrc_extreme_war
-		remove_variable = zgrc_extreme_liege
-		remove_variable = zgrc_extreme_attacker
-		ai_chance = {
-			base = 0
-		}
-	}
-}
-
-# 1004 —— 场景4：藩王造反（同族宗室作乱）
-zgrc_common.1004 = {
-	type = character_event
-	title = zgrc_common.1004.t
-	desc = zgrc_common.1004.desc
-	theme = war
-
-	left_portrait = {
-		character = root
-		animation = thinking
-	}
-
-	option = {
-		name = zgrc_common.1004.a
-		zgrc_extreme_loyal_response_effect = yes
-		remove_variable = zgrc_extreme_war
-		remove_variable = zgrc_extreme_liege
-		remove_variable = zgrc_extreme_attacker
-		ai_chance = {
-			base = 50
-		}
-	}
-
-	option = {
-		name = zgrc_common.1004.b
-		trigger = {
-			highest_held_title_tier >= tier_kingdom
-			NOT = { government_has_mechanic = administrative }
-			NOT = { is_at_war_with = root.var:zgrc_extreme_liege }
-		}
-		zgrc_extreme_rebel_response_effect = yes
-		remove_variable = zgrc_extreme_war
-		remove_variable = zgrc_extreme_liege
-		remove_variable = zgrc_extreme_attacker
-		ai_chance = {
-			base = 50
-		}
-	}
-
-	option = {
-		name = zgrc_common.1004.c
-		add_character_modifier = {
-			modifier = zgrc_gouquan_modifier
-			years = 5
-		}
-		remove_variable = zgrc_extreme_war
-		remove_variable = zgrc_extreme_liege
-		remove_variable = zgrc_extreme_attacker
-		ai_chance = {
-			base = 0
-		}
-	}
-}
-
-
-# 1005 —— 场景5：诸侯造反（华夏诸侯犯上，天命之争）
-zgrc_common.1005 = {
-	type = character_event
-	title = zgrc_common.1005.t
-	desc = zgrc_common.1005.desc
-	theme = war
-
-	left_portrait = {
-		character = root
-		animation = thinking
-	}
-
-	option = {
-		name = zgrc_common.1005.a
-		zgrc_extreme_loyal_response_effect = yes
-		remove_variable = zgrc_extreme_war
-		remove_variable = zgrc_extreme_liege
-		remove_variable = zgrc_extreme_attacker
-		ai_chance = {
-			base = 50
-		}
-	}
-
-	option = {
-		name = zgrc_common.1005.b
-		trigger = {
-			highest_held_title_tier >= tier_kingdom
-			NOT = { government_has_mechanic = administrative }
-			NOT = { is_at_war_with = root.var:zgrc_extreme_liege }
-		}
-		zgrc_extreme_rebel_response_effect = yes
-		remove_variable = zgrc_extreme_war
-		remove_variable = zgrc_extreme_liege
-		remove_variable = zgrc_extreme_attacker
-		ai_chance = {
-			base = 50
-		}
-	}
-
-	option = {
-		name = zgrc_common.1005.c
-		add_character_modifier = {
-			modifier = zgrc_gouquan_modifier
-			years = 5
-		}
-		remove_variable = zgrc_extreme_war
-		remove_variable = zgrc_extreme_liege
-		remove_variable = zgrc_extreme_attacker
-		ai_chance = {
-			base = 0
-		}
-	}
-}
-
-# 1006 —— 场景6：真正民粹起义（红巾军 / 汉人世侯聚义）
-# 防御方为异族领主，其治下汉人封臣被问是否响应聚义
-zgrc_common.1006 = {
-	type = character_event
-	title = zgrc_common.1006.t
-	desc = zgrc_common.1006.desc
-	theme = war
-
-	left_portrait = {
-		character = root
-		animation = thinking
-	}
-
-	option = {
-		name = zgrc_common.1006.a
-		zgrc_extreme_loyal_response_effect = yes
-		remove_variable = zgrc_extreme_war
-		remove_variable = zgrc_extreme_liege
-		remove_variable = zgrc_extreme_attacker
-		ai_chance = {
-			base = 50
-		}
-	}
-
-	option = {
-		name = zgrc_common.1006.b
-		trigger = {
-			highest_held_title_tier >= tier_kingdom
-			NOT = { government_has_mechanic = administrative }
-			NOT = { is_at_war_with = root.var:zgrc_extreme_liege }
-		}
-		zgrc_extreme_rebel_response_effect = yes
-
-		remove_variable = zgrc_extreme_war
-		remove_variable = zgrc_extreme_liege
-		remove_variable = zgrc_extreme_attacker
-		ai_chance = {
-			base = 50
-		}
-	}
-
-	option = {
-		name = zgrc_common.1006.c
-		add_character_modifier = {
-			modifier = zgrc_gouquan_modifier
-			years = 5
-		}
-		remove_variable = zgrc_extreme_war
-		remove_variable = zgrc_extreme_liege
-		remove_variable = zgrc_extreme_attacker
-		ai_chance = {
-			base = 0
-		}
-	}
-}
-
 
 # ============================================================
 # 乡勇义军 —— 汉人起义 / 收复故土 时，义军来投
@@ -436,9 +401,7 @@ zgrc_common.2001 = {
 			name = zgrc_yijun_army_name
 			men_at_arms = {
 				type = zgrc_hanjia_yiyong
-				stacks = {
-					value = 8
-				}
+				stacks = zgrc_yijun_stacks
 			}
 			location = root.location
 			origin = root.location
@@ -448,7 +411,7 @@ zgrc_common.2001 = {
 			base = 100
 		}
 	}
-	# —— 选项2：收为麾下（正常招募 2 折，编入常备 800 人）——
+	# —— 选项2：收为麾下（事件专属获取：2 折价编入常备，队数同上；义勇不可常规招募）——
 	option = {
 		name = zgrc_common.2001.b
 		trigger = {
@@ -456,11 +419,24 @@ zgrc_common.2001 = {
 		}
 		remove_short_term_gold = zgrc_hanjia_yiyong_event_cost
 
-		create_maa_regiment = {
-			type = zgrc_hanjia_yiyong
-			check_can_recruit = no
-			size = 8
-		}
+		# create_maa_regiment 的 size 只接受字面量整数（写 script value 会报 Malformed token），
+		# 故按 zgrc_yijun_stacks 分档取整；队数与选项 1（spawn_army）一致，最低保底 1 队
+		if = { limit = { zgrc_yijun_stacks >= 16 } create_maa_regiment = { type = zgrc_hanjia_yiyong check_can_recruit = no size = 16 } }
+		else_if = { limit = { zgrc_yijun_stacks >= 15 } create_maa_regiment = { type = zgrc_hanjia_yiyong check_can_recruit = no size = 15 } }
+		else_if = { limit = { zgrc_yijun_stacks >= 14 } create_maa_regiment = { type = zgrc_hanjia_yiyong check_can_recruit = no size = 14 } }
+		else_if = { limit = { zgrc_yijun_stacks >= 13 } create_maa_regiment = { type = zgrc_hanjia_yiyong check_can_recruit = no size = 13 } }
+		else_if = { limit = { zgrc_yijun_stacks >= 12 } create_maa_regiment = { type = zgrc_hanjia_yiyong check_can_recruit = no size = 12 } }
+		else_if = { limit = { zgrc_yijun_stacks >= 11 } create_maa_regiment = { type = zgrc_hanjia_yiyong check_can_recruit = no size = 11 } }
+		else_if = { limit = { zgrc_yijun_stacks >= 10 } create_maa_regiment = { type = zgrc_hanjia_yiyong check_can_recruit = no size = 10 } }
+		else_if = { limit = { zgrc_yijun_stacks >= 9 } create_maa_regiment = { type = zgrc_hanjia_yiyong check_can_recruit = no size = 9 } }
+		else_if = { limit = { zgrc_yijun_stacks >= 8 } create_maa_regiment = { type = zgrc_hanjia_yiyong check_can_recruit = no size = 8 } }
+		else_if = { limit = { zgrc_yijun_stacks >= 7 } create_maa_regiment = { type = zgrc_hanjia_yiyong check_can_recruit = no size = 7 } }
+		else_if = { limit = { zgrc_yijun_stacks >= 6 } create_maa_regiment = { type = zgrc_hanjia_yiyong check_can_recruit = no size = 6 } }
+		else_if = { limit = { zgrc_yijun_stacks >= 5 } create_maa_regiment = { type = zgrc_hanjia_yiyong check_can_recruit = no size = 5 } }
+		else_if = { limit = { zgrc_yijun_stacks >= 4 } create_maa_regiment = { type = zgrc_hanjia_yiyong check_can_recruit = no size = 4 } }
+		else_if = { limit = { zgrc_yijun_stacks >= 3 } create_maa_regiment = { type = zgrc_hanjia_yiyong check_can_recruit = no size = 3 } }
+		else_if = { limit = { zgrc_yijun_stacks >= 2 } create_maa_regiment = { type = zgrc_hanjia_yiyong check_can_recruit = no size = 2 } }
+		else = { create_maa_regiment = { type = zgrc_hanjia_yiyong check_can_recruit = no size = 1 } }
 		ai_chance = {
 			base = 0
 		}
@@ -468,13 +444,381 @@ zgrc_common.2001 = {
 	# —— 选项3：仁德君子（温言安抚，安居乡里）——
 	option = {
 		name = zgrc_common.2001.c
+		# 众望所归：仁声素著者再行仁举，威望倍之
+		if = {
+			limit = { has_character_modifier = zgrc_rende_modifier }
+			add_prestige = 100
+		}
 		add_prestige = 100
 		add_character_modifier = {
 			modifier = zgrc_rende_modifier
 			years = 5
 		}
+		# 传言·美名立乡：县记仁德传闻
+		zgrc_wenyan_mark_effect = { RUMOR = zgrc_wen_rende HERO = zgrc_wen_hero_rende }
 		ai_chance = {
 			base = 0
 		}
+	}
+}
+
+# ============================================================
+# 传言系统 —— 旅行听闻（3001-3004）
+# 入口：on_travel_plan_movement → zgrc_wenyan_travel_check → zgrc_wenyan_try_hear_effect
+# 传参：root 变量 zgrc_wen_county（传闻所在县）；主角存于县变量 zgrc_wen_hero_<type>
+# 机制：计数制寿命（每被听闻一次减一，归零湮灭）；
+#       捐资立祠/铸像＝县 modifier（多人可先后捐资，续捐刷新时长）
+# ============================================================
+
+# 3001 —— 美名 · 忠义传闻
+zgrc_common.3001 = {
+	type = character_event
+	title = zgrc_common.3001.t
+	desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = {
+					root.var:zgrc_wen_county.var:zgrc_wen_hero_zhongyi = { is_alive = no }
+				}
+				desc = zgrc_common.3001.desc_late
+			}
+			desc = zgrc_common.3001.desc
+		}
+	}
+	theme = diplomacy
+
+	left_portrait = {
+		character = root
+		animation = thinking
+	}
+
+	immediate = {
+		hidden_effect = {
+			add_character_flag = { flag = zgrc_wen_cooldown years = zgrc_wen_cooldown_years }
+			root.var:zgrc_wen_county = {
+				change_variable = { name = zgrc_wen_zhongyi add = -1 }
+				if = {
+					limit = { var:zgrc_wen_zhongyi <= 0 }
+					remove_variable = zgrc_wen_zhongyi
+					remove_variable = zgrc_wen_hero_zhongyi
+				}
+			}
+		}
+	}
+
+	# —— A 捐资立祠（首捐倡修 / 再捐续香火）——
+	option = {
+		trigger = {
+			gold >= zgrc_wen_shrine_cost
+			NOT = { has_character_flag = zgrc_wen_donate_cd }
+		}
+		name = {
+			trigger = { root.var:zgrc_wen_county = { has_county_modifier = zgrc_ci_zhong } }
+			text = zgrc_common.3001.a_renew
+		}
+		name = {
+			trigger = { NOT = { root.var:zgrc_wen_county = { has_county_modifier = zgrc_ci_zhong } } }
+			text = zgrc_common.3001.a
+		}
+		remove_short_term_gold = zgrc_wen_shrine_cost
+		root.var:zgrc_wen_county = {
+			add_county_modifier = { modifier = zgrc_ci_zhong years = zgrc_wen_shrine_years }
+		}
+		add_prestige = 50
+		add_character_flag = { flag = zgrc_wen_donate_cd years = zgrc_wen_donate_cooldown_years }
+		# 主角在世：乡人立生祠祀之
+		if = {
+			limit = { root.var:zgrc_wen_county.var:zgrc_wen_hero_zhongyi = { is_alive = yes } }
+			root.var:zgrc_wen_county.var:zgrc_wen_hero_zhongyi = {
+				add_character_modifier = { modifier = zgrc_shengci_modifier years = zgrc_wen_shrine_years }
+				add_opinion = { target = root modifier = zgrc_opinion_zhongyi opinion = 30 }
+			}
+		}
+		ai_chance = { base = 40 }
+	}
+
+	# —— B 礼敬其贤 ——
+	option = {
+		name = zgrc_common.3001.b
+		add_piety = 25
+		add_stress = -15
+		if = {
+			limit = { root.var:zgrc_wen_county.var:zgrc_wen_hero_zhongyi = { is_alive = yes } }
+			root.var:zgrc_wen_county.var:zgrc_wen_hero_zhongyi = {
+				add_opinion = { target = root modifier = zgrc_opinion_zhongyi opinion = 20 }
+			}
+		}
+		ai_chance = { base = 40 }
+	}
+
+	# —— C 不以为意 ——
+	option = {
+		name = zgrc_common.3001.c
+		ai_chance = { base = 20 }
+	}
+}
+
+# 3002 —— 美名 · 仁德传闻
+zgrc_common.3002 = {
+	type = character_event
+	title = zgrc_common.3002.t
+	desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = {
+					root.var:zgrc_wen_county.var:zgrc_wen_hero_rende = { is_alive = no }
+				}
+				desc = zgrc_common.3002.desc_late
+			}
+			desc = zgrc_common.3002.desc
+		}
+	}
+	theme = diplomacy
+
+	left_portrait = {
+		character = root
+		animation = thinking
+	}
+
+	immediate = {
+		hidden_effect = {
+			add_character_flag = { flag = zgrc_wen_cooldown years = zgrc_wen_cooldown_years }
+			root.var:zgrc_wen_county = {
+				change_variable = { name = zgrc_wen_rende add = -1 }
+				if = {
+					limit = { var:zgrc_wen_rende <= 0 }
+					remove_variable = zgrc_wen_rende
+					remove_variable = zgrc_wen_hero_rende
+				}
+			}
+		}
+	}
+
+	# —— A 捐资立祠 ——
+	option = {
+		trigger = {
+			gold >= zgrc_wen_shrine_cost
+			NOT = { has_character_flag = zgrc_wen_donate_cd }
+		}
+		name = {
+			trigger = { root.var:zgrc_wen_county = { has_county_modifier = zgrc_ci_ren } }
+			text = zgrc_common.3002.a_renew
+		}
+		name = {
+			trigger = { NOT = { root.var:zgrc_wen_county = { has_county_modifier = zgrc_ci_ren } } }
+			text = zgrc_common.3002.a
+		}
+		remove_short_term_gold = zgrc_wen_shrine_cost
+		root.var:zgrc_wen_county = {
+			add_county_modifier = { modifier = zgrc_ci_ren years = zgrc_wen_shrine_years }
+		}
+		add_prestige = 50
+		add_character_flag = { flag = zgrc_wen_donate_cd years = zgrc_wen_donate_cooldown_years }
+		if = {
+			limit = { root.var:zgrc_wen_county.var:zgrc_wen_hero_rende = { is_alive = yes } }
+			root.var:zgrc_wen_county.var:zgrc_wen_hero_rende = {
+				add_character_modifier = { modifier = zgrc_shengci_modifier years = zgrc_wen_shrine_years }
+				add_opinion = { target = root modifier = zgrc_opinion_rende opinion = 30 }
+			}
+		}
+		ai_chance = { base = 40 }
+	}
+
+	# —— B 礼敬其贤 ——
+	option = {
+		name = zgrc_common.3002.b
+		add_piety = 25
+		add_stress = -15
+		if = {
+			limit = { root.var:zgrc_wen_county.var:zgrc_wen_hero_rende = { is_alive = yes } }
+			root.var:zgrc_wen_county.var:zgrc_wen_hero_rende = {
+				add_opinion = { target = root modifier = zgrc_opinion_rende opinion = 20 }
+			}
+		}
+		ai_chance = { base = 40 }
+	}
+
+	# —— C 不以为意 ——
+	option = {
+		name = zgrc_common.3002.c
+		ai_chance = { base = 20 }
+	}
+}
+
+# 3003 —— 恶名 · 野心传闻
+zgrc_common.3003 = {
+	type = character_event
+	title = zgrc_common.3003.t
+	desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = {
+					root.var:zgrc_wen_county.var:zgrc_wen_hero_yexin = { is_alive = no }
+				}
+				desc = zgrc_common.3003.desc_late
+			}
+			desc = zgrc_common.3003.desc
+		}
+	}
+	theme = diplomacy
+
+	left_portrait = {
+		character = root
+		animation = thinking
+	}
+
+	immediate = {
+		hidden_effect = {
+			add_character_flag = { flag = zgrc_wen_cooldown years = zgrc_wen_cooldown_years }
+			root.var:zgrc_wen_county = {
+				change_variable = { name = zgrc_wen_yexin add = -1 }
+				if = {
+					limit = { var:zgrc_wen_yexin <= 0 }
+					remove_variable = zgrc_wen_yexin
+					remove_variable = zgrc_wen_hero_yexin
+				}
+			}
+		}
+	}
+
+	# —— A 捐资铸铁罪像（首捐倡铸 / 再捐续警）——
+	option = {
+		trigger = {
+			gold >= zgrc_wen_shrine_cost
+			NOT = { has_character_flag = zgrc_wen_donate_cd }
+		}
+		name = {
+			trigger = { root.var:zgrc_wen_county = { has_county_modifier = zgrc_xiang_zui } }
+			text = zgrc_common.3003.a_renew
+		}
+		name = {
+			trigger = { NOT = { root.var:zgrc_wen_county = { has_county_modifier = zgrc_xiang_zui } } }
+			text = zgrc_common.3003.a
+		}
+		remove_short_term_gold = zgrc_wen_shrine_cost
+		root.var:zgrc_wen_county = {
+			add_county_modifier = { modifier = zgrc_xiang_zui years = zgrc_wen_shrine_years }
+		}
+		# 锄奸之名
+		add_prestige = 50
+		add_character_flag = { flag = zgrc_wen_donate_cd years = zgrc_wen_donate_cooldown_years }
+		# 主角在世：人人得而唾之 + 有所忌惮
+		if = {
+			limit = { root.var:zgrc_wen_county.var:zgrc_wen_hero_yexin = { is_alive = yes } }
+			root.var:zgrc_wen_county.var:zgrc_wen_hero_yexin = {
+				add_character_modifier = { modifier = zgrc_tuozhi_modifier years = zgrc_wen_shrine_years }
+				add_character_modifier = { modifier = zgrc_jidan_modifier years = zgrc_wen_shrine_years }
+			}
+		}
+		ai_chance = { base = 30 }
+	}
+
+	# —— B 广而告之：一吐为快，恶名入耳者寝食难安 ——
+	option = {
+		name = zgrc_common.3003.b
+		add_stress = -15
+		add_opinion = { target = root.var:zgrc_wen_county.var:zgrc_wen_hero_yexin modifier = zgrc_opinion_yexin opinion = -30 }
+		if = {
+			limit = { root.var:zgrc_wen_county.var:zgrc_wen_hero_yexin = { is_alive = yes } }
+			root.var:zgrc_wen_county.var:zgrc_wen_hero_yexin = {
+				add_stress = 20
+			}
+		}
+		ai_chance = { base = 40 }
+	}
+
+	# —— C 不足为虑 ——
+	option = {
+		name = zgrc_common.3003.c
+		ai_chance = { base = 30 }
+	}
+}
+
+# 3004 —— 恶名 · 附逆传闻
+zgrc_common.3004 = {
+	type = character_event
+	title = zgrc_common.3004.t
+	desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = {
+					root.var:zgrc_wen_county.var:zgrc_wen_hero_funi = { is_alive = no }
+				}
+				desc = zgrc_common.3004.desc_late
+			}
+			desc = zgrc_common.3004.desc
+		}
+	}
+	theme = diplomacy
+
+	left_portrait = {
+		character = root
+		animation = thinking
+	}
+
+	immediate = {
+		hidden_effect = {
+			add_character_flag = { flag = zgrc_wen_cooldown years = zgrc_wen_cooldown_years }
+			root.var:zgrc_wen_county = {
+				change_variable = { name = zgrc_wen_funi add = -1 }
+				if = {
+					limit = { var:zgrc_wen_funi <= 0 }
+					remove_variable = zgrc_wen_funi
+					remove_variable = zgrc_wen_hero_funi
+				}
+			}
+		}
+	}
+
+	# —— A 捐资铸铁唾逆像 ——
+	option = {
+		trigger = {
+			gold >= zgrc_wen_shrine_cost
+			NOT = { has_character_flag = zgrc_wen_donate_cd }
+		}
+		name = {
+			trigger = { root.var:zgrc_wen_county = { has_county_modifier = zgrc_xiang_ni } }
+			text = zgrc_common.3004.a_renew
+		}
+		name = {
+			trigger = { NOT = { root.var:zgrc_wen_county = { has_county_modifier = zgrc_xiang_ni } } }
+			text = zgrc_common.3004.a
+		}
+		remove_short_term_gold = zgrc_wen_shrine_cost
+		root.var:zgrc_wen_county = {
+			add_county_modifier = { modifier = zgrc_xiang_ni years = zgrc_wen_shrine_years }
+		}
+		# 锄奸之名（附逆为重）
+		add_prestige = 100
+		add_character_flag = { flag = zgrc_wen_donate_cd years = zgrc_wen_donate_cooldown_years }
+		# 主角在世：遗臭乡邦 + 有所忌惮
+		if = {
+			limit = { root.var:zgrc_wen_county.var:zgrc_wen_hero_funi = { is_alive = yes } }
+			root.var:zgrc_wen_county.var:zgrc_wen_hero_funi = {
+				add_character_modifier = { modifier = zgrc_tuozhi_ni_modifier years = zgrc_wen_shrine_years }
+				add_character_modifier = { modifier = zgrc_jidan_modifier years = zgrc_wen_shrine_years }
+			}
+		}
+		ai_chance = { base = 30 }
+	}
+
+	# —— B 广而告之 ——
+	option = {
+		name = zgrc_common.3004.b
+		add_stress = -15
+		add_opinion = { target = root.var:zgrc_wen_county.var:zgrc_wen_hero_funi modifier = zgrc_opinion_funi opinion = -30 }
+		if = {
+			limit = { root.var:zgrc_wen_county.var:zgrc_wen_hero_funi = { is_alive = yes } }
+			root.var:zgrc_wen_county.var:zgrc_wen_hero_funi = {
+				add_stress = 30
+			}
+		}
+		ai_chance = { base = 40 }
+	}
+
+	# —— C 不足为虑 ——
+	option = {
+		name = zgrc_common.3004.c
+		ai_chance = { base = 30 }
 	}
 }

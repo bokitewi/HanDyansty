@@ -20,7 +20,11 @@ on_war_started = {
 # 		zgrc_game_start_init
 # 	}
 # }
-
+on_game_start_after_lobby = {
+	on_actions = {
+		zgrc_game_start_init
+	}
+}
 
 on_birth_child = {
 	on_actions = {
@@ -58,7 +62,11 @@ yearly_culture_pulse = {
 	}
 }
 
-
+on_travel_plan_movement = {
+	on_actions = {
+		zgrc_wenyan_travel_check
+	}
+}
 
 # ---------- 本地提炼 ----------
 
@@ -68,10 +76,12 @@ zgrc_game_start_init = {
 	effect = {
 		if = {
 			limit = { has_game_rule = zgrc_init_on_start_enabled }
-			# ① 革新初始化（与原版 han 对齐）
+			# ① 革新初始化（中华革新 + 时代与基础革新对齐原版 han）
 			zgrc_innovation_init_effect = yes
+			# ①b 革新初始化（原版 han 专段：本 mod 的汉家兵法 / 汉传武备）
+			# zgrc_innovation_init_han_effect = yes 汉末mod不需要
 			# ② 地域风俗初始化 仅香草适配需要 TODO
-			# zgrc_distribute_regional_customs_effect = yes
+			# zgrc_distribute_regional_customs_effect = yes 汉末mod不需要
 			# ③ 全局分发汉家冠带
 			zgrc_distribute_hanjia_guandai_effect = yes
 		}
@@ -84,13 +94,19 @@ zgrc_hanjia_children_on_birth = {
 		# ① 子嗣文化绑定出生地：新生儿文化有华夏礼乐、出生地文化亦有华夏礼乐且不一致 → 改为当地文化
 		if = {
 			limit = {
+				# 空安全：新生儿无 location（出生即夭等）时下钻 location.county 会刷 Script system error
+				exists = location
 				culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue }
 				location.county = {
 					culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue }
 					NOT = { culture = root.culture }
 				}
 			}
+			# 祖风 · 先记录祖上（继承）大区（须在改文化之前）
+			zgrc_zufeng_set_origin_effect = yes
 			set_culture = location.county.culture
+			# 祖风 · 跨大区迁居者挂「某祖风」；同大区跨风俗则不计
+			zgrc_zufeng_apply_effect = yes
 		}
 		# ② 汉家冠带：文化有华夏礼乐 → 添加
 		if = {
@@ -176,14 +192,11 @@ zgrc_innovation_sync_pulse = {
 		has_cultural_tradition = tradition_zgrc_hua_xia_li_yue
 		exists = culture_head
 		culture_head = { top_liege = { highest_held_title_tier >= tier_empire } }
-		has_game_rule = zgrc_innovation_sync_enabled
+		NOT = { has_game_rule = zgrc_innovation_sync_disabled }
 	}
 	effect = {
 		if = {
-			limit = {
-				exists = global_var:g_zgrc_sync_count
-				global_var:g_zgrc_sync_count = 0
-			}
+			limit = { global_var:g_zgrc_sync_count == 0 }
 			zgrc_innovation_sync_effect = yes
 		}
 	}
@@ -192,9 +205,43 @@ zgrc_innovation_sync_pulse = {
 # 死则举大名耳
 zgrc_si_ze_ju_da_ming = {
 	effect = {
-		# 天下响应 TODO:待重新设计
-		# zgrc_tianxia_xiangying_effect = yes
-		# 极端爆发
+		# 极端爆发 · 义军响应（直接来投）
 		zgrc_jiduan_baofa_effect = yes
+		# 天下响应 · 非常时期封臣表态（文化体验事件 1010）
+		if = {
+			limit = { NOT = { has_game_rule = zgrc_luanshi_xiangying_disabled } }
+			zgrc_tianxia_xiangying_effect = yes
+		}
+	}
+}
+
+# ============================================================
+# 传言系统 —— 旅行听闻（美名/恶名传闻）
+# 旅行途经的当前伯爵领有传闻时，概率触发 → 事件 3001-3004（严格脚下县）
+# ============================================================
+zgrc_wenyan_travel_check = {
+	trigger = {
+		NOT = { has_character_flag = zgrc_wen_cooldown }
+		current_travel_plan = {
+			# 空安全：启程首步 / 海上 / 无伯爵领时 current_location.county 未设，直接下钻会刷 Script system error
+			exists = current_location
+			current_location = {
+				exists = county
+				county = {
+					OR = {
+						has_variable = zgrc_wen_zhongyi
+						has_variable = zgrc_wen_rende
+						has_variable = zgrc_wen_yexin
+						has_variable = zgrc_wen_funi
+					}
+				}
+			}
+		}
+	}
+	effect = {
+		random = {
+			chance = zgrc_wen_travel_weight
+			zgrc_wenyan_try_hear_effect = yes
+		}
 	}
 }

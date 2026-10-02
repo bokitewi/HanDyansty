@@ -27,18 +27,16 @@ zgrc_ruxiang_cooldown_years = 50
 # ============================================================
 # 革新同步 —— 同步阈值（= 周期，每 N 年同步一次）
 # 消费方：on_action zgrc_innovation_sync_count_pulse
-# 可配置：game_rule zgrc_innovation_sync_threshold（1 / 3 / 5）
+# 可配置：game_rule zgrc_innovation_sync（关闭 / 1 / 3 / 5；关闭时不调用本值）
 # ============================================================
 zgrc_innovation_sync_threshold = {
+	value = 3
 	if = {
-		limit = { has_game_rule = zgrc_innovation_sync_threshold_1 }
+		limit = { has_game_rule = zgrc_innovation_sync_1 }
 		value = 1
 	}
-	else_if = {
-		limit = { has_game_rule = zgrc_innovation_sync_threshold_3 }
-		value = 3
-	}
-	else = {
+	if = {
+		limit = { has_game_rule = zgrc_innovation_sync_5 }
 		value = 5
 	}
 }
@@ -92,38 +90,134 @@ zgrc_han_ruishi_low_maint_cost = 1.10
 zgrc_han_ruishi_high_maint_cost = 3.30
 
 
-# ============================================================
-# 厚生慎死·极端爆发 —— 关键数值
-# 消费方：on_action zgrc_tianxia_xiangying_effect（on_war_started）
-# 事件：zgrc_common.0003 - 0007
-# ============================================================
-# 外敌入侵：触发臣子表态的基础概率（%）
-zgrc_extreme_foreign_chance = 25
-# 动态概率：基础概率 × 攻防军力比（钳制 [基础, 100]）——军力越悬殊，臣子越可能响应
-zgrc_extreme_foreign_chance_scaled = {
-	value = zgrc_extreme_foreign_chance
-	multiply = {
-		value = scope:attacker.current_military_strength
-		divide = {
-			value = scope:defender.current_military_strength
-			min = 1
-		}
+# 义军来投 · 队数（1 队 = 100 人）
+# 基线 8 队（800 人）：寻常人亦有乡党来投
+# 威望与美名（忠义/仁德/生祠香火/乡里立祠）增其众；恶名（野心/千夫所指/附逆遗臭）大减其众，乡里铸有逆像者再削
+zgrc_yijun_stacks = {
+	value = 8
+	add = prestige_level
+	if = {
+		limit = { has_character_modifier = zgrc_zhongyi_modifier }
+		add = 3
 	}
-	min = zgrc_extreme_foreign_chance
-	max = 100
+	if = {
+		limit = { has_character_modifier = zgrc_rende_modifier }
+		add = 3
+	}
+	if = {
+		limit = { has_character_modifier = zgrc_shengci_modifier }
+		add = 2
+	}
+	if = {
+		limit = {
+			capital_county = {
+				OR = {
+					has_county_modifier = zgrc_ci_zhong
+					has_county_modifier = zgrc_ci_ren
+				}
+			}
+		}
+		add = 2
+	}
+	# 恶名：择最重者一击，不叠乘
+	if = {
+		limit = { has_character_modifier = zgrc_tuozhi_ni_modifier }
+		multiply = 0.35
+	}
+	else_if = {
+		limit = { has_character_modifier = zgrc_tuozhi_modifier }
+		multiply = 0.5
+	}
+	else_if = {
+		limit = { has_character_modifier = zgrc_yexin_modifier }
+		multiply = 0.65
+	}
+	# 乡里铸有逆像：再削 2 队
+	if = {
+		limit = {
+			capital_county = {
+				OR = {
+					has_county_modifier = zgrc_xiang_zui
+					has_county_modifier = zgrc_xiang_ni
+				}
+			}
+		}
+		subtract = 2
+	}
+	floor = yes
+	max = 16
 }
 
-# 军力悬殊比例阈值（按场景分档；判断时内联：攻方战力 ≥ 防方战力 × 阈值）
-zgrc_extreme_ratio_peasant  = 0.75   # 农民起义（民心补偿，阈值低）
-zgrc_extreme_ratio_populist = 0.75   # 民粹起义（同上）
-zgrc_extreme_ratio_invasion = 2.0    # 外敌入侵（大军压境，作声索的 OR 补充）
-zgrc_extreme_ratio_prince   = 1.0    # 藩王造反（同族旗鼓相当）
-zgrc_extreme_ratio_warlord  = 1.0    # 诸侯造反（同文旗鼓相当）
-zgrc_extreme_ratio_uprising = 0.75   # 汉人聚义（红巾军，真正民粹）
-
-# 汉家义勇 · 事件收编优惠总价（正常招募的 2 折：50×0.2×8 队 = 80 金）
+# 汉家义勇 · 事件收编优惠总价（2 折基准：50 金/队 × 队数 × 0.2）
+# 注：该兵种为事件专属（special_recruit_only），不可常规招募；此值仅作事件 2001 选项 B 的定价
 zgrc_hanjia_yiyong_event_cost = {
-	value = zgrc_hanjia_yiyong_recruitment_cost
-	multiply = 8
+	value = zgrc_yijun_stacks
+	multiply = zgrc_hanjia_yiyong_recruitment_cost
 	multiply = 0.2
 }
+
+# ============================================================
+# 天下响应 —— 关键数值（非常时期封臣表态，事件 1010）
+# 消费方：on_war_started → zgrc_tianxia_xiangying_effect（War 作用域）
+# 设计基线：文化向（华夏礼乐 + 厚生慎死）；完全忽略政体
+# ============================================================
+# 大事判定②：来犯者须成气候——攻击方军力 ≥ 防御方 × 本值（上不封顶）
+# 0.8：来犯者至少握有帝国八成之力；帝国愈弱、来犯者愈强，愈应天下响应
+zgrc_luanshi_ratio_lo = 0.8
+
+# 选项A「勤王」：散家财以应征
+zgrc_luanshi_muster_cost = {
+	value = gold
+	multiply = 0.25     # 0.25
+	min = 50            # 50
+	max = 200           # 200
+}
+
+# 选项A「勤王」：所起乡勇队数
+zgrc_luanshi_muster_stacks = {
+	value = 5
+	add = prestige_level          # 0-5
+	add = { value = gold divide = 50 max = 6 }
+	min = 8
+	max = 16
+}
+
+# 选项B「举义」：须有本钱（点数兵力下限，约 10 队常备）
+zgrc_luanshi_rebel_min_strength = 1000
+
+# 事件 1010 触发概率（%）：每名合格封臣被问的可能性
+zgrc_luanshi_ai_chance = 20
+
+# 事件 1010 冷却（年）：同一封臣 10 年内不再被问
+zgrc_luanshi_cooldown_years = 10
+
+# ============================================================
+# 传言系统 —— 美名/恶名传闻（旅行听闻 → 捐资立祠/铸像）
+# 消费方：on_travel_plan_movement → zgrc_wenyan_travel_check
+#         事件 zgrc_common.3001-3004
+# ============================================================
+# 旅行触发概率（%）：途经有传闻的王国时，听闻一次的概率
+zgrc_wen_travel_weight = 50
+
+# 传言寿命（计数制）：初始可闻次数，每被听闻一次减一，归零则传闻湮灭
+zgrc_wen_rumor_count = 3
+
+# 祠/像县修正时长（年，续捐刷新）
+zgrc_wen_shrine_years = 20
+
+# 捐资费用（金）
+zgrc_wen_shrine_cost = 20
+
+# 同一角色两次听闻间隔（年）
+zgrc_wen_cooldown_years = 3
+
+# 同一角色两次捐资间隔（年）
+zgrc_wen_donate_cooldown_years = 5
+
+# ============================================================
+# 祖风 —— 跨大区迁居（新生儿祖上传承）
+# 消费方：scripted_effects/zgrc_effects.txt → zgrc_zufeng_apply_effect
+# ============================================================
+# 祖风 modifier 持续年数（到期自然消散，祖荫随世代淡去）
+zgrc_zufeng_years = 30
+
