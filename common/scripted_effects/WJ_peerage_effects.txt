@@ -156,7 +156,7 @@ WJ_peer_get_family = {
    house = { save_scope_as = wj_peer_original_house }
    create_cadet_branch = {}
    # Only this newly created branch: never replace the head of the original house.
-   if = { limit = { NOT = { house = scope:wj_peer_original_house } } house = { set_house_head = prev } }
+   if = { limit = { NOT = { house = scope:wj_peer_original_house } } house = { set_house_head = prev set_house_name_from_house = scope:wj_peer_original_house } }
   }
   if = { limit = { scope:wj_peer_was_close_kin = yes } house = { add_house_modifier = { modifier = SanGong_SeparatedCloseKin_modifier } } }
   create_noble_family_effect = { GOVERNMENT_GIVER = top_liege }
@@ -166,11 +166,14 @@ WJ_peer_get_family = {
 }
 # Remove only the character's mirror; never release family/source occupancy here.
 WJ_peer_clear_mirror = {
- remove_trait = WJ_peerage_trait remove_variable = wj_peer_family
- remove_variable = wj_peer_rank remove_variable = wj_peer_name remove_variable = wj_peer_food
+ # The death callback freezes only a currently valid grant; revocation never sets this marker.
+ if = { limit = { NOT = { has_variable = wj_peer_memorial } }
+  remove_trait = WJ_peerage_trait remove_variable = wj_peer_rank remove_variable = wj_peer_name remove_variable = wj_peer_princess
+ }
+ remove_variable = wj_peer_family remove_variable = wj_peer_food
  remove_variable = wj_peer_realm remove_variable = wj_peer_heir remove_variable = wj_peer_last_paid
  remove_variable = wj_peer_amount
- remove_variable = wj_peer_princess
+ remove_variable = wj_peer_personal
 }
 # Family title scope. This is the only authoritative record; character variables are display adapters.
 WJ_peer_sync_holder = {
@@ -221,14 +224,29 @@ WJ_peer_clear_family = {
 }
 # Character scope; family record owns every cleanup operation.
 WJ_peer_clear = {
- if = { limit = { exists = var:wj_peer_family } var:wj_peer_family = { WJ_peer_clear_family = yes } }
+ if = { limit = { has_variable = wj_peer_personal } WJ_peer_clear_personal = yes }
+ else_if = { limit = { exists = var:wj_peer_family } var:wj_peer_family = { WJ_peer_clear_family = yes } }
  else = { WJ_peer_clear_mirror = yes }
 }
 WJ_peer_commit = {
  if = { limit = { WJ_peer_commit_valid = yes }
   save_scope_as = wj_peer_issuer
-  var:wj_peer_target = { WJ_peer_get_family = yes }
-  if = { limit = { WJ_peer_commit_valid = yes exists = scope:wj_peer_family scope:wj_peer_family = { holder = root.var:wj_peer_target NOT = { has_variable = wj_peer_rank } } }
+  if = { limit = { var:wj_peer_target = { dynasty = root.dynasty } }
+   var:wj_peer_target = {
+    set_variable = { name = wj_peer_personal value = yes }
+    set_variable = { name = wj_peer_rank value = scope:wj_peer_issuer.var:wj_peer_pending_rank }
+    set_variable = { name = wj_peer_name value = scope:wj_peer_issuer.var:wj_peer_pending_name }
+    set_variable = { name = wj_peer_food value = scope:wj_peer_issuer.var:wj_peer_pending_food }
+    set_variable = { name = wj_peer_realm value = scope:wj_peer_issuer.primary_title }
+    set_variable = { name = wj_peer_last_paid value = current_year }
+    if = { limit = { is_female = yes } set_variable = { name = wj_peer_princess value = yes } }
+    WJ_peer_bind_personal = yes
+   }
+   WJ_peer_finish_grant = yes
+  }
+  else = {
+   var:wj_peer_target = { WJ_peer_get_family = yes }
+   if = { limit = { WJ_peer_commit_valid = yes exists = scope:wj_peer_family scope:wj_peer_family = { holder = root.var:wj_peer_target NOT = { has_variable = wj_peer_rank } } }
    # Native creation can trigger hooks; only charge once a real family title is available.
    scope:wj_peer_family = {
     set_variable = { name = wj_peer_rank value = scope:wj_peer_issuer.var:wj_peer_pending_rank }
@@ -242,15 +260,22 @@ WJ_peer_commit = {
     }
     WJ_peer_bind_family = yes
    }
-   if = { limit = { var:wj_peer_pending_rank = 4 } remove_short_term_gold = 50 add_piety = -50 change_influence = -50 }
-   var:wj_peer_target = { trigger_event = WJ_peer.020 }
-   WJ_peer_end_workflow = yes
+    WJ_peer_finish_grant = yes
+   }
   }
  }
 }
+WJ_peer_finish_grant = {
+ if = { limit = { var:wj_peer_pending_rank = 4 } remove_short_term_gold = 50 add_piety = -50 change_influence = -50 }
+ var:wj_peer_target = { trigger_event = WJ_peer.020 }
+ WJ_peer_end_workflow = yes
+}
 WJ_peer_pay = {
- if = { limit = { WJ_peer_valid = yes exists = var:wj_peer_family var:wj_peer_family = { var:wj_peer_last_paid < current_year } }
-  var:wj_peer_family = { set_variable = { name = wj_peer_last_paid value = current_year } }
+ if = { limit = { WJ_peer_valid = yes OR = {
+  AND = { has_variable = wj_peer_personal var:wj_peer_last_paid < current_year }
+  AND = { exists = var:wj_peer_family var:wj_peer_family = { var:wj_peer_last_paid < current_year } }
+ } }
+  var:wj_peer_family ?= { set_variable = { name = wj_peer_last_paid value = current_year } }
   set_variable = { name = wj_peer_last_paid value = current_year }
   set_variable = { name = wj_peer_amount value = WJ_peer_annual_gold }
   add_gold = var:wj_peer_amount
@@ -274,4 +299,39 @@ WJ_peer_maintain_all = {
  clear_local_variable_list = wj_peer_check_snapshot
  every_in_global_list = { variable = wj_peer_families add_to_local_variable_list = { name = wj_peer_check_snapshot target = this } }
  every_in_local_list = { variable = wj_peer_check_snapshot WJ_peer_maintain_family = yes }
+ clear_local_variable_list = wj_peer_personal_snapshot
+ every_in_global_list = { variable = wj_peer_personal_bearers add_to_local_variable_list = { name = wj_peer_personal_snapshot target = this } }
+ every_in_local_list = { variable = wj_peer_personal_snapshot
+  # The realm title may still point at a dying emperor until the native transfer finishes.
+  if = { limit = { exists = var:wj_peer_realm.holder var:wj_peer_realm.holder = { is_alive = no } is_alive = yes } }
+  else_if = { limit = { WJ_peer_personal_valid = no } WJ_peer_clear_personal = yes }
+ }
+}
+# Royal grants live on the recipient, never a cadet house or an inheritable family title.
+WJ_peer_bind_personal = {
+ save_scope_as = wj_peer_person
+ add_trait = WJ_peerage_trait
+ var:wj_peer_name = {
+  set_variable = { name = wj_peer_name_owner value = scope:wj_peer_person }
+  set_variable = { name = wj_peer_fief_rank value = scope:wj_peer_person.var:wj_peer_rank }
+  set_variable = { name = wj_peer_xiang_owner value = scope:wj_peer_person }
+ }
+ var:wj_peer_food = { set_variable = { name = wj_peer_food_owner value = scope:wj_peer_person } }
+ add_to_global_variable_list = { name = wj_peer_personal_bearers target = this }
+}
+WJ_peer_clear_personal = {
+ save_scope_as = wj_peer_person
+ var:wj_peer_name ?= { if = { limit = { var:wj_peer_name_owner = scope:wj_peer_person }
+  remove_variable = wj_peer_name_owner remove_variable = wj_peer_fief_rank remove_variable = wj_peer_xiang_owner
+ } }
+ var:wj_peer_food ?= { if = { limit = { var:wj_peer_food_owner = scope:wj_peer_person } remove_variable = wj_peer_food_owner } }
+ remove_list_global_variable = { name = wj_peer_personal_bearers target = this }
+ WJ_peer_clear_mirror = yes
+}
+# Called before native death cleanup: keep the badge/name only, no income or occupation.
+WJ_peer_before_death = {
+ if = { limit = { WJ_peer_valid = yes }
+  set_variable = { name = wj_peer_memorial value = yes }
+  if = { limit = { has_variable = wj_peer_personal } WJ_peer_clear_personal = yes }
+ }
 }

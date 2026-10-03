@@ -1,4 +1,4 @@
-﻿namespace = zgrc_common
+namespace = zgrc_common
 
 # ============================================================
 # 入乡随俗 —— 可见选择
@@ -820,5 +820,107 @@ zgrc_common.3004 = {
 	option = {
 		name = zgrc_common.3004.c
 		ai_chance = { base = 30 }
+	}
+}
+
+# ============================================================
+# 大复仇 · 复仇抉择（玩家自选；AI 按 ai_chance 权重自选）
+# ============================================================
+# 入口：on_death → zgrc_dachou_on_death_effect（死者直系亲属：父母 / 子女）
+# 作用域：root = 复仇者候选；scope:zgrc_victim = 死者；scope:zgrc_killer = 凶手
+#   A 不共戴天：add_opinion（-200 永久，自带监禁 / 处决 / 夺衔之合法理由）
+#   B 含垢忍辱：压力 + 概率负面特质（怯懦 / 多疑 / 羞怯 / 隐遁）
+# 两选项 ai_chance 互补（30 + 70 = 100），故 A 的实际概率即其权重%
+# ============================================================
+zgrc_common.4001 = {
+	type = character_event
+	title = zgrc_common.4001.t
+	desc = zgrc_common.4001.desc
+
+	# 双保险（源头已在 zgrc_dachou_on_death_effect 过滤）：须成年、有此个人信条、且有立足之地
+	trigger = {
+		zgrc_can_revenge_trigger = yes
+		exists = scope:zgrc_victim
+		exists = scope:zgrc_killer
+		scope:zgrc_killer = { is_alive = yes }
+		this != scope:zgrc_killer
+	}
+
+	theme = death
+
+	# 三人：左＝复仇者（root）｜右＝死者｜下中＝凶手
+	# 依据：character_event 不支持 center_portrait（_events.info:89「not used in all event types」）；
+	#       三人布局须用 lower_*_portrait（参考原版 birth_events.txt:826-844、
+	#       汉晋春秋 zz_hd_peach_garden_events.txt:12-27）
+	left_portrait = {
+		character = root
+		animation = anger
+	}
+	right_portrait = {
+		character = scope:zgrc_victim
+		animation = dead
+	}
+	lower_center_portrait = {
+		character = scope:zgrc_killer
+		animation = assassin
+	}
+
+	immediate = {
+		play_music_cue = "mx_cue_murder"
+	}
+
+	# —— A 不共戴天：此仇不报，誓不为人 ——
+	option = {
+		name = zgrc_common.4001.a
+
+		add_opinion = {
+			modifier = zgrc_bugongdaitian_opinion
+			target = scope:zgrc_killer
+		}
+
+		ai_chance = {
+			base = 30
+			# 亲缘：父母丧子，痛彻骨髓；手足亦痛
+			modifier = { add = 20 is_parent_of = scope:zgrc_victim }
+			modifier = { add = 10 scope:zgrc_victim = { any_sibling = { this = root } } }
+			# 死者为「我最喜爱的孩子」/「我的继承人」→ 更切齿
+			modifier = { add = 20 has_relation_favorite_child = scope:zgrc_victim }
+			modifier = { add = 20 scope:zgrc_victim = { is_primary_heir_of = root } }
+			# 性格
+			modifier = { add = 15 has_trait = vengeful }
+			modifier = { add = 10 has_trait = zealous }
+			modifier = { add = -20 has_trait = forgiving }
+			modifier = { add = -20 has_trait = craven }
+			# 对死者生前好恶
+			modifier = { add = 15 opinion = { target = scope:zgrc_victim value >= 50 } }
+			modifier = { add = -20 opinion = { target = scope:zgrc_victim value <= -50 } }
+		}
+	}
+
+	# —— B 含垢忍辱：隐忍不发，郁结于心 ——
+	option = {
+		name = zgrc_common.4001.b
+
+		add_stress = minor_stress_gain
+
+		# 负面特质（合计 40%）：怯懦
+		random_list = {
+			1 = { add_trait = craven }
+			9 = {}
+		}
+
+		ai_chance = {
+			base = 70
+			modifier = { add = -20 is_parent_of = scope:zgrc_victim }
+			modifier = { add = -10 scope:zgrc_victim = { any_sibling = { this = root } } }
+			modifier = { add = -20 has_relation_favorite_child = scope:zgrc_victim }
+			modifier = { add = -20 scope:zgrc_victim = { is_primary_heir_of = root } }
+			modifier = { add = -15 has_trait = vengeful }
+			modifier = { add = -10 has_trait = zealous }
+			modifier = { add = 20 has_trait = forgiving }
+			modifier = { add = 20 has_trait = craven }
+			modifier = { add = -15 opinion = { target = scope:zgrc_victim value >= 50 } }
+			modifier = { add = 20 opinion = { target = scope:zgrc_victim value <= -50 } }
+		}
 	}
 }
