@@ -58,6 +58,8 @@ dynastic_cycle = {
 				update_movement_power_effect = yes
 			}
 		}
+		# 天朝循环大修·朋党：年度归组与各朝廷结算（分散到 60 天内）
+		hd_party_yearly_effect = yes
 		
 		title:h_china.holder ?= {
 			save_scope_as = huangdi
@@ -130,10 +132,14 @@ dynastic_cycle = {
 	##################################################
 	# Groups
 	##################################################
+	# 天朝循环大修·朋党：参与者组改为"身份"。排列顺序即归属优先级（引擎取第一个满足的组）：
+	# 天子 > 四夷 > 诸侯 > 宦官 > 外戚 > 武勋 > 世族 > 寒门（兜底）
+	# 保留原版组 key 与 movement_member 旗标以兼容既有代码：
+	#   undecided=宦官 pro_hegemon=外戚 expansion=武勋 conservative=世族 advancement=寒门
 	participant_groups = {
-		hegemon_ruler = { #just the hegemon
+		hegemon_ruler = { # 天子
 			icon = "gfx/interface/icons/dynastic_cycle/dynastic_cycle_group_emperor.dds"
-			
+
 			map_color = { 255 234 64 }
 
 			is_character_valid = {
@@ -149,12 +155,45 @@ dynastic_cycle = {
 				}
 			}
 		}
-		pro_hegemon_movement = { #they are cool with whatever the hegemon wants and does
-			icon = "gfx/interface/icons/dynastic_cycle/dynastic_cycle_group_pro.dds"
-			map_color = { 150 20 150 }
+		hd_siyi_movement = { # 四夷：非汉文化传承，不预朝政
+			icon = "gfx/interface/icons/dynastic_cycle/dynastic_cycle_group_independent.dds"
+			map_color = { 140 100 60 }
 
 			is_character_valid = {
-				exists = title:h_china.holder
+				hd_party_is_siyi_trigger = yes
+				OR = {
+					is_independent_ruler = yes
+					hd_party_identity_realm_trigger = yes
+				}
+			}
+		}
+		other_rulers = { # 诸侯：其他独立统治者
+			icon = "gfx/interface/icons/dynastic_cycle/dynastic_cycle_group_emperor.dds"
+			is_character_valid = {
+				is_independent_ruler = yes
+				trigger_if = {
+					limit = {
+						exists = title:h_china.holder
+					}
+					NAND = {
+						is_tributary_of = title:h_china.holder
+						subject_contract_has_flag = celestial_investiture_politics
+					}
+				}
+			}
+			on_join = {
+				if = {
+					limit = { is_ai = no }
+					trigger_event = tgp_dynastic_cycle.0051
+				}
+			}
+		}
+		undecided_movement = { # 宦官
+			icon = "gfx/interface/icons/dynastic_cycle/dynastic_cycle_group_pro.dds"
+			map_color = { 240 240 240 }
+
+			is_character_valid = {
+				hd_party_identity_realm_trigger = yes
 				trigger_if = {
 					limit = {
 						NOR = {
@@ -162,14 +201,58 @@ dynastic_cycle = {
 							top_participant_group:dynastic_cycle.var:movement_leader ?= root
 						}
 					}
-					OR = {
-						is_vassal_or_below_of = title:h_china.holder
-						AND = {
-							is_tributary_of = title:h_china.holder
-							subject_contract_has_flag = celestial_investiture_politics
+					hd_party_is_huanguan_trigger = yes
+				}
+				trigger_else = {
+					var:movement_member ?= flag:undecided
+				}
+			}
+			on_join = {
+				update_character_movement_power_effect = yes
+				set_movement_leader_and_power_effect = yes
+				if = {
+					limit = { is_ai = no }
+					trigger_event = tgp_dynastic_cycle.0052
+				}
+				# to prevent from bouncing between movements
+				if = {
+					limit = {
+						NOT = { has_variable = movement_member }
+					}
+					set_variable = {
+						name = movement_member
+						value = flag:undecided
+					}
+				}
+			}
+			on_leave = {
+				scope:situation_participant_group = {
+					update_movement_power_effect = yes
+				}
+				if = {
+					limit = {
+						root = scope:situation_participant_group.var:movement_leader
+					}
+					scope:situation_participant_group = {
+						update_movement_leader_effect = yes
+					}
+				}
+			}
+		}
+		pro_hegemon_movement = { # 外戚
+			icon = "gfx/interface/icons/dynastic_cycle/dynastic_cycle_group_unaligned.dds"
+			map_color = { 150 20 150 }
+
+			is_character_valid = {
+				hd_party_identity_realm_trigger = yes
+				trigger_if = {
+					limit = {
+						NOR = {
+							exists = var:movement_member
+							top_participant_group:dynastic_cycle.var:movement_leader ?= root
 						}
 					}
-					should_pick_pro_hegemon_movement_trigger = yes
+					hd_party_is_waiqi_trigger = yes
 				}
 				trigger_else = {
 					var:movement_member ?= flag:pro_hegemon
@@ -207,70 +290,12 @@ dynastic_cycle = {
 				}
 			}
 		}
-		advancement_movement = { #they want to push towards advancement stability phase, if this is the current phase they want to keep it
-			icon = "gfx/interface/icons/dynastic_cycle/dynastic_cycle_group_advance.dds"
-			map_color = { 128 255 128 }
-
-			is_character_valid = {
-				exists = title:h_china.holder
-				trigger_if = {
-					limit = {
-						NOR = {
-							exists = var:movement_member
-							top_participant_group:dynastic_cycle.var:movement_leader ?= root
-						}
-					}
-					OR = {
-						is_vassal_or_below_of = title:h_china.holder
-						AND = {
-							is_tributary_of = title:h_china.holder
-							subject_contract_has_flag = celestial_investiture_politics
-						}
-					}
-					should_pick_advancement_movement_trigger = yes
-				}
-				trigger_else = {
-					var:movement_member ?= flag:advancement
-				}
-			}
-			on_join = {
-				update_character_movement_power_effect = yes
-				set_movement_leader_and_power_effect = yes
-				if = {
-					limit = { is_ai = no }
-					trigger_event = tgp_dynastic_cycle.0054
-				}
-				# to prevent from bouncing between movements
-				if = {
-					limit = {
-						NOT = { has_variable = movement_member }
-					}
-					set_variable = {
-						name = movement_member
-						value = flag:advancement
-					}
-				}
-			}
-			on_leave = {
-				scope:situation_participant_group = {
-					update_movement_power_effect = yes
-				}
-				if = {
-					limit = {
-						root = scope:situation_participant_group.var:movement_leader
-					}
-					scope:situation_participant_group = {
-						update_movement_leader_effect = yes
-					}
-				}
-			}
-		}
-		expansion_movement = { #they want to push towards expansion stability phase, if this is the current phase they want to keep it
+		expansion_movement = { # 武勋
 			icon = "gfx/interface/icons/dynastic_cycle/dynastic_cycle_group_expand.dds"
 			map_color = { 220 20 0 }
 
 			is_character_valid = {
-				exists = title:h_china.holder
+				hd_party_identity_realm_trigger = yes
 				trigger_if = {
 					limit = {
 						NOR = {
@@ -278,14 +303,7 @@ dynastic_cycle = {
 							top_participant_group:dynastic_cycle.var:movement_leader ?= root
 						}
 					}
-					OR = {
-						is_vassal_or_below_of = title:h_china.holder
-						AND = {
-							is_tributary_of = title:h_china.holder
-							subject_contract_has_flag = celestial_investiture_politics
-						}
-					}
-					should_pick_expansion_movement_trigger = yes
+					hd_party_is_wuxun_trigger = yes
 				}
 				trigger_else = {
 					var:movement_member ?= flag:expansion
@@ -323,12 +341,12 @@ dynastic_cycle = {
 				}
 			}
 		}
-		conservative_movement = { #they want to empower nobility, oppose reformation and meritocracy
+		conservative_movement = { # 世族
 			icon = "gfx/interface/icons/dynastic_cycle/dynastic_cycle_group_anti.dds"
 			map_color = { 50 120 255 }
 
 			is_character_valid = {
-				exists = title:h_china.holder
+				hd_party_identity_realm_trigger = yes
 				trigger_if = {
 					limit = {
 						NOR = {
@@ -336,14 +354,7 @@ dynastic_cycle = {
 							top_participant_group:dynastic_cycle.var:movement_leader ?= root
 						}
 					}
-					OR = {
-						is_vassal_or_below_of = title:h_china.holder
-						AND = {
-							is_tributary_of = title:h_china.holder
-							subject_contract_has_flag = celestial_investiture_politics
-						}
-					}
-					should_pick_conservative_movement_trigger = yes
+					hd_party_is_shizu_trigger = yes
 				}
 				trigger_else = {
 					var:movement_member ?= flag:conservative
@@ -381,39 +392,26 @@ dynastic_cycle = {
 				}
 			}
 		}
-		undecided_movement = { #everyone else that didn't fit into the groups above
-			icon = "gfx/interface/icons/dynastic_cycle/dynastic_cycle_group_unaligned.dds"
-			map_color = { 240 240 240 }
+		advancement_movement = { # 寒门（兜底：不属于其他任何组的人）
+			icon = "gfx/interface/icons/dynastic_cycle/dynastic_cycle_group_advance.dds"
+			map_color = { 128 255 128 }
 
 			is_character_valid = {
-				exists = title:h_china.holder
+				hd_party_identity_realm_trigger = yes
 				trigger_if = {
 					limit = {
-						NOR = {
-							exists = var:movement_member
-							top_participant_group:dynastic_cycle.var:movement_leader ?= root
-						}
+						exists = var:movement_member
+						NOT = { top_participant_group:dynastic_cycle.var:movement_leader ?= root }
 					}
-					OR = {
-						is_vassal_or_below_of = title:h_china.holder
-						AND = {
-							is_tributary_of = title:h_china.holder
-							subject_contract_has_flag = celestial_investiture_politics
-						}
-					}
-				}
-				trigger_else = {
-					var:movement_member ?= flag:undecided
+					var:movement_member ?= flag:advancement
 				}
 			}
 			on_join = {
 				update_character_movement_power_effect = yes
-				scope:situation_participant_group = {
-					update_movement_power_effect = yes
-				}
+				set_movement_leader_and_power_effect = yes
 				if = {
 					limit = { is_ai = no }
-					trigger_event = tgp_dynastic_cycle.0052
+					trigger_event = tgp_dynastic_cycle.0054
 				}
 				# to prevent from bouncing between movements
 				if = {
@@ -422,7 +420,7 @@ dynastic_cycle = {
 					}
 					set_variable = {
 						name = movement_member
-						value = flag:undecided
+						value = flag:advancement
 					}
 				}
 			}
@@ -430,29 +428,13 @@ dynastic_cycle = {
 				scope:situation_participant_group = {
 					update_movement_power_effect = yes
 				}
-			}
-		}
-		other_rulers = { #all other independent rulers in the Dynastic Cycle region
-			icon = "gfx/interface/icons/dynastic_cycle/dynastic_cycle_group_independent.dds"
-			is_character_valid = {
-				trigger_if = {
-					limit = {
-						exists = title:h_china.holder
-					}
-					is_independent_ruler = yes
-					NAND = {
-						is_tributary_of = title:h_china.holder
-						subject_contract_has_flag = celestial_investiture_politics
-					}
-				}
-				trigger_else = {
-					always = yes
-				}
-			}
-			on_join = {
 				if = {
-					limit = { is_ai = no }
-					trigger_event = tgp_dynastic_cycle.0051
+					limit = {
+						root = scope:situation_participant_group.var:movement_leader
+					}
+					scope:situation_participant_group = {
+						update_movement_leader_effect = yes
+					}
 				}
 			}
 		}
@@ -549,28 +531,7 @@ dynastic_cycle = {
 			update_movement_power_effect = yes
 		}
 		
-		# Make the most powerful movement empowered
-		if = {
-			limit = {
-				NOT = {
-					any_participant_group = {
-						exists = var:movement_favored
-					}
-				}
-			}
-			ordered_participant_group = {
-				limit = {
-					OR = {
-						participant_group_type = expansion_movement
-						participant_group_type = advancement_movement
-						participant_group_type = pro_hegemon_movement
-						participant_group_type = conservative_movement
-					}
-				}
-				order_by = var:movement_power
-				make_movement_favored_effect = yes
-			}
-		}
+		# 天朝循环大修·朋党：开局不再自动青睐最强的朋党（默认不青睐，史实剧本另行设定）
 		every_situation_participant = {
 			if = {
 				limit = { is_ai = no }
@@ -631,7 +592,7 @@ dynastic_cycle = {
 		}
 		situation_dynastic_cycle_phase_stability_expansion = {
 			icon = "gfx/interface/icons/dynastic_cycle/dynastic_cycle_phase_expansion.dds"
-			illustration = "gfx/interface/illustrations/event_story/tgp_dynastic_cycle_stability.dds"
+			illustration = "gfx/interface/icons/dynastic_cycle/phases/expansion_period.png"
 
 			on_start = {
 				set_variable = {
@@ -704,178 +665,240 @@ dynastic_cycle = {
 			future_phases = {
 				situation_dynastic_cycle_phase_instability = {
 					takeover_type = points
-					takeover_points = @lost_mandate_of_heaven
+					takeover_points = hd_dc_era_threshold
 					catalysts = {
 
 						### SHARED CORRUPTION CATALYSTS
 
 						# Movement Power
-						catalyst_conservative_movement_yearly = massive_situation_catalyst_over_time_gain
-						catalyst_expansion_movement_yearly = major_situation_catalyst_loss
-						catalyst_movement_gained_power_advancement = major_situation_catalyst_gain
-						catalyst_movement_gained_power_expansion = medium_situation_catalyst_loss
-						catalyst_movement_gained_power_conservative = major_situation_catalyst_gain
-						catalyst_movement_gained_power_pro_hegemon = minimal_situation_catalyst_loss
-						catalyst_movement_consulted_heaven_instability_positive = massive_situation_catalyst_gain
-						catalyst_movement_consulted_heaven_instability_negative = massive_plus_situation_catalyst_loss
-						catalyst_house_head_consulted_heaven_instability_positive = massive_situation_catalyst_gain
-						catalyst_house_head_consulted_heaven_instability_negative = massive_plus_situation_catalyst_loss
+						catalyst_conservative_movement_yearly = hd_dc_base
+						catalyst_expansion_movement_yearly = hd_dc_base_neg
+						catalyst_movement_gained_power_advancement = hd_dc_t_m
+						catalyst_movement_gained_power_expansion = hd_dc_t_m_neg
+						catalyst_movement_gained_power_conservative = hd_dc_t_m
+						catalyst_movement_gained_power_pro_hegemon = hd_dc_t_s_neg
+						catalyst_movement_consulted_heaven_instability_positive = hd_dc_t_l
+						catalyst_movement_consulted_heaven_instability_negative = hd_dc_t_h_neg
+						catalyst_house_head_consulted_heaven_instability_positive = hd_dc_t_l
+						catalyst_house_head_consulted_heaven_instability_negative = hd_dc_t_h_neg
 						# Calamities
-						catalyst_hegemon_natural_disaster = monumental_situation_catalyst_over_time_gain
-						catalyst_hegemon_natural_disaster_recovered = massive_situation_catalyst_loss
-						catalyst_hegemon_in_civil_war = massive_situation_catalyst_gain
-						catalyst_hegemon_in_defensive_war_yearly = massive_situation_catalyst_over_time_gain
-						catalyst_hegemon_epidemic = massive_situation_catalyst_over_time_gain
-						catalyst_hegemon_apocalyptic_epidemic = monumental_situation_catalyst_over_time_gain
+						catalyst_hegemon_natural_disaster = hd_dc_base
+						catalyst_hegemon_natural_disaster_recovered = hd_dc_t_l_neg
+						catalyst_hegemon_in_civil_war = hd_dc_t_l
+						catalyst_hegemon_in_defensive_war_yearly = hd_dc_base
+						catalyst_hegemon_epidemic = hd_dc_base
+						catalyst_hegemon_apocalyptic_epidemic = hd_dc_base
 						# Legitimacy
-						catalyst_hegemon_below_legitimacy_yearly = below_legitimacy_catalyst_over_time_value
-						catalyst_hegemon_lost_mandate_of_heaven = @lost_mandate_of_heaven # Should always go into instability
-						catalyst_hegemon_mandate_of_heaven_at_0 = @lost_mandate_of_heaven
-						catalyst_hegemon_above_legitimacy_yearly = major_situation_catalyst_over_time_loss
+						catalyst_hegemon_below_legitimacy_yearly = hd_dc_base
+						catalyst_hegemon_lost_mandate_of_heaven = hd_dc_era_threshold # Should always go into instability
+						catalyst_hegemon_mandate_of_heaven_at_0 = hd_dc_era_threshold
+						catalyst_hegemon_above_legitimacy_yearly = hd_dc_base_neg
 						# Held Lands
-						catalyst_hegemony_too_few_lands = extreme_situation_catalyst_over_time_gain
-						catalyst_hegemony_far_too_few_lands = @lost_mandate_of_heaven
+						catalyst_hegemony_too_few_lands = hd_dc_base
+						catalyst_hegemony_far_too_few_lands = hd_dc_era_threshold
 						# Regency
-						catalyst_diarch_mandate = minimal_situation_catalyst_gain
+						catalyst_diarch_mandate = hd_dc_t_s
 						# Merit
-						catalyst_imperial_examinations_gap_long_yearly = major_situation_catalyst_over_time_gain
+						catalyst_imperial_examinations_gap_long_yearly = hd_dc_base
 
 						# Intrigue
-						catalyst_hegemon_murdered = monumental_situation_catalyst_gain
-						catalyst_imperial_family_member_murdered = medium_situation_catalyst_gain
+						catalyst_hegemon_murdered = hd_dc_t_h
+						catalyst_imperial_family_member_murdered = hd_dc_t_m
 						# Imperial Treasury
-						catalyst_imperial_treasury_raided = monumental_situation_catalyst_over_time_gain
-						catalyst_imperial_treasury_debt = massive_situation_catalyst_over_time_gain
+						catalyst_imperial_treasury_raided = hd_dc_base
+						catalyst_imperial_treasury_debt = hd_dc_base
 						# Administrative
-						catalyst_governor_embezzlement = medium_situation_catalyst_gain
-						catalyst_dipped_into_treasury = medium_situation_catalyst_gain
-						catalyst_hegemon_influenced_by_interaction = medium_situation_catalyst_gain
-						catalyst_minister_imprison = minor_situation_catalyst_gain
-						catalyst_governor_raided_estate = medium_situation_catalyst_gain
-						catalyst_governor_slander = minimal_situation_catalyst_gain
-						catalyst_governor_challenged_status = minimal_situation_catalyst_gain
-						catalyst_great_project_great_wall_contribution = minor_situation_catalyst_loss
-						catalyst_great_project_establish_control_contribution = minimal_situation_catalyst_gain
+						catalyst_governor_embezzlement = hd_dc_t_m
+						catalyst_dipped_into_treasury = hd_dc_t_m
+						catalyst_hegemon_influenced_by_interaction = hd_dc_t_m
+						catalyst_minister_imprison = hd_dc_t_l
+						catalyst_governor_raided_estate = hd_dc_t_m
+						catalyst_governor_slander = hd_dc_t_s
+						catalyst_governor_challenged_status = hd_dc_t_s
+						catalyst_great_project_great_wall_contribution = hd_dc_t_s_neg
+						catalyst_great_project_establish_control_contribution = hd_dc_t_s
 						# Tyranny
-						catalyst_tyrannical_extinguish_noble_family = medium_situation_catalyst_gain
+						catalyst_tyrannical_extinguish_noble_family = hd_dc_t_m
 						
 						# Succession - A new dynasty inherits the throne
-						catalyst_new_dynasty_inherits = @lost_mandate_of_heaven # Should always go into instability
+						catalyst_new_dynasty_inherits = hd_dc_era_threshold # Should always go into instability
 
 						### EXPANSION CORRUPTION CATALYSTS
 
 						# Movement Power
-						catalyst_advancement_movement_yearly = major_situation_catalyst_over_time_gain
-						catalyst_pro_hegemon_movement_advancement_yearly = massive_situation_catalyst_over_time_gain
+						catalyst_advancement_movement_yearly = hd_dc_base
+						catalyst_pro_hegemon_movement_advancement_yearly = hd_dc_base
 						# Diplomacy
-						catalyst_hegemon_too_few_tributaries_yearly = major_situation_catalyst_over_time_gain
+						catalyst_hegemon_too_few_tributaries_yearly = hd_dc_base
 						# Warfare
-						catalyst_hegemon_outdated_maa_yearly = major_situation_catalyst_over_time_gain
-						catalyst_hegemon_below_maa_limit_yearly = major_situation_catalyst_over_time_gain
-						catalyst_hegemon_hired_mercenary = minor_situation_catalyst_gain
-						catalyst_hegemon_lost_war = massive_plus_situation_catalyst_gain
-						catalyst_hegemon_lost_defensive_territorial_war = massive_situation_catalyst_gain
-						catalyst_hegemon_lost_capital_in_war = monumental_situation_catalyst_gain
+						catalyst_hegemon_outdated_maa_yearly = hd_dc_base
+						catalyst_hegemon_below_maa_limit_yearly = hd_dc_base
+						catalyst_hegemon_hired_mercenary = hd_dc_t_s
+						catalyst_hegemon_lost_war = hd_dc_t_h
+						catalyst_hegemon_lost_defensive_territorial_war = hd_dc_t_l
+						catalyst_hegemon_lost_capital_in_war = hd_dc_t_h
 
 						#Events
-						catalyst_event_mongol_empire_appears = massive_situation_catalyst_gain
-						catalyst_event_mongol_empire_attacks_minor = medium_situation_catalyst_gain
-						catalyst_event_mongol_empire_attacks_major = major_situation_catalyst_gain
+						catalyst_hd_nomad_power_rises = hd_dc_t_l
+						catalyst_hd_nomad_invasion_minor = hd_dc_t_m
+						catalyst_hd_nomad_invasion_major = hd_dc_t_l
 
 						# Great Projects
-						catalyst_great_project_great_wall_contribution = minimal_situation_catalyst_loss
-						catalyst_great_project_establish_control_contribution = minimal_situation_catalyst_gain
-						catalyst_minister_train_troops = medium_situation_catalyst_loss
-						catalyst_grand_campaign = major_situation_catalyst_loss
-						catalyst_grand_campaign_lost = major_situation_catalyst_gain
+						catalyst_minister_train_troops = hd_dc_t_s_neg
+						catalyst_grand_campaign = hd_dc_t_m_neg
+						catalyst_grand_campaign_lost = hd_dc_t_m
 
 						# Ministers
-						catalyst_find_secrets_bad_outcome = minor_situation_catalyst_gain
-						catalyst_find_secrets_good_outcome = minor_situation_catalyst_loss
-						catalyst_minister_caught_exam_cheater = minimal_situation_catalyst_loss
-						catalyst_minister_blackmailed = minimal_situation_catalyst_loss
-						catalyst_minister_exposed_secret = minor_situation_catalyst_loss
-						catalyst_cleared_treasury_debt = minor_situation_catalyst_loss
-						catalyst_minister_pardoned_known_criminal = minor_situation_catalyst_gain
-						catalyst_minister_pardoned_dangerous_criminal = minimal_situation_catalyst_gain
-						catalyst_requested_incursion = major_situation_catalyst_gain
+						catalyst_find_secrets_bad_outcome = hd_dc_t_s
+						catalyst_find_secrets_good_outcome = hd_dc_t_s_neg
+						catalyst_minister_caught_exam_cheater = hd_dc_t_s_neg
+						catalyst_minister_blackmailed = hd_dc_t_s_neg
+						catalyst_minister_exposed_secret = hd_dc_t_s_neg
+						catalyst_cleared_treasury_debt = hd_dc_t_s_neg
+						catalyst_minister_pardoned_known_criminal = hd_dc_t_m
+						catalyst_minister_pardoned_dangerous_criminal = hd_dc_t_m
+						catalyst_requested_incursion = hd_dc_t_m
+						catalyst_hd_lost_war_vip = hd_dc_t_h # era-gen
+						catalyst_hd_lost_land_vip = hd_dc_t_l # era-gen
+						catalyst_hd_vip_murdered = hd_dc_t_m # era-gen
+						catalyst_hd_crime = hd_dc_t_m # era-gen
+						catalyst_hd_suppress_party = hd_dc_t_l # era-gen
+						catalyst_hd_harsh_tax = hd_dc_t_s # era-gen
+						catalyst_hd_purge_vip = hd_dc_t_l # era-gen
+						catalyst_hd_incompetent_minister = hd_dc_t_m # era-gen
+						catalyst_hd_endless_war = hd_dc_t_h # era-gen
+						catalyst_hd_overmighty_vassal = hd_dc_t_l # era-gen
+						catalyst_hd_lost_to_barbarians = hd_dc_t_l # era-gen
+						catalyst_hd_able_civil_minister = hd_dc_t_m_half # era-gen
+						catalyst_hd_building_completed = hd_dc_t_s_half # era-gen
+						catalyst_hd_development = hd_dc_t_s_half # era-gen
+						catalyst_hd_exam_held = hd_dc_t_s_half # era-gen
+						catalyst_hd_peace_with_foreign = hd_dc_t_s_half # era-gen
+						catalyst_hd_tributary_gained = hd_dc_t_s_half # era-gen
+						catalyst_hd_demilitarized = hd_dc_t_s_half # era-gen
+						catalyst_hd_frontier_victory = hd_dc_t_m_neg # era-gen
+						catalyst_hd_investiture = hd_dc_t_s_neg # era-gen
+						catalyst_hd_tuntian = hd_dc_t_m_neg # era-gen
+						catalyst_hd_military_merit = hd_dc_t_m_neg # era-gen
+					}
+				}
+				situation_dynastic_cycle_phase_stability_advancement = {
+					takeover_type = points
+					takeover_points = hd_dc_era_threshold
+					catalysts = {
+						# Passive gain
+						## Movement Power
+						catalyst_movement_gained_power_advancement = hd_dc_t_m
+						catalyst_pro_hegemon_movement_advancement_yearly = hd_dc_base
+						catalyst_advancement_movement_yearly = hd_dc_base
+						catalyst_expansion_movement_yearly = hd_dc_base_neg
+						catalyst_movement_consulted_heaven_advancement_positive = hd_dc_t_l
+						catalyst_movement_consulted_heaven_advancement_negative = hd_dc_t_h_neg
+						catalyst_house_head_consulted_heaven_advancement_positive = hd_dc_t_m
+						catalyst_house_head_consulted_heaven_advancement_negative = hd_dc_t_l_neg
+						## Legitimacy
+						catalyst_hegemon_above_legitimacy_yearly = hd_dc_base
+						catalyst_new_dynasty_inherits = hd_dc_t_h_neg
+						# Active gain
+						## Great Projects
+						catalyst_minister_project_culture = hd_dc_t_l
+						catalyst_minister_compel_religious_uniformity = hd_dc_t_l
+						catalyst_minister_conduct_census = hd_dc_t_l
+						catalyst_great_project_establish_control_contribution = hd_dc_t_s_neg
+						## Events
+						catalyst_event_advancement_medium_progress = hd_dc_t_m
+						# Ministers
+						catalyst_find_secrets_bad_outcome = hd_dc_t_s_neg
+						catalyst_find_secrets_good_outcome = hd_dc_t_s
+						catalyst_minister_caught_exam_cheater = hd_dc_t_s
+						catalyst_hd_lost_war_vip = hd_dc_t_h_half # era-gen
+						catalyst_hd_lost_land_vip = hd_dc_t_l_half # era-gen
+						catalyst_hd_vip_murdered = hd_dc_t_m_half # era-gen
+						catalyst_hd_crime = hd_dc_t_m_half # era-gen
+						catalyst_hd_suppress_party = hd_dc_t_l_half # era-gen
+						catalyst_hd_harsh_tax = hd_dc_t_s_half # era-gen
+						catalyst_hd_purge_vip = hd_dc_t_l_half # era-gen
+						catalyst_hd_incompetent_minister = hd_dc_t_m_half # era-gen
+						catalyst_hd_endless_war = hd_dc_t_h_half # era-gen
+						catalyst_hd_overmighty_vassal = hd_dc_t_l_half # era-gen
+						catalyst_hd_lost_to_barbarians = hd_dc_t_l_half # era-gen
+						catalyst_hd_able_civil_minister = hd_dc_t_m # era-gen
+						catalyst_hd_building_completed = hd_dc_t_s # era-gen
+						catalyst_hd_development = hd_dc_t_s # era-gen
+						catalyst_hd_exam_held = hd_dc_t_s # era-gen
+						catalyst_hd_peace_with_foreign = hd_dc_t_s # era-gen
+						catalyst_hd_tributary_gained = hd_dc_t_s # era-gen
+						catalyst_hd_demilitarized = hd_dc_t_s # era-gen
 					}
 				}
 			}
-			modifier_sets = {
+			modifier_sets = {	# 天朝循环大修·朋党：按身份重排（见 docs/朋党系统_设计草案.md 第 8 节）
 				dynastic_cycle_government_effects = {
-					hegemon_ruler = {
+					hegemon_ruler = {	# 天子
 						parameters = {
-							#phase defining effects
 							dynastic_cycle_hegemon_unlocks_external_casus_belli = yes
 							dynastic_cycle_vassal_internal_wars_allowed = yes
-							#shared effects
 							dynastic_cycle_hegemon_legitimacy_from_external_conquest = yes
 							dynastic_cycle_hegemony_higher_court_position_salaries = yes
-							dynastic_cycle_hegemony_ignore_merit_for_appointments = yes # Exists for localisation and does not need an actual implementation
+							dynastic_cycle_hegemony_ignore_merit_for_appointments = yes
 							dynastic_cycle_hegemon_increased_protectorate_limit = yes
 							dynastic_cycle_hegemon_martial_examinations = yes
 							dynastic_cycle_locks_title_integration = yes
 						}
 					}
-					pro_hegemon_movement = {
-						parameters = {
-							#movement defining effects
-							pro_hegemon_interaction_boost = yes
-							#phase defining effects
-							dynastic_cycle_vassal_internal_wars_allowed = yes
-							#shared effects
-							dynastic_cycle_hegemon_legitimacy_from_external_conquest = yes
-							dynastic_cycle_hegemon_legitimacy_increasing_expectations = yes
-							dynastic_cycle_locks_title_integration = yes
-						}
-					}
-					expansion_movement = {
-						parameters = {
-							#phase defining effects
-							dynastic_cycle_vassal_internal_wars_allowed = yes
-							#shared effects
-							dynastic_cycle_hegemon_legitimacy_from_external_conquest = yes
-							dynastic_cycle_hegemon_legitimacy_increasing_expectations = yes
-							dynastic_cycle_locks_title_integration = yes
-						}
-					}
-					advancement_movement = {
-						parameters = {
-							#phase defining effects
-							dynastic_cycle_vassal_internal_wars_allowed = yes
-							#shared effects
-							dynastic_cycle_hegemon_legitimacy_from_external_conquest = yes
-							dynastic_cycle_hegemon_legitimacy_increasing_expectations = yes
-							dynastic_cycle_locks_title_integration = yes
-						}
-					}
-					conservative_movement = {
-						parameters = {
-							#phase defining effects
-							dynastic_cycle_vassal_internal_wars_allowed = yes
-							#shared effects
-							dynastic_cycle_hegemon_legitimacy_from_external_conquest = yes
-							dynastic_cycle_hegemon_legitimacy_increasing_expectations = yes
-							dynastic_cycle_locks_title_integration = yes
-						}
-					}
-					undecided_movement = {
-						parameters = {
-							#phase defining effects
-							dynastic_cycle_vassal_internal_wars_allowed = yes
-							#shared effects
-							dynastic_cycle_locks_title_integration = yes
-						}
-					}
-					other_rulers = {
+					hd_siyi_movement = {	# 四夷
 						parameters = {
 							dynastic_cycle_no_effects = yes
 						}
 					}
+					other_rulers = {	# 诸侯
+						parameters = {
+							dynastic_cycle_no_effects = yes
+						}
+					}
+					undecided_movement = {	# 宦官
+						parameters = {
+							dynastic_cycle_vassal_internal_wars_allowed = yes
+							dynastic_cycle_locks_title_integration = yes
+							dynastic_cycle_hegemon_legitimacy_from_external_conquest = yes
+							dynastic_cycle_hegemon_legitimacy_increasing_expectations = yes
+						}
+					}
+					pro_hegemon_movement = {	# 外戚
+						parameters = {
+							dynastic_cycle_vassal_internal_wars_allowed = yes
+							dynastic_cycle_locks_title_integration = yes
+							dynastic_cycle_hegemon_legitimacy_from_external_conquest = yes
+							dynastic_cycle_hegemon_legitimacy_increasing_expectations = yes
+						}
+					}
+					expansion_movement = {	# 武勋
+						parameters = {
+							dynastic_cycle_vassal_internal_wars_allowed = yes
+							dynastic_cycle_locks_title_integration = yes
+							dynastic_cycle_hegemon_legitimacy_from_external_conquest = yes
+							dynastic_cycle_hegemon_legitimacy_increasing_expectations = yes
+						}
+					}
+					conservative_movement = {	# 世族
+						parameters = {
+							dynastic_cycle_vassal_internal_wars_allowed = yes
+							dynastic_cycle_locks_title_integration = yes
+							dynastic_cycle_hegemon_legitimacy_from_external_conquest = yes
+							dynastic_cycle_hegemon_legitimacy_increasing_expectations = yes
+						}
+					}
+					advancement_movement = {	# 寒门
+						parameters = {
+							dynastic_cycle_vassal_internal_wars_allowed = yes
+							dynastic_cycle_locks_title_integration = yes
+							dynastic_cycle_hegemon_legitimacy_from_external_conquest = yes
+							dynastic_cycle_hegemon_legitimacy_increasing_expectations = yes
+						}
+					}
 				}
 				dynastic_cycle_character_effects = {
-					hegemon_ruler = {
+					hegemon_ruler = {	# 天子
 						character_modifier = {
 							men_at_arms_title_cap = 2
 							mercenary_hire_cost_mult = 2.5
@@ -884,25 +907,42 @@ dynastic_cycle = {
 							max_personal_schemes_add = 1
 						}
 					}
-					pro_hegemon_movement = {
+					hd_siyi_movement = {	# 四夷
+						character_modifier = {
+							ai_war_chance = -0.2
+							monthly_prestige_gain_mult = -0.1
+						}
+					}
+					undecided_movement = {	# 宦官
+						character_modifier = {
+							monthly_influence_mult = 0.05
+						}
+					}
+					pro_hegemon_movement = {	# 外戚
 						character_modifier = {
 							men_at_arms_cap = 1
 							men_at_arms_maintenance = -0.1
 							liege_opinion = 10
 						}
 					}
-					expansion_movement = {
+					expansion_movement = {	# 武勋
 						character_modifier = {
 							men_at_arms_cap = 3
 							men_at_arms_maintenance = -0.3
 						}
 					}
-					conservative_movement = {
+					conservative_movement = {	# 世族
 						character_modifier = {
 							domicile_build_speed = 0.1
 							domicile_build_gold_cost = -0.1
 							domicile_monthly_influence_add = 1
 							dynasty_house_opinion = 10
+						}
+					}
+					advancement_movement = {	# 寒门
+						character_modifier = {
+							monthly_prestige_gain_mult = 0.1
+							levy_size = 0.05
 						}
 					}
 				}
@@ -911,7 +951,7 @@ dynastic_cycle = {
 
 		situation_dynastic_cycle_phase_stability_advancement = { # Song/Ming
 			icon = "gfx/interface/icons/dynastic_cycle/dynastic_cycle_phase_advancement.dds"
-			illustration = "gfx/interface/illustrations/event_story/tgp_dynastic_cycle_stability.dds"
+			illustration = "gfx/interface/icons/dynastic_cycle/phases/advancement_period.png"
 
 			on_start = {
 				set_variable = {
@@ -983,152 +1023,228 @@ dynastic_cycle = {
 			future_phases = {
 				situation_dynastic_cycle_phase_instability = {
 					takeover_type = points
-					takeover_points = @lost_mandate_of_heaven
+					takeover_points = hd_dc_era_threshold
 					catalysts = {
 
 						### SHARED CORRUPTION CATALYSTS
 
 						# Movement Power
-						catalyst_conservative_movement_yearly = minor_situation_catalyst_over_time_gain
-						catalyst_advancement_movement_yearly = major_situation_catalyst_loss
-						catalyst_movement_gained_power_advancement = medium_situation_catalyst_loss
-						catalyst_movement_gained_power_expansion = minor_situation_catalyst_gain
-						catalyst_movement_gained_power_conservative = minor_situation_catalyst_gain
-						catalyst_movement_gained_power_pro_hegemon = minimal_situation_catalyst_loss
-						catalyst_movement_consulted_heaven_instability_positive = massive_situation_catalyst_gain
-						catalyst_movement_consulted_heaven_instability_negative = massive_plus_situation_catalyst_loss
-						catalyst_house_head_consulted_heaven_instability_positive = major_situation_catalyst_gain
-						catalyst_house_head_consulted_heaven_instability_negative = major_plus_situation_catalyst_loss
+						catalyst_conservative_movement_yearly = hd_dc_base
+						catalyst_advancement_movement_yearly = hd_dc_base_neg
+						catalyst_movement_gained_power_advancement = hd_dc_t_m_neg
+						catalyst_movement_gained_power_expansion = hd_dc_t_s
+						catalyst_movement_gained_power_conservative = hd_dc_t_s
+						catalyst_movement_gained_power_pro_hegemon = hd_dc_t_s_neg
+						catalyst_movement_consulted_heaven_instability_positive = hd_dc_t_l
+						catalyst_movement_consulted_heaven_instability_negative = hd_dc_t_h_neg
+						catalyst_house_head_consulted_heaven_instability_positive = hd_dc_t_m
+						catalyst_house_head_consulted_heaven_instability_negative = hd_dc_t_l_neg
 						# Calamities
-						catalyst_hegemon_natural_disaster = monumental_situation_catalyst_over_time_gain
-						catalyst_hegemon_natural_disaster_recovered = massive_situation_catalyst_loss
-						catalyst_hegemon_in_civil_war = massive_situation_catalyst_gain
-						catalyst_hegemon_in_defensive_war_yearly = massive_situation_catalyst_over_time_gain
-						catalyst_hegemon_epidemic = massive_situation_catalyst_over_time_gain
-						catalyst_hegemon_apocalyptic_epidemic = monumental_situation_catalyst_over_time_gain
+						catalyst_hegemon_natural_disaster = hd_dc_base
+						catalyst_hegemon_natural_disaster_recovered = hd_dc_t_l_neg
+						catalyst_hegemon_in_civil_war = hd_dc_t_l
+						catalyst_hegemon_in_defensive_war_yearly = hd_dc_base
+						catalyst_hegemon_epidemic = hd_dc_base
+						catalyst_hegemon_apocalyptic_epidemic = hd_dc_base
 						# Legitimacy
-						catalyst_hegemon_below_legitimacy_yearly = below_legitimacy_catalyst_over_time_value
-						catalyst_hegemon_lost_mandate_of_heaven = @lost_mandate_of_heaven # Should always go into instability
-						catalyst_hegemon_mandate_of_heaven_at_0 = @lost_mandate_of_heaven
-						catalyst_hegemon_above_legitimacy_yearly = major_situation_catalyst_over_time_loss
+						catalyst_hegemon_below_legitimacy_yearly = hd_dc_base
+						catalyst_hegemon_lost_mandate_of_heaven = hd_dc_era_threshold # Should always go into instability
+						catalyst_hegemon_mandate_of_heaven_at_0 = hd_dc_era_threshold
+						catalyst_hegemon_above_legitimacy_yearly = hd_dc_base_neg
 						# Held Lands
-						catalyst_hegemony_too_few_lands = extreme_situation_catalyst_over_time_gain
-						catalyst_hegemony_far_too_few_lands = @lost_mandate_of_heaven
+						catalyst_hegemony_too_few_lands = hd_dc_base
+						catalyst_hegemony_far_too_few_lands = hd_dc_era_threshold
 						# Regency
-						catalyst_diarch_mandate = minimal_situation_catalyst_gain
+						catalyst_diarch_mandate = hd_dc_t_s
 						# Merit
-						catalyst_imperial_examinations_gap_long_yearly = major_situation_catalyst_over_time_gain
+						catalyst_imperial_examinations_gap_long_yearly = hd_dc_base
 
 						# Intrigue
-						catalyst_hegemon_murdered = monumental_situation_catalyst_gain
-						catalyst_imperial_family_member_murdered = major_situation_catalyst_gain
+						catalyst_hegemon_murdered = hd_dc_t_h
+						catalyst_imperial_family_member_murdered = hd_dc_t_m
 						# Imperial Treasury
-						catalyst_imperial_treasury_raided = monumental_situation_catalyst_over_time_gain
-						catalyst_imperial_treasury_debt = massive_situation_catalyst_over_time_gain
+						catalyst_imperial_treasury_raided = hd_dc_base
+						catalyst_imperial_treasury_debt = hd_dc_base
 						# Administrative
-						catalyst_governor_embezzlement = medium_situation_catalyst_gain
-						catalyst_dipped_into_treasury = medium_situation_catalyst_gain
-						catalyst_hegemon_influenced_by_interaction = medium_situation_catalyst_gain
-						catalyst_minister_imprison = minor_situation_catalyst_gain
-						catalyst_governor_raided_estate = medium_situation_catalyst_gain
-						catalyst_governor_slander = minimal_situation_catalyst_gain
-						catalyst_governor_challenged_status = minimal_situation_catalyst_gain
-						catalyst_hegemon_appointing_low_merit_governor = minor_situation_catalyst_gain
-						catalyst_hegemon_appointing_low_merit_councillor = minor_situation_catalyst_gain
+						catalyst_governor_embezzlement = hd_dc_t_m
+						catalyst_dipped_into_treasury = hd_dc_t_m
+						catalyst_hegemon_influenced_by_interaction = hd_dc_t_m
+						catalyst_minister_imprison = hd_dc_t_l
+						catalyst_governor_raided_estate = hd_dc_t_m
+						catalyst_governor_slander = hd_dc_t_s
+						catalyst_governor_challenged_status = hd_dc_t_s
+						catalyst_hegemon_appointing_low_merit_governor = hd_dc_t_m
+						catalyst_hegemon_appointing_low_merit_councillor = hd_dc_t_m
 						# Tyranny
-						catalyst_tyrannical_extinguish_noble_family = medium_situation_catalyst_gain
+						catalyst_tyrannical_extinguish_noble_family = hd_dc_t_m
 
 						# Great Projects
-						catalyst_great_project_great_wall_contribution = minimal_situation_catalyst_gain
-						catalyst_great_project_establish_control_contribution = minimal_situation_catalyst_loss
-						catalyst_minister_project_culture = medium_situation_catalyst_loss
-						catalyst_minister_compel_religious_uniformity = medium_situation_catalyst_loss
-						catalyst_minister_conduct_census = medium_situation_catalyst_loss
-						catalyst_grand_campaign = minor_situation_catalyst_loss
-						catalyst_grand_campaign_lost = major_situation_catalyst_gain
+						catalyst_great_project_great_wall_contribution = hd_dc_t_s
+						catalyst_great_project_establish_control_contribution = hd_dc_t_s_neg
+						catalyst_minister_project_culture = hd_dc_t_m_neg
+						catalyst_minister_compel_religious_uniformity = hd_dc_t_m_neg
+						catalyst_minister_conduct_census = hd_dc_t_m_neg
+						catalyst_grand_campaign = hd_dc_t_s_neg
+						catalyst_grand_campaign_lost = hd_dc_t_m
 						
 						# Succession - A new dynasty inherits the throne
-						catalyst_new_dynasty_inherits = @lost_mandate_of_heaven # Should always go into instability
+						catalyst_new_dynasty_inherits = hd_dc_era_threshold # Should always go into instability
 
 						### ADVANCEMENT CORRUPTION CATALYSTS
 
 						# Movement Power
-						catalyst_expansion_movement_yearly = massive_situation_catalyst_over_time_gain
-						catalyst_pro_hegemon_movement_expansion_yearly = medium_situation_catalyst_over_time_gain
+						catalyst_expansion_movement_yearly = hd_dc_base
+						catalyst_pro_hegemon_movement_expansion_yearly = hd_dc_base
 						# Warfare
-						catalyst_hegemon_above_maa_limit_yearly = minor_situation_catalyst_over_time_gain
-						catalyst_hegemon_lost_war = massive_plus_situation_catalyst_gain
-						catalyst_hegemon_lost_defensive_territorial_war = major_situation_catalyst_gain
-						catalyst_hegemon_lost_capital_in_war = massive_situation_catalyst_gain
-						catalyst_requested_incursion = major_situation_catalyst_gain
+						catalyst_hegemon_above_maa_limit_yearly = hd_dc_base
+						catalyst_hegemon_lost_war = hd_dc_t_h
+						catalyst_hegemon_lost_defensive_territorial_war = hd_dc_t_l
+						catalyst_hegemon_lost_capital_in_war = hd_dc_t_l
+						catalyst_requested_incursion = hd_dc_t_m
 						# Merit
-						catalyst_imperial_examinations_gap_short_yearly = major_situation_catalyst_over_time_gain
+						catalyst_imperial_examinations_gap_short_yearly = hd_dc_base
 
 						#Events
-						catalyst_event_mongol_empire_appears = massive_situation_catalyst_gain
-						catalyst_event_mongol_empire_attacks_minor = medium_situation_catalyst_gain
-						catalyst_event_mongol_empire_attacks_major = major_situation_catalyst_gain
+						catalyst_hd_nomad_power_rises = hd_dc_t_l
+						catalyst_hd_nomad_invasion_minor = hd_dc_t_m
+						catalyst_hd_nomad_invasion_major = hd_dc_t_l
 						# Ministers
-						catalyst_find_secrets_bad_outcome = minor_situation_catalyst_gain
-						catalyst_find_secrets_good_outcome = minor_situation_catalyst_loss
-						catalyst_minister_caught_exam_cheater = minimal_situation_catalyst_loss
-						catalyst_minister_blackmailed = minimal_situation_catalyst_loss
-						catalyst_minister_exposed_secret = minor_situation_catalyst_loss
-						catalyst_cleared_treasury_debt = minor_situation_catalyst_loss
-						catalyst_minister_pardoned_known_criminal = minor_situation_catalyst_gain
-						catalyst_minister_pardoned_dangerous_criminal = minimal_situation_catalyst_gain
-						catalyst_ministers_abused_privilege_of_office = minor_situation_catalyst_gain
+						catalyst_find_secrets_bad_outcome = hd_dc_t_s
+						catalyst_find_secrets_good_outcome = hd_dc_t_s_neg
+						catalyst_minister_caught_exam_cheater = hd_dc_t_s_neg
+						catalyst_minister_blackmailed = hd_dc_t_s_neg
+						catalyst_minister_exposed_secret = hd_dc_t_s_neg
+						catalyst_cleared_treasury_debt = hd_dc_t_s_neg
+						catalyst_minister_pardoned_known_criminal = hd_dc_t_m
+						catalyst_minister_pardoned_dangerous_criminal = hd_dc_t_m
+						catalyst_ministers_abused_privilege_of_office = hd_dc_t_m
+						catalyst_hd_lost_war_vip = hd_dc_t_h # era-gen
+						catalyst_hd_lost_land_vip = hd_dc_t_l # era-gen
+						catalyst_hd_vip_murdered = hd_dc_t_m # era-gen
+						catalyst_hd_crime = hd_dc_t_m # era-gen
+						catalyst_hd_suppress_party = hd_dc_t_l # era-gen
+						catalyst_hd_harsh_tax = hd_dc_t_s # era-gen
+						catalyst_hd_purge_vip = hd_dc_t_l # era-gen
+						catalyst_hd_incompetent_minister = hd_dc_t_m # era-gen
+						catalyst_hd_extravagance = hd_dc_t_s # era-gen
+						catalyst_hd_land_annexation = hd_dc_t_l # era-gen
+						catalyst_hd_party_strife = hd_dc_t_m # era-gen
+						catalyst_hd_reform_failed = hd_dc_t_l # era-gen
+						catalyst_hd_won_external_war = hd_dc_t_m_half # era-gen
+						catalyst_hd_maa_full_yearly = hd_dc_t_s_half # era-gen
+						catalyst_hd_able_military_minister = hd_dc_t_m_half # era-gen
+						catalyst_hd_barbarian_raid = hd_dc_t_s_half # era-gen
+						catalyst_hd_wuxun_dominant = hd_dc_t_l_half # era-gen
+						catalyst_hd_compile_classics = hd_dc_t_l_neg # era-gen
+						catalyst_hd_reform_success = hd_dc_t_l_neg # era-gen
+						catalyst_hd_literary_gathering = hd_dc_t_m_neg # era-gen
+						catalyst_hd_taixue_event = hd_dc_t_s_neg # era-gen
+					}
+				}
+				situation_dynastic_cycle_phase_stability_expansion = {
+					takeover_type = points
+					takeover_points = hd_dc_era_threshold
+					catalysts = {
+						# Passive gain
+						## Movement Power
+						catalyst_movement_gained_power_expansion = hd_dc_t_m
+						catalyst_pro_hegemon_movement_expansion_yearly = hd_dc_base
+						catalyst_expansion_movement_yearly = hd_dc_base
+						catalyst_advancement_movement_yearly = hd_dc_base_neg
+						catalyst_movement_consulted_heaven_expansion_positive = hd_dc_t_l
+						catalyst_movement_consulted_heaven_expansion_negative = hd_dc_t_h_neg
+						catalyst_house_head_consulted_heaven_expansion_positive = hd_dc_t_m
+						catalyst_house_head_consulted_heaven_expansion_negative = hd_dc_t_l_neg
+						## Legitimacy
+						catalyst_hegemon_above_legitimacy_yearly = hd_dc_base
+						catalyst_new_dynasty_inherits = hd_dc_t_h_neg
+						# Active gain
+						## Warfare
+						catalyst_hegemon_won_war = hd_dc_t_m
+						## Great Projects
+						catalyst_great_wall = hd_dc_t_s
+						catalyst_great_project_great_wall_contribution = hd_dc_t_s
+						catalyst_grand_campaign = hd_dc_t_l
+						catalyst_minister_train_troops = hd_dc_t_s
+						# Ministers
+						catalyst_find_secrets_bad_outcome = hd_dc_t_s_neg
+						catalyst_find_secrets_good_outcome = hd_dc_t_s
+						catalyst_hd_lost_war_vip = hd_dc_t_h_half # era-gen
+						catalyst_hd_lost_land_vip = hd_dc_t_l_half # era-gen
+						catalyst_hd_vip_murdered = hd_dc_t_m_half # era-gen
+						catalyst_hd_crime = hd_dc_t_m_half # era-gen
+						catalyst_hd_suppress_party = hd_dc_t_l_half # era-gen
+						catalyst_hd_harsh_tax = hd_dc_t_s_half # era-gen
+						catalyst_hd_purge_vip = hd_dc_t_l_half # era-gen
+						catalyst_hd_incompetent_minister = hd_dc_t_m_half # era-gen
+						catalyst_hd_extravagance = hd_dc_t_s_half # era-gen
+						catalyst_hd_land_annexation = hd_dc_t_l_half # era-gen
+						catalyst_hd_party_strife = hd_dc_t_m_half # era-gen
+						catalyst_hd_reform_failed = hd_dc_t_l_half # era-gen
+						catalyst_hd_won_external_war = hd_dc_t_m # era-gen
+						catalyst_hd_maa_full_yearly = hd_dc_t_s # era-gen
+						catalyst_hd_able_military_minister = hd_dc_t_m # era-gen
+						catalyst_hd_barbarian_raid = hd_dc_t_s # era-gen
+						catalyst_hd_wuxun_dominant = hd_dc_t_l # era-gen
 					}
 				}
 			}
-			modifier_sets = {
+			modifier_sets = {	# 天朝循环大修·朋党：按身份重排（见 docs/朋党系统_设计草案.md 第 8 节）
 				dynastic_cycle_government_effects = {
-					hegemon_ruler = {
+					hegemon_ruler = {	# 天子
 						parameters = {
-							#phase defining effects
 							dynastic_cycle_hegemon_legitimacy_increasing_expectations = yes
 							dynastic_cycle_offensive_wars_ban = yes
 							dynastic_cycle_can_build_in_tributaries = yes
-							#shared effects
 							dynastic_cycle_faster_title_integration = yes
 							dynastic_cycle_hegemon_increased_metropolitan_limit = yes
 							dynastic_cycle_hegemon_stewardship_examinations = yes
 							dynastic_cycle_imperial_buildings_increased_build_speed = yes
 						}
 					}
-					pro_hegemon_movement = {
+					hd_siyi_movement = {	# 四夷
 						parameters = {
-							#movement defining effects
-							pro_hegemon_interaction_boost = yes
-							#shared effects
-							dynastic_cycle_faster_title_integration = yes
+							dynastic_cycle_no_effects = yes
 						}
 					}
-					expansion_movement = {
+					other_rulers = {	# 诸侯
 						parameters = {
-							dynastic_cycle_faster_title_integration = yes
+							dynastic_cycle_no_effects = yes
 						}
 					}
-					advancement_movement = {
+					undecided_movement = {	# 宦官
 						parameters = {
 							dynastic_cycle_faster_title_integration = yes
 							dynastic_cycle_send_treasury_for_merit = yes
 						}
 					}
-					conservative_movement = {
+					pro_hegemon_movement = {	# 外戚
 						parameters = {
 							dynastic_cycle_faster_title_integration = yes
+							dynastic_cycle_send_treasury_for_merit = yes
 						}
 					}
-					other_rulers = {
+					expansion_movement = {	# 武勋
 						parameters = {
-							dynastic_cycle_no_effects = yes
+							dynastic_cycle_faster_title_integration = yes
+							dynastic_cycle_send_treasury_for_merit = yes
+						}
+					}
+					conservative_movement = {	# 世族
+						parameters = {
+							dynastic_cycle_faster_title_integration = yes
+							dynastic_cycle_send_treasury_for_merit = yes
+						}
+					}
+					advancement_movement = {	# 寒门
+						parameters = {
+							dynastic_cycle_faster_title_integration = yes
+							dynastic_cycle_send_treasury_for_merit = yes
 						}
 					}
 				}
-
 				dynastic_cycle_character_effects = {
-					hegemon_ruler = {
+					hegemon_ruler = {	# 天子
 						character_modifier = {
 							men_at_arms_cap = -2
 							mercenary_hire_cost_mult = 5
@@ -1142,8 +1258,20 @@ dynastic_cycle = {
 							build_speed = -0.15
 						}
 					}
-
-					pro_hegemon_movement = {
+					hd_siyi_movement = {	# 四夷
+						character_modifier = {
+							ai_war_chance = -0.2
+							cultural_acceptance_gain_mult = 0.1
+						}
+					}
+					undecided_movement = {	# 宦官
+						character_modifier = {
+							men_at_arms_cap = -1
+							men_at_arms_maintenance = 0.1
+							monthly_influence_mult = 0.1
+						}
+					}
+					pro_hegemon_movement = {	# 外戚
 						character_modifier = {
 							men_at_arms_cap = -1
 							men_at_arms_maintenance = 0.1
@@ -1155,8 +1283,24 @@ dynastic_cycle = {
 							build_speed = -0.1
 						}
 					}
-
-					advancement_movement = {
+					expansion_movement = {	# 武勋
+						character_modifier = {
+							men_at_arms_cap = -2
+							men_at_arms_maintenance = 0.2
+							levy_size = -0.1
+						}
+					}
+					conservative_movement = {	# 世族
+						character_modifier = {
+							men_at_arms_cap = -2
+							men_at_arms_maintenance = 0.2
+							domicile_build_speed = 0.1
+							domicile_build_gold_cost = -0.1
+							domicile_monthly_influence_add = 1
+							dynasty_house_opinion = 10
+						}
+					}
+					advancement_movement = {	# 寒门
 						character_modifier = {
 							men_at_arms_cap = -2
 							men_at_arms_maintenance = 0.2
@@ -1167,23 +1311,6 @@ dynastic_cycle = {
 							build_speed = -0.2
 						}
 					}
-
-					conservative_movement = {
-						character_modifier = {
-							men_at_arms_cap = -2
-							men_at_arms_maintenance = 0.2
-							domicile_build_speed = 0.1
-							domicile_build_gold_cost = -0.1
-							domicile_monthly_influence_add = 1
-							dynasty_house_opinion = 10
-						}
-					}
-					undecided_movement = {
-						character_modifier = {
-							men_at_arms_cap = -2
-							men_at_arms_maintenance = 0.2
-						}
-					}
 				}
 			}
 		}
@@ -1191,7 +1318,7 @@ dynastic_cycle = {
 
 		situation_dynastic_cycle_phase_instability_conquest = {
 			icon = "gfx/interface/icons/dynastic_cycle/dynastic_cycle_phase_conquest.dds"
-			illustration = "gfx/interface/illustrations/event_story/tgp_dynastic_cycle_consolidation.dds"
+			illustration = "gfx/interface/icons/dynastic_cycle/phases/conquest_period.png"
 
 			on_start = {
 				title:h_china.holder ?= { trigger_event = tgp_dynastic_cycle.0061 } # China conquered
@@ -1254,198 +1381,203 @@ dynastic_cycle = {
 			}
 
 			future_phases = {
-				situation_dynastic_cycle_phase_stability_advancement = {
+				situation_dynastic_cycle_phase_hd_collapse = {
 					takeover_type = points
-					takeover_points = @gained_mandate_of_heaven_halved
-					catalysts = {
-						# Passive gain
-						## Movement Power
-						catalyst_pro_hegemon_movement_advancement_yearly = major_situation_catalyst_over_time_gain
-						catalyst_expansion_movement_yearly = medium_situation_catalyst_loss
-						catalyst_advancement_movement_yearly = massive_situation_catalyst_over_time_gain
-						catalyst_movement_consulted_heaven_advancement_positive = massive_situation_catalyst_gain
-						catalyst_movement_consulted_heaven_advancement_negative = massive_plus_situation_catalyst_loss
-						catalyst_house_head_consulted_heaven_advancement_positive = major_situation_catalyst_gain
-						catalyst_house_head_consulted_heaven_advancement_negative = major_plus_situation_catalyst_loss
-						## Legitimacy
-						catalyst_hegemon_above_legitimacy_yearly = major_situation_catalyst_over_time_gain
-						catalyst_new_dynasty_inherits = monumental_situation_catalyst_loss
-						# Regency
-						catalyst_diarch_mandate = minimal_situation_catalyst_gain
-						# Active gain
-						## Great Projects
-						catalyst_minister_project_culture = massive_situation_catalyst_gain
-						catalyst_minister_compel_religious_uniformity = massive_situation_catalyst_gain
-						catalyst_minister_conduct_census = massive_situation_catalyst_gain
-						catalyst_great_project_establish_control_contribution = minor_situation_catalyst_loss
-						## Events
-						catalyst_event_advancement_medium_progress = medium_situation_catalyst_gain
-						# Ministers
-						catalyst_find_secrets_bad_outcome = minor_situation_catalyst_loss
-						catalyst_find_secrets_good_outcome = minor_situation_catalyst_gain
-						catalyst_minister_caught_exam_cheater = minor_situation_catalyst_gain
-					}
-				}
-
-				situation_dynastic_cycle_phase_stability_expansion = {
-					takeover_type = points
-					takeover_points = @gained_mandate_of_heaven_halved
-					catalysts = {
-						# Passive gain
-						## Movement Power
-						catalyst_pro_hegemon_movement_expansion_yearly = major_situation_catalyst_over_time_gain
-						catalyst_expansion_movement_yearly = massive_situation_catalyst_over_time_gain
-						catalyst_advancement_movement_yearly = medium_situation_catalyst_loss
-						catalyst_movement_consulted_heaven_expansion_positive = massive_situation_catalyst_gain
-						catalyst_movement_consulted_heaven_expansion_negative = massive_plus_situation_catalyst_loss
-						catalyst_house_head_consulted_heaven_expansion_positive = major_situation_catalyst_gain
-						catalyst_house_head_consulted_heaven_expansion_negative = major_plus_situation_catalyst_loss
-						## Legitimacy
-						catalyst_hegemon_above_legitimacy_yearly = major_situation_catalyst_over_time_gain
-						catalyst_new_dynasty_inherits = monumental_situation_catalyst_loss
-						# Active gain
-						## Warfare
-						catalyst_hegemon_won_war = massive_situation_catalyst_gain
-						## Great Projects
-						catalyst_great_wall = massive_situation_catalyst_gain
-						catalyst_great_project_great_wall_contribution = minor_situation_catalyst_loss
-						catalyst_grand_campaign = massive_situation_catalyst_gain
-						catalyst_minister_train_troops = massive_situation_catalyst_gain
-						# Ministers
-						catalyst_find_secrets_bad_outcome = minor_situation_catalyst_loss
-						catalyst_find_secrets_good_outcome = minor_situation_catalyst_gain
-					}
-				}
-
-				situation_dynastic_cycle_phase_chaos = {
-					takeover_type = untyped
-					takeover_points = @lost_mandate_of_heaven_halved
+					takeover_points = hd_dc_era_threshold
 					catalysts = {
 						# Movement Power
-						catalyst_pro_hegemon_movement_yearly = medium_situation_catalyst_loss
-						catalyst_movement_gained_power_conservative = medium_situation_catalyst_gain
-						catalyst_movement_gained_power_pro_hegemon = minimal_situation_catalyst_loss
-						catalyst_movement_consulted_heaven_chaos_positive = massive_situation_catalyst_gain
-						catalyst_movement_consulted_heaven_chaos_negative = massive_plus_situation_catalyst_loss
-						catalyst_house_head_consulted_heaven_chaos_positive = major_situation_catalyst_gain
-						catalyst_house_head_consulted_heaven_chaos_negative = major_plus_situation_catalyst_loss
+						catalyst_pro_hegemon_movement_yearly = hd_dc_base_ls_neg
+						catalyst_movement_gained_power_conservative = hd_dc_t_m_ls
+						catalyst_movement_gained_power_pro_hegemon = hd_dc_t_s_ls_neg
+						catalyst_movement_consulted_heaven_chaos_positive = hd_dc_t_l_ls
+						catalyst_movement_consulted_heaven_chaos_negative = hd_dc_t_h_ls_neg
+						catalyst_house_head_consulted_heaven_chaos_positive = hd_dc_t_m_ls
+						catalyst_house_head_consulted_heaven_chaos_negative = hd_dc_t_l_ls_neg
 						# Diplomacy
-						catalyst_hegemon_too_few_tributaries_yearly = medium_situation_catalyst_gain
+						catalyst_hegemon_too_few_tributaries_yearly = hd_dc_base_ls
 						# Held Lands
-						catalyst_hegemony_too_few_lands = extreme_situation_catalyst_over_time_gain
-						catalyst_hegemony_far_too_few_lands = @lost_mandate_of_heaven
+						catalyst_hegemony_too_few_lands = hd_dc_base_ls
+						catalyst_hegemony_far_too_few_lands = hd_dc_era_threshold
 						# Calamities
-						catalyst_hegemon_natural_disaster = monumental_situation_catalyst_over_time_gain
-						catalyst_hegemon_natural_disaster_recovered = massive_situation_catalyst_loss
-						catalyst_hegemon_in_civil_war = massive_situation_catalyst_gain
-						catalyst_hegemon_in_defensive_war_yearly = massive_situation_catalyst_over_time_gain
-						catalyst_hegemon_epidemic = massive_situation_catalyst_over_time_gain
-						catalyst_hegemon_apocalyptic_epidemic = monumental_situation_catalyst_over_time_gain
+						catalyst_hegemon_natural_disaster = hd_dc_base_ls
+						catalyst_hegemon_natural_disaster_recovered = hd_dc_t_l_ls_neg
+						catalyst_hegemon_in_civil_war = hd_dc_t_l_ls
+						catalyst_hegemon_in_defensive_war_yearly = hd_dc_base_ls
+						catalyst_hegemon_epidemic = hd_dc_base_ls
+						catalyst_hegemon_apocalyptic_epidemic = hd_dc_base_ls
 						# Intrigue
-						catalyst_hegemon_murdered = monumental_situation_catalyst_gain
-						catalyst_minister_imprison = minor_situation_catalyst_gain
+						catalyst_hegemon_murdered = hd_dc_t_h_ls
+						catalyst_minister_imprison = hd_dc_t_l_ls
 						# Warfare
-						catalyst_hegemon_below_maa_limit_yearly = major_situation_catalyst_over_time_gain
-						catalyst_hegemon_lost_defensive_territorial_war = major_situation_catalyst_gain
-						catalyst_hegemon_lost_capital_in_war = massive_situation_catalyst_gain
-						catalyst_hegemon_hired_mercenary = medium_situation_catalyst_gain
-						catalyst_hegemon_lost_war = massive_plus_situation_catalyst_gain
-						catalyst_grand_campaign_lost = massive_situation_catalyst_gain
-						catalyst_requested_incursion = major_situation_catalyst_gain
+						catalyst_hegemon_below_maa_limit_yearly = hd_dc_base_ls
+						catalyst_hegemon_lost_defensive_territorial_war = hd_dc_t_l_ls
+						catalyst_hegemon_lost_capital_in_war = hd_dc_t_l_ls
+						catalyst_hegemon_hired_mercenary = hd_dc_t_m_ls
+						catalyst_hegemon_lost_war = hd_dc_t_h_ls
+						catalyst_grand_campaign_lost = hd_dc_t_l_ls
+						catalyst_requested_incursion = hd_dc_t_m_ls
 
 						#Legitimacy
-						catalyst_hegemon_below_legitimacy_yearly = below_legitimacy_catalyst_over_time_value
-						catalyst_hegemon_lost_mandate_of_heaven = @lost_mandate_of_heaven_halved # Should always go into chaotic
-						catalyst_hegemon_mandate_of_heaven_at_0 = @lost_mandate_of_heaven_halved
-						catalyst_hegemon_above_legitimacy_yearly = major_situation_catalyst_over_time_loss
+						catalyst_hegemon_below_legitimacy_yearly = hd_dc_base_ls
+						catalyst_hegemon_lost_mandate_of_heaven = hd_dc_era_threshold # Should always go into chaotic
+						catalyst_hegemon_mandate_of_heaven_at_0 = hd_dc_era_threshold
+						catalyst_hegemon_above_legitimacy_yearly = hd_dc_base_ls_neg
 
 						#Events
-						catalyst_event_mongol_empire_appears = massive_situation_catalyst_gain
-						catalyst_event_mongol_empire_attacks_minor = medium_situation_catalyst_gain
-						catalyst_event_mongol_empire_attacks_major = major_situation_catalyst_gain
+						catalyst_hd_nomad_power_rises = hd_dc_t_l_ls
+						catalyst_hd_nomad_invasion_minor = hd_dc_t_m_ls
+						catalyst_hd_nomad_invasion_major = hd_dc_t_l_ls
 						# Tyranny
-						catalyst_tyrannical_extinguish_noble_family = medium_situation_catalyst_gain
+						catalyst_tyrannical_extinguish_noble_family = hd_dc_t_m_ls
 
 						# Ministers
-						catalyst_minister_blackmailed = minimal_situation_catalyst_loss
-						catalyst_minister_exposed_secret = minor_situation_catalyst_loss
-						catalyst_cleared_treasury_debt = minor_situation_catalyst_loss
-						catalyst_minister_pardoned_known_criminal = minor_situation_catalyst_gain
-						catalyst_minister_pardoned_dangerous_criminal = minimal_situation_catalyst_gain
-						catalyst_ministers_abused_privilege_of_office = minor_situation_catalyst_gain
+						catalyst_minister_blackmailed = hd_dc_t_s_ls_neg
+						catalyst_minister_exposed_secret = hd_dc_t_s_ls_neg
+						catalyst_cleared_treasury_debt = hd_dc_t_s_ls_neg
+						catalyst_minister_pardoned_known_criminal = hd_dc_t_m_ls
+						catalyst_minister_pardoned_dangerous_criminal = hd_dc_t_m_ls
+						catalyst_ministers_abused_privilege_of_office = hd_dc_t_m_ls
+						catalyst_hd_lost_war_vip = hd_dc_t_h_ls # era-gen
+						catalyst_hd_lost_land_vip = hd_dc_t_l_ls # era-gen
+						catalyst_hd_vip_murdered = hd_dc_t_m_ls # era-gen
+						catalyst_hd_crime = hd_dc_t_m_ls # era-gen
+						catalyst_hd_suppress_party = hd_dc_t_l_ls # era-gen
+						catalyst_hd_harsh_tax = hd_dc_t_s_ls # era-gen
+						catalyst_hd_purge_vip = hd_dc_t_l_ls # era-gen
+						catalyst_hd_incompetent_minister = hd_dc_t_m_ls # era-gen
+						catalyst_hd_forced_assimilation = hd_dc_t_m_ls # era-gen
+						catalyst_hd_native_revolt = hd_dc_t_l_ls # era-gen
+						catalyst_hd_restorationist_revolt = hd_dc_t_h_ls # era-gen
+						catalyst_hd_able_civil_minister = hd_dc_t_m_ls_half # era-gen
+						catalyst_hd_building_completed = hd_dc_t_s_ls_half # era-gen
+						catalyst_hd_development = hd_dc_t_s_ls_half # era-gen
+						catalyst_hd_exam_held = hd_dc_t_s_ls_half # era-gen
+						catalyst_hd_power_minister_removed = hd_dc_t_l_ls_half # era-gen
+						catalyst_hd_reconciliation = hd_dc_t_m_ls_half # era-gen
+						catalyst_hd_houses_harmonious_s = hd_dc_t_s_ls_half # era-gen
+						catalyst_hd_houses_harmonious_m = hd_dc_t_m_ls_half # era-gen
+						catalyst_hd_houses_harmonious_l = hd_dc_t_l_ls_half # era-gen
+						catalyst_hd_houses_harmonious_h = hd_dc_t_h_ls_half # era-gen
+						catalyst_hd_sinicization_complete = hd_dc_t_h_ls_half # era-gen
+						catalyst_hd_intermarriage = hd_dc_t_m_ls_half # era-gen
+						catalyst_hd_former_dynasty_honored = hd_dc_t_l_ls_half # era-gen
+						catalyst_hd_local_gentry_employed = hd_dc_t_m_ls_half # era-gen
+						catalyst_hd_sinicization_step = hd_dc_t_s_ls_half # era-gen
+						catalyst_hd_hybrid_culture = hd_dc_t_l_ls_half # era-gen
+						catalyst_imperial_treasury_debt = hd_dc_base_ls # era-gen
+					}
+				}
+				situation_dynastic_cycle_phase_hd_recovery = {
+					takeover_type = points
+					takeover_points = hd_dc_era_threshold
+					catalysts = {
+						catalyst_hd_hegemon_peace_yearly = hd_dc_t_s_ls
+						catalyst_hd_treasury_solvent_yearly = hd_dc_t_s_ls
+						catalyst_hd_popular_content_yearly = hd_dc_t_m_ls
+						catalyst_hd_hegemon_won_defensive_war = hd_dc_t_h_ls
+						catalyst_hd_lost_war_vip = hd_dc_t_h_ls_half # era-gen
+						catalyst_hd_lost_land_vip = hd_dc_t_l_ls_half # era-gen
+						catalyst_hd_vip_murdered = hd_dc_t_m_ls_half # era-gen
+						catalyst_hd_crime = hd_dc_t_m_ls_half # era-gen
+						catalyst_hd_suppress_party = hd_dc_t_l_ls_half # era-gen
+						catalyst_hd_harsh_tax = hd_dc_t_s_ls_half # era-gen
+						catalyst_hd_purge_vip = hd_dc_t_l_ls_half # era-gen
+						catalyst_hd_incompetent_minister = hd_dc_t_m_ls_half # era-gen
+						catalyst_hd_forced_assimilation = hd_dc_t_m_ls_half # era-gen
+						catalyst_hd_native_revolt = hd_dc_t_l_ls_half # era-gen
+						catalyst_hd_restorationist_revolt = hd_dc_t_h_ls_half # era-gen
+						catalyst_hd_able_civil_minister = hd_dc_t_m_ls # era-gen
+						catalyst_hd_building_completed = hd_dc_t_s_ls # era-gen
+						catalyst_hd_development = hd_dc_t_s_ls # era-gen
+						catalyst_hd_exam_held = hd_dc_t_s_ls # era-gen
+						catalyst_hd_power_minister_removed = hd_dc_t_l_ls # era-gen
+						catalyst_hd_reconciliation = hd_dc_t_m_ls # era-gen
+						catalyst_hd_houses_harmonious_s = hd_dc_t_s_ls # era-gen
+						catalyst_hd_houses_harmonious_m = hd_dc_t_m_ls # era-gen
+						catalyst_hd_houses_harmonious_l = hd_dc_t_l_ls # era-gen
+						catalyst_hd_houses_harmonious_h = hd_dc_t_h_ls # era-gen
+						catalyst_hd_sinicization_complete = hd_dc_t_h_ls # era-gen
+						catalyst_hd_intermarriage = hd_dc_t_m_ls # era-gen
+						catalyst_hd_former_dynasty_honored = hd_dc_t_l_ls # era-gen
+						catalyst_hd_local_gentry_employed = hd_dc_t_m_ls # era-gen
+						catalyst_hd_sinicization_step = hd_dc_t_s_ls # era-gen
+						catalyst_hd_hybrid_culture = hd_dc_t_l_ls # era-gen
+						catalyst_hegemon_above_legitimacy_yearly = hd_dc_base_ls # era-gen
 					}
 				}
 			}
-			modifier_sets = {
+			modifier_sets = {	# 天朝循环大修·朋党：按身份重排（见 docs/朋党系统_设计草案.md 第 8 节）
 				dynastic_cycle_government_effects = {
-					hegemon_ruler = {
+					hegemon_ruler = {	# 天子
 						parameters = {
-							#phase defining effects
 							dynastic_cycle_hegemon_may_favour_own_culture_for_appointments = yes
 							dynastic_cycle_hegemon_unlocks_external_casus_belli = yes
 							dynastic_cycle_vassal_seize_cb = yes
 							dynastic_cycle_vassal_internal_wars_allowed = yes
-							#shared effects
 							dynastic_cycle_hegemon_legitimacy_from_external_conquest = yes
 							dynastic_cycle_locks_title_integration = yes
 						}
 					}
-
-					pro_hegemon_movement = {
-						parameters = {
-							#movement defining effects
-							pro_hegemon_interaction_boost = yes
-							#shared effects
-							dynastic_cycle_vassal_internal_wars_allowed = yes
-							dynastic_cycle_vassal_seize_cb = yes
-							dynastic_cycle_hegemon_legitimacy_from_external_conquest = yes
-							dynastic_cycle_hegemon_may_favour_own_culture_for_appointments = yes
-							dynastic_cycle_locks_title_integration = yes
-						}
-					}
-					expansion_movement = {
-						parameters = {
-							dynastic_cycle_vassal_internal_wars_allowed = yes
-							dynastic_cycle_vassal_seize_cb = yes
-							dynastic_cycle_hegemon_legitimacy_from_external_conquest = yes
-							dynastic_cycle_hegemon_may_favour_own_culture_for_appointments = yes
-							dynastic_cycle_locks_title_integration = yes
-						}
-					}
-					advancement_movement = {
-						parameters = {
-							dynastic_cycle_vassal_internal_wars_allowed = yes
-							dynastic_cycle_vassal_seize_cb = yes
-							dynastic_cycle_hegemon_legitimacy_from_external_conquest = yes
-							dynastic_cycle_hegemon_may_favour_own_culture_for_appointments = yes
-							dynastic_cycle_locks_title_integration = yes
-						}
-					}
-					conservative_movement = {
-						parameters = {
-							dynastic_cycle_vassal_internal_wars_allowed = yes
-							dynastic_cycle_vassal_seize_cb = yes
-							dynastic_cycle_hegemon_legitimacy_from_external_conquest = yes
-							dynastic_cycle_hegemon_may_favour_own_culture_for_appointments = yes
-							dynastic_cycle_locks_title_integration = yes
-						}
-					}
-					undecided_movement = {
-						parameters = {
-							dynastic_cycle_vassal_internal_wars_allowed = yes
-							dynastic_cycle_locks_title_integration = yes
-						}
-					}
-					other_rulers = {
+					hd_siyi_movement = {	# 四夷
 						parameters = {
 							dynastic_cycle_no_effects = yes
 						}
 					}
+					other_rulers = {	# 诸侯
+						parameters = {
+							dynastic_cycle_no_effects = yes
+						}
+					}
+					undecided_movement = {	# 宦官
+						parameters = {
+							dynastic_cycle_vassal_internal_wars_allowed = yes
+							dynastic_cycle_locks_title_integration = yes
+							dynastic_cycle_vassal_seize_cb = yes
+							dynastic_cycle_hegemon_legitimacy_from_external_conquest = yes
+							dynastic_cycle_hegemon_may_favour_own_culture_for_appointments = yes
+						}
+					}
+					pro_hegemon_movement = {	# 外戚
+						parameters = {
+							dynastic_cycle_vassal_internal_wars_allowed = yes
+							dynastic_cycle_locks_title_integration = yes
+							dynastic_cycle_vassal_seize_cb = yes
+							dynastic_cycle_hegemon_legitimacy_from_external_conquest = yes
+							dynastic_cycle_hegemon_may_favour_own_culture_for_appointments = yes
+						}
+					}
+					expansion_movement = {	# 武勋
+						parameters = {
+							dynastic_cycle_vassal_internal_wars_allowed = yes
+							dynastic_cycle_locks_title_integration = yes
+							dynastic_cycle_vassal_seize_cb = yes
+							dynastic_cycle_hegemon_legitimacy_from_external_conquest = yes
+							dynastic_cycle_hegemon_may_favour_own_culture_for_appointments = yes
+						}
+					}
+					conservative_movement = {	# 世族
+						parameters = {
+							dynastic_cycle_vassal_internal_wars_allowed = yes
+							dynastic_cycle_locks_title_integration = yes
+							dynastic_cycle_vassal_seize_cb = yes
+							dynastic_cycle_hegemon_legitimacy_from_external_conquest = yes
+							dynastic_cycle_hegemon_may_favour_own_culture_for_appointments = yes
+						}
+					}
+					advancement_movement = {	# 寒门
+						parameters = {
+							dynastic_cycle_vassal_internal_wars_allowed = yes
+							dynastic_cycle_locks_title_integration = yes
+							dynastic_cycle_vassal_seize_cb = yes
+							dynastic_cycle_hegemon_legitimacy_from_external_conquest = yes
+							dynastic_cycle_hegemon_may_favour_own_culture_for_appointments = yes
+						}
+					}
 				}
-
 				dynastic_cycle_character_effects = {
-					hegemon_ruler = {
+					hegemon_ruler = {	# 天子
 						character_modifier = {
+							ai_war_chance = 4 # A1
 							men_at_arms_title_cap = 2
 							vassal_tax_contribution_mult = -0.2
 							vassal_opinion = -20
@@ -1456,8 +1588,24 @@ dynastic_cycle = {
 							max_personal_schemes_add = 1
 						}
 					}
-					pro_hegemon_movement = {
+					hd_siyi_movement = {	# 四夷
 						character_modifier = {
+							ai_war_chance = 4 # A1
+							liege_opinion = 10
+							monthly_prestige_gain_mult = 0.1
+							levy_size = 0.1
+						}
+					}
+					undecided_movement = {	# 宦官
+						character_modifier = {
+							ai_war_chance = 4 # A1
+							vassal_tax_contribution_mult = -0.2
+							vassal_opinion = -20
+						}
+					}
+					pro_hegemon_movement = {	# 外戚
+						character_modifier = {
+							ai_war_chance = 4 # A1
 							men_at_arms_title_cap = 1
 							men_at_arms_maintenance = -0.1
 							vassal_tax_contribution_mult = -0.1
@@ -1465,22 +1613,17 @@ dynastic_cycle = {
 							liege_opinion = 10
 						}
 					}
-					expansion_movement = {
+					expansion_movement = {	# 武勋
 						character_modifier = {
+							ai_war_chance = 4 # A1
 							men_at_arms_title_cap = 2
 							vassal_opinion = 10
+							liege_opinion = 5
 						}
 					}
-					advancement_movement = {
+					conservative_movement = {	# 世族
 						character_modifier = {
-							men_at_arms_title_cap = 2
-							men_at_arms_maintenance = -0.2
-							vassal_tax_contribution_mult = -0.2
-							vassal_opinion = -20
-						}
-					}
-					conservative_movement = {
-						character_modifier = {
+							ai_war_chance = 4 # A1
 							men_at_arms_title_cap = 2
 							men_at_arms_maintenance = -0.2
 							vassal_tax_contribution_mult = -0.2
@@ -1488,10 +1631,19 @@ dynastic_cycle = {
 							dynasty_house_opinion = 10
 						}
 					}
-					undecided_movement = {
+					advancement_movement = {	# 寒门
 						character_modifier = {
+							ai_war_chance = 4 # A1
+							men_at_arms_title_cap = 2
+							men_at_arms_maintenance = -0.2
 							vassal_tax_contribution_mult = -0.2
 							vassal_opinion = -20
+							liege_opinion = -10
+						}
+					}
+					other_rulers = {
+						character_modifier = {
+							ai_war_chance = 4 # A1
 						}
 					}
 				}
@@ -1500,7 +1652,7 @@ dynastic_cycle = {
 
 		situation_dynastic_cycle_phase_instability = { # Tang
 			icon = "gfx/interface/icons/dynastic_cycle/dynastic_cycle_phase_instability.dds"
-			illustration = "gfx/interface/illustrations/event_story/tgp_dynastic_cycle_consolidation.dds"
+			illustration = "gfx/interface/icons/dynastic_cycle/phases/tension_period.png"
 
 			on_start = {
 				title:h_china.holder ?= {
@@ -1563,222 +1715,220 @@ dynastic_cycle = {
 				}
 			}
 			future_phases = {
-				situation_dynastic_cycle_phase_stability_advancement = {
+
+				situation_dynastic_cycle_phase_hd_collapse = {
 					takeover_type = points
-					takeover_points = @gained_mandate_of_heaven_halved
-					catalysts = {
-						# Passive gain
-						## Movement Power
-						catalyst_movement_gained_power_advancement = major_situation_catalyst_gain
-						catalyst_pro_hegemon_movement_advancement_yearly = major_situation_catalyst_over_time_gain
-						catalyst_advancement_movement_yearly = massive_situation_catalyst_over_time_gain
-						catalyst_expansion_movement_yearly = medium_situation_catalyst_loss
-						catalyst_movement_consulted_heaven_advancement_positive = massive_situation_catalyst_gain
-						catalyst_movement_consulted_heaven_advancement_negative = massive_plus_situation_catalyst_loss
-						catalyst_house_head_consulted_heaven_advancement_positive = major_situation_catalyst_gain
-						catalyst_house_head_consulted_heaven_advancement_negative = major_plus_situation_catalyst_loss
-						## Legitimacy
-						catalyst_hegemon_above_legitimacy_yearly = major_situation_catalyst_over_time_gain
-						catalyst_new_dynasty_inherits = monumental_situation_catalyst_loss
-						# Active gain
-						## Great Projects
-						catalyst_minister_project_culture = massive_situation_catalyst_gain
-						catalyst_minister_compel_religious_uniformity = massive_situation_catalyst_gain
-						catalyst_minister_conduct_census = massive_situation_catalyst_gain
-						catalyst_great_project_establish_control_contribution = minor_situation_catalyst_loss
-						## Events
-						catalyst_event_advancement_medium_progress = medium_situation_catalyst_gain
-						# Ministers
-						catalyst_find_secrets_bad_outcome = minor_situation_catalyst_loss
-						catalyst_find_secrets_good_outcome = minor_situation_catalyst_gain
-						catalyst_minister_caught_exam_cheater = minor_situation_catalyst_gain
-					}
-				}
-				situation_dynastic_cycle_phase_stability_expansion = {
-					takeover_type = points
-					takeover_points = @gained_mandate_of_heaven_halved
-					catalysts = {
-						# Passive gain
-						## Movement Power
-						catalyst_movement_gained_power_expansion = major_situation_catalyst_gain
-						catalyst_pro_hegemon_movement_expansion_yearly = major_situation_catalyst_over_time_gain
-						catalyst_expansion_movement_yearly = massive_situation_catalyst_over_time_gain
-						catalyst_advancement_movement_yearly = medium_situation_catalyst_loss
-						catalyst_movement_consulted_heaven_expansion_positive = massive_situation_catalyst_gain
-						catalyst_movement_consulted_heaven_expansion_negative = massive_plus_situation_catalyst_loss
-						catalyst_house_head_consulted_heaven_expansion_positive = major_situation_catalyst_gain
-						catalyst_house_head_consulted_heaven_expansion_negative = major_plus_situation_catalyst_loss
-						## Legitimacy
-						catalyst_hegemon_above_legitimacy_yearly = major_situation_catalyst_over_time_gain
-						catalyst_new_dynasty_inherits = monumental_situation_catalyst_loss
-						# Active gain
-						## Warfare
-						catalyst_hegemon_won_war = massive_situation_catalyst_gain
-						## Great Projects
-						catalyst_great_wall = massive_situation_catalyst_gain
-						catalyst_great_project_great_wall_contribution = minor_situation_catalyst_gain
-						catalyst_grand_campaign = massive_situation_catalyst_gain
-						catalyst_minister_train_troops = massive_situation_catalyst_gain
-						# Ministers
-						catalyst_find_secrets_bad_outcome = minor_situation_catalyst_loss
-						catalyst_find_secrets_good_outcome = minor_situation_catalyst_gain
-					}
-				}
-				situation_dynastic_cycle_phase_chaos = {
-					takeover_type = untyped
-					takeover_points = @lost_mandate_of_heaven_halved
+					takeover_points = hd_dc_era_threshold
 					catalysts = {
 						# Movement Power
-						catalyst_pro_hegemon_movement_yearly = medium_situation_catalyst_loss
-						catalyst_movement_gained_power_conservative = medium_situation_catalyst_gain
-						catalyst_movement_gained_power_pro_hegemon = minimal_situation_catalyst_loss
-						catalyst_movement_consulted_heaven_chaos_positive = massive_situation_catalyst_gain
-						catalyst_movement_consulted_heaven_chaos_negative = massive_plus_situation_catalyst_loss
-						catalyst_house_head_consulted_heaven_chaos_positive = major_situation_catalyst_gain
-						catalyst_house_head_consulted_heaven_chaos_negative = major_plus_situation_catalyst_loss
+						catalyst_pro_hegemon_movement_yearly = hd_dc_base_ls_neg
+						catalyst_movement_gained_power_conservative = hd_dc_t_m_ls
+						catalyst_movement_gained_power_pro_hegemon = hd_dc_t_s_ls_neg
+						catalyst_movement_consulted_heaven_chaos_positive = hd_dc_t_l_ls
+						catalyst_movement_consulted_heaven_chaos_negative = hd_dc_t_h_ls_neg
+						catalyst_house_head_consulted_heaven_chaos_positive = hd_dc_t_m_ls
+						catalyst_house_head_consulted_heaven_chaos_negative = hd_dc_t_l_ls_neg
 						# Legitimacy
-						catalyst_hegemon_below_legitimacy_yearly = below_legitimacy_catalyst_over_time_value
-						catalyst_hegemon_lost_mandate_of_heaven = @lost_mandate_of_heaven_halved
-						catalyst_hegemon_mandate_of_heaven_at_0 = @lost_mandate_of_heaven_halved
-						catalyst_hegemon_above_legitimacy_yearly = major_situation_catalyst_over_time_loss
+						catalyst_hegemon_below_legitimacy_yearly = hd_dc_base_ls
+						catalyst_hegemon_lost_mandate_of_heaven = hd_dc_era_threshold
+						catalyst_hegemon_mandate_of_heaven_at_0 = hd_dc_era_threshold
+						catalyst_hegemon_above_legitimacy_yearly = hd_dc_base_ls_neg
 						# Held Lands
-						catalyst_hegemony_too_few_lands = extreme_situation_catalyst_over_time_gain
-						catalyst_hegemony_far_too_few_lands = @lost_mandate_of_heaven_halved
+						catalyst_hegemony_too_few_lands = hd_dc_base_ls
+						catalyst_hegemony_far_too_few_lands = hd_dc_era_threshold
 						# Intrigue
-						catalyst_hegemon_murdered = monumental_situation_catalyst_gain
-						catalyst_minister_imprison = minor_situation_catalyst_gain
+						catalyst_hegemon_murdered = hd_dc_t_h_ls
+						catalyst_minister_imprison = hd_dc_t_l_ls
 						# Imperial Treasury
-						catalyst_imperial_treasury_raided = massive_situation_catalyst_gain
-						catalyst_imperial_treasury_debt = major_situation_catalyst_over_time_gain
+						catalyst_imperial_treasury_raided = hd_dc_t_l_ls
+						catalyst_imperial_treasury_debt = hd_dc_base_ls
 						# Calamities
-						catalyst_hegemon_natural_disaster = monumental_situation_catalyst_over_time_gain
-						catalyst_hegemon_natural_disaster_recovered = massive_situation_catalyst_loss
-						catalyst_hegemon_in_civil_war = massive_situation_catalyst_gain
-						catalyst_hegemon_in_defensive_war_yearly = massive_situation_catalyst_over_time_gain
-						catalyst_hegemon_epidemic = massive_situation_catalyst_over_time_gain
-						catalyst_hegemon_apocalyptic_epidemic = monumental_situation_catalyst_over_time_gain
+						catalyst_hegemon_natural_disaster = hd_dc_base_ls
+						catalyst_hegemon_natural_disaster_recovered = hd_dc_t_l_ls_neg
+						catalyst_hegemon_in_civil_war = hd_dc_t_l_ls
+						catalyst_hegemon_in_defensive_war_yearly = hd_dc_base_ls
+						catalyst_hegemon_epidemic = hd_dc_base_ls
+						catalyst_hegemon_apocalyptic_epidemic = hd_dc_base_ls
 						# Warfare
-						catalyst_hegemon_lost_war = massive_plus_situation_catalyst_gain
-						catalyst_hegemon_lost_defensive_territorial_war = major_situation_catalyst_gain
-						catalyst_grand_campaign_lost = massive_situation_catalyst_gain
-						catalyst_requested_incursion = major_situation_catalyst_gain
+						catalyst_hegemon_lost_war = hd_dc_t_h_ls
+						catalyst_hegemon_lost_defensive_territorial_war = hd_dc_t_l_ls
+						catalyst_grand_campaign_lost = hd_dc_t_l_ls
+						catalyst_requested_incursion = hd_dc_t_m_ls
 
 						#Events
-						catalyst_event_mongol_empire_appears = massive_situation_catalyst_gain
-						catalyst_event_mongol_empire_attacks_minor = medium_situation_catalyst_gain
-						catalyst_event_mongol_empire_attacks_major = major_situation_catalyst_gain
+						catalyst_hd_nomad_power_rises = hd_dc_t_l_ls
+						catalyst_hd_nomad_invasion_minor = hd_dc_t_m_ls
+						catalyst_hd_nomad_invasion_major = hd_dc_t_l_ls
 
 						# Tyranny
-						catalyst_tyrannical_extinguish_noble_family = medium_situation_catalyst_gain
+						catalyst_tyrannical_extinguish_noble_family = hd_dc_t_m_ls
 
 						# Ministers
-						catalyst_minister_blackmailed = minimal_situation_catalyst_loss
-						catalyst_minister_exposed_secret = minor_situation_catalyst_loss
-						catalyst_cleared_treasury_debt = minor_situation_catalyst_loss
-						catalyst_minister_pardoned_known_criminal = minor_situation_catalyst_gain
-						catalyst_minister_pardoned_dangerous_criminal = minimal_situation_catalyst_gain
-						catalyst_ministers_abused_privilege_of_office = minor_situation_catalyst_gain
+						catalyst_minister_blackmailed = hd_dc_t_s_ls_neg
+						catalyst_minister_exposed_secret = hd_dc_t_s_ls_neg
+						catalyst_cleared_treasury_debt = hd_dc_t_s_ls_neg
+						catalyst_minister_pardoned_known_criminal = hd_dc_t_m_ls
+						catalyst_minister_pardoned_dangerous_criminal = hd_dc_t_m_ls
+						catalyst_ministers_abused_privilege_of_office = hd_dc_t_m_ls
 
 						# Administrative
-						catalyst_hegemon_appointing_low_merit_councillor = minor_situation_catalyst_gain
-						catalyst_hegemon_appointing_low_merit_governor = minor_situation_catalyst_gain
+						catalyst_hegemon_appointing_low_merit_councillor = hd_dc_t_m_ls
+						catalyst_hegemon_appointing_low_merit_governor = hd_dc_t_m_ls
+						catalyst_hd_lost_war_vip = hd_dc_t_h_ls # era-gen
+						catalyst_hd_lost_land_vip = hd_dc_t_l_ls # era-gen
+						catalyst_hd_vip_murdered = hd_dc_t_m_ls # era-gen
+						catalyst_hd_crime = hd_dc_t_m_ls # era-gen
+						catalyst_hd_suppress_party = hd_dc_t_l_ls # era-gen
+						catalyst_hd_harsh_tax = hd_dc_t_s_ls # era-gen
+						catalyst_hd_purge_vip = hd_dc_t_l_ls # era-gen
+						catalyst_hd_incompetent_minister = hd_dc_t_m_ls # era-gen
+						catalyst_hd_partisan_prohibition = hd_dc_t_h_ls # era-gen
+						catalyst_hd_deposed = hd_dc_t_l_ls # era-gen
+						catalyst_hd_houses_antagonistic_s = hd_dc_t_s_ls # era-gen
+						catalyst_hd_houses_antagonistic_m = hd_dc_t_m_ls # era-gen
+						catalyst_hd_houses_antagonistic_l = hd_dc_t_l_ls # era-gen
+						catalyst_hd_houses_antagonistic_h = hd_dc_t_h_ls # era-gen
+						catalyst_hd_restoration_failed = hd_dc_t_l_ls # era-gen
+						catalyst_hd_able_civil_minister = hd_dc_t_m_ls_half # era-gen
+						catalyst_hd_building_completed = hd_dc_t_s_ls_half # era-gen
+						catalyst_hd_development = hd_dc_t_s_ls_half # era-gen
+						catalyst_hd_exam_held = hd_dc_t_s_ls_half # era-gen
+						catalyst_hd_power_minister_removed = hd_dc_t_l_ls_half # era-gen
+						catalyst_hd_reconciliation = hd_dc_t_m_ls_half # era-gen
+						catalyst_hd_houses_harmonious_s = hd_dc_t_s_ls_half # era-gen
+						catalyst_hd_houses_harmonious_m = hd_dc_t_m_ls_half # era-gen
+						catalyst_hd_houses_harmonious_l = hd_dc_t_l_ls_half # era-gen
+						catalyst_hd_houses_harmonious_h = hd_dc_t_h_ls_half # era-gen
+						catalyst_hd_restoration_success = hd_dc_t_h_ls_half # era-gen
+					}
+				}
+				situation_dynastic_cycle_phase_hd_recovery = {
+					takeover_type = points
+					takeover_points = hd_dc_era_threshold
+					catalysts = {
+						catalyst_hd_hegemon_peace_yearly = hd_dc_t_s_ls
+						catalyst_hd_treasury_solvent_yearly = hd_dc_t_s_ls
+						catalyst_hd_popular_content_yearly = hd_dc_t_m_ls
+						catalyst_hd_hegemon_won_defensive_war = hd_dc_t_h_ls
+						catalyst_hd_lost_war_vip = hd_dc_t_h_ls_half # era-gen
+						catalyst_hd_lost_land_vip = hd_dc_t_l_ls_half # era-gen
+						catalyst_hd_vip_murdered = hd_dc_t_m_ls_half # era-gen
+						catalyst_hd_crime = hd_dc_t_m_ls_half # era-gen
+						catalyst_hd_suppress_party = hd_dc_t_l_ls_half # era-gen
+						catalyst_hd_harsh_tax = hd_dc_t_s_ls_half # era-gen
+						catalyst_hd_purge_vip = hd_dc_t_l_ls_half # era-gen
+						catalyst_hd_incompetent_minister = hd_dc_t_m_ls_half # era-gen
+						catalyst_hd_partisan_prohibition = hd_dc_t_h_ls_half # era-gen
+						catalyst_hd_deposed = hd_dc_t_l_ls_half # era-gen
+						catalyst_hd_houses_antagonistic_s = hd_dc_t_s_ls_half # era-gen
+						catalyst_hd_houses_antagonistic_m = hd_dc_t_m_ls_half # era-gen
+						catalyst_hd_houses_antagonistic_l = hd_dc_t_l_ls_half # era-gen
+						catalyst_hd_houses_antagonistic_h = hd_dc_t_h_ls_half # era-gen
+						catalyst_hd_restoration_failed = hd_dc_t_l_ls_half # era-gen
+						catalyst_hd_able_civil_minister = hd_dc_t_m_ls # era-gen
+						catalyst_hd_building_completed = hd_dc_t_s_ls # era-gen
+						catalyst_hd_development = hd_dc_t_s_ls # era-gen
+						catalyst_hd_exam_held = hd_dc_t_s_ls # era-gen
+						catalyst_hd_power_minister_removed = hd_dc_t_l_ls # era-gen
+						catalyst_hd_reconciliation = hd_dc_t_m_ls # era-gen
+						catalyst_hd_houses_harmonious_s = hd_dc_t_s_ls # era-gen
+						catalyst_hd_houses_harmonious_m = hd_dc_t_m_ls # era-gen
+						catalyst_hd_houses_harmonious_l = hd_dc_t_l_ls # era-gen
+						catalyst_hd_houses_harmonious_h = hd_dc_t_h_ls # era-gen
+						catalyst_hd_restoration_success = hd_dc_t_h_ls # era-gen
+						catalyst_hegemon_above_legitimacy_yearly = hd_dc_base_ls # era-gen
 					}
 				}
 			}
-			modifier_sets = {
+			modifier_sets = {	# 天朝循环大修·朋党：按身份重排（见 docs/朋党系统_设计草案.md 第 8 节）
 				dynastic_cycle_government_effects = {
-					hegemon_ruler = {
+					hegemon_ruler = {	# 天子
 						parameters = {
-							#phase defining effects
 							dynastic_cycle_more_peasant_factions = yes
-							#shared effects
 							dynastic_cycle_vassal_internal_wars_allowed = yes
-							dynastic_cycle_internal_vassals_non_admin_war_desire = yes # NOT IMPLEMENTED
+							dynastic_cycle_internal_vassals_non_admin_war_desire = yes
 							dynastic_cycle_offensive_wars_ban = yes
 							dynastic_cycle_governor_efficiency_penalty = yes
 							dynastic_cycle_external_tributaries_vassals_increased_independence_desire = yes
-							dynastic_cycle_vassals_reduced_independence_penalties = yes # NOT IMPLEMENTED
+							dynastic_cycle_vassals_reduced_independence_penalties = yes
 							dynastic_cycle_locks_title_integration = yes
 						}
 					}
-					pro_hegemon_movement = {
+					hd_siyi_movement = {	# 四夷
 						parameters = {
-							#movement defining effects
-							pro_hegemon_interaction_boost = yes
-							#phase defining effects
+							dynastic_cycle_unlocks_cb_for_outsiders = yes
+						}
+					}
+					other_rulers = {	# 诸侯
+						parameters = {
+							dynastic_cycle_unlocks_cb_for_outsiders = yes
+						}
+					}
+					undecided_movement = {	# 宦官
+						parameters = {
 							dynastic_cycle_more_peasant_factions = yes
 							dynastic_cycle_vassal_seize_cb = yes
-							#shared effects
 							dynastic_cycle_vassal_internal_wars_allowed = yes
-							dynastic_cycle_internal_vassals_non_admin_war_desire = yes # NOT IMPLEMENTED
+							dynastic_cycle_locks_title_integration = yes
+							dynastic_cycle_internal_vassals_non_admin_war_desire = yes
 							dynastic_cycle_governor_efficiency_penalty = yes
 							dynastic_cycle_external_tributaries_vassals_increased_independence_desire = yes
-							dynastic_cycle_vassals_reduced_independence_penalties = yes # NOT IMPLEMENTED
-							dynastic_cycle_locks_title_integration = yes
+							dynastic_cycle_vassals_reduced_independence_penalties = yes
 						}
 					}
-					expansion_movement = {
+					pro_hegemon_movement = {	# 外戚
 						parameters = {
-							#phase defining effects
 							dynastic_cycle_more_peasant_factions = yes
 							dynastic_cycle_vassal_seize_cb = yes
-							#shared effects
 							dynastic_cycle_vassal_internal_wars_allowed = yes
-							dynastic_cycle_internal_vassals_non_admin_war_desire = yes # NOT IMPLEMENTED
+							dynastic_cycle_locks_title_integration = yes
+							dynastic_cycle_internal_vassals_non_admin_war_desire = yes
 							dynastic_cycle_governor_efficiency_penalty = yes
 							dynastic_cycle_external_tributaries_vassals_increased_independence_desire = yes
-							dynastic_cycle_vassals_reduced_independence_penalties = yes # NOT IMPLEMENTED
-							dynastic_cycle_locks_title_integration = yes
+							dynastic_cycle_vassals_reduced_independence_penalties = yes
 						}
 					}
-					advancement_movement = {
+					expansion_movement = {	# 武勋
 						parameters = {
-							#phase defining effects
 							dynastic_cycle_more_peasant_factions = yes
 							dynastic_cycle_vassal_seize_cb = yes
-							#shared effects
 							dynastic_cycle_vassal_internal_wars_allowed = yes
-							dynastic_cycle_internal_vassals_non_admin_war_desire = yes # NOT IMPLEMENTED
+							dynastic_cycle_locks_title_integration = yes
+							dynastic_cycle_internal_vassals_non_admin_war_desire = yes
 							dynastic_cycle_governor_efficiency_penalty = yes
 							dynastic_cycle_external_tributaries_vassals_increased_independence_desire = yes
-							dynastic_cycle_vassals_reduced_independence_penalties = yes # NOT IMPLEMENTED
-							dynastic_cycle_locks_title_integration = yes
+							dynastic_cycle_vassals_reduced_independence_penalties = yes
 						}
 					}
-					conservative_movement = {
+					conservative_movement = {	# 世族
 						parameters = {
-							#phase defining effects
 							dynastic_cycle_more_peasant_factions = yes
 							dynastic_cycle_vassal_seize_cb = yes
-							#shared effects
 							dynastic_cycle_vassal_internal_wars_allowed = yes
-							dynastic_cycle_internal_vassals_non_admin_war_desire = yes # NOT IMPLEMENTED
+							dynastic_cycle_locks_title_integration = yes
+							dynastic_cycle_internal_vassals_non_admin_war_desire = yes
 							dynastic_cycle_governor_efficiency_penalty = yes
 							dynastic_cycle_external_tributaries_vassals_increased_independence_desire = yes
-							dynastic_cycle_vassals_reduced_independence_penalties = yes # NOT IMPLEMENTED
-							dynastic_cycle_locks_title_integration = yes
+							dynastic_cycle_vassals_reduced_independence_penalties = yes
 						}
 					}
-					undecided_movement = {
+					advancement_movement = {	# 寒门
 						parameters = {
-							#phase defining effects
 							dynastic_cycle_more_peasant_factions = yes
 							dynastic_cycle_vassal_seize_cb = yes
-							#shared effects
 							dynastic_cycle_vassal_internal_wars_allowed = yes
 							dynastic_cycle_locks_title_integration = yes
-						}
-					}
-					other_rulers = {
-						parameters = {
-							dynastic_cycle_unlocks_cb_for_outsiders = yes # for loc purposes only, to let players know they can be invaded
+							dynastic_cycle_internal_vassals_non_admin_war_desire = yes
+							dynastic_cycle_governor_efficiency_penalty = yes
+							dynastic_cycle_external_tributaries_vassals_increased_independence_desire = yes
+							dynastic_cycle_vassals_reduced_independence_penalties = yes
 						}
 					}
 				}
-
 				dynastic_cycle_character_effects = {
-					hegemon_ruler = {
+					hegemon_ruler = {	# 天子
 						character_modifier = {
+							ai_war_chance = 4 # A1
 							mercenary_hire_cost_mult = 2.5
 							vassal_tax_mult = -0.2
 							vassal_opinion = -20
@@ -1790,39 +1940,61 @@ dynastic_cycle = {
 							max_personal_schemes_add = 1
 						}
 					}
-					pro_hegemon_movement = {
+					hd_siyi_movement = {	# 四夷
 						character_modifier = {
+							ai_war_chance = 4.3 # A1：原 0.3 +4
+							monthly_prestige_gain_mult = 0.1
+						}
+					}
+					undecided_movement = {	# 宦官
+						character_modifier = {
+							ai_war_chance = 4 # A1
+							monthly_treasury_from_liege_mult = -0.20
+							vassal_tax_mult = -0.1
+							vassal_opinion = -20
+							owned_hostile_scheme_success_chance_add = 5
+							monthly_influence_mult = 0.1
+						}
+					}
+					pro_hegemon_movement = {	# 外戚
+						character_modifier = {
+							ai_war_chance = 4 # A1
 							monthly_treasury_from_liege_mult = -0.20
 							vassal_tax_mult = -0.1
 							vassal_opinion = -30
 							liege_opinion = 10
 						}
 					}
-					expansion_movement = {
+					expansion_movement = {	# 武勋
 						character_modifier = {
+							ai_war_chance = 4 # A1
 							monthly_treasury_from_liege_mult = -0.20
 							vassal_tax_mult = -0.1
 							vassal_opinion = -20
+							men_at_arms_cap = 1
 						}
 					}
-					advancement_movement = {
+					conservative_movement = {	# 世族
 						character_modifier = {
-							monthly_treasury_from_liege_mult = -0.20
-							vassal_tax_mult = -0.1
-							vassal_opinion = -20
-						}
-					}
-					conservative_movement = {
-						character_modifier = {
+							ai_war_chance = 4 # A1
 							monthly_treasury_from_liege_mult = -0.20
 							dynasty_house_opinion = 10
+							domicile_monthly_gold_mult = 0.1
 						}
 					}
-					undecided_movement = {
+					advancement_movement = {	# 寒门
 						character_modifier = {
+							ai_war_chance = 4 # A1
 							monthly_treasury_from_liege_mult = -0.20
 							vassal_tax_mult = -0.1
 							vassal_opinion = -20
+							monthly_influence_mult = -0.1
+							monthly_prestige_gain_mult = 0.1
+						}
+					}
+					other_rulers = {
+						character_modifier = {
+							ai_war_chance = 4 # A1
 						}
 					}
 				}
@@ -1831,21 +2003,36 @@ dynastic_cycle = {
 
 		situation_dynastic_cycle_phase_chaos = {
 			icon = "gfx/interface/icons/dynastic_cycle/dynastic_cycle_phase_chaos.dds"
-			illustration = "gfx/interface/illustrations/event_story/tgp_dynastic_cycle_corruption.dds"
+			illustration = "gfx/interface/icons/dynastic_cycle/phases/warring_period.png"
 
 			on_start = {
-				hd_dc_notify_chaos_effect = yes
+				# 从治世直接进入斗争（未经崩溃/对峙）时才开启新纪元
+				if = {
+					limit = {
+						NOR = {
+							var:last_recorded_phase_change ?= 8
+							var:last_recorded_phase_change ?= 9
+						}
+					}
+					hd_dc_notify_chaos_effect = yes
+				}
 				# Record the phase without inventing a deposed emperor or trade recovery.
 				record_situation_special_event = {
 					key = situation_dynastic_cycle_era_change_history_entry
 					phase = situation_dynastic_cycle_phase_chaos
 				}
 				set_variable = { name = last_recorded_phase_change value = 6 }
+				hd_cycle_siyi_clear_effect = yes
+				hd_cycle_siyi_refresh_effect = yes
+				hd_strat_grant_all_effect = yes
 			}
 			on_end = {
-				every_situation_participant = {
-					remove_variable = former_movement_leader
-					remove_variable = former_movement_member
+				if = {
+					limit = { hd_cycle_is_luanshi_trigger = no }
+					every_situation_participant = {
+						remove_variable = former_movement_leader
+						remove_variable = former_movement_member
+					}
 				}
 			}
 
@@ -1853,56 +2040,25 @@ dynastic_cycle = {
 				era_type_chaotic = yes
 			}
 
-			# 割据退出恢复原版天命催化剂。
+			# 斗争期唯一的治世出口是‘终结乱世’决议；积分只通向对峙。
 			future_phases = {
-				situation_dynastic_cycle_phase_stability_advancement = {
+				situation_dynastic_cycle_phase_hd_standoff = {
 					takeover_type = points
-					takeover_points = @mandate_of_heaven_flavorful_points
+					takeover_points = hd_dc_era_threshold
 					catalysts = {
-						catalyst_hegemon_gains_mandate_of_heaven = @mandate_of_heaven_flavorful_points
-					}
-				}
-				situation_dynastic_cycle_phase_stability_expansion = {
-					takeover_type = points
-					takeover_points = @mandate_of_heaven_flavorful_points
-					catalysts = {
-						catalyst_hegemon_gains_mandate_of_heaven = @mandate_of_heaven_flavorful_points
+						catalyst_hd_few_major_powers_yearly = hd_dc_t_l_ls
+						catalyst_hd_consolidation_lost_to_peer = hd_dc_t_s_ls
+						catalyst_hd_multiple_empires_yearly = hd_dc_t_m_ls
+						catalyst_hd_two_great_powers_yearly = hd_dc_t_l_ls # era-gen
+						catalyst_hd_proclaim_king = hd_dc_t_l_ls # era-gen
+						catalyst_hd_proclaim_emperor = hd_dc_t_h_ls # era-gen
+						catalyst_hd_independent_eliminated = hd_dc_t_s_ls # era-gen
 					}
 				}
 			}
-			modifier_sets = {
+			modifier_sets = {	# 天朝循环大修·朋党：按身份重排（见 docs/朋党系统_设计草案.md 第 8 节）
 				dynastic_cycle_government_effects = {
-					hegemon_ruler = {
-						parameters = {
-							dynastic_cycle_no_movement = yes
-						}
-					}
-					pro_hegemon_movement = {
-						parameters = {
-							dynastic_cycle_no_movement = yes
-						}
-					}
-					expansion_movement = {
-						parameters = {
-							dynastic_cycle_no_movement = yes
-						}
-					}
-					advancement_movement = {
-						parameters = {
-							dynastic_cycle_no_movement = yes
-						}
-					}
-					conservative_movement = {
-						parameters = {
-							dynastic_cycle_no_movement = yes
-						}
-					}
-					undecided_movement = {
-						parameters = {
-							dynastic_cycle_no_movement = yes
-						}
-					}
-					other_rulers = {
+					hd_siyi_movement = {	# 四夷
 						parameters = {
 							dynastic_cycle_great_projects_increased_legitimacy = yes
 							dynastic_cycle_legitimacy_from_appointments = yes
@@ -1910,6 +2066,945 @@ dynastic_cycle = {
 						}
 						county_modifier = {
 							tax_mult = -0.2
+						}
+					}
+					other_rulers = {	# 诸侯
+						parameters = {
+							dynastic_cycle_great_projects_increased_legitimacy = yes
+							dynastic_cycle_legitimacy_from_appointments = yes
+							dynastic_cycle_reclaim_mandate_decision = yes
+						}
+						county_modifier = {
+							tax_mult = -0.2
+						}
+					}
+				}
+				dynastic_cycle_character_effects = {
+					hegemon_ruler = {	# 天子
+						character_modifier = {
+							ai_war_chance = 4 # A1
+							legitimacy_gain_mult = -0.25
+						}
+					}
+					hd_siyi_movement = {	# 四夷
+						character_modifier = {
+							men_at_arms_maintenance = -0.2
+							men_at_arms_cap = 3
+							ai_war_chance = 9 # A1：原 5 +4
+							monthly_prestige_gain_mult = 0.3
+						}
+					}
+					other_rulers = {	# 诸侯
+						character_modifier = {
+							ai_war_chance = 4 # A1
+							legitimacy_gain_mult = -0.25
+						}
+					}
+					undecided_movement = {	# 宦官
+						character_modifier = {
+							ai_war_chance = 4 # A1
+							monthly_prestige_gain_mult = -0.2
+							monthly_influence_mult = -0.2
+							liege_opinion = 10
+						}
+					}
+					pro_hegemon_movement = {	# 外戚
+						character_modifier = {
+							ai_war_chance = 4 # A1
+							monthly_prestige_gain_mult = 0.1
+							liege_opinion = 10
+						}
+					}
+					expansion_movement = {	# 武勋
+						character_modifier = {
+							ai_war_chance = 4 # A1
+							levy_size = 0.2
+							men_at_arms_cap = 2
+							men_at_arms_maintenance = -0.1
+						}
+					}
+					conservative_movement = {	# 世族
+						character_modifier = {
+							ai_war_chance = 4 # A1
+							monthly_income_mult = -0.15
+						}
+					}
+					advancement_movement = {	# 寒门
+						character_modifier = {
+							ai_war_chance = 4 # A1
+							monthly_prestige_gain_mult = 0.15
+						}
+					}
+				}
+			}
+		}
+
+		############################################################
+		# HD 天朝循环大修：恢复期（治世，≈ 进取期效果 ×0.5）
+		############################################################
+		situation_dynastic_cycle_phase_hd_recovery = {
+			icon = "gfx/interface/icons/dynastic_cycle/hd_dc_phase_recovery.dds"
+			illustration = "gfx/interface/icons/dynastic_cycle/phases/recovering_period.png"
+
+			on_start = {
+				set_variable = {
+					name = stability_phase_start_date
+					value = current_date
+				}
+				tgp_update_wuking_element_effect = yes
+				# 乱世结束后举办科举以恢复功名体系
+				title:h_china.holder ?= {
+					if = {
+						limit = {
+							is_ai = yes
+							OR = {
+								root.var:last_recorded_phase_change ?= 6
+								root.var:last_recorded_phase_change ?= 8
+								root.var:last_recorded_phase_change ?= 9
+							}
+						}
+						add_character_flag = examinations_ai_override
+						ai_attempt_to_host_activity = activity_imperial_examination
+					}
+				}
+				hd_cycle_phase_started_effect = { PHASE = hd_recovery NUMBER = 7 }
+			}
+
+			parameters = {
+				era_type_stable = yes
+				dynastic_cycle_hegemon_increased_metropolitan_limit = yes
+			}
+
+			future_phases = {
+				situation_dynastic_cycle_phase_stability_expansion = {
+					takeover_type = points
+					takeover_points = hd_dc_era_threshold
+					catalysts = {
+						catalyst_movement_gained_power_expansion = hd_dc_t_m
+						catalyst_pro_hegemon_movement_expansion_yearly = hd_dc_base
+						catalyst_expansion_movement_yearly = hd_dc_base
+						catalyst_advancement_movement_yearly = hd_dc_base_neg
+						catalyst_movement_consulted_heaven_expansion_positive = hd_dc_t_l
+						catalyst_movement_consulted_heaven_expansion_negative = hd_dc_t_h_neg
+						catalyst_house_head_consulted_heaven_expansion_positive = hd_dc_t_m
+						catalyst_house_head_consulted_heaven_expansion_negative = hd_dc_t_l_neg
+						catalyst_hegemon_above_legitimacy_yearly = hd_dc_base_split
+						catalyst_new_dynasty_inherits = hd_dc_t_h_neg
+						catalyst_hegemon_won_war = hd_dc_t_m
+						catalyst_great_wall = hd_dc_t_s
+						catalyst_great_project_great_wall_contribution = hd_dc_t_s
+						catalyst_grand_campaign = hd_dc_t_l
+						catalyst_minister_train_troops = hd_dc_t_s
+						catalyst_find_secrets_bad_outcome = hd_dc_t_s_neg
+						catalyst_find_secrets_good_outcome = hd_dc_t_s
+						catalyst_hd_won_external_war = hd_dc_t_m # era-gen
+						catalyst_hd_maa_full_yearly = hd_dc_t_s # era-gen
+						catalyst_hd_able_military_minister = hd_dc_t_m # era-gen
+						catalyst_hd_resettle_refugees = hd_dc_t_s # era-gen
+						catalyst_hd_lost_war_vip = hd_dc_t_h_half # era-gen
+						catalyst_hd_lost_land_vip = hd_dc_t_l_half # era-gen
+						catalyst_hd_vip_murdered = hd_dc_t_m_half # era-gen
+						catalyst_hd_crime = hd_dc_t_m_half # era-gen
+						catalyst_hd_suppress_party = hd_dc_t_l_half # era-gen
+						catalyst_hd_harsh_tax = hd_dc_t_s_half # era-gen
+						catalyst_hd_purge_vip = hd_dc_t_l_half # era-gen
+						catalyst_hd_incompetent_minister = hd_dc_t_m_half # era-gen
+					}
+				}
+				situation_dynastic_cycle_phase_stability_advancement = {
+					takeover_type = points
+					takeover_points = hd_dc_era_threshold
+					catalysts = {
+						catalyst_movement_gained_power_advancement = hd_dc_t_m
+						catalyst_pro_hegemon_movement_advancement_yearly = hd_dc_base
+						catalyst_advancement_movement_yearly = hd_dc_base
+						catalyst_expansion_movement_yearly = hd_dc_base_neg
+						catalyst_movement_consulted_heaven_advancement_positive = hd_dc_t_l
+						catalyst_movement_consulted_heaven_advancement_negative = hd_dc_t_h_neg
+						catalyst_house_head_consulted_heaven_advancement_positive = hd_dc_t_m
+						catalyst_house_head_consulted_heaven_advancement_negative = hd_dc_t_l_neg
+						catalyst_hegemon_above_legitimacy_yearly = hd_dc_base_split
+						catalyst_new_dynasty_inherits = hd_dc_t_h_neg
+						catalyst_minister_project_culture = hd_dc_t_l
+						catalyst_minister_compel_religious_uniformity = hd_dc_t_l
+						catalyst_minister_conduct_census = hd_dc_t_l
+						catalyst_great_project_establish_control_contribution = hd_dc_t_s_neg
+						catalyst_event_advancement_medium_progress = hd_dc_t_m
+						catalyst_find_secrets_bad_outcome = hd_dc_t_s_neg
+						catalyst_find_secrets_good_outcome = hd_dc_t_s
+						catalyst_minister_caught_exam_cheater = hd_dc_t_s
+						catalyst_hd_able_civil_minister = hd_dc_t_m # era-gen
+						catalyst_hd_building_completed = hd_dc_t_s # era-gen
+						catalyst_hd_development = hd_dc_t_s # era-gen
+						catalyst_hd_exam_held = hd_dc_t_s # era-gen
+						catalyst_hd_light_taxes = hd_dc_t_m # era-gen
+						catalyst_hd_resettle_refugees = hd_dc_t_s # era-gen
+						catalyst_hd_reconciliation = hd_dc_t_m # era-gen
+						catalyst_hd_grand_amnesty_full = hd_dc_t_l # era-gen
+						catalyst_hd_lost_war_vip = hd_dc_t_h_half # era-gen
+						catalyst_hd_lost_land_vip = hd_dc_t_l_half # era-gen
+						catalyst_hd_vip_murdered = hd_dc_t_m_half # era-gen
+						catalyst_hd_crime = hd_dc_t_m_half # era-gen
+						catalyst_hd_suppress_party = hd_dc_t_l_half # era-gen
+						catalyst_hd_harsh_tax = hd_dc_t_s_half # era-gen
+						catalyst_hd_purge_vip = hd_dc_t_l_half # era-gen
+						catalyst_hd_incompetent_minister = hd_dc_t_m_half # era-gen
+					}
+				}
+				situation_dynastic_cycle_phase_instability = {
+					takeover_type = points
+					takeover_points = hd_dc_era_threshold
+					catalysts = {
+						catalyst_conservative_movement_yearly = hd_dc_base
+						catalyst_movement_gained_power_expansion = hd_dc_t_s
+						catalyst_movement_gained_power_conservative = hd_dc_t_s
+						catalyst_movement_gained_power_pro_hegemon = hd_dc_t_s_neg
+						catalyst_movement_consulted_heaven_instability_positive = hd_dc_t_l
+						catalyst_movement_consulted_heaven_instability_negative = hd_dc_t_h_neg
+						catalyst_house_head_consulted_heaven_instability_positive = hd_dc_t_m
+						catalyst_house_head_consulted_heaven_instability_negative = hd_dc_t_l_neg
+						catalyst_hegemon_natural_disaster = hd_dc_base
+						catalyst_hegemon_natural_disaster_recovered = hd_dc_t_l_neg
+						catalyst_hegemon_in_civil_war = hd_dc_t_l
+						catalyst_hegemon_in_defensive_war_yearly = hd_dc_base
+						catalyst_hegemon_epidemic = hd_dc_base
+						catalyst_hegemon_apocalyptic_epidemic = hd_dc_base
+						catalyst_hegemon_below_legitimacy_yearly = hd_dc_base
+						catalyst_hegemon_lost_mandate_of_heaven = hd_dc_era_threshold
+						catalyst_hegemon_mandate_of_heaven_at_0 = hd_dc_era_threshold
+						catalyst_hegemon_above_legitimacy_yearly = hd_dc_base_neg
+						catalyst_hegemony_too_few_lands = hd_dc_base
+						catalyst_hegemony_far_too_few_lands = hd_dc_era_threshold
+						catalyst_diarch_mandate = hd_dc_t_s
+						catalyst_imperial_examinations_gap_long_yearly = hd_dc_base
+						catalyst_hegemon_murdered = hd_dc_t_h
+						catalyst_imperial_family_member_murdered = hd_dc_t_m
+						catalyst_imperial_treasury_raided = hd_dc_base
+						catalyst_imperial_treasury_debt = hd_dc_base
+						catalyst_governor_embezzlement = hd_dc_t_m
+						catalyst_dipped_into_treasury = hd_dc_t_m
+						catalyst_hegemon_influenced_by_interaction = hd_dc_t_m
+						catalyst_minister_imprison = hd_dc_t_l
+						catalyst_governor_raided_estate = hd_dc_t_m
+						catalyst_governor_slander = hd_dc_t_s
+						catalyst_governor_challenged_status = hd_dc_t_s
+						catalyst_hegemon_appointing_low_merit_governor = hd_dc_t_m
+						catalyst_hegemon_appointing_low_merit_councillor = hd_dc_t_m
+						catalyst_tyrannical_extinguish_noble_family = hd_dc_t_m
+						catalyst_new_dynasty_inherits = hd_dc_era_threshold
+						catalyst_hegemon_lost_war = hd_dc_t_h
+						catalyst_hegemon_lost_defensive_territorial_war = hd_dc_t_l
+						catalyst_hegemon_lost_capital_in_war = hd_dc_t_l
+						catalyst_requested_incursion = hd_dc_t_m
+						catalyst_imperial_examinations_gap_short_yearly = hd_dc_base
+						catalyst_ministers_abused_privilege_of_office = hd_dc_t_m
+						catalyst_hd_able_civil_minister = hd_dc_t_m_half # era-gen
+						catalyst_hd_building_completed = hd_dc_t_s_half # era-gen
+						catalyst_hd_development = hd_dc_t_s_half # era-gen
+						catalyst_hd_exam_held = hd_dc_t_s_half # era-gen
+						catalyst_hd_light_taxes = hd_dc_t_m_half # era-gen
+						catalyst_hd_resettle_refugees = hd_dc_t_s_half # era-gen
+						catalyst_hd_reconciliation = hd_dc_t_m_half # era-gen
+						catalyst_hd_grand_amnesty_full = hd_dc_t_l_half # era-gen
+						catalyst_hd_won_external_war = hd_dc_t_m_half # era-gen
+						catalyst_hd_maa_full_yearly = hd_dc_t_s_half # era-gen
+						catalyst_hd_able_military_minister = hd_dc_t_m_half # era-gen
+						catalyst_hd_lost_war_vip = hd_dc_t_h # era-gen
+						catalyst_hd_lost_land_vip = hd_dc_t_l # era-gen
+						catalyst_hd_vip_murdered = hd_dc_t_m # era-gen
+						catalyst_hd_crime = hd_dc_t_m # era-gen
+						catalyst_hd_suppress_party = hd_dc_t_l # era-gen
+						catalyst_hd_harsh_tax = hd_dc_t_s # era-gen
+						catalyst_hd_purge_vip = hd_dc_t_l # era-gen
+						catalyst_hd_incompetent_minister = hd_dc_t_m # era-gen
+					}
+				}
+			}
+
+			modifier_sets = {	# 天朝循环大修·朋党：按身份重排（见 docs/朋党系统_设计草案.md 第 8 节）
+				dynastic_cycle_government_effects = {
+					hegemon_ruler = {	# 天子
+						parameters = {
+							dynastic_cycle_hegemon_legitimacy_increasing_expectations = yes
+							dynastic_cycle_offensive_wars_ban = yes
+							dynastic_cycle_can_build_in_tributaries = yes
+							dynastic_cycle_faster_title_integration = yes
+							dynastic_cycle_hegemon_increased_metropolitan_limit = yes
+							dynastic_cycle_hegemon_stewardship_examinations = yes
+							dynastic_cycle_imperial_buildings_increased_build_speed = yes
+						}
+					}
+					hd_siyi_movement = {	# 四夷
+						parameters = {
+							dynastic_cycle_no_effects = yes
+						}
+					}
+					other_rulers = {	# 诸侯
+						parameters = {
+							dynastic_cycle_no_effects = yes
+						}
+					}
+					undecided_movement = {	# 宦官
+						parameters = {
+							dynastic_cycle_faster_title_integration = yes
+							dynastic_cycle_send_treasury_for_merit = yes
+						}
+					}
+					pro_hegemon_movement = {	# 外戚
+						parameters = {
+							dynastic_cycle_faster_title_integration = yes
+							dynastic_cycle_send_treasury_for_merit = yes
+						}
+					}
+					expansion_movement = {	# 武勋
+						parameters = {
+							dynastic_cycle_faster_title_integration = yes
+							dynastic_cycle_send_treasury_for_merit = yes
+						}
+					}
+					conservative_movement = {	# 世族
+						parameters = {
+							dynastic_cycle_faster_title_integration = yes
+							dynastic_cycle_send_treasury_for_merit = yes
+						}
+					}
+					advancement_movement = {	# 寒门
+						parameters = {
+							dynastic_cycle_faster_title_integration = yes
+							dynastic_cycle_send_treasury_for_merit = yes
+						}
+					}
+				}
+				dynastic_cycle_character_effects = {
+					hegemon_ruler = {	# 天子
+						character_modifier = {
+							men_at_arms_cap = -1
+							mercenary_hire_cost_mult = 2.5
+							cultural_head_fascination_mult = 0.1
+							legitimacy_gain_mult = 0.15
+							monthly_prestige_gain_mult = 0.1
+							levy_reinforcement_rate = 0.15
+							ai_war_chance = -0.3
+						}
+						county_modifier = {
+							build_gold_cost = -0.15
+							build_speed = -0.075
+							development_growth_factor = 0.2
+							monthly_county_control_growth_factor = 0.3
+							county_opinion_add = 5
+						}
+					}
+					hd_siyi_movement = {	# 四夷
+						character_modifier = {
+							ai_war_chance = -0.5
+							herd_gain_mult = 0.1
+						}
+						county_modifier = {
+							build_gold_cost = -0.15
+							development_growth_factor = 0.2
+							monthly_county_control_growth_factor = 0.3
+							county_opinion_add = 5
+						}
+					}
+					other_rulers = {	# 诸侯
+						character_modifier = {
+							ai_war_chance = -0.3
+						}
+						county_modifier = {
+							build_gold_cost = -0.15
+							development_growth_factor = 0.2
+							monthly_county_control_growth_factor = 0.3
+							county_opinion_add = 5
+						}
+					}
+					undecided_movement = {	# 宦官
+						character_modifier = {
+							ai_war_chance = -0.3
+							monthly_influence_mult = 0.05
+							liege_opinion = 5
+						}
+						county_modifier = {
+							build_gold_cost = -0.15
+							development_growth_factor = 0.2
+							monthly_county_control_growth_factor = 0.3
+							county_opinion_add = 5
+						}
+					}
+					pro_hegemon_movement = {	# 外戚
+						character_modifier = {
+							ai_war_chance = -0.3
+							liege_opinion = 5
+							monthly_prestige_gain_mult = 0.05
+						}
+						county_modifier = {
+							build_gold_cost = -0.15
+							development_growth_factor = 0.2
+							monthly_county_control_growth_factor = 0.3
+							county_opinion_add = 5
+						}
+					}
+					expansion_movement = {	# 武勋
+						character_modifier = {
+							ai_war_chance = -0.3
+							men_at_arms_maintenance = 0.1
+							levy_reinforcement_rate = 0.1
+						}
+						county_modifier = {
+							build_gold_cost = -0.15
+							development_growth_factor = 0.2
+							monthly_county_control_growth_factor = 0.3
+							county_opinion_add = 5
+						}
+					}
+					conservative_movement = {	# 世族
+						character_modifier = {
+							ai_war_chance = -0.3
+							domicile_monthly_gold_mult = 0.1
+							domicile_build_gold_cost = -0.05
+							dynasty_house_opinion = 5
+						}
+						county_modifier = {
+							build_gold_cost = -0.15
+							development_growth_factor = 0.2
+							monthly_county_control_growth_factor = 0.3
+							county_opinion_add = 5
+						}
+					}
+					advancement_movement = {	# 寒门
+						character_modifier = {
+							ai_war_chance = -0.3
+							monthly_influence_mult = 0.1
+							monthly_prestige_gain_mult = 0.05
+						}
+						county_modifier = {
+							build_gold_cost = -0.15
+							development_growth_factor = 0.2
+							monthly_county_control_growth_factor = 0.3
+							county_opinion_add = 5
+						}
+					}
+				}
+			}
+		}
+
+		############################################################
+		# HD 天朝循环大修：崩溃期（乱世，≈ 局势紧张效果 ×2 + 文档效果）
+		############################################################
+		situation_dynastic_cycle_phase_hd_collapse = {
+			icon = "gfx/interface/icons/dynastic_cycle/hd_dc_phase_collapse.dds"
+			illustration = "gfx/interface/icons/dynastic_cycle/phases/crash_period.png"
+
+			on_start = {
+				# 一次乱世只计一次纪元（终结乱世奖励每纪元一次）
+				change_variable = { name = hd_dc_chaos_epoch add = 1 }
+				hd_cycle_collapse_reset_counters_effect = yes
+				hd_cycle_phase_started_effect = { PHASE = hd_collapse NUMBER = 8 }
+			}
+
+			on_end = {
+				every_participant_group = {
+					if = {
+						limit = { exists = var:movement_leader }
+						var:movement_leader = {
+							set_variable = {
+								name = former_movement_leader
+								value = prev
+							}
+						}
+					}
+					every_situation_group_participant = {
+						set_variable = {
+							name = former_movement_member
+							value = prev
+						}
+					}
+				}
+			}
+
+			parameters = {
+				era_type_unstable = yes
+			}
+
+			future_phases = {
+				situation_dynastic_cycle_phase_chaos = {
+					takeover_type = points
+					takeover_points = hd_dc_era_threshold
+					catalysts = {
+						catalyst_hd_collapse_drift_yearly = hd_dc_t_m_ls
+						catalyst_hd_collapse_crisis_succeeded = hd_dc_t_l_ls
+						catalyst_hegemon_lost_defensive_territorial_war = hd_dc_t_l_ls
+						catalyst_hegemon_below_legitimacy_yearly = hd_dc_base_ls
+						catalyst_hegemon_murdered = hd_dc_t_h_ls
+						catalyst_hd_lost_war_vip = hd_dc_t_h_ls # era-gen
+						catalyst_hd_lost_land_vip = hd_dc_t_l_ls # era-gen
+						catalyst_hd_vip_murdered = hd_dc_t_m_ls # era-gen
+						catalyst_hd_crime = hd_dc_t_m_ls # era-gen
+						catalyst_hd_suppress_party = hd_dc_t_l_ls # era-gen
+						catalyst_hd_harsh_tax = hd_dc_t_s_ls # era-gen
+						catalyst_hd_purge_vip = hd_dc_t_l_ls # era-gen
+						catalyst_hd_incompetent_minister = hd_dc_t_m_ls # era-gen
+						catalyst_hd_partisan_prohibition = hd_dc_t_h_ls # era-gen
+						catalyst_hd_deposed = hd_dc_t_l_ls # era-gen
+						catalyst_hd_houses_antagonistic_s = hd_dc_t_s_ls # era-gen
+						catalyst_hd_houses_antagonistic_m = hd_dc_t_m_ls # era-gen
+						catalyst_hd_houses_antagonistic_l = hd_dc_t_l_ls # era-gen
+						catalyst_hd_houses_antagonistic_h = hd_dc_t_h_ls # era-gen
+						catalyst_hd_secession = hd_dc_t_l_ls # era-gen
+						catalyst_hd_local_selfstrengthen = hd_dc_t_s_ls # era-gen
+						catalyst_hd_authorized_militia = hd_dc_t_m_ls # era-gen
+						catalyst_hd_collapse_crisis_outbreak = hd_dc_t_m_ls # era-gen
+						catalyst_hd_able_civil_minister = hd_dc_t_m_ls_half # era-gen
+						catalyst_hd_building_completed = hd_dc_t_s_ls_half # era-gen
+						catalyst_hd_development = hd_dc_t_s_ls_half # era-gen
+						catalyst_hd_exam_held = hd_dc_t_s_ls_half # era-gen
+						catalyst_hd_power_minister_removed = hd_dc_t_l_ls_half # era-gen
+						catalyst_hd_reconciliation = hd_dc_t_m_ls_half # era-gen
+						catalyst_hd_houses_harmonious_s = hd_dc_t_s_ls_half # era-gen
+						catalyst_hd_houses_harmonious_m = hd_dc_t_m_ls_half # era-gen
+						catalyst_hd_houses_harmonious_l = hd_dc_t_l_ls_half # era-gen
+						catalyst_hd_houses_harmonious_h = hd_dc_t_h_ls_half # era-gen
+						catalyst_hd_collapse_crisis_suppressed = hd_dc_t_l_ls_half # era-gen
+						catalyst_hd_qinwang_success = hd_dc_t_l_ls_half # era-gen
+						catalyst_hd_disaster_relief = hd_dc_t_m_ls_half # era-gen
+						catalyst_hd_refugees_recruited = hd_dc_t_m_ls_half # era-gen
+						catalyst_hd_amnesty_rebels = hd_dc_t_m_ls_half # era-gen
+						catalyst_imperial_treasury_debt = hd_dc_base_ls # era-gen
+						catalyst_hegemon_natural_disaster = hd_dc_base_ls # era-gen
+						catalyst_hegemon_epidemic = hd_dc_base_ls # era-gen
+						catalyst_hegemon_apocalyptic_epidemic = hd_dc_base_ls # era-gen
+					}
+				}
+				situation_dynastic_cycle_phase_instability = {
+					takeover_type = points
+					takeover_points = hd_dc_era_threshold
+					catalysts = {
+						catalyst_hd_collapse_crisis_suppressed = hd_dc_t_l_ls
+						catalyst_hegemon_above_legitimacy_yearly = hd_dc_base_ls
+						catalyst_hd_hegemon_control_70_yearly = hd_dc_t_l_ls
+						catalyst_hd_lost_war_vip = hd_dc_t_h_ls_half # era-gen
+						catalyst_hd_lost_land_vip = hd_dc_t_l_ls_half # era-gen
+						catalyst_hd_vip_murdered = hd_dc_t_m_ls_half # era-gen
+						catalyst_hd_crime = hd_dc_t_m_ls_half # era-gen
+						catalyst_hd_suppress_party = hd_dc_t_l_ls_half # era-gen
+						catalyst_hd_harsh_tax = hd_dc_t_s_ls_half # era-gen
+						catalyst_hd_purge_vip = hd_dc_t_l_ls_half # era-gen
+						catalyst_hd_incompetent_minister = hd_dc_t_m_ls_half # era-gen
+						catalyst_hd_partisan_prohibition = hd_dc_t_h_ls_half # era-gen
+						catalyst_hd_deposed = hd_dc_t_l_ls_half # era-gen
+						catalyst_hd_houses_antagonistic_s = hd_dc_t_s_ls_half # era-gen
+						catalyst_hd_houses_antagonistic_m = hd_dc_t_m_ls_half # era-gen
+						catalyst_hd_houses_antagonistic_l = hd_dc_t_l_ls_half # era-gen
+						catalyst_hd_houses_antagonistic_h = hd_dc_t_h_ls_half # era-gen
+						catalyst_hd_secession = hd_dc_t_l_ls_half # era-gen
+						catalyst_hd_local_selfstrengthen = hd_dc_t_s_ls_half # era-gen
+						catalyst_hd_authorized_militia = hd_dc_t_m_ls_half # era-gen
+						catalyst_hd_collapse_crisis_outbreak = hd_dc_t_m_ls_half # era-gen
+						catalyst_hd_collapse_crisis_succeeded = hd_dc_t_l_ls_half # era-gen
+						catalyst_hegemon_murdered = hd_dc_t_h_ls_half # era-gen
+						catalyst_hd_able_civil_minister = hd_dc_t_m_ls # era-gen
+						catalyst_hd_building_completed = hd_dc_t_s_ls # era-gen
+						catalyst_hd_development = hd_dc_t_s_ls # era-gen
+						catalyst_hd_exam_held = hd_dc_t_s_ls # era-gen
+						catalyst_hd_power_minister_removed = hd_dc_t_l_ls # era-gen
+						catalyst_hd_reconciliation = hd_dc_t_m_ls # era-gen
+						catalyst_hd_houses_harmonious_s = hd_dc_t_s_ls # era-gen
+						catalyst_hd_houses_harmonious_m = hd_dc_t_m_ls # era-gen
+						catalyst_hd_houses_harmonious_l = hd_dc_t_l_ls # era-gen
+						catalyst_hd_houses_harmonious_h = hd_dc_t_h_ls # era-gen
+						catalyst_hd_qinwang_success = hd_dc_t_l_ls # era-gen
+						catalyst_hd_disaster_relief = hd_dc_t_m_ls # era-gen
+						catalyst_hd_refugees_recruited = hd_dc_t_m_ls # era-gen
+						catalyst_hd_amnesty_rebels = hd_dc_t_m_ls # era-gen
+					}
+				}
+			}
+
+			modifier_sets = {	# 天朝循环大修·朋党：按身份重排（见 docs/朋党系统_设计草案.md 第 8 节）
+				dynastic_cycle_government_effects = {
+					hegemon_ruler = {	# 天子
+						parameters = {
+							dynastic_cycle_more_peasant_factions = yes
+							dynastic_cycle_vassal_internal_wars_allowed = yes
+							dynastic_cycle_internal_vassals_non_admin_war_desire = yes
+							dynastic_cycle_offensive_wars_ban = yes
+							dynastic_cycle_governor_efficiency_penalty = yes
+							dynastic_cycle_external_tributaries_vassals_increased_independence_desire = yes
+							dynastic_cycle_vassals_reduced_independence_penalties = yes
+							dynastic_cycle_locks_title_integration = yes
+						}
+					}
+					hd_siyi_movement = {	# 四夷
+						parameters = {
+							dynastic_cycle_unlocks_cb_for_outsiders = yes
+						}
+					}
+					other_rulers = {	# 诸侯
+						parameters = {
+							dynastic_cycle_unlocks_cb_for_outsiders = yes
+						}
+					}
+					undecided_movement = {	# 宦官
+						parameters = {
+							dynastic_cycle_more_peasant_factions = yes
+							dynastic_cycle_vassal_seize_cb = yes
+							dynastic_cycle_vassal_internal_wars_allowed = yes
+							dynastic_cycle_locks_title_integration = yes
+							dynastic_cycle_internal_vassals_non_admin_war_desire = yes
+							dynastic_cycle_governor_efficiency_penalty = yes
+							dynastic_cycle_external_tributaries_vassals_increased_independence_desire = yes
+							dynastic_cycle_vassals_reduced_independence_penalties = yes
+						}
+					}
+					pro_hegemon_movement = {	# 外戚
+						parameters = {
+							dynastic_cycle_more_peasant_factions = yes
+							dynastic_cycle_vassal_seize_cb = yes
+							dynastic_cycle_vassal_internal_wars_allowed = yes
+							dynastic_cycle_locks_title_integration = yes
+							dynastic_cycle_internal_vassals_non_admin_war_desire = yes
+							dynastic_cycle_governor_efficiency_penalty = yes
+							dynastic_cycle_external_tributaries_vassals_increased_independence_desire = yes
+							dynastic_cycle_vassals_reduced_independence_penalties = yes
+						}
+					}
+					expansion_movement = {	# 武勋
+						parameters = {
+							dynastic_cycle_more_peasant_factions = yes
+							dynastic_cycle_vassal_seize_cb = yes
+							dynastic_cycle_vassal_internal_wars_allowed = yes
+							dynastic_cycle_locks_title_integration = yes
+							dynastic_cycle_internal_vassals_non_admin_war_desire = yes
+							dynastic_cycle_governor_efficiency_penalty = yes
+							dynastic_cycle_external_tributaries_vassals_increased_independence_desire = yes
+							dynastic_cycle_vassals_reduced_independence_penalties = yes
+						}
+					}
+					conservative_movement = {	# 世族
+						parameters = {
+							dynastic_cycle_more_peasant_factions = yes
+							dynastic_cycle_vassal_seize_cb = yes
+							dynastic_cycle_vassal_internal_wars_allowed = yes
+							dynastic_cycle_locks_title_integration = yes
+							dynastic_cycle_internal_vassals_non_admin_war_desire = yes
+							dynastic_cycle_governor_efficiency_penalty = yes
+							dynastic_cycle_external_tributaries_vassals_increased_independence_desire = yes
+							dynastic_cycle_vassals_reduced_independence_penalties = yes
+						}
+					}
+					advancement_movement = {	# 寒门
+						parameters = {
+							dynastic_cycle_more_peasant_factions = yes
+							dynastic_cycle_vassal_seize_cb = yes
+							dynastic_cycle_vassal_internal_wars_allowed = yes
+							dynastic_cycle_locks_title_integration = yes
+							dynastic_cycle_internal_vassals_non_admin_war_desire = yes
+							dynastic_cycle_governor_efficiency_penalty = yes
+							dynastic_cycle_external_tributaries_vassals_increased_independence_desire = yes
+							dynastic_cycle_vassals_reduced_independence_penalties = yes
+						}
+					}
+				}
+				dynastic_cycle_character_effects = {
+					hegemon_ruler = {	# 天子
+						character_modifier = {
+							ai_war_chance = 4 # A1
+							mercenary_hire_cost_mult = 5
+							vassal_tax_mult = -0.4
+							vassal_opinion = -40
+							monthly_treasury_from_vassals = -0.02
+							legitimacy_gain_mult = -0.5
+							legitimacy_loss_mult = 0.4
+							monthly_prestige_gain_mult = -0.5
+							monthly_piety_gain_mult = -0.5
+							monthly_income_mult = -0.1
+							men_at_arms_maintenance = 0.2
+							max_political_schemes_add = 2
+							max_hostile_schemes_add = 2
+							max_personal_schemes_add = 2
+							owned_hostile_scheme_success_chance_add = 5
+							owned_personal_scheme_success_chance_add = 5
+							owned_political_scheme_success_chance_add = 5
+							hostile_scheme_phase_duration_add = -10
+							personal_scheme_phase_duration_add = -10
+							political_scheme_phase_duration_add = -10
+						}
+						county_modifier = {
+							county_opinion_add = -30
+							monthly_county_control_growth_factor = -0.5
+							monthly_county_control_growth_add = -0.1
+						}
+					}
+					hd_siyi_movement = {	# 四夷
+						character_modifier = {
+							owned_hostile_scheme_success_chance_add = 5
+							owned_personal_scheme_success_chance_add = 5
+							owned_political_scheme_success_chance_add = 5
+							hostile_scheme_phase_duration_add = -10
+							personal_scheme_phase_duration_add = -10
+							political_scheme_phase_duration_add = -10
+							ai_war_chance = 5 # A1：原 1 +4
+							herd_gain_mult = 0.1
+							monthly_prestige_gain_mult = 0.15
+						}
+						county_modifier = {
+							county_opinion_add = -30
+							monthly_county_control_growth_factor = -0.5
+							monthly_county_control_growth_add = -0.1
+						}
+					}
+					other_rulers = {	# 诸侯
+						character_modifier = {
+							owned_hostile_scheme_success_chance_add = 5
+							owned_personal_scheme_success_chance_add = 5
+							owned_political_scheme_success_chance_add = 5
+							hostile_scheme_phase_duration_add = -10
+							personal_scheme_phase_duration_add = -10
+							political_scheme_phase_duration_add = -10
+							ai_war_chance = 4.2 # A1：原 0.2 +4
+						}
+						county_modifier = {
+							county_opinion_add = -30
+							monthly_county_control_growth_factor = -0.5
+							monthly_county_control_growth_add = -0.1
+						}
+					}
+					undecided_movement = {	# 宦官
+						character_modifier = {
+							ai_war_chance = 4 # A1
+							monthly_treasury_from_liege_mult = -0.4
+							vassal_tax_mult = -0.2
+							vassal_opinion = -40
+							liege_opinion = 10
+							owned_hostile_scheme_success_chance_add = 10
+							owned_personal_scheme_success_chance_add = 5
+							owned_political_scheme_success_chance_add = 5
+							hostile_scheme_phase_duration_add = -10
+							personal_scheme_phase_duration_add = -10
+							political_scheme_phase_duration_add = -10
+							monthly_influence_mult = 0.15
+							dread_baseline_add = 10
+						}
+						county_modifier = {
+							county_opinion_add = -30
+							monthly_county_control_growth_factor = -0.5
+							monthly_county_control_growth_add = -0.1
+						}
+					}
+					pro_hegemon_movement = {	# 外戚
+						character_modifier = {
+							ai_war_chance = 4 # A1
+							monthly_treasury_from_liege_mult = -0.4
+							vassal_tax_mult = -0.2
+							vassal_opinion = -60
+							liege_opinion = 20
+							owned_hostile_scheme_success_chance_add = 5
+							owned_personal_scheme_success_chance_add = 5
+							owned_political_scheme_success_chance_add = 5
+							hostile_scheme_phase_duration_add = -10
+							personal_scheme_phase_duration_add = -10
+							political_scheme_phase_duration_add = -10
+							monthly_influence_mult = 0.1
+							levy_size = 0.1
+						}
+						county_modifier = {
+							county_opinion_add = -30
+							monthly_county_control_growth_factor = -0.5
+							monthly_county_control_growth_add = -0.1
+						}
+					}
+					expansion_movement = {	# 武勋
+						character_modifier = {
+							ai_war_chance = 4 # A1
+							monthly_treasury_from_liege_mult = -0.4
+							vassal_tax_mult = -0.2
+							vassal_opinion = -40
+							liege_opinion = -20
+							men_at_arms_maintenance = -0.05
+							men_at_arms_recruitment_cost = -0.15
+							owned_hostile_scheme_success_chance_add = 5
+							owned_personal_scheme_success_chance_add = 5
+							owned_political_scheme_success_chance_add = 5
+							hostile_scheme_phase_duration_add = -10
+							personal_scheme_phase_duration_add = -10
+							political_scheme_phase_duration_add = -10
+							men_at_arms_limit = 2
+						}
+						county_modifier = {
+							county_opinion_add = -30
+							monthly_county_control_growth_factor = -0.5
+							monthly_county_control_growth_add = -0.1
+						}
+					}
+					conservative_movement = {	# 世族
+						character_modifier = {
+							ai_war_chance = 4 # A1
+							monthly_treasury_from_liege_mult = -0.4
+							dynasty_house_opinion = 20
+							liege_opinion = -20
+							domicile_monthly_gold_mult = 0.12
+							owned_hostile_scheme_success_chance_add = 5
+							owned_personal_scheme_success_chance_add = 5
+							owned_political_scheme_success_chance_add = 5
+							hostile_scheme_phase_duration_add = -10
+							personal_scheme_phase_duration_add = -10
+							political_scheme_phase_duration_add = -10
+						}
+						county_modifier = {
+							county_opinion_add = -30
+							monthly_county_control_growth_factor = -0.5
+							monthly_county_control_growth_add = -0.1
+						}
+					}
+					advancement_movement = {	# 寒门
+						character_modifier = {
+							ai_war_chance = 4 # A1
+							monthly_treasury_from_liege_mult = -0.4
+							vassal_tax_mult = -0.2
+							vassal_opinion = -40
+							liege_opinion = -20
+							monthly_influence_mult = 0.1
+							monthly_prestige_gain_mult = 0.1
+							owned_hostile_scheme_success_chance_add = 5
+							owned_personal_scheme_success_chance_add = 5
+							owned_political_scheme_success_chance_add = 5
+							hostile_scheme_phase_duration_add = -10
+							personal_scheme_phase_duration_add = -10
+							political_scheme_phase_duration_add = -10
+						}
+						county_modifier = {
+							county_opinion_add = -30
+							monthly_county_control_growth_factor = -0.5
+							monthly_county_control_growth_add = -0.1
+						}
+					}
+				}
+			}
+		}
+
+		############################################################
+		# HD 天朝循环大修：对峙期（乱世，群雄成形后的长期对峙）
+		############################################################
+		situation_dynastic_cycle_phase_hd_standoff = {
+			icon = "gfx/interface/icons/dynastic_cycle/hd_dc_phase_standoff.dds"
+			illustration = "gfx/interface/icons/dynastic_cycle/phases/standoff_period.png"
+
+			on_start = {
+				hd_cycle_phase_started_effect = { PHASE = hd_standoff NUMBER = 9 }
+			}
+			on_end = {
+				if = {
+					limit = { hd_cycle_is_luanshi_trigger = no }
+					every_situation_participant = {
+						remove_variable = former_movement_leader
+						remove_variable = former_movement_member
+					}
+				}
+			}
+
+			parameters = {
+				era_type_chaotic = yes
+			}
+
+			future_phases = {
+				situation_dynastic_cycle_phase_chaos = {
+					takeover_type = points
+					takeover_points = hd_dc_era_threshold
+					catalysts = {
+						catalyst_hd_many_major_powers_yearly = hd_dc_t_m_ls
+						catalyst_hd_major_ruler_child_heir = hd_dc_t_h_ls
+						catalyst_hd_big_conquest = hd_dc_t_l_ls
+						catalyst_hd_siyi_raid_won = hd_dc_t_m_ls
+						catalyst_hd_faction_war_started = hd_dc_t_l_ls
+						catalyst_hd_broke_truce = hd_dc_t_l_ls # era-gen
+						catalyst_hd_subversion_success = hd_dc_t_m_ls # era-gen
+						catalyst_hd_hostage_sent = hd_dc_t_s_ls_neg # era-gen
+						catalyst_hd_truce_bought = hd_dc_t_s_ls_neg # era-gen
+						catalyst_hd_border_market = hd_dc_t_s_ls_neg # era-gen
+						catalyst_hd_ceded_land = hd_dc_t_s_ls_neg # era-gen
+					}
+				}
+			}
+
+			modifier_sets = {	# 天朝循环大修·朋党：按身份重排（见 docs/朋党系统_设计草案.md 第 8 节）
+				dynastic_cycle_government_effects = {
+					hd_siyi_movement = {	# 四夷
+						parameters = {
+							dynastic_cycle_great_projects_increased_legitimacy = yes
+							dynastic_cycle_legitimacy_from_appointments = yes
+							dynastic_cycle_reclaim_mandate_decision = yes
+						}
+						county_modifier = {
+							tax_mult = -0.2
+						}
+					}
+					other_rulers = {	# 诸侯
+						parameters = {
+							dynastic_cycle_great_projects_increased_legitimacy = yes
+							dynastic_cycle_legitimacy_from_appointments = yes
+							dynastic_cycle_reclaim_mandate_decision = yes
+						}
+						county_modifier = {
+							tax_mult = -0.2
+						}
+					}
+				}
+				dynastic_cycle_character_effects = {
+					hegemon_ruler = {	# 天子
+						character_modifier = {
+							monthly_income_mult = 0.1
+							legitimacy_gain_mult = 0.2
+							ai_war_chance = 3.8 # A1：原 -0.2 +4
+						}
+					}
+					hd_siyi_movement = {	# 四夷
+						character_modifier = {
+							ai_war_chance = 4.8 # A1：原 0.8 +4
+							monthly_prestige_gain_mult = 0.15
+							herd_gain_mult = 0.1
+						}
+					}
+					other_rulers = {	# 诸侯
+						character_modifier = {
+							monthly_income_mult = 0.1
+							legitimacy_gain_mult = 0.2
+							ai_war_chance = 3.8 # A1：原 -0.2 +4
+						}
+					}
+					undecided_movement = {	# 宦官
+						character_modifier = {
+							ai_war_chance = 3.8 # A1：原 -0.2 +4
+							monthly_influence_mult = 0.1
+							liege_opinion = 5
+						}
+					}
+					pro_hegemon_movement = {	# 外戚
+						character_modifier = {
+							ai_war_chance = 3.8 # A1：原 -0.2 +4
+							liege_opinion = 10
+							monthly_influence_mult = 0.1
+						}
+					}
+					expansion_movement = {	# 武勋
+						character_modifier = {
+							ai_war_chance = 3.8 # A1：原 -0.2 +4
+							men_at_arms_maintenance = -0.1
+							levy_reinforcement_rate = 0.15
+						}
+					}
+					conservative_movement = {	# 世族
+						character_modifier = {
+							ai_war_chance = 3.8 # A1：原 -0.2 +4
+							domicile_monthly_gold_mult = 0.15
+							dynasty_house_opinion = 10
+						}
+					}
+					advancement_movement = {	# 寒门
+						character_modifier = {
+							ai_war_chance = 3.8 # A1：原 -0.2 +4
+							monthly_prestige_gain_mult = 0.1
+						}
+						county_modifier = {
+							development_growth_factor = 0.1
 						}
 					}
 				}
@@ -1961,5 +3056,26 @@ dynastic_cycle = {
 			situation_current_phase = situation_dynastic_cycle_phase_instability
 		}
 		reference = "gfx/interface/icons/dynastic_cycle/dynastic_cycle_phase_instability.dds"
+	}
+
+	icon = {
+		trigger = {
+			situation_current_phase = situation_dynastic_cycle_phase_hd_recovery
+		}
+		reference = "gfx/interface/icons/dynastic_cycle/hd_dc_phase_recovery.dds"
+	}
+
+	icon = {
+		trigger = {
+			situation_current_phase = situation_dynastic_cycle_phase_hd_collapse
+		}
+		reference = "gfx/interface/icons/dynastic_cycle/hd_dc_phase_collapse.dds"
+	}
+
+	icon = {
+		trigger = {
+			situation_current_phase = situation_dynastic_cycle_phase_hd_standoff
+		}
+		reference = "gfx/interface/icons/dynastic_cycle/hd_dc_phase_standoff.dds"
 	}
 }

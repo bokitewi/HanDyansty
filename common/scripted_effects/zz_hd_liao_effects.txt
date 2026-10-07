@@ -1,0 +1,833 @@
+﻿# 僚人入蜀效果（见 docs/五胡内附_僚人入蜀_设计草案.md 第 3 节）。
+# 迁居效果照搬原版 launch_hungarian_migration_scripted_effect（00_decisions_effects.txt），
+# 去掉文化替换：只有新首都所在伯爵领改为僚人；区域外原有僚人伯爵领保持不变。
+
+############################
+# 年度脉冲（AI）
+############################
+
+### Global scope。条件满足时每年 10%：找宁州/巴郡一带的 AI 僚人统治者（无则在牂牁生成僚帅），对蜀地最大统治者宣战。
+hd_liao_ai_yearly_effect = {
+	if = {
+		limit = {
+			hd_liao_ai_enabled_trigger = yes
+			NOT = { exists = global_var:hd_liao_migration_launched }
+			hd_liao_year_ok_trigger = yes
+			hd_wuhu_dongluan_phase_trigger = yes
+			# 有玩家可以自己发起时，AI 不抢（照原版 game_rule.1012）
+			NOT = {
+				any_player = {
+					hd_liao_player_initiator_trigger = yes
+					hd_liao_not_yet_settled_trigger = yes
+				}
+			}
+		}
+		random = {
+			chance = hd_liao_ai_yearly_chance
+			hd_liao_ai_try_launch_effect = yes
+		}
+	}
+}
+
+hd_liao_ai_try_launch_effect = {
+	# 发起者：优先王国级，其次公爵级，再次伯爵级
+	random_county_in_region = {
+		region = hd_liao_source_region
+		limit = {
+			holder ?= {
+				hd_liao_ai_initiator_trigger = yes
+				highest_held_title_tier = tier_kingdom
+			}
+		}
+		alternative_limit = {
+			holder ?= {
+				hd_liao_ai_initiator_trigger = yes
+				highest_held_title_tier = tier_duchy
+			}
+		}
+		alternative_limit = {
+			holder ?= { hd_liao_ai_initiator_trigger = yes }
+		}
+		holder = { save_scope_as = hd_liao_initiator }
+	}
+
+	hd_liao_pick_defender_effect = yes
+
+	if = {
+		limit = { exists = scope:hd_liao_defender }
+		if = {
+			limit = { exists = scope:hd_liao_initiator }
+			# 蜀地弱势：守方兵力 ≤ (僚帅兵力 + 事件军估算) × 2
+			if = {
+				limit = {
+					scope:hd_liao_defender.current_military_strength <= scope:hd_liao_initiator.hd_liao_initiator_strength_x2
+				}
+				scope:hd_liao_initiator = { hd_liao_declare_effect = yes }
+			}
+			# 兜底：现有僚帅宣战失败（例如封臣不能对自己的宗主宣战）时，改由生成的僚帅发起
+			if = {
+				limit = {
+					NOT = { exists = global_var:hd_liao_migration_launched }
+					scope:hd_liao_defender.current_military_strength <= {
+						value = hd_liao_event_army_strength_estimate
+						multiply = hd_liao_weak_shu_multiplier
+					}
+				}
+				hd_liao_spawn_chief_effect = yes
+				scope:hd_liao_chief = {
+					save_scope_as = hd_liao_initiator
+					hd_liao_declare_effect = yes
+				}
+			}
+		}
+		else = {
+			# 没有现成的僚人首领：先按"僚帅自身兵力 0 + 事件军估算"判定，通过后才生成僚帅
+			if = {
+				limit = {
+					scope:hd_liao_defender.current_military_strength <= {
+						value = hd_liao_event_army_strength_estimate
+						multiply = hd_liao_weak_shu_multiplier
+					}
+				}
+				hd_liao_spawn_chief_effect = yes
+				scope:hd_liao_chief = {
+					save_scope_as = hd_liao_initiator
+					hd_liao_declare_effect = yes
+				}
+			}
+		}
+	}
+}
+
+### 守方：目标区域内持有伯爵领最多的独立统治者（排除发起者本人）
+hd_liao_pick_defender_effect = {
+	every_county_in_region = {
+		region = hd_liao_target_region
+		limit = { exists = holder }
+		holder.top_liege = {
+			if = {
+				limit = { NOT = { is_in_list = hd_liao_shu_rulers } }
+				add_to_temporary_list = hd_liao_shu_rulers
+			}
+		}
+	}
+	ordered_in_list = {
+		list = hd_liao_shu_rulers
+		limit = {
+			NOT = { scope:hd_liao_initiator ?= this }
+		}
+		order_by = hd_liao_region_county_count
+		save_scope_as = hd_liao_defender
+	}
+}
+
+### Character（僚帅）：宣战
+hd_liao_declare_effect = {
+	add_character_flag = hd_liao_undertaking
+	start_war = {
+		cb = hd_liao_migration_cb
+		target = scope:hd_liao_defender
+		target_title = title:k_uuii_yizhou
+	}
+	# 宣战失败（宣战理由条件不满足）时收回旗标，机会不消耗
+	if = {
+		limit = { has_character_flag = hd_liao_undertaking }
+		remove_character_flag = hd_liao_undertaking
+	}
+}
+
+### 在牂牁生成僚帅（照塞尔柱首领模板），存为 scope:hd_liao_chief
+hd_liao_spawn_chief_effect = {
+	title:d_zangke = {
+		random_de_jure_county = {
+			weight = {
+				base = 1
+				modifier = {
+					add = 100
+					culture = culture:liaoren
+				}
+			}
+			save_scope_as = hd_liao_birth_county
+		}
+	}
+	create_character = {
+		location = scope:hd_liao_birth_county.title_province
+		age = { 20 40 }
+		gender_female_chance = 0
+		dynasty = generate
+		culture = culture:liaoren
+		rite = rite:wugui
+		random_traits = no
+		trait = brave
+		trait = ambitious
+		trait = education_martial_3
+		trait = jungle_stalker
+		martial = { 14 18 }
+		prowess = { 16 20 }
+		diplomacy = { 8 12 }
+		stewardship = { 8 12 }
+		intrigue = { 8 12 }
+		learning = { 6 10 }
+		save_scope_as = hd_liao_chief
+		after_creation = {
+			add_gold = medium_gold_value
+			add_prestige = medium_prestige_value
+			add_character_flag = hd_liao_spawned_chief
+			game_rule_create_spouse_and_children = {
+				CHARACTER = this
+				LOCATION = this
+			}
+		}
+	}
+	# 无地公爵头衔"僚部"（在僚帅作用域内创建，照原版 give_seljuk_title_effect）
+	scope:hd_liao_chief = {
+		create_dynamic_title = {
+			tier = duchy
+			name = hd_liao_horde_title_name
+			adj = hd_liao_horde_title_adj
+		}
+		create_title_and_vassal_change = {
+			type = created
+			save_scope_as = hd_liao_title_change
+			add_claim_on_loss = no
+		}
+		scope:new_title = {
+			set_capital_county = scope:hd_liao_birth_county
+			set_landless_title = yes
+			set_destroy_if_invalid_heir = yes
+			set_destroy_on_gain_same_tier = yes
+			set_delete_on_destroy = yes
+			set_no_automatic_claims = yes
+			set_definitive_form = yes
+			set_can_be_named_after_dynasty = no
+			change_title_holder = {
+				holder = scope:hd_liao_chief
+				change = scope:hd_liao_title_change
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_liao_title_change
+	}
+}
+
+############################
+# 宣战
+############################
+
+### Character（进攻方）：攻取军（随战争解散）+ 留守军（永久）
+hd_liao_spawn_migration_armies_effect = {
+	if = {
+		limit = { exists = capital_province }
+		capital_province = { save_scope_as = hd_liao_army_location }
+	}
+	else = {
+		location = { save_scope_as = hd_liao_army_location }
+	}
+	spawn_army = {
+		name = hd_liao_conquer_army_name
+		levies = 3000
+		men_at_arms = {
+			type = light_footmen
+			stacks = 10
+		}
+		men_at_arms = {
+			type = bowmen
+			stacks = 5
+		}
+		location = scope:hd_liao_army_location
+		uses_supply = no
+		war = scope:war
+		inheritable = no
+	}
+	spawn_army = {
+		name = hd_liao_hold_army_name
+		levies = 1500
+		men_at_arms = {
+			type = light_footmen
+			stacks = 5
+		}
+		location = scope:hd_liao_army_location
+		uses_supply = no
+		inheritable = no
+	}
+}
+
+### CB scope：给其宗主中的玩家、目标区域内的玩家发通知
+hd_liao_send_declaration_notifications_effect = {
+	scope:attacker = { save_scope_as = hd_liao_invader }
+	every_player = {
+		limit = { NOT = { this = scope:hd_liao_invader } }
+		if = {
+			limit = {
+				any_vassal_or_below = { this = scope:hd_liao_invader }
+			}
+			trigger_event = hd_liao.0002
+		}
+		else_if = {
+			limit = {
+				any_realm_county = {
+					title_province = { geographical_region = hd_liao_target_region }
+				}
+			}
+			trigger_event = hd_liao.0003
+		}
+	}
+}
+
+############################
+# 胜利：迁居
+############################
+
+hd_liao_migration_effect = {
+	$INVADER$ = {
+		# 迁都：目标区域内发展度最高的直辖伯爵领
+		custom_tooltip = hd_liao_migration_effect.tt.new_capital
+		hidden_effect = {
+			if = {
+				limit = {
+					any_held_title = {
+						tier = tier_county
+						title_province = { geographical_region = hd_liao_target_region }
+					}
+				}
+				ordered_held_title = {
+					limit = {
+						tier = tier_county
+						title_province = { geographical_region = hd_liao_target_region }
+					}
+					order_by = development_level
+					save_scope_as = hd_liao_new_capital
+				}
+				set_realm_capital = scope:hd_liao_new_capital
+			}
+			# 无地僚帅获得土地后改为部族制
+			if = {
+				limit = { has_character_flag = hd_liao_spawned_chief }
+				change_government = tribal_government
+				remove_character_flag = hd_liao_spawned_chief
+			}
+		}
+
+		# 只有新首都所在伯爵领立即变为僚人
+		custom_tooltip = hd_liao_migration_effect.tt.capital_culture
+		hidden_effect = {
+			scope:hd_liao_new_capital ?= {
+				set_county_culture = culture:liaoren
+			}
+		}
+
+		# 销毁主头衔以外多余的王国
+		custom_tooltip = hd_liao_migration_effect.tt.destroy_other_kingdoms
+		hidden_effect = {
+			if = {
+				limit = {
+					any_held_title = {
+						title_tier >= kingdom
+						count >= 2
+					}
+				}
+				every_held_title = {
+					limit = {
+						title_tier >= kingdom
+						NOT = { this = $INVADER$.primary_title }
+					}
+					save_temporary_scope_as = hd_liao_excess_kingdom
+					$INVADER$ = { destroy_title = scope:hd_liao_excess_kingdom }
+				}
+			}
+		}
+
+		# 抛弃故地
+		custom_tooltip = hd_liao_migration_effect.tt.non_liao_vassals
+		custom_tooltip = hd_liao_migration_effect.tt.liao_vassals
+		custom_tooltip = hd_liao_migration_effect.tt.former_territories
+		hidden_effect = {
+			hd_liao_abandon_homeland_effect = { INVADER = $INVADER$ }
+		}
+
+		# 渐进僚化
+		custom_tooltip = hd_liao_migration_effect.tt.settlement_story
+		hidden_effect = {
+			if = {
+				limit = {
+					NOT = { any_owned_story = { story_type = story_hd_liao_settlement } }
+				}
+				create_story = story_hd_liao_settlement
+			}
+		}
+	}
+}
+
+### 照搬原版：区域外非僚封臣独立；僚人封臣迁入区域内分地；区域外土地交给地方军阀并独立
+hd_liao_abandon_homeland_effect = {
+	# 区域外的非僚封臣独立
+	every_vassal = {
+		limit = {
+			NOT = { culture = culture:liaoren }
+			highest_held_title_tier >= tier_county
+			any_held_title = {
+				count = all
+				NOT = {
+					title_capital_county.title_province = { geographical_region = hd_liao_target_region }
+				}
+			}
+		}
+		create_title_and_vassal_change = {
+			type = independency
+			save_scope_as = change
+			add_claim_on_loss = no
+		}
+		becomes_independent = { change = scope:change }
+		resolve_title_and_vassal_change = scope:change
+	}
+	every_vassal_or_below = {
+		limit = {
+			NOT = { culture = culture:liaoren }
+			highest_held_title_tier >= tier_county
+			any_held_title = {
+				count = all
+				NOT = {
+					title_capital_county.title_province = { geographical_region = hd_liao_target_region }
+				}
+			}
+		}
+		create_title_and_vassal_change = {
+			type = independency
+			save_scope_as = change
+			add_claim_on_loss = no
+		}
+		becomes_independent = { change = scope:change }
+		resolve_title_and_vassal_change = scope:change
+	}
+
+	# 为僚帅保留一个区域内的公爵领（优先新首都所在公爵领）
+	if = {
+		limit = {
+			exists = scope:hd_liao_new_capital
+			scope:hd_liao_new_capital.duchy.holder ?= $INVADER$
+		}
+		scope:hd_liao_new_capital.duchy = { save_scope_as = reserved_title }
+	}
+	else = {
+		random_held_title = {
+			limit = {
+				tier = tier_duchy
+				title_capital_county.title_province = { geographical_region = hd_liao_target_region }
+			}
+			alternative_limit = {
+				title_capital_county.title_province = { geographical_region = hd_liao_target_region }
+			}
+			save_scope_as = reserved_title
+		}
+	}
+
+	# 僚人封臣
+	every_vassal_or_below = {
+		limit = {
+			culture = culture:liaoren
+			highest_held_title_tier >= tier_county
+		}
+		add_to_list = hd_liao_vassals_list
+	}
+	# 区域内可分配的头衔
+	every_held_title = {
+		limit = {
+			title_capital_county.title_province = { geographical_region = hd_liao_target_region }
+			OR = {
+				tier = tier_county
+				tier = tier_duchy
+			}
+			exists = scope:reserved_title
+			this != scope:reserved_title
+			NOT = { scope:hd_liao_new_capital ?= this }
+		}
+		add_to_list = hd_liao_spare_titles_list
+	}
+
+	# 先分公爵领（玩家优先）
+	every_in_list = {
+		list = hd_liao_vassals_list
+		limit = {
+			is_ai = no
+			highest_held_title_tier = tier_duchy
+			NOT = {
+				any_held_title = {
+					tier = tier_duchy
+					title_capital_county.title_province = { geographical_region = hd_liao_target_region }
+				}
+			}
+		}
+		alternative_limit = {
+			is_ai = yes
+			highest_held_title_tier = tier_duchy
+			NOT = {
+				any_held_title = {
+					tier = tier_duchy
+					title_capital_county.title_province = { geographical_region = hd_liao_target_region }
+				}
+			}
+		}
+		save_temporary_scope_as = receiving_vassal
+		if = {
+			limit = {
+				any_in_list = {
+					list = hd_liao_spare_titles_list
+					tier = tier_duchy
+					holder = $INVADER$
+				}
+			}
+			random_in_list = {
+				list = hd_liao_spare_titles_list
+				limit = {
+					tier = tier_duchy
+					holder = $INVADER$
+				}
+				every_in_de_jure_hierarchy = {
+					limit = {
+						holder = $INVADER$
+						tier >= tier_county
+						NOT = { scope:hd_liao_new_capital ?= this }
+					}
+					add_to_list = hd_liao_donated_titles
+				}
+			}
+			create_title_and_vassal_change = {
+				type = granted
+				save_scope_as = change
+				add_claim_on_loss = no
+			}
+			every_in_list = {
+				list = hd_liao_donated_titles
+				save_temporary_scope_as = donated_title
+				scope:donated_title = {
+					change_title_holder = {
+						holder = scope:receiving_vassal
+						change = scope:change
+					}
+				}
+				remove_from_list = hd_liao_donated_titles
+			}
+			resolve_title_and_vassal_change = scope:change
+		}
+	}
+
+	# 再分伯爵领：先把次级封臣与其宗主配对
+	every_in_list = {
+		list = hd_liao_vassals_list
+		limit = {
+			is_ai = no
+			NOT = {
+				any_held_title = {
+					tier = tier_county
+					title_province = { geographical_region = hd_liao_target_region }
+				}
+			}
+		}
+		alternative_limit = {
+			is_ai = yes
+			NOT = {
+				any_held_title = {
+					tier = tier_county
+					title_province = { geographical_region = hd_liao_target_region }
+				}
+			}
+		}
+		save_temporary_scope_as = receiving_vassal
+		if = {
+			limit = {
+				NOT = { liege = $INVADER$ }
+				any_in_list = {
+					list = hd_liao_spare_titles_list
+					tier = tier_county
+					holder = scope:receiving_vassal.liege
+					holder = {
+						any_held_title = {
+							count >= 2
+							tier = tier_county
+							title_province = { geographical_region = hd_liao_target_region }
+						}
+					}
+				}
+			}
+			random_in_list = {
+				list = hd_liao_spare_titles_list
+				limit = {
+					tier = tier_county
+					holder = scope:receiving_vassal.liege
+					holder = {
+						any_held_title = {
+							count >= 2
+							tier = tier_county
+							title_province = { geographical_region = hd_liao_target_region }
+						}
+					}
+					this != holder.primary_title.title_capital_county
+				}
+				save_temporary_scope_as = donated_title
+			}
+			create_title_and_vassal_change = {
+				type = granted
+				save_scope_as = change
+				add_claim_on_loss = no
+			}
+			scope:donated_title = {
+				change_title_holder = {
+					holder = scope:receiving_vassal
+					change = scope:change
+				}
+			}
+			resolve_title_and_vassal_change = scope:change
+		}
+	}
+
+	# 其余直属封臣：从僚帅直辖的伯爵领中分
+	every_in_list = {
+		list = hd_liao_vassals_list
+		limit = {
+			is_ai = no
+			NOT = {
+				any_held_title = {
+					tier = tier_county
+					title_province = { geographical_region = hd_liao_target_region }
+				}
+			}
+		}
+		alternative_limit = {
+			is_ai = yes
+			NOT = {
+				any_held_title = {
+					tier = tier_county
+					title_province = { geographical_region = hd_liao_target_region }
+				}
+			}
+		}
+		save_temporary_scope_as = receiving_vassal
+		if = {
+			limit = {
+				any_in_list = {
+					list = hd_liao_spare_titles_list
+					tier = tier_county
+					holder = $INVADER$
+				}
+			}
+			random_in_list = {
+				list = hd_liao_spare_titles_list
+				limit = {
+					tier = tier_county
+					holder = $INVADER$
+				}
+				save_temporary_scope_as = donated_title
+			}
+			create_title_and_vassal_change = {
+				type = granted
+				save_scope_as = change
+				add_claim_on_loss = no
+			}
+			scope:donated_title = {
+				change_title_holder = {
+					holder = scope:receiving_vassal
+					change = scope:change
+				}
+			}
+			resolve_title_and_vassal_change = scope:change
+		}
+	}
+
+	# 失去土地的僚人封臣进入僚帅宫廷
+	every_in_list = {
+		list = hd_liao_vassals_list
+		limit = { is_ruler = no }
+		save_temporary_scope_as = landless_liao_vassal
+		$INVADER$ = { add_courtier = scope:landless_liao_vassal }
+	}
+
+	# 区域外的公爵领：交给地方军阀并独立
+	every_sub_realm_title = {
+		if = {
+			limit = {
+				NOT = {
+					title_capital_county.title_province = { geographical_region = hd_liao_target_region }
+				}
+				tier = tier_duchy
+			}
+			save_temporary_scope_as = seceding_duchy
+			scope:seceding_duchy = {
+				every_in_de_jure_hierarchy = {
+					limit = {
+						tier >= tier_county
+						OR = {
+							holder = $INVADER$
+							holder = {
+								any_liege_or_above = { this = $INVADER$ }
+							}
+						}
+					}
+					add_to_temporary_list = seceding_duchy_list
+				}
+			}
+			create_character = {
+				location = scope:seceding_duchy.title_capital_county.title_province
+				template = post_migration_local_warlord_template
+				save_scope_as = local_warlord
+			}
+			create_title_and_vassal_change = {
+				type = granted
+				save_scope_as = change
+				add_claim_on_loss = no
+			}
+			every_in_list = {
+				list = seceding_duchy_list
+				limit = {
+					NAND = {
+						tier = tier_county
+						title_province = { geographical_region = hd_liao_target_region }
+					}
+				}
+				change_title_holder = {
+					holder = scope:local_warlord
+					change = scope:change
+					take_baronies = yes
+				}
+				remove_from_list = seceding_duchy_list
+			}
+			resolve_title_and_vassal_change = scope:change
+			create_title_and_vassal_change = {
+				type = independency
+				save_scope_as = change
+				add_claim_on_loss = no
+			}
+			scope:local_warlord = {
+				becomes_independent = { change = scope:change }
+			}
+			resolve_title_and_vassal_change = scope:change
+			# 军阀名下误收的区域内伯爵：归还给区域内的公爵，否则归还僚帅
+			scope:local_warlord = {
+				every_vassal = {
+					limit = {
+						highest_held_title_tier = tier_county
+						any_held_title = {
+							tier = tier_county
+							title_province = { geographical_region = hd_liao_target_region }
+						}
+					}
+					add_to_list = hd_liao_vassals_to_shunt
+				}
+			}
+			every_in_list = {
+				list = hd_liao_vassals_to_shunt
+				if = {
+					limit = {
+						any_held_title = {
+							tier = tier_county
+							title_province = { geographical_region = hd_liao_target_region }
+							duchy = {
+								holder ?= {
+									NOT = { this = $INVADER$ }
+									liege = $INVADER$
+								}
+							}
+						}
+					}
+					random_held_title = {
+						limit = {
+							tier = tier_county
+							title_province = { geographical_region = hd_liao_target_region }
+							duchy = {
+								holder ?= {
+									NOT = { this = $INVADER$ }
+									liege = $INVADER$
+								}
+							}
+						}
+						duchy.holder = { save_scope_as = appropriate_liege }
+					}
+				}
+				else = {
+					$INVADER$ = { save_scope_as = appropriate_liege }
+				}
+				create_title_and_vassal_change = {
+					type = conquest
+					save_scope_as = change
+					add_claim_on_loss = no
+				}
+				change_liege = {
+					liege = scope:appropriate_liege
+					change = scope:change
+				}
+				resolve_title_and_vassal_change = scope:change
+			}
+		}
+	}
+	# 区域外剩余的伯爵领：交给小军阀并独立
+	every_sub_realm_title = {
+		if = {
+			limit = {
+				NOT = {
+					title_capital_county.title_province = { geographical_region = hd_liao_target_region }
+				}
+				tier = tier_county
+			}
+			save_temporary_scope_as = seceding_county
+			create_character = {
+				location = scope:seceding_county.title_province
+				template = post_migration_minor_warlord_template
+				save_scope_as = minor_warlord
+			}
+			create_title_and_vassal_change = {
+				type = granted
+				save_scope_as = change
+				add_claim_on_loss = no
+			}
+			scope:seceding_county = {
+				change_title_holder = {
+					holder = scope:minor_warlord
+					change = scope:change
+					take_baronies = yes
+				}
+			}
+			resolve_title_and_vassal_change = scope:change
+			create_title_and_vassal_change = {
+				type = independency
+				save_scope_as = change
+				add_claim_on_loss = no
+			}
+			scope:minor_warlord = {
+				becomes_independent = { change = scope:change }
+			}
+			resolve_title_and_vassal_change = scope:change
+		}
+	}
+	update_domicile_and_courtier_location_effect = yes
+}
+
+############################
+# 渐进僚化
+############################
+
+### Character（僚化故事主）：改一块伯爵领为僚人；存 scope:hd_liao_conv_county
+hd_liao_convert_one_county_effect = {
+	save_scope_as = hd_liao_owner
+	random_realm_county = {
+		limit = {
+			hd_liao_convertible_county_trigger = { OWNER = scope:hd_liao_owner }
+		}
+		weight = {
+			base = 100
+			modifier = {
+				factor = 0.1
+				culture = { has_cultural_pillar = heritage_chinese }
+			}
+		}
+		save_scope_as = hd_liao_conv_county
+	}
+	scope:hd_liao_conv_county ?= {
+		set_county_culture = culture:liaoren
+		random = {
+			chance = 50
+			set_county_rite = scope:hd_liao_owner.rite
+		}
+		add_county_modifier = {
+			modifier = hd_foreign_settlement_county_modifier
+			years = 20
+		}
+	}
+}

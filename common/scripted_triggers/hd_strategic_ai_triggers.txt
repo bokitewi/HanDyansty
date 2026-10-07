@@ -1,0 +1,104 @@
+﻿# 天朝循环大修：战略区 AI 判定。
+# 需要的 saved scope：scope:hd_strat_actor（发动者）、scope:hd_strat_region（当前战略区，geographical_region）。
+
+# Scope：角色。被历史剧本引擎托管（剧本优先，结束后才接入战略 AI）
+hd_strat_historical_managed_trigger = {
+	OR = {
+		owns_story_of_type = hd_story_cao_expansion
+		owns_story_of_type = hd_story_yuan_expansion
+		owns_story_of_type = hd_story_historical_ai_controller
+		hds_managed_war_actor_trigger = yes
+		AND = {
+			this = character:tao_qian
+			has_character_flag = hd4_tao_activated
+		}
+	}
+}
+
+# Scope：角色。可拥有战略 AI story
+hd_strat_eligible_trigger = {
+	is_ai = yes
+	is_alive = yes
+	is_independent_ruler = yes
+	highest_held_title_tier >= tier_duchy
+	hd_cycle_is_luanshi_trigger = yes
+	# 崩溃期皇帝不参与（走原版派系战争逻辑）
+	NAND = {
+		hd_cycle_phase_is_collapse_trigger = yes
+		has_title = title:h_china
+	}
+	hd_strat_historical_managed_trigger = no
+	hd_strat_capital_in_any_region_trigger = yes
+}
+
+# Scope：角色。首都位于任一战略区
+hd_strat_capital_in_any_region_trigger = {
+	capital_province ?= {
+		OR = {
+			geographical_region = strategic_region_shanxi
+			geographical_region = strategic_region_bashu
+			geographical_region = strategic_region_lingnan
+			geographical_region = strategic_region_xiliang
+			geographical_region = strategic_region_zhongyuan
+			geographical_region = strategic_region_guanzhong
+			geographical_region = strategic_region_xia
+			geographical_region = strategic_region_jiangnan
+			geographical_region = strategic_region_hebei
+			geographical_region = strategic_region_xianbei
+		}
+	}
+}
+
+# Scope：候选目标（独立统治者）。基础合法性：军力 <= 发动者 x2
+hd_strat_base_target_trigger = {
+	is_independent_ruler = yes
+	NOT = { this = scope:hd_strat_actor }
+	NOT = { is_allied_to = scope:hd_strat_actor }
+	NOT = { is_at_war_with = scope:hd_strat_actor }
+	current_military_strength <= scope:hd_strat_actor.hd_strat_strength_ceiling_value
+	scope:hd_strat_actor = { NOT = { has_truce = prev } }
+}
+
+# Scope：候选目标。在当前战略区拥有领土
+hd_strat_region_target_trigger = {
+	hd_strat_base_target_trigger = yes
+	any_realm_county = {
+		title_province = { geographical_region = scope:hd_strat_region }
+	}
+}
+
+# Scope：候选目标。挚友类（发动者对其好感 > 80 或朋友/至交/灵魂伴侣/情人/结义兄弟）
+hd_strat_friendly_target_trigger = {
+	scope:hd_strat_actor = {
+		OR = {
+			opinion = { target = prev value > 80 }
+			has_relation_friend = prev
+			has_relation_best_friend = prev
+			has_relation_soulmate = prev
+			has_relation_lover = prev
+			has_relation_blood_brother = prev
+		}
+	}
+}
+
+# Scope：发动者。宣战前先招降的性格
+hd_strat_offers_first_trigger = {
+	OR = {
+		has_trait = just
+		has_trait = compassionate
+		has_trait = patient
+		has_trait = loyal
+	}
+}
+
+# Scope：发动者。脉冲时的廉价前置条件
+hd_strat_pulse_ready_trigger = {
+	is_ai = yes
+	is_adult = yes
+	is_imprisoned = no
+	NOT = { has_character_flag = hd_strat_war_cooldown }
+	gold >= -100
+	NOT = {
+		any_character_war = { primary_attacker = prev }
+	}
+}

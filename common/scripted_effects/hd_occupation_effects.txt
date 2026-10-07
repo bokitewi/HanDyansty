@@ -1,0 +1,61 @@
+﻿# 天朝循环大修：战时占领记录 -> 胜利结算（历史入侵式）。
+# 适用 CB：hd_siyi_raid_cb、hd_historical_war_cb（见 hd_occupation_war_trigger）。
+# 记录挂在战争主攻方身上：变量列表 hd_occupied_counties。
+
+# on_siege_completion：root = 占领者
+hd_occupation_record_effect = {
+	scope:war.primary_attacker ?= {
+		if = {
+			limit = {
+				NOT = {
+					is_target_in_variable_list = { name = hd_occupied_counties target = scope:county }
+				}
+			}
+			add_to_variable_list = { name = hd_occupied_counties target = scope:county }
+		}
+	}
+}
+
+# on_liberation_siege_completion：收复则移出列表
+hd_occupation_liberate_effect = {
+	scope:war.primary_attacker ?= {
+		remove_list_variable = { name = hd_occupied_counties target = scope:county }
+	}
+}
+
+# CB on_victory：把列表中仍属防守方阵营、且仍被攻方阵营控制的伯爵领转给攻方
+hd_occupation_settle_effect = {
+	scope:attacker = {
+		if = {
+			limit = { has_variable_list = hd_occupied_counties }
+			create_title_and_vassal_change = {
+				type = conquest
+				save_scope_as = hd_occupation_change
+				add_claim_on_loss = yes
+			}
+			every_in_list = {
+				variable = hd_occupied_counties
+				limit = {
+					holder.top_liege ?= scope:defender
+					county_controller ?= {
+						OR = {
+							this = scope:attacker
+							is_allied_to = scope:attacker
+						}
+					}
+				}
+				change_title_holder = {
+					holder = scope:attacker
+					change = scope:hd_occupation_change
+					take_baronies = yes
+				}
+			}
+			resolve_title_and_vassal_change = scope:hd_occupation_change
+			clear_variable_list = hd_occupied_counties
+		}
+	}
+}
+
+hd_occupation_clear_effect = {
+	scope:attacker = { clear_variable_list = hd_occupied_counties }
+}

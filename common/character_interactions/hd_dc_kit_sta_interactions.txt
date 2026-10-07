@@ -1,0 +1,608 @@
+﻿# 天朝循环·时代特色：对峙期套件互动（见 docs/天朝循环_时代特色重制计划.md §3.6）
+# - hd_dc_sta_border_market_interaction：互市（与接壤的独立统治者签约 10 年：双方收入 +10%、好感 +10）
+# - hd_dc_sta_cede_land_interaction：割地求和（战争中割一郡给敌方首领，换取白和 + 停战 10 年）
+# - hd_dc_sta_incite_independence_interaction / _defection_ / _faction_：发起三种“策反”阴谋
+
+##################################################
+# 互市
+##################################################
+hd_dc_sta_border_market_interaction = {
+	category = interaction_category_diplomacy
+	icon = icon_gold
+	interface_priority = 40
+	common_interaction = yes
+	desc = hd_dc_sta_border_market_interaction_desc
+	greeting = positive
+	notification_text = hd_dc_sta_border_market_interaction_notification
+	popup_on_receive = yes
+
+	cooldown_against_recipient = { years = 10 }
+
+	is_available = {
+		is_independent_ruler = yes
+		is_landed = yes
+		is_imprisoned = no
+		hd_dc_kit_sta_tools_trigger = yes
+	}
+
+	is_shown = {
+		scope:actor != scope:recipient
+		scope:recipient = {
+			hd_dc_sta_border_market_partner_trigger = { PARTNER = scope:actor }
+		}
+	}
+
+	is_valid_showing_failures_only = {
+		scope:recipient = {
+			is_imprisoned = no
+			custom_description = {
+				text = hd_dc_sta_border_market_at_war_tt
+				NOT = { is_at_war_with = scope:actor }
+			}
+			custom_description = {
+				text = hd_dc_sta_border_market_already_tt
+				NOT = {
+					has_opinion_modifier = {
+						modifier = hd_dc_sta_border_market_opinion
+						target = scope:actor
+					}
+				}
+			}
+		}
+	}
+
+	on_accept = {
+		hd_dc_sta_border_market_effect = yes
+		scope:actor = {
+			send_interface_toast = {
+				type = event_toast_effect_good
+				title = hd_dc_sta_border_market_interaction.toast
+				left_icon = scope:actor
+				right_icon = scope:recipient
+			}
+		}
+		scope:recipient = {
+			send_interface_toast = {
+				type = event_toast_effect_good
+				title = hd_dc_sta_border_market_interaction.toast
+				left_icon = scope:recipient
+				right_icon = scope:actor
+			}
+		}
+	}
+
+	on_decline = {
+		scope:actor = {
+			send_interface_toast = {
+				type = event_toast_effect_neutral
+				title = hd_dc_sta_border_market_interaction.declined
+				left_icon = scope:recipient
+			}
+		}
+	}
+
+	ai_accept = {
+		base = 10
+		modifier = {
+			add = 20
+			desc = hd_dc_sta_border_market_ai_profit
+		}
+		opinion_modifier = {
+			who = scope:recipient
+			opinion_target = scope:actor
+			multiplier = 0.5
+			desc = AI_OPINION_REASON
+		}
+		modifier = {
+			add = 15
+			scope:recipient = { has_trait = greedy }
+			desc = hd_dc_sta_border_market_ai_greedy
+		}
+		modifier = {
+			add = -60
+			scope:recipient = {
+				OR = {
+					has_relation_rival = scope:actor
+					has_relation_nemesis = scope:actor
+				}
+			}
+			desc = hd_dc_sta_border_market_ai_rival
+		}
+		modifier = {
+			add = -20
+			scope:recipient = { has_trait = paranoid }
+			desc = hd_dc_sta_border_market_ai_paranoid
+		}
+	}
+
+	ai_potential = {
+		is_independent_ruler = yes
+	}
+	ai_targets = {
+		ai_recipients = neighboring_rulers
+		max = 10
+	}
+	ai_frequency_by_tier = {
+		barony = 0
+		county = 0
+		duchy = 60
+		kingdom = 36
+		empire = 36
+		hegemony = 0
+	}
+	ai_will_do = {
+		base = 25
+		modifier = {
+			add = 20
+			has_trait = greedy
+		}
+		modifier = {
+			add = 10
+			stewardship >= 12
+		}
+		modifier = {
+			factor = 0
+			scope:recipient = {
+				OR = {
+					has_relation_rival = scope:actor
+					has_relation_nemesis = scope:actor
+				}
+			}
+		}
+	}
+}
+
+##################################################
+# 割地求和
+##################################################
+hd_dc_sta_cede_land_interaction = {
+	category = interaction_category_diplomacy
+	icon = icon_retreat
+	interface_priority = 50
+	desc = hd_dc_sta_cede_land_interaction_desc
+	greeting = positive
+	notification_text = hd_dc_sta_cede_land_interaction_notification
+	popup_on_receive = yes
+	pause_on_receive = yes
+
+	# 选一县（或所持郡号），割让其所在之郡
+	target_type = title
+	target_source = actor
+	target_filter = domain_titles
+	show_all_targets = no
+
+	cooldown_against_recipient = { years = 1 }
+
+	is_available = {
+		is_independent_ruler = yes
+		is_landed = yes
+		is_at_war = yes
+		is_imprisoned = no
+		hd_dc_kit_sta_tools_trigger = yes
+	}
+
+	is_shown = {
+		scope:actor != scope:recipient
+		scope:recipient = {
+			is_landed = yes
+			is_independent_ruler = yes
+		}
+		scope:actor = {
+			any_character_war = {
+				hd_dc_sta_cede_land_war_trigger = {
+					ACTOR = scope:actor
+					ENEMY = scope:recipient
+				}
+			}
+		}
+	}
+
+	can_be_picked_title = {
+		scope:target = {
+			OR = {
+				tier = tier_county
+				tier = tier_duchy
+			}
+			is_landless_type_title = no
+			# 不得割让治所所在之郡
+			trigger_if = {
+				limit = { tier = tier_county }
+				NOT = { duchy = scope:actor.capital_county.duchy }
+			}
+			trigger_else = {
+				NOT = { this = scope:actor.capital_county.duchy }
+			}
+		}
+	}
+
+	has_valid_target = {
+		exists = scope:target
+	}
+
+	on_accept = {
+		hd_dc_sta_cede_land_effect = yes
+		scope:actor = {
+			send_interface_toast = {
+				type = event_toast_effect_neutral
+				title = hd_dc_sta_cede_land_interaction.toast
+				left_icon = scope:recipient
+			}
+		}
+		scope:recipient = {
+			send_interface_toast = {
+				type = event_toast_effect_good
+				title = hd_dc_sta_cede_land_interaction.toast_recipient
+				left_icon = scope:actor
+			}
+		}
+	}
+
+	on_decline = {
+		scope:actor = {
+			send_interface_toast = {
+				type = event_toast_effect_bad
+				title = hd_dc_sta_cede_land_interaction.declined
+				left_icon = scope:recipient
+			}
+		}
+	}
+
+	ai_accept = {
+		base = 20
+		# 对方（受地者）战局
+		modifier = {
+			add = -60
+			scope:recipient = {
+				hd_dc_sta_war_score_at_least_trigger = {
+					WHO = scope:recipient
+					ENEMY = scope:actor
+					SCORE = 70
+				}
+			}
+			desc = hd_dc_sta_cede_land_ai_winning_big
+		}
+		modifier = {
+			add = -25
+			scope:recipient = {
+				hd_dc_sta_war_score_at_least_trigger = {
+					WHO = scope:recipient
+					ENEMY = scope:actor
+					SCORE = 30
+				}
+				hd_dc_sta_war_score_at_most_trigger = {
+					WHO = scope:recipient
+					ENEMY = scope:actor
+					SCORE = 69
+				}
+			}
+			desc = hd_dc_sta_cede_land_ai_winning
+		}
+		modifier = {
+			add = 30
+			scope:recipient = {
+				hd_dc_sta_war_score_at_most_trigger = {
+					WHO = scope:recipient
+					ENEMY = scope:actor
+					SCORE = 0
+				}
+			}
+			desc = hd_dc_sta_cede_land_ai_losing
+		}
+		opinion_modifier = {
+			who = scope:recipient
+			opinion_target = scope:actor
+			multiplier = 0.25
+			desc = AI_OPINION_REASON
+		}
+		ai_value_modifier = {
+			ai_greed = 0.25
+			ai_boldness = -0.25
+		}
+	}
+
+	ai_potential = {
+		is_at_war = yes
+	}
+	ai_targets = {
+		ai_recipients = primary_war_enemies
+	}
+	ai_frequency_by_tier = {
+		barony = 0
+		county = 0
+		duchy = 12
+		kingdom = 12
+		empire = 12
+		hegemony = 0
+	}
+	ai_will_do = {
+		base = 0
+		modifier = {
+			add = 60
+			scope:actor = {
+				hd_dc_sta_war_score_at_most_trigger = {
+					WHO = scope:actor
+					ENEMY = scope:recipient
+					SCORE = -50
+				}
+			}
+		}
+		modifier = {
+			add = 30
+			scope:actor = {
+				hd_dc_sta_war_score_at_most_trigger = {
+					WHO = scope:actor
+					ENEMY = scope:recipient
+					SCORE = -25
+				}
+			}
+		}
+		modifier = {
+			add = 15
+			has_trait = craven
+		}
+		modifier = {
+			factor = 0.5
+			OR = {
+				has_trait = arrogant
+				has_trait = stubborn
+				has_trait = brave
+			}
+		}
+		# 战局未败则不割地
+		modifier = {
+			factor = 0
+			scope:actor = {
+				hd_dc_sta_war_score_at_least_trigger = {
+					WHO = scope:actor
+					ENEMY = scope:recipient
+					SCORE = -10
+				}
+			}
+		}
+	}
+}
+
+##################################################
+# 策反（三种阴谋的发起互动）
+##################################################
+hd_dc_sta_incite_independence_interaction = {
+	icon = icon_scheme_seizure
+	category = interaction_category_hostile
+	send_name = START_SCHEME
+	interface_priority = 60
+	scheme = hd_dc_sta_incite_independence
+	ignores_pending_interaction_block = yes
+	desc = hd_dc_sta_incite_independence_interaction_desc
+
+	is_available = {
+		is_independent_ruler = yes
+		is_adult = yes
+		is_imprisoned = no
+		hd_dc_kit_sta_tools_trigger = yes
+		trigger_if = {
+			limit = { is_ai = yes }
+			hd_dc_sta_has_subversion_scheme_trigger = no
+		}
+	}
+
+	is_shown = {
+		scope:actor != scope:recipient
+		scope:recipient = {
+			hd_dc_sta_subversion_target_trigger = { OWNER = scope:actor }
+		}
+	}
+
+	is_valid_showing_failures_only = {
+		scope:actor = {
+			can_start_scheme = {
+				type = hd_dc_sta_incite_independence
+				target_character = scope:recipient
+			}
+		}
+	}
+
+	on_accept = {
+		scope:actor = {
+			send_interface_toast = {
+				type = event_toast_effect_neutral
+				title = hd_dc_sta_subversion_started_toast
+				left_icon = scope:actor
+				right_icon = scope:recipient
+				begin_scheme_basic_effect = {
+					SCHEME_TYPE = hd_dc_sta_incite_independence
+					TARGET_TYPE = target_character
+					TARGET_SCOPE = scope:recipient
+				}
+			}
+		}
+	}
+
+	auto_accept = yes
+
+	ai_targets = {
+		ai_recipients = neighboring_rulers
+		max = 10
+	}
+	ai_frequency_by_tier = {
+		barony = 0
+		county = 0
+		duchy = 72
+		kingdom = 48
+		empire = 48
+		hegemony = 0
+	}
+	ai_will_do = {
+		base = 0
+		hd_dc_sta_subversion_ai_will_do_modifier = yes
+		# 独立：目标须有一战之力
+		modifier = {
+			add = 20
+			scope:recipient.max_military_strength >= scope:recipient.liege.max_military_strength
+		}
+	}
+}
+
+hd_dc_sta_incite_defection_interaction = {
+	icon = icon_scheme_sway
+	category = interaction_category_hostile
+	send_name = START_SCHEME
+	interface_priority = 60
+	scheme = hd_dc_sta_incite_defection
+	ignores_pending_interaction_block = yes
+	desc = hd_dc_sta_incite_defection_interaction_desc
+
+	is_available = {
+		is_independent_ruler = yes
+		is_adult = yes
+		is_imprisoned = no
+		hd_dc_kit_sta_tools_trigger = yes
+		trigger_if = {
+			limit = { is_ai = yes }
+			hd_dc_sta_has_subversion_scheme_trigger = no
+		}
+	}
+
+	is_shown = {
+		scope:actor != scope:recipient
+		scope:recipient = {
+			hd_dc_sta_subversion_target_trigger = { OWNER = scope:actor }
+		}
+	}
+
+	is_valid_showing_failures_only = {
+		scope:actor = {
+			can_start_scheme = {
+				type = hd_dc_sta_incite_defection
+				target_character = scope:recipient
+			}
+		}
+	}
+
+	on_accept = {
+		scope:actor = {
+			send_interface_toast = {
+				type = event_toast_effect_neutral
+				title = hd_dc_sta_subversion_started_toast
+				left_icon = scope:actor
+				right_icon = scope:recipient
+				begin_scheme_basic_effect = {
+					SCHEME_TYPE = hd_dc_sta_incite_defection
+					TARGET_TYPE = target_character
+					TARGET_SCOPE = scope:recipient
+				}
+			}
+		}
+	}
+
+	auto_accept = yes
+
+	ai_targets = {
+		ai_recipients = neighboring_rulers
+		max = 10
+	}
+	ai_frequency_by_tier = {
+		barony = 0
+		county = 0
+		duchy = 72
+		kingdom = 48
+		empire = 48
+		hegemony = 0
+	}
+	ai_will_do = {
+		base = 0
+		hd_dc_sta_subversion_ai_will_do_modifier = yes
+		# 投靠：只拉与己接壤者
+		modifier = {
+			factor = 0
+			NOT = {
+				scope:recipient = {
+					any_sub_realm_county = {
+						any_neighboring_county = { holder.top_liege ?= scope:actor }
+					}
+				}
+			}
+		}
+		modifier = {
+			add = 20
+			max_military_strength > scope:recipient.top_liege.max_military_strength
+		}
+	}
+}
+
+hd_dc_sta_incite_faction_interaction = {
+	icon = icon_scheme_depose
+	category = interaction_category_hostile
+	send_name = START_SCHEME
+	interface_priority = 60
+	scheme = hd_dc_sta_incite_faction
+	ignores_pending_interaction_block = yes
+	desc = hd_dc_sta_incite_faction_interaction_desc
+
+	is_available = {
+		is_independent_ruler = yes
+		is_adult = yes
+		is_imprisoned = no
+		hd_dc_kit_sta_tools_trigger = yes
+		trigger_if = {
+			limit = { is_ai = yes }
+			hd_dc_sta_has_subversion_scheme_trigger = no
+		}
+	}
+
+	is_shown = {
+		scope:actor != scope:recipient
+		scope:recipient = {
+			hd_dc_sta_subversion_target_trigger = { OWNER = scope:actor }
+		}
+	}
+
+	is_valid_showing_failures_only = {
+		scope:actor = {
+			can_start_scheme = {
+				type = hd_dc_sta_incite_faction
+				target_character = scope:recipient
+			}
+		}
+	}
+
+	on_accept = {
+		scope:actor = {
+			send_interface_toast = {
+				type = event_toast_effect_neutral
+				title = hd_dc_sta_subversion_started_toast
+				left_icon = scope:actor
+				right_icon = scope:recipient
+				begin_scheme_basic_effect = {
+					SCHEME_TYPE = hd_dc_sta_incite_faction
+					TARGET_TYPE = target_character
+					TARGET_SCOPE = scope:recipient
+				}
+			}
+		}
+	}
+
+	auto_accept = yes
+
+	ai_targets = {
+		ai_recipients = neighboring_rulers
+		max = 10
+	}
+	ai_frequency_by_tier = {
+		barony = 0
+		county = 0
+		duchy = 72
+		kingdom = 48
+		empire = 48
+		hegemony = 0
+	}
+	ai_will_do = {
+		base = 5
+		hd_dc_sta_subversion_ai_will_do_modifier = yes
+		modifier = {
+			add = 15
+			scope:recipient = {
+				joined_faction ?= { faction_target = scope:recipient.liege }
+			}
+		}
+	}
+}

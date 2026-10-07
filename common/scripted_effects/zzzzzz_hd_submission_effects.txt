@@ -155,76 +155,107 @@ hd_submission_queue_followup_effect = {
 
 # Actor scope. Never pass hd_submission_actor into an ai_start_best_war callback.
 # The new system invokes only the existing, scope-safe HD war-selection effect.
-hd_submission_dispatch_effect = {
+hd_submission_try_offer_effect = {
     if = {
-        limit = { hd_submission_ai_can_scan_trigger = yes }
+        limit = {
+            hd_submission_world_active_trigger = yes
+            hd_submission_liege_trigger = yes
+        }
         save_scope_as = hd_submission_actor
-        # Counts keep their old war route; only dukes+ can ask for vassals.
-        if = {
-            limit = { hd_submission_liege_trigger = yes }
-            # A local neighbor snapshot: no every_ruler / province / army scan here.
-            every_neighboring_top_liege_realm_owner = {
-                limit = {
-                    is_landed = yes
-                    is_independent_ruler = yes
-                    highest_held_title_tier < scope:hd_submission_actor.highest_held_title_tier
-                    hd_submission_inbox_free_trigger = { LIEGE = scope:hd_submission_actor }
-                    hd_submission_recipient_legal_trigger = { LIEGE = scope:hd_submission_actor }
-                    NOT = { hd_submission_ai_refuses_trigger = { LIEGE = scope:hd_submission_actor } }
-                    OR = {
-                        AND = {
-                            is_ai = yes
-                            scope:hd_submission_actor = {
-                                is_character_interaction_potentially_accepted = {
-                                    recipient = prev
-                                    interaction = hd_warlord_offer_vassalization_interaction
-                                }
+        # A local neighbor snapshot: no every_ruler / province / army scan here.
+        every_neighboring_top_liege_realm_owner = {
+            limit = {
+                is_landed = yes
+                is_independent_ruler = yes
+                highest_held_title_tier < scope:hd_submission_actor.highest_held_title_tier
+                hd_submission_inbox_free_trigger = { LIEGE = scope:hd_submission_actor }
+                hd_submission_recipient_legal_trigger = { LIEGE = scope:hd_submission_actor }
+                NOT = { hd_submission_ai_refuses_trigger = { LIEGE = scope:hd_submission_actor } }
+                # 历史剧本保护：曹操与袁绍互不招降；陶谦激活后不被招降。
+                NOT = { AND = { this = character:cao_cao scope:hd_submission_actor = character:yuan_shao } }
+                NOT = { AND = { this = character:yuan_shao scope:hd_submission_actor = character:cao_cao } }
+                NOT = { AND = { this = character:tao_qian has_character_flag = hd4_tao_activated } }
+                OR = {
+                    AND = {
+                        is_ai = yes
+                        scope:hd_submission_actor = {
+                            is_character_interaction_potentially_accepted = {
+                                recipient = prev
+                                interaction = hd_warlord_offer_vassalization_interaction
                             }
-                        }
-                        AND = {
-                            is_ai = no
-                            sub_realm_size <= 5
                         }
                     }
+                    AND = {
+                        is_ai = no
+                        sub_realm_size <= 5
+                    }
                 }
-                add_to_list = hd_submission_candidates
             }
-            if = {
-                limit = { any_in_list = { list = hd_submission_candidates always = yes } }
-                ordered_in_list = {
-                    list = hd_submission_candidates
-                    order_by = { value = sub_realm_size multiply = -1 }
-                    max = 3
-                    check_range_bounds = no
-                    # Native cooldown checks may reject a candidate. At most three
-                    # valid candidates are attempted, with at most ONE actual request.
+            add_to_list = hd_submission_candidates
+        }
+        if = {
+            limit = { any_in_list = { list = hd_submission_candidates always = yes } }
+            ordered_in_list = {
+                list = hd_submission_candidates
+                order_by = { value = sub_realm_size multiply = -1 }
+                max = 3
+                check_range_bounds = no
+                # Native cooldown checks may reject a candidate. At most three
+                # valid candidates are attempted, with at most ONE actual request.
+                if = {
+                    limit = { scope:hd_submission_actor = { NOT = { has_character_flag = hd_submission_request_issued } } }
                     if = {
-                        limit = { scope:hd_submission_actor = { NOT = { has_character_flag = hd_submission_request_issued } } }
-                        if = {
-                            limit = { is_ai = no }
-                            run_interaction = {
-                                interaction = hd_warlord_offer_vassalization_interaction
-                                actor = scope:hd_submission_actor
-                                recipient = this
-                                send_threshold = decline
-                            }
+                        limit = { is_ai = no }
+                        run_interaction = {
+                            interaction = hd_warlord_offer_vassalization_interaction
+                            actor = scope:hd_submission_actor
+                            recipient = this
+                            send_threshold = decline
                         }
-                        else = {
-                            run_interaction = {
-                                interaction = hd_warlord_offer_vassalization_interaction
-                                actor = scope:hd_submission_actor
-                                recipient = this
-                                send_threshold = accept
-                            }
+                    }
+                    else = {
+                        run_interaction = {
+                            interaction = hd_warlord_offer_vassalization_interaction
+                            actor = scope:hd_submission_actor
+                            recipient = this
+                            send_threshold = accept
                         }
                     }
                 }
             }
         }
+    }
+}
+
+# Actor scope. 开战前先招降：若本次实际发出了招降（或上一份仍在等待回复），
+# 之后 hd_submission_request_issued 为真，调用方应跳过本次宣战。
+hd_submission_offer_before_war_effect = {
+    remove_character_flag = hd_submission_request_issued
+    if = {
+        limit = { is_ai = yes }
+        if = {
+            limit = { has_character_flag = hd_submission_outgoing_pending }
+            add_character_flag = { flag = hd_submission_request_issued days = 1 }
+        }
+        else = {
+            hd_submission_try_offer_effect = yes
+        }
+    }
+}
+
+hd_submission_dispatch_effect = {
+    if = {
+        limit = { hd_submission_ai_can_scan_trigger = yes }
+        # Counts keep their old war route; only dukes+ can ask for vassals.
+        hd_submission_try_offer_effect = yes
         if = {
             limit = { NOT = { has_character_flag = hd_submission_request_issued } }
             if = {
-                limit = { hd_submission_war_ready_trigger = yes }
+                # 战略 AI 持有者已由自己的 story 脉冲开战，这里不再重复触发。
+                limit = {
+                    hd_submission_war_ready_trigger = yes
+                    NOT = { owns_story_of_type = hd_strategic_ai_story }
+                }
                 # Keeps current local CBs and all historical war-management guards.
                 hd_unification_ai_attempt_effect = yes
             }

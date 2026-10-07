@@ -1,0 +1,181 @@
+﻿# 天朝循环·时代特色：扩张期 · 册封朝贡（见 docs/天朝循环_时代特色重制计划.md §3.1）
+# 天子对接壤的天下之外独立统治者使用；对方接受时天子支付 100 金（转赠对方），对方成为天子的朝贡国
+# 对方实力低于天子一半时 AI 明显更愿意接受
+# 发射：catalyst_hd_investiture（行为人 = 天子）、catalyst_hd_tributary_gained（全局）
+
+hd_dc_exp_investiture_interaction = {
+	category = interaction_category_diplomacy
+	icon = demand_tributary_interaction
+	desc = hd_dc_exp_investiture_interaction_desc
+	greeting = positive
+	notification_text = hd_dc_exp_investiture_interaction_notification
+	interface_priority = 60
+
+	is_shown = {
+		scope:actor = { hd_dc_exp_emperor_trigger = yes }
+		scope:recipient = {
+			NOT = { this = scope:actor }
+			is_landed = yes
+			is_independent_ruler = yes
+			highest_held_title_tier >= tier_county
+			hd_dc_is_outsider_trigger = yes
+			NOR = {
+				government_has_flag = cannot_be_vassal_or_liege
+				government_has_flag = government_is_mandala
+				government_has_flag = government_is_holy_order
+			}
+		}
+		scope:actor = {
+			any_neighboring_top_liege_realm_owner = { this = scope:recipient }
+		}
+	}
+
+	is_valid_showing_failures_only = {
+		scope:actor = {
+			gold >= hd_dc_exp_investiture_gold
+			NOT = { is_at_war_with = scope:recipient }
+		}
+		scope:recipient = {
+			is_tributary = no
+			is_confederation_member = no
+			custom_tooltip = {
+				text = hd_dc_exp_investiture_cooldown_tt
+				NOT = {
+					has_opinion_modifier = {
+						modifier = hd_dc_exp_investiture_declined_opinion
+						target = scope:actor
+					}
+				}
+			}
+		}
+	}
+
+	on_accept = {
+		scope:actor = {
+			remove_short_term_gold = hd_dc_exp_investiture_gold
+		}
+		scope:recipient = {
+			add_gold = hd_dc_exp_investiture_gold
+			add_opinion = {
+				target = scope:actor
+				modifier = hd_dc_exp_investiture_accepted_opinion
+			}
+		}
+		start_tributary_interaction_effect = {
+			TRIBUTARY = scope:recipient
+			SUZERAIN = scope:actor
+		}
+		scope:actor = { add_prestige = minor_prestige_value }
+		hidden_effect = {
+			scope:recipient = { hd_dc_exp_mark_tributary_effect = yes }
+			hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_investiture ACTOR = scope:actor }
+			hd_dc_kit_fire_global_effect = { CATALYST = catalyst_hd_tributary_gained }
+		}
+	}
+
+	on_decline = {
+		scope:recipient = {
+			add_opinion = {
+				target = scope:actor
+				modifier = hd_dc_exp_investiture_declined_opinion
+			}
+			custom_tooltip = hd_dc_exp_investiture_cooldown_tt
+		}
+	}
+
+	ai_accept = {
+		base = -25
+		opinion_modifier = {
+			who = scope:recipient
+			opinion_target = scope:actor
+			multiplier = 0.5
+			desc = AI_OPINION_REASON
+		}
+		modifier = {	# 天朝之赐
+			desc = hd_dc_exp_investiture_reason_gift
+			add = 15
+		}
+		modifier = {	# 实力不及天子一半：更愿意受封
+			desc = hd_dc_exp_investiture_reason_weak
+			trigger = {
+				scope:recipient = { max_military_strength < scope:actor.hd_dc_kit_half_strength_value }
+			}
+			add = 75
+		}
+		modifier = {	# 实力强于天子：不屑受封
+			desc = hd_dc_exp_investiture_reason_strong
+			trigger = {
+				scope:recipient = { max_military_strength > scope:actor.max_military_strength }
+			}
+			add = -75
+		}
+		modifier = {	# 王
+			desc = hd_dc_exp_investiture_reason_king
+			trigger = {
+				scope:recipient = { highest_held_title_tier = tier_kingdom }
+			}
+			add = -40
+		}
+		modifier = {	# 帝
+			desc = hd_dc_exp_investiture_reason_emperor
+			trigger = {
+				scope:recipient = { highest_held_title_tier >= tier_empire }
+			}
+			add = -150
+		}
+		modifier = {
+			desc = hd_dc_exp_investiture_reason_rival
+			trigger = {
+				scope:recipient = {
+					has_relation_rival = scope:actor
+					NOT = { has_relation_nemesis = scope:actor }
+				}
+			}
+			add = -100
+		}
+		modifier = {
+			desc = hd_dc_exp_investiture_reason_nemesis
+			trigger = {
+				scope:recipient = { has_relation_nemesis = scope:actor }
+			}
+			add = -200
+		}
+		modifier = {	# 骄傲 / 野心者不愿称臣纳贡
+			desc = hd_dc_exp_investiture_reason_proud
+			trigger = {
+				scope:recipient = {
+					OR = {
+						has_trait = arrogant
+						has_trait = ambitious
+					}
+				}
+			}
+			add = -20
+		}
+	}
+
+	ai_min_reply_days = 3
+	ai_max_reply_days = 10
+
+	ai_potential = {
+		hd_dc_exp_emperor_trigger = yes
+		gold >= 200
+	}
+	ai_targets = {
+		ai_recipients = neighboring_rulers
+		max = 10
+	}
+	ai_frequency = 24
+
+	ai_will_do = {
+		base = 0
+		modifier = {	# 只找弱小邻邦
+			add = 60
+			scope:recipient = { max_military_strength < scope:actor.hd_dc_kit_half_strength_value }
+		}
+		modifier = {
+			add = -100
+			scope:recipient = { max_military_strength > scope:actor.max_military_strength }
+		}
+	}
+}

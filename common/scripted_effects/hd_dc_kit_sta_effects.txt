@@ -1,0 +1,394 @@
+﻿# 天朝循环·时代特色：对峙期套件效果（见 docs/天朝循环_时代特色重制计划.md §3.6）
+# 诱因一律经 hd_dc_kit_fire_effect 发射（ACTOR 须为已保存的 scope）。
+
+############################################################
+# 策反阴谋
+############################################################
+
+# Scope：阴谋（on_invalidated）
+hd_dc_sta_subversion_invalidated_effect = {
+	scheme_owner = { save_scope_as = owner }
+	scheme_target_character = { save_scope_as = target }
+	if = {
+		limit = { scope:owner = { is_alive = yes } }
+		scope:owner = {
+			send_interface_toast = {
+				type = event_toast_effect_neutral
+				title = hd_dc_sta_subversion_invalidated_title
+				left_icon = scope:target
+				custom_tooltip = hd_dc_sta_subversion_invalidated_tt
+			}
+		}
+	}
+}
+
+# 败露：双方关系恶化，计“背盟毁约”。需 scope:hd_dc_sta_sub_owner、scope:hd_dc_sta_sub_target
+hd_dc_sta_subversion_exposed_effect = {
+	scope:hd_dc_sta_sub_target = {
+		if = {
+			limit = { exists = top_liege }
+			top_liege = { save_scope_as = hd_dc_sta_sub_top }
+		}
+		if = {
+			limit = { exists = liege }
+			liege = { save_scope_as = hd_dc_sta_sub_liege }
+		}
+	}
+	# 策反者与敌国之主互相交恶
+	if = {
+		limit = {
+			exists = scope:hd_dc_sta_sub_top
+			NOT = { scope:hd_dc_sta_sub_top = scope:hd_dc_sta_sub_owner }
+		}
+		scope:hd_dc_sta_sub_top = {
+			add_opinion = {
+				target = scope:hd_dc_sta_sub_owner
+				modifier = hd_dc_sta_subversion_exposed_opinion
+			}
+			send_interface_toast = {
+				type = event_toast_effect_bad
+				title = hd_dc_sta_subversion_exposed_liege_toast
+				left_icon = scope:hd_dc_sta_sub_owner
+				right_icon = scope:hd_dc_sta_sub_target
+			}
+		}
+		scope:hd_dc_sta_sub_owner = {
+			add_opinion = {
+				target = scope:hd_dc_sta_sub_top
+				modifier = hd_dc_sta_subversion_exposed_opinion
+			}
+		}
+	}
+	# 目标的直属主君（若非敌国之主本人）亦记恨
+	if = {
+		limit = {
+			exists = scope:hd_dc_sta_sub_liege
+			NOT = { scope:hd_dc_sta_sub_liege = scope:hd_dc_sta_sub_owner }
+			OR = {
+				NOT = { exists = scope:hd_dc_sta_sub_top }
+				NOT = { scope:hd_dc_sta_sub_liege = scope:hd_dc_sta_sub_top }
+			}
+		}
+		scope:hd_dc_sta_sub_liege = {
+			add_opinion = {
+				target = scope:hd_dc_sta_sub_owner
+				modifier = hd_dc_sta_subversion_exposed_opinion
+			}
+		}
+	}
+	scope:hd_dc_sta_sub_owner = {
+		send_interface_toast = {
+			type = event_toast_effect_bad
+			title = hd_dc_sta_subversion_exposed_owner_toast
+			left_icon = scope:hd_dc_sta_sub_target
+			custom_tooltip = hd_dc_sta_subversion_exposed_owner_tt
+		}
+	}
+	# 计“背盟毁约”（对峙 → 斗争）
+	hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_broke_truce ACTOR = scope:hd_dc_sta_sub_owner }
+}
+
+# 策反独立：目标对其主君发动独立战争。Scope：任意；需 scope:owner、scope:target
+hd_dc_sta_incite_independence_success_effect = {
+	scope:target = {
+		liege = { save_scope_as = hd_dc_sta_sub_liege }
+		start_war = {
+			casus_belli = independence_war
+			target = scope:hd_dc_sta_sub_liege
+		}
+	}
+}
+
+# 策反投靠：目标带地投靠阴谋发起者。Scope：任意；需 scope:owner、scope:target
+hd_dc_sta_incite_defection_success_effect = {
+	scope:target = {
+		liege = { save_scope_as = hd_dc_sta_sub_liege }
+		top_liege = { save_scope_as = hd_dc_sta_sub_top }
+	}
+	create_title_and_vassal_change = {
+		type = swear_fealty
+		save_scope_as = change
+	}
+	scope:target = {
+		change_liege = {
+			liege = scope:owner
+			change = scope:change
+		}
+	}
+	resolve_title_and_vassal_change = scope:change
+	scope:hd_dc_sta_sub_liege = {
+		add_opinion = {
+			target = scope:target
+			modifier = hd_dc_sta_defected_opinion
+		}
+		add_opinion = {
+			target = scope:owner
+			modifier = hd_dc_sta_defected_opinion
+		}
+	}
+	if = {
+		limit = { NOT = { scope:hd_dc_sta_sub_top = scope:hd_dc_sta_sub_liege } }
+		scope:hd_dc_sta_sub_top = {
+			add_opinion = {
+				target = scope:owner
+				modifier = hd_dc_sta_defected_opinion
+			}
+		}
+	}
+}
+
+# 煽动谋反：目标加入/建立反对其主君的派系，派系不满 +30，目标兵员 +30%（5 年）。Scope：任意；需 scope:target
+hd_dc_sta_incite_faction_success_effect = {
+	scope:target = {
+		liege = { save_scope_as = hd_dc_sta_sub_liege }
+		if = {
+			limit = {
+				joined_faction ?= { faction_target = scope:hd_dc_sta_sub_liege }
+			}
+			# 已在反主派系中：派系不满 +30
+		}
+		else_if = {
+			limit = {
+				scope:hd_dc_sta_sub_liege = {
+					any_targeting_faction = {
+						OR = {
+							faction_is_type = independence_faction
+							faction_is_type = liberty_faction
+						}
+						scope:target = { can_join_faction = prev }
+					}
+				}
+			}
+			scope:hd_dc_sta_sub_liege = {
+				random_targeting_faction = {
+					limit = {
+						OR = {
+							faction_is_type = independence_faction
+							faction_is_type = liberty_faction
+						}
+						scope:target = { can_join_faction = prev }
+					}
+					save_scope_as = hd_dc_sta_sub_faction
+				}
+			}
+			join_faction = scope:hd_dc_sta_sub_faction
+		}
+		else_if = {
+			limit = {
+				can_create_faction = {
+					type = independence_faction
+					target = scope:hd_dc_sta_sub_liege
+				}
+			}
+			create_faction = {
+				type = independence_faction
+				target = scope:hd_dc_sta_sub_liege
+			}
+		}
+		else_if = {
+			limit = {
+				can_create_faction = {
+					type = liberty_faction
+					target = scope:hd_dc_sta_sub_liege
+				}
+			}
+			create_faction = {
+				type = liberty_faction
+				target = scope:hd_dc_sta_sub_liege
+			}
+		}
+		# 所在反主派系不满 +30（“派系力量 +30%”的近似）
+		if = {
+			limit = {
+				joined_faction ?= { faction_target = scope:hd_dc_sta_sub_liege }
+			}
+			joined_faction = {
+				add_faction_discontent = hd_dc_sta_incite_faction_discontent
+			}
+		}
+		add_character_modifier = {
+			modifier = hd_dc_sta_incited_rebellion_modifier
+			years = hd_dc_sta_incite_faction_levy_years
+		}
+	}
+}
+
+############################################################
+# 互市
+############################################################
+
+# Scope：互动（scope:actor / scope:recipient）
+hd_dc_sta_border_market_effect = {
+	scope:actor = { hd_dc_sta_apply_border_market_effect = { PARTNER = scope:recipient } }
+	scope:recipient = { hd_dc_sta_apply_border_market_effect = { PARTNER = scope:actor } }
+	hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_border_market ACTOR = scope:actor }
+}
+
+# Scope：签约一方。收入修正不叠加：已有则刷新为 10 年
+hd_dc_sta_apply_border_market_effect = {
+	if = {
+		limit = { has_character_modifier = hd_dc_sta_border_market_modifier }
+		remove_character_modifier = hd_dc_sta_border_market_modifier
+	}
+	add_character_modifier = {
+		modifier = hd_dc_sta_border_market_modifier
+		years = hd_dc_sta_border_market_years
+	}
+	add_opinion = {
+		target = $PARTNER$
+		modifier = hd_dc_sta_border_market_opinion
+	}
+}
+
+############################################################
+# 割地求和
+############################################################
+
+# Scope：互动。scope:actor 割一郡给敌方战争首领 scope:recipient；scope:target = 所选县（或郡）
+hd_dc_sta_cede_land_effect = {
+	# 所割之郡
+	if = {
+		limit = { scope:target = { tier = tier_duchy } }
+		scope:target = { save_scope_as = hd_dc_sta_ceded_duchy }
+	}
+	else = {
+		scope:target.duchy = { save_scope_as = hd_dc_sta_ceded_duchy }
+	}
+	# 罢兵：白和
+	scope:actor = {
+		random_character_war = {
+			limit = {
+				hd_dc_sta_cede_land_war_trigger = {
+					ACTOR = scope:actor
+					ENEMY = scope:recipient
+				}
+			}
+			save_scope_as = hd_dc_sta_cede_war
+		}
+	}
+	scope:hd_dc_sta_cede_war ?= {
+		end_war = white_peace
+	}
+	# 割地：本人直辖的该郡诸县（连同郡号），以及治所在该郡的直属封臣
+	create_title_and_vassal_change = {
+		type = conquest
+		save_scope_as = change
+		add_claim_on_loss = no
+	}
+	scope:hd_dc_sta_ceded_duchy = {
+		if = {
+			limit = { holder ?= scope:actor }
+			change_title_holder = {
+				holder = scope:recipient
+				change = scope:change
+			}
+		}
+		every_de_jure_county = {
+			limit = { holder ?= scope:actor }
+			change_title_holder = {
+				holder = scope:recipient
+				change = scope:change
+				take_baronies = yes
+			}
+		}
+	}
+	scope:actor = {
+		every_vassal = {
+			limit = {
+				exists = capital_county
+				capital_county = { target_is_de_jure_liege_or_above = scope:hd_dc_sta_ceded_duchy }
+			}
+			change_liege = {
+				liege = scope:recipient
+				change = scope:change
+			}
+		}
+	}
+	resolve_title_and_vassal_change = scope:change
+	# 停战 10 年
+	scope:actor = {
+		add_truce_both_ways = {
+			character = scope:recipient
+			days = hd_dc_sta_ceded_land_truce_days
+			name = HD_DC_STA_TRUCE_CEDED_LAND
+		}
+	}
+	scope:recipient = {
+		add_opinion = {
+			target = scope:actor
+			modifier = hd_dc_sta_ceded_land_opinion
+		}
+	}
+	# 计“割地求和”（对峙期缓和 → 延长对峙）
+	hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_ceded_land ACTOR = scope:actor }
+}
+
+############################################################
+# 质子（on_set_relation_guardian / on_remove_relation_guardian）
+############################################################
+
+# Scope：被送去做养子的角色（root）；scope:target = 监护人
+# 对峙期：天下之内的独立统治者把至亲（子女、孙辈、兄弟姊妹）送到另一独立统治者处做养子 → 双方停战 10 年
+hd_dc_sta_hostage_set_effect = {
+	if = {
+		limit = {
+			exists = liege
+			hd_dc_phase_is_trigger = { PHASE = hd_standoff }
+		}
+		liege = { save_scope_as = hd_dc_sta_ward_liege }
+		if = {
+			limit = {
+				scope:hd_dc_sta_ward_liege = {
+					is_independent_ruler = yes
+					is_landed = yes
+					hd_dc_in_china_trigger = yes
+				}
+				scope:target = {
+					NOT = { this = scope:hd_dc_sta_ward_liege }
+					is_independent_ruler = yes
+					is_landed = yes
+					hd_dc_in_china_trigger = yes
+				}
+				is_close_family_of = scope:hd_dc_sta_ward_liege
+			}
+			scope:target = {
+				add_truce_both_ways = {
+					character = scope:hd_dc_sta_ward_liege
+					days = hd_dc_sta_hostage_truce_days
+					name = HD_DC_STA_TRUCE_HOSTAGE
+				}
+			}
+			set_variable = {
+				name = hd_dc_sta_hostage_guardian
+				value = scope:target
+			}
+			set_variable = {
+				name = hd_dc_sta_hostage_liege
+				value = scope:hd_dc_sta_ward_liege
+			}
+			hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_hostage_sent ACTOR = scope:hd_dc_sta_ward_liege }
+		}
+	}
+}
+
+# Scope：养子（root）；scope:target = 原监护人。同原版：质子离开即解除该停战（防止送去立刻召回白嫖停战）
+hd_dc_sta_hostage_removed_effect = {
+	if = {
+		limit = {
+			exists = var:hd_dc_sta_hostage_guardian
+			var:hd_dc_sta_hostage_guardian = scope:target
+		}
+		if = {
+			limit = {
+				exists = var:hd_dc_sta_hostage_liege
+				var:hd_dc_sta_hostage_liege = { is_alive = yes }
+				scope:target = { has_truce = root.var:hd_dc_sta_hostage_liege }
+			}
+			scope:target = {
+				cancel_truce_both_ways = root.var:hd_dc_sta_hostage_liege
+			}
+		}
+		remove_variable = hd_dc_sta_hostage_guardian
+		remove_variable = hd_dc_sta_hostage_liege
+	}
+}

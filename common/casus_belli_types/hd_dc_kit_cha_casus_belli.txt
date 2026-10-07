@@ -1,0 +1,217 @@
+﻿# 天朝循环·时代特色：斗争期套件宣战理由（见 docs/天朝循环_时代特色重制计划.md §3.5）
+# hd_dc_cha_border_raid_cb：边境劫掠（仿原版 fp2_border_raid）
+#   无花费；目标为与进攻方接壤的一县；胜则从防守方取金钱与威望，不夺地；停战 2 年。
+
+hd_dc_cha_border_raid_cb = {
+	group = celestial
+	icon = struggle
+
+	combine_into_one = yes
+	should_show_war_goal_subview = yes
+	allow_hostages = no
+	mutually_exclusive_titles = { always = yes }
+	interface_priority = 110
+
+	attacker_score_from_occupation_scale = 150
+	attacker_score_from_battles_scale = 150
+	defender_score_from_battles_scale = 150
+
+	allowed_for_character = {
+		hd_dc_kit_cha_tools_trigger = yes
+		is_landed = yes
+		NOT = { government_has_flag = government_is_landless_adventurer }
+	}
+
+	allowed_against_character = {
+		scope:defender = {
+			hd_dc_in_china_trigger = yes
+			# 防守方须与进攻方（或其主君）陆上接壤
+			OR = {
+				character_is_land_realm_neighbor = scope:attacker
+				AND = {
+					exists = scope:attacker.liege
+					character_is_land_realm_neighbor = scope:attacker.liege
+				}
+			}
+		}
+		NOT = { scope:attacker.top_liege = scope:defender.top_liege }
+	}
+
+	target_titles = neighbor_land
+	target_title_tier = county
+	target_de_jure_regions_above = no
+	ignore_effect = change_title_holder
+
+	ai_score_mult = { value = 0.5 }
+
+	valid_to_start = {
+		exists = scope:target
+	}
+
+	should_invalidate = {
+		NOT = {
+			any_in_list = {
+				list = target_titles
+				holder = { target_is_same_character_or_above = scope:defender }
+			}
+		}
+	}
+
+	on_invalidated_desc = msg_county_conquest_war_invalidated_message
+	on_invalidated = {}
+
+	# 无花费
+	cost = {}
+
+	on_declaration = {
+		on_declared_war = yes
+	}
+
+	on_victory_desc = hd_dc_cha_border_raid_cb_victory_desc
+	on_victory = {
+		add_legitimacy_attacker_victory_effect = yes
+		scope:attacker = { accolade_attacker_war_end_glory_gain_low_effect = yes }
+
+		# 取金：由防守方支付（不超过其现有金钱）
+		scope:defender = {
+			save_scope_value_as = {
+				name = hd_dc_cha_raid_gold
+				value = hd_dc_cha_border_raid_gold_value
+			}
+		}
+		if = {
+			limit = { scope:hd_dc_cha_raid_gold > 0 }
+			scope:defender = {
+				pay_short_term_gold = {
+					target = scope:attacker
+					gold = scope:hd_dc_cha_raid_gold
+				}
+			}
+		}
+		# 取威望
+		scope:defender = {
+			add_prestige = {
+				value = hd_dc_cha_border_raid_prestige_value
+				multiply = -1
+			}
+			add_opinion = {
+				target = scope:attacker
+				modifier = hd_dc_cha_border_raided_opinion
+			}
+		}
+		scope:attacker = {
+			add_prestige = hd_dc_cha_border_raid_prestige_value
+		}
+
+		add_from_contribution_attackers = {
+			prestige = minor_prestige_value
+			opinion = { modifier = contributed_in_war }
+		}
+		add_from_contribution_defenders = {
+			prestige = minor_prestige_value
+			opinion = { modifier = contributed_in_war }
+		}
+
+		# 停战 2 年（进攻方对防守方）
+		scope:attacker = {
+			hidden_effect = {
+				add_truce_one_way = {
+					character = scope:defender
+					days = hd_dc_cha_border_raid_truce_days
+					war = root.war
+					result = victory
+				}
+			}
+		}
+		custom_tooltip = hd_dc_cha_border_raid_truce_tt
+	}
+
+	on_white_peace_desc = hd_dc_cha_border_raid_cb_white_peace_desc
+	on_white_peace = {
+		scope:attacker = {
+			add_prestige = {
+				value = miniscule_prestige_value
+				multiply = -1.0
+			}
+		}
+		add_from_contribution_attackers = {
+			prestige = minor_prestige_value
+			opinion = { modifier = contributed_in_war }
+		}
+		add_from_contribution_defenders = {
+			prestige = minor_prestige_value
+			opinion = { modifier = contributed_in_war }
+		}
+		scope:attacker = {
+			hidden_effect = {
+				add_truce_both_ways = {
+					character = scope:defender
+					days = hd_dc_cha_border_raid_truce_days
+				}
+			}
+		}
+		custom_tooltip = hd_dc_cha_border_raid_truce_tt
+	}
+
+	on_defeat_desc = hd_dc_cha_border_raid_cb_defeat_desc
+	on_defeat = {
+		add_legitimacy_attacker_defeat_effect = yes
+		scope:defender = {
+			add_prestige_war_defender_effect = {
+				PRESTIGE_VALUE = minor_prestige_value
+			}
+		}
+		scope:attacker = {
+			pay_short_term_gold_reparations_effect = {
+				GOLD_VALUE = 1
+			}
+			add_prestige = {
+				value = minor_prestige_value
+				multiply = -1.0
+			}
+		}
+		add_from_contribution_attackers = {
+			prestige = minor_prestige_value
+			opinion = { modifier = contributed_in_war }
+		}
+		add_from_contribution_defenders = {
+			prestige = minor_prestige_value
+			opinion = { modifier = contributed_in_war }
+		}
+		scope:attacker = {
+			hidden_effect = {
+				add_truce_both_ways = {
+					character = scope:defender
+					days = hd_dc_cha_border_raid_truce_days
+				}
+			}
+		}
+		custom_tooltip = hd_dc_cha_border_raid_truce_tt
+	}
+
+	transfer_behavior = transfer
+
+	on_primary_attacker_death = invalidate
+	on_primary_defender_death = inherit
+
+	attacker_allies_inherit = no
+	defender_allies_inherit = no
+
+	war_name = "HD_DC_CHA_BORDER_RAID_WAR_NAME"
+	war_name_base = "HD_DC_CHA_BORDER_RAID_WAR_NAME_BASE"
+	cb_name = "HD_DC_CHA_BORDER_RAID_CB_NAME"
+
+	use_de_jure_wargoal_only = yes
+
+	# 同原版边境劫掠：至多约 2 年
+	defender_ticking_warscore_delay = { months = 3 }
+	defender_ticking_warscore = 0.15
+
+	attacker_wargoal_percentage = 1
+	attacker_ticking_warscore = 1
+
+	max_defender_score_from_occupation = 100
+	max_attacker_score_from_occupation = 1
+
+	ticking_war_score_targets_entire_realm = no
+}

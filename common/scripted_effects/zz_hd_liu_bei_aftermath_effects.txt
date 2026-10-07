@@ -1,4 +1,4 @@
-# Rebuilt Liu Bei rise. Fixed historical actors; no global character scans.
+﻿# Rebuilt Liu Bei rise. Fixed historical actors; no global character scans.
 # Effects called from world hooks explicitly enter character:liu_bei.
 
 # Character: Liu Bei. One story, continuing beyond the Yellow Turbans.
@@ -434,6 +434,34 @@ hd_lb_mi_visit_effect = {
 	}
 }
 
+# Liu Bei scope: summon the landless camp into Tao's Xuzhou (no alliance needed).
+hd_lb_summon_xuzhou_effect = {
+	if = {
+		limit = {
+			hd_lb_adventurer_trigger = yes
+			NOT = { hd_lb_in_xuzhou_trigger = yes }
+			is_travelling = no
+		}
+		clear_saved_scope = hd_lb_camp_destination
+		character:tao_qian = {
+			if = {
+				limit = { exists = capital_province capital_province = { hd_lb_tao_xuzhou_province_trigger = yes } }
+				capital_province = { save_scope_as = hd_lb_camp_destination }
+			}
+			else = {
+				random_sub_realm_county = {
+					limit = { target_is_de_jure_liege_or_above = title:k_uuii_xuzhou }
+					title_province = { save_scope_as = hd_lb_camp_destination }
+				}
+			}
+		}
+		if = {
+			limit = { exists = scope:hd_lb_camp_destination }
+			domicile = { move_domicile = scope:hd_lb_camp_destination }
+		}
+	}
+}
+
 # Any scope; a single pending lock serializes Tao/Liu player perspectives.
 hd_lb_open_bequest_effect = {
 	if = {
@@ -441,6 +469,7 @@ hd_lb_open_bequest_effect = {
 			hd_lb_bequest_ready_trigger = yes
 			NOT = { exists = global_var:hd_lb_bequest_pending }
 		}
+		character:liu_bei = { hd_lb_summon_xuzhou_effect = yes }
 		set_global_variable = hd_lb_bequest_pending
 		if = {
 			limit = { character:tao_qian = { is_ai = no } }
@@ -462,6 +491,7 @@ hd_lb_commit_bequest_effect = {
 			exists = global_var:hd_lb_bequest_pending
 			exists = global_var:hd_lb_bequest_authorized
 		}
+		character:liu_bei = { hd_lb_summon_xuzhou_effect = yes }
 		clear_saved_scope = hd_lb_tao_old_liege
 		clear_saved_scope = hd_lb_xuzhou_capital
 		character:tao_qian = {
@@ -665,6 +695,32 @@ hd_lb_tick_effect = {
 			limit = { has_character_flag = hd_lb_mi_visit_done }
 			character:mi_zhu ?= { hd_lb_mi_recruit_pending_effect = yes }
 			character:mi_fang ?= { hd_lb_mi_recruit_pending_effect = yes }
+		}
+		# 托付徐州完成前，刘备不得拥有原版冒险者 AI 故事（会让他开局就在别处建国）。
+		if = {
+			limit = {
+				NOT = { exists = global_var:hd_lb_bequest_resolved }
+				NOT = { exists = global_var:hd_lb_bequest_failed }
+				any_owned_story = { story_type = story_adventurer_ai }
+			}
+			every_owned_story = {
+				limit = { story_type = story_adventurer_ai }
+				end_story = yes
+			}
+		}
+		# 194 年起陶谦进入病危：去掉历史人物保护，挂隐藏的衰弱修正，使 health <= 2，托付徐州得以触发（他在 194.7.1 会按史实死亡）。
+		if = {
+			limit = {
+				current_date >= 194.1.1
+				NOT = { exists = global_var:hd_lb_bequest_resolved }
+				NOT = { exists = global_var:hd_lb_bequest_failed }
+				hd_lb_adventurer_trigger = yes
+				character:tao_qian ?= { is_alive = yes has_title = title:k_uuii_xuzhou NOT = { has_character_modifier = hd_tao_failing_health } }
+			}
+			character:tao_qian = {
+				if = { limit = { has_character_modifier = hd_historical_actor_protection } remove_character_modifier = hd_historical_actor_protection }
+				add_character_modifier = { modifier = hd_tao_failing_health }
+			}
 		}
 		if = {
 			limit = { NOT = { has_character_flag = hd_lb_mi_pending } }

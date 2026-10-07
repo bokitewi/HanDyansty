@@ -1,0 +1,1027 @@
+﻿# 天朝循环·时代特色：斗争期套件互动（见 docs/天朝循环_时代特色重制计划.md §3.5）
+# - hd_dc_cha_buy_claim_interaction：取得宣称（郡 200 金 + 200 威望 + 100 影响力；州 ×3；对同一人冷却 5 年）
+# - hd_dc_cha_lure_vassal_interaction：招纳叛将（以金钱或封地拉拢他国封臣带地来投）
+# - hd_dc_cha_request_incursion_interaction：请求入侵（照搬原版 fp3_request_turkic_invasion_interaction，开放到斗争期与对峙期；
+#   战争改用本 mod 的“入寇”CB hd_siyi_raid_cb，因原版 fp3_turkic_invasion_cb 的胜利结算含波斯/阿列维改宗分支）
+
+##################################################
+# 取得宣称
+##################################################
+hd_dc_cha_buy_claim_interaction = {
+	category = interaction_category_diplomacy
+	icon = vassal_claim_liege_title_interaction
+	interface_priority = 40
+	desc = hd_dc_cha_buy_claim_interaction_desc
+
+	target_type = title
+	target_source = recipient
+	target_filter = domain_titles
+	show_all_targets = no
+	ignores_pending_interaction_block = yes
+
+	cooldown_against_recipient = { years = 5 }
+
+	is_available = {
+		is_independent_ruler = yes
+		is_landed = yes
+		is_imprisoned = no
+		hd_dc_kit_cha_tools_trigger = yes
+	}
+
+	is_shown = {
+		scope:actor != scope:recipient
+		scope:recipient = {
+			is_playable_character = yes
+			highest_held_title_tier >= tier_duchy
+			NOT = { is_vassal_or_below_of = scope:actor }
+		}
+	}
+
+	can_be_picked_title = {
+		scope:target = {
+			hd_dc_cha_buy_claim_title_trigger = yes
+		}
+	}
+
+	has_valid_target = {
+		exists = scope:target
+	}
+
+	is_valid_showing_failures_only = {
+		trigger_if = {
+			limit = { exists = scope:target }
+			custom_description = {
+				text = hd_dc_cha_buy_claim_already_claimed_tt
+				object = scope:target
+				NOT = { scope:actor = { has_claim_on = scope:target } }
+			}
+		}
+		scope:recipient = { NOT = { has_strong_hook = scope:actor } }
+	}
+
+	# 郡 200 金 + 200 威望 + 100 影响力；州 ×3。无影响力的政体不付影响力
+	cost = {
+		gold = {
+			value = hd_dc_cha_buy_claim_gold_value
+			desc = hd_dc_cha_buy_claim_cost_desc
+		}
+		prestige = {
+			value = hd_dc_cha_buy_claim_prestige_value
+			desc = hd_dc_cha_buy_claim_cost_desc
+		}
+		influence = {
+			value = 0
+			if = {
+				limit = { scope:actor = { government_has_flag = government_has_influence } }
+				add = {
+					value = hd_dc_cha_buy_claim_influence_value
+					desc = hd_dc_cha_buy_claim_cost_desc
+				}
+			}
+		}
+	}
+
+	auto_accept = yes
+
+	on_accept = {
+		scope:actor = {
+			send_interface_toast = {
+				type = event_toast_effect_good
+				title = hd_dc_cha_buy_claim_interaction.toast
+				left_icon = scope:actor
+				right_icon = scope:recipient
+				add_unpressed_claim = scope:target
+			}
+		}
+		scope:recipient = {
+			add_opinion = {
+				target = scope:actor
+				modifier = hd_dc_cha_claim_bought_opinion
+			}
+		}
+	}
+
+	# AI：只盯接壤者，钱粮有余才买，且只买与己接壤的郡/州
+	ai_potential = {
+		is_independent_ruler = yes
+		is_at_war = no
+	}
+	ai_targets = {
+		ai_recipients = neighboring_rulers
+		max = 10
+	}
+	ai_frequency_by_tier = {
+		barony = 0
+		county = 0
+		duchy = 60
+		kingdom = 60
+		empire = 60
+		hegemony = 0
+	}
+	ai_will_do = {
+		base = 10
+		modifier = {
+			add = 20
+			has_trait = ambitious
+		}
+		modifier = {
+			add = 10
+			has_trait = arrogant
+		}
+		modifier = {
+			add = -10
+			OR = {
+				has_trait = content
+				has_trait = just
+			}
+		}
+		modifier = {
+			add = {
+				value = ai_greed
+				multiply = -0.2
+			}
+		}
+		# 钱粮须留余裕
+		modifier = {
+			factor = 0
+			gold < {
+				value = hd_dc_cha_buy_claim_gold_value
+				add = 300
+			}
+		}
+		modifier = {
+			factor = 0
+			prestige < {
+				value = hd_dc_cha_buy_claim_prestige_value
+				add = 200
+			}
+		}
+		# 只买与自己接壤的头衔
+		modifier = {
+			factor = 0
+			NOT = {
+				scope:target = {
+					any_in_de_jure_hierarchy = {
+						tier = tier_county
+						any_neighboring_county = { holder.top_liege ?= scope:actor }
+					}
+				}
+			}
+		}
+		# 对方远强于己则不碰
+		modifier = {
+			factor = 0.25
+			scope:recipient.top_liege.max_military_strength > scope:actor.max_military_strength
+		}
+		modifier = {
+			factor = 0
+			scope:recipient = {
+				OR = {
+					is_allied_to = scope:actor
+					has_relation_friend = scope:actor
+					has_relation_lover = scope:actor
+				}
+			}
+		}
+	}
+}
+
+##################################################
+# 招纳叛将
+##################################################
+hd_dc_cha_lure_vassal_interaction = {
+	category = interaction_category_diplomacy
+	icon = icon_vassal
+	interface_priority = 40
+	desc = hd_dc_cha_lure_vassal_interaction_desc
+	greeting = positive
+	notification_text = hd_dc_cha_lure_vassal_interaction_notification
+	popup_on_receive = yes
+	pause_on_receive = yes
+
+	# 可选：许以封地时从自己的直辖县中挑一县相赠
+	target_type = title
+	target_source = actor
+	target_filter = domain_titles
+	show_all_targets = no
+
+	cooldown_against_recipient = { years = 5 }
+
+	is_available = {
+		is_independent_ruler = yes
+		is_landed = yes
+		is_imprisoned = no
+		hd_dc_kit_cha_tools_trigger = yes
+	}
+
+	is_shown = {
+		scope:actor != scope:recipient
+		scope:recipient = {
+			hd_dc_cha_lure_target_trigger = yes
+			NOT = { top_liege = scope:actor }
+		}
+	}
+
+	can_be_picked_title = {
+		scope:target = {
+			tier = tier_county
+			is_landless_type_title = no
+			NOT = { this = scope:actor.capital_county }
+		}
+	}
+
+	is_valid_showing_failures_only = {
+		scope:recipient = {
+			is_imprisoned = no
+			NOT = { is_at_war_with = scope:actor }
+			custom_description = {
+				text = hd_dc_cha_lure_vassal_border_tt
+				any_sub_realm_county = {
+					any_neighboring_county = { holder.top_liege ?= scope:actor }
+				}
+			}
+		}
+		scope:actor = {
+			custom_description = {
+				text = hd_dc_cha_lure_vassal_tier_tt
+				tier_difference = {
+					target = scope:recipient
+					value >= 1
+				}
+			}
+		}
+	}
+
+	localization_values = {
+		HD_DC_LURE_GOLD = scope:actor.hd_dc_cha_lure_gold_value
+	}
+
+	send_options_exclusive = yes
+	options_heading = hd_dc_cha_lure_vassal_options_heading
+
+	send_option = {
+		flag = hd_dc_cha_lure_gold
+		localization = hd_dc_cha_lure_option_gold
+		current_description = hd_dc_cha_lure_option_gold_desc
+		is_valid = {
+			scope:actor = {
+				custom_description = {
+					text = hd_dc_cha_lure_not_enough_gold_tt
+					gold >= hd_dc_cha_lure_gold_value
+				}
+			}
+		}
+		starts_enabled = {
+			scope:actor = { gold >= hd_dc_cha_lure_gold_value }
+		}
+	}
+
+	send_option = {
+		flag = hd_dc_cha_lure_title
+		localization = hd_dc_cha_lure_option_title
+		current_description = hd_dc_cha_lure_option_title_desc
+		is_valid = {
+			custom_description = {
+				text = hd_dc_cha_lure_needs_title_tt
+				exists = scope:target
+			}
+		}
+	}
+
+	can_send = {
+		custom_description = {
+			text = hd_dc_cha_lure_choose_option_tt
+			OR = {
+				scope:hd_dc_cha_lure_gold = yes
+				scope:hd_dc_cha_lure_title = yes
+			}
+		}
+	}
+
+	on_accept = {
+		scope:recipient.liege = { save_scope_as = hd_dc_cha_old_liege }
+		scope:recipient.top_liege = { save_scope_as = hd_dc_cha_old_top_liege }
+		# 报酬
+		if = {
+			limit = { scope:hd_dc_cha_lure_gold = yes }
+			scope:actor = {
+				pay_short_term_gold = {
+					target = scope:recipient
+					gold = hd_dc_cha_lure_gold_value
+				}
+			}
+		}
+		# 改换门庭：带地来投
+		create_title_and_vassal_change = {
+			type = swear_fealty
+			save_scope_as = change
+		}
+		scope:recipient = {
+			change_liege = {
+				liege = scope:actor
+				change = scope:change
+			}
+		}
+		resolve_title_and_vassal_change = scope:change
+		# 许以封地：投靠后再授县
+		if = {
+			limit = {
+				scope:hd_dc_cha_lure_title = yes
+				exists = scope:target
+				scope:target = { holder = scope:actor }
+			}
+			create_title_and_vassal_change = {
+				type = granted
+				save_scope_as = grant_change
+				add_claim_on_loss = no
+			}
+			scope:target = {
+				change_title_holder = {
+					holder = scope:recipient
+					change = scope:grant_change
+				}
+			}
+			resolve_title_and_vassal_change = scope:grant_change
+		}
+		scope:recipient = {
+			add_opinion = {
+				target = scope:actor
+				modifier = hd_dc_cha_lured_gratitude_opinion
+			}
+		}
+		# 原主君记恨
+		scope:hd_dc_cha_old_liege ?= {
+			add_opinion = {
+				target = scope:recipient
+				modifier = hd_dc_cha_lured_away_opinion
+			}
+			add_opinion = {
+				target = scope:actor
+				modifier = hd_dc_cha_lured_away_opinion
+			}
+		}
+		if = {
+			limit = {
+				exists = scope:hd_dc_cha_old_top_liege
+				scope:hd_dc_cha_old_top_liege != scope:hd_dc_cha_old_liege
+			}
+			scope:hd_dc_cha_old_top_liege = {
+				add_opinion = {
+					target = scope:actor
+					modifier = hd_dc_cha_lured_away_opinion
+				}
+			}
+		}
+		scope:actor = {
+			send_interface_toast = {
+				type = event_toast_effect_good
+				title = hd_dc_cha_lure_vassal_interaction.toast
+				left_icon = scope:recipient
+				right_icon = scope:hd_dc_cha_old_liege
+			}
+		}
+		scope:hd_dc_cha_old_liege ?= {
+			send_interface_toast = {
+				type = event_toast_effect_bad
+				title = hd_dc_cha_lure_vassal_interaction.toast_liege
+				left_icon = scope:recipient
+				right_icon = scope:actor
+			}
+		}
+	}
+
+	on_decline = {
+		scope:actor = {
+			send_interface_toast = {
+				type = event_toast_effect_bad
+				title = hd_dc_cha_lure_vassal_interaction.declined
+				left_icon = scope:recipient
+			}
+		}
+	}
+
+	ai_accept = {
+		base = -25
+		# 对现主君的不满
+		modifier = {
+			add = {
+				value = "scope:recipient.opinion(scope:recipient.liege)"
+				multiply = -0.75
+				floor = yes
+			}
+			desc = hd_dc_cha_lure_ai_liege_opinion
+		}
+		# 对招纳者的好感
+		opinion_modifier = {
+			who = scope:recipient
+			opinion_target = scope:actor
+			multiplier = 0.5
+			desc = AI_OPINION_REASON
+		}
+		modifier = {
+			add = 40
+			scope:hd_dc_cha_lure_gold = yes
+			desc = hd_dc_cha_lure_ai_gold
+		}
+		modifier = {
+			add = 50
+			scope:hd_dc_cha_lure_title = yes
+			desc = hd_dc_cha_lure_ai_title
+		}
+		modifier = {
+			add = 20
+			scope:recipient = { has_trait = ambitious }
+			desc = hd_dc_cha_lure_ai_ambitious
+		}
+		modifier = {
+			add = 15
+			scope:recipient = { has_trait = greedy }
+			scope:hd_dc_cha_lure_gold = yes
+			desc = hd_dc_cha_lure_ai_greedy
+		}
+		modifier = {
+			add = -50
+			scope:recipient = { has_trait = loyal }
+			desc = hd_dc_cha_lure_ai_loyal
+		}
+		modifier = {
+			add = 25
+			scope:recipient = { has_trait = disloyal }
+			desc = hd_dc_cha_lure_ai_disloyal
+		}
+		modifier = {
+			add = -30
+			scope:recipient = {
+				exists = dynasty
+				liege ?= {
+					exists = dynasty
+					dynasty = scope:recipient.dynasty
+				}
+			}
+			desc = hd_dc_cha_lure_ai_same_dynasty
+		}
+		# 投靠后能否自保：新主君须强于旧主
+		modifier = {
+			add = 20
+			scope:actor.max_military_strength > scope:recipient.top_liege.max_military_strength
+			desc = hd_dc_cha_lure_ai_stronger
+		}
+		modifier = {
+			add = -30
+			scope:actor.max_military_strength < scope:recipient.top_liege.max_military_strength
+			desc = hd_dc_cha_lure_ai_weaker
+		}
+		ai_value_modifier = {
+			ai_honor = -0.5
+			ai_greed = 0.25
+		}
+	}
+
+	ai_potential = {
+		is_independent_ruler = yes
+		is_at_war = no
+	}
+	ai_targets = {
+		ai_recipients = neighboring_rulers
+		max = 15
+	}
+	ai_frequency_by_tier = {
+		barony = 0
+		county = 0
+		duchy = 48
+		kingdom = 36
+		empire = 36
+		hegemony = 0
+	}
+	ai_will_do = {
+		base = 10
+		modifier = {
+			add = 20
+			has_trait = ambitious
+		}
+		modifier = {
+			add = 15
+			has_trait = deceitful
+		}
+		modifier = {
+			add = -20
+			has_trait = honest
+		}
+		# 对方对其主君越不满越值得一试
+		modifier = {
+			add = 25
+			scope:recipient = {
+				opinion = {
+					target = scope:recipient.liege
+					value < 0
+				}
+			}
+		}
+		modifier = {
+			factor = 0
+			scope:recipient = {
+				opinion = {
+					target = scope:recipient.liege
+					value >= 40
+				}
+			}
+		}
+		# AI 只用厚赂（不挑县）
+		modifier = {
+			factor = 0
+			scope:hd_dc_cha_lure_title = yes
+		}
+		modifier = {
+			factor = 0
+			gold < {
+				value = hd_dc_cha_lure_gold_value
+				add = 200
+			}
+		}
+		modifier = {
+			factor = 0
+			scope:recipient.top_liege = { is_allied_to = scope:actor }
+		}
+	}
+}
+
+##################################################
+# 请求入侵：照搬原版 fp3_request_turkic_invasion_interaction（本 mod 已将原版键禁用为空壳）
+# 斗争期、对峙期开放；行为人：天下之内的统治者；对象：天下之内的独立统治者；入侵者：与对象接壤的四夷部落/游牧统治者
+##################################################
+hd_dc_cha_request_incursion_interaction = {
+	interface_priority = 100
+	common_interaction = yes
+	category = interaction_category_hostile
+	cooldown_against_recipient = { years = 2 }
+
+	icon = request_mercenary
+	desc = hd_dc_cha_request_incursion_interaction_desc
+
+	is_available = {
+		hd_dc_kit_cha_or_sta_tools_trigger = yes
+		is_landed = yes
+		is_imprisoned = no
+		trigger_if = {
+			limit = { is_ai = yes }
+			is_independent_ruler = yes
+			ai_greed <= 25
+			ai_has_builder_or_pious_builder_personality = no
+			is_at_war = no
+		}
+	}
+
+	is_shown = {
+		scope:recipient = {
+			is_playable_character = yes
+			is_landed = yes
+			is_independent_ruler = yes
+			hd_dc_in_china_trigger = yes
+			is_ai = yes
+		}
+		scope:actor != scope:recipient
+	}
+
+	is_valid_showing_failures_only = {
+	}
+
+	populate_recipient_list = {
+		scope:actor.top_liege = {
+			every_independent_ruler = {
+				limit = {
+					is_ai = yes
+					is_landed = yes
+					is_physically_able = yes
+					has_raised_armies = no
+					is_at_war = no
+					in_diplomatic_range = scope:actor
+					highest_held_title_tier >= tier_county
+					NOR = {
+						is_allied_to = scope:recipient
+						has_truce = scope:recipient
+						this = scope:actor
+						this = scope:recipient
+						is_tributary_of = scope:recipient.top_liege
+					}
+					OR = {
+						government_has_flag = government_is_tribal
+						government_has_flag = government_is_nomadic
+						government_has_flag = government_is_wanua
+						government_has_flag = government_is_landless_adventurer
+					}
+					# 四夷：天下之外，且与对象接壤
+					hd_dc_is_outsider_trigger = yes
+					character_is_land_realm_neighbor = scope:recipient
+				}
+				add_to_list = characters
+			}
+		}
+	}
+
+	send_options_exclusive = no
+
+	send_option = {
+		flag = war_support
+		localization = fp3_request_turkic_invasion_interaction_option_join_war
+		current_description = fp3_request_turkic_invasion_interaction_option_join_war_desc
+		is_shown = { exists = scope:secondary_recipient }
+		is_valid = {
+			scope:actor = {
+				NOR = {
+					is_at_war_with = scope:recipient
+					is_allied_to = scope:recipient
+					has_truce = scope:recipient
+				}
+			}
+		}
+	}
+
+	send_option = {
+		flag = financial_support
+		localization = fp3_request_turkic_invasion_interaction_option_more_gold
+		current_description = fp3_request_turkic_invasion_interaction_option_more_gold_desc
+		is_shown = { exists = scope:secondary_recipient }
+		is_valid = {
+			custom_description = {
+				text = hd_dc_cha_incursion_negative_gold_tt
+				fp3_request_invasion_troop_value_estimate > 0
+			}
+		}
+	}
+
+	cost = {
+		gold = {
+			value = {
+				value = scope:secondary_recipient.max_military_strength
+				divide = 20
+				round = yes
+			}
+			add = {
+				if = {
+					limit = { scope:financial_support = yes }
+					add = fp3_request_invasion_troop_value_estimate
+				}
+			}
+		}
+	}
+
+	on_accept = {
+		if = {
+			limit = { exists = scope:secondary_recipient }
+
+			scope:recipient = {
+				# 入侵目标：对象境内（天下法理之内）与入侵者接壤的一县（不含行为人自己的领地），否则首府
+				if = {
+					limit = {
+						any_realm_county = {
+							target_is_de_jure_liege_or_above = title:h_china
+							any_neighboring_county = { holder.top_liege = scope:secondary_recipient.top_liege }
+							NOR = {
+								holder = scope:actor
+								holder = { is_vassal_or_below_of = scope:actor }
+							}
+						}
+					}
+					random_realm_county = {
+						limit = {
+							target_is_de_jure_liege_or_above = title:h_china
+							any_neighboring_county = { holder.top_liege = scope:secondary_recipient.top_liege }
+							NOR = {
+								holder = scope:actor
+								holder = { is_vassal_or_below_of = scope:actor }
+							}
+						}
+						save_scope_as = invasion_target_title
+					}
+				}
+				else_if = {
+					limit = {
+						any_realm_county = {
+							target_is_de_jure_liege_or_above = title:h_china
+							NOR = {
+								holder = scope:actor
+								holder = { is_vassal_or_below_of = scope:actor }
+							}
+						}
+					}
+					random_realm_county = {
+						limit = {
+							target_is_de_jure_liege_or_above = title:h_china
+							NOR = {
+								holder = scope:actor
+								holder = { is_vassal_or_below_of = scope:actor }
+							}
+						}
+						save_scope_as = invasion_target_title
+					}
+				}
+				else = {
+					capital_county = { save_scope_as = invasion_target_title }
+				}
+
+				scope:invasion_target_title.duchy = { save_scope_as = text_title }
+
+				hidden_effect = { # Not worth cluttering the UI with
+					add_opinion = {
+						modifier = fp3_incited_conflict
+						target = scope:actor
+					}
+					add_opinion = {
+						modifier = declared_war
+						target = scope:secondary_recipient
+					}
+				}
+			}
+
+			scope:secondary_recipient = {
+				add_gold = {
+					value = {
+						value = scope:secondary_recipient.max_military_strength
+						divide = 20
+						round = yes
+					}
+					add = {
+						if = {
+							limit = { scope:financial_support = yes }
+							add = fp3_request_invasion_troop_value_estimate
+						}
+					}
+				}
+				# 天朝循环·时代特色：以“入寇”CB 开战（start_war 不检查 allowed_for_character）
+				start_war = {
+					casus_belli = hd_siyi_raid_cb
+					target = scope:recipient
+					target_title = scope:invasion_target_title.duchy
+				}
+				custom_tooltip = hd_dc_cha_incursion_result_tt
+				if = {
+					limit = { scope:financial_support = yes }
+					# 本 mod 已将原版 fp3_misc_decisions.0006 置空，改由本套件事件出兵
+					trigger_event = hd_dc_cha.0002
+					show_as_tooltip = {
+						spawn_army = {
+							men_at_arms = {
+								type = horse_archers
+								stacks = fp3_request_invasion_troop_value_bonus_troops
+							}
+							men_at_arms = {
+								type = light_horsemen
+								stacks = fp3_request_invasion_troop_value_bonus_troops
+							}
+							levies = fp3_request_invasion_troop_value_bonus_levy_troops
+							location = capital_province
+							uses_supply = yes
+							inheritable = no
+							name = turkic_tribal_event_troops
+						}
+					}
+				}
+				if = {
+					limit = { scope:war_support = yes }
+					custom_tooltip = fp3_request_turkic_invasion_interaction_option_join_war_outcome_tooltip
+					# 本 mod 已将原版 fp3_misc_decisions.0005 置空，改由本套件事件参战
+					trigger_event = hd_dc_cha.0001
+				}
+			}
+
+			scope:actor = {
+				hidden_effect = {
+					send_interface_toast = {
+						type = event_toast_effect_good
+						title = fp3_request_turkic_invasion_interaction_accept_notification.t
+						left_icon = scope:secondary_recipient
+						right_icon = scope:recipient
+
+						show_as_tooltip = {
+							custom_tooltip = fp3_request_turkic_invasion_interaction_accept_notification.desc
+						}
+					}
+				}
+				add_secret = {
+					target = scope:recipient
+					type = secret_request_incursion
+				}
+				scope:secondary_recipient = {
+					add_secret = {
+						target = scope:recipient
+						type = secret_request_incursion
+					}
+				}
+			}
+
+			scope:recipient = {
+				add_character_flag = {
+					flag = incursion_ai_pacing
+					years = 5
+				}
+				hidden_effect = {
+					send_interface_toast = {
+						type = event_toast_effect_bad
+						title = fp3_request_turkic_invasion_interaction_accept_notification.t
+						left_icon = scope:secondary_recipient
+						right_icon = scope:actor
+
+						show_as_tooltip = {
+							custom_tooltip = fp3_request_turkic_invasion_interaction_accept_target_notification.desc
+						}
+					}
+				}
+			}
+		}
+	}
+
+	use_diplomatic_range = yes
+
+	# 以下 AI 接受度照搬原版（入侵者视角）
+	ai_accept = {
+		base = 0
+
+		modifier = { # Rivalry modifier.
+			desc = offer_vassalization_interaction_aibehavior_rival_tt_2
+			trigger = {
+				scope:secondary_recipient = {
+					has_relation_rival = scope:actor
+					NOT = { has_relation_nemesis = scope:actor }
+				}
+			}
+			add = -10
+		}
+		modifier = { # Nemesis modifier.
+			desc = offer_vassalization_interaction_aibehavior_nemesis_tt_2
+			trigger = {
+				scope:secondary_recipient = {
+					has_relation_nemesis = scope:actor
+				}
+			}
+			add = -100
+		}
+		modifier = { # Same Dynasty modifier.
+			desc = offer_vassalization_interaction_aibehavior_dynasty_tt_2
+			trigger = {
+				scope:secondary_recipient = {
+					dynasty = scope:actor.dynasty
+				}
+			}
+			add = 10
+		}
+
+		opinion_modifier = {
+			who = scope:secondary_recipient
+			opinion_target = scope:actor
+			multiplier = 0.25
+		}
+
+		modifier = {
+			add = {
+				value = scope:actor.max_military_strength
+				divide = 70
+				round = yes
+			}
+			desc = HAS_YOUR_SUPPORT_REASON
+			scope:war_support = yes
+		}
+
+		modifier = { # A lot less levies than scope:secondary_recipient
+			add = -100
+			scope:secondary_recipient.max_military_strength <= scope:recipient.purchase_truce_interaction_recipient_far_weaker_value
+			desc = fp3_RTI_AI_RECIPIENT_IS_MUCH_WEAKER
+		}
+		modifier = { # Few less levies than scope:secondary_recipient
+			add = -75
+			scope:secondary_recipient.max_military_strength > scope:recipient.purchase_truce_interaction_recipient_far_weaker_value
+			scope:secondary_recipient.max_military_strength <= scope:recipient.purchase_truce_interaction_recipient_somewhat_weaker_value
+			desc = fp3_RTI_AI_RECIPIENT_IS_SOMEWHAT_WEAKER
+		}
+		modifier = { # Roughly equal levies with scope:secondary_recipient
+			add = 10
+			scope:secondary_recipient.max_military_strength > scope:recipient.purchase_truce_interaction_recipient_somewhat_weaker_value
+			scope:secondary_recipient.max_military_strength <= scope:recipient.purchase_truce_interaction_recipient_somewhat_stronger_value
+			desc = fp3_RTI_AI_RECIPIENT_IS_ROUGHLY_EQUAL
+		}
+		modifier = { # More levies than scope:secondary_recipient
+			add = 50
+			scope:secondary_recipient.max_military_strength > scope:recipient.purchase_truce_interaction_recipient_somewhat_stronger_value
+			scope:secondary_recipient.max_military_strength <= scope:recipient.purchase_truce_interaction_recipient_far_stronger_value
+			desc = fp3_RTI_AI_RECIPIENT_IS_SOMEWHAT_STRONGER
+		}
+		modifier = { # Many more levies than scope:secondary_recipient
+			add = 75
+			scope:secondary_recipient.max_military_strength > scope:recipient.purchase_truce_interaction_recipient_far_stronger_value
+			desc = fp3_RTI_AI_RECIPIENT_IS_MUCH_STRONGER
+		}
+
+		modifier = {
+			add = {
+				value = scope:secondary_recipient.debt_level
+				add = 1
+				multiply = 10
+			}
+			debt_level >= 0
+			desc = PT_AI_IS_IN_DEBT
+		}
+
+		modifier = {
+			add = -25
+			scope:secondary_recipient.faith = { has_doctrine_parameter = pacifist }
+			desc = PT_AI_IS_PACIFIST_FAITH_2
+		}
+		modifier = {
+			add = -25
+			scope:secondary_recipient.culture = { has_cultural_parameter = reduced_cost_for_conversion_to_pacifist_faith }
+			desc = PT_AI_IS_PACIFIST_CULTURE_2
+		}
+		modifier = {
+			add = -25
+			"scope:secondary_recipient.capital_province.squared_distance(scope:recipient.capital_province)" >= squared_distance_medium
+			"scope:secondary_recipient.capital_province.squared_distance(scope:recipient.capital_province)" < squared_distance_almost_massive
+			desc = PT_AI_IS_FAR_AWAY
+		}
+		modifier = {
+			add = -75
+			"scope:secondary_recipient.capital_province.squared_distance(scope:recipient.capital_province)" >= squared_distance_almost_massive
+			desc = PT_AI_IS_VERY_FAR_AWAY
+		}
+
+		modifier = {
+			add = 85
+			scope:financial_support = yes
+			desc = GOLD_REASON
+		}
+
+		ai_value_modifier = {
+			ai_greed = 0.5
+			ai_boldness = 0.25
+			min = 0
+			max = 25
+		}
+	}
+	can_send_despite_rejection = no
+	ai_frequency_by_tier = {
+		barony = 0
+		county = 72
+		duchy = 72
+		kingdom = 36
+		empire = 24
+		hegemony = 24
+	}
+	ai_targets = {
+		ai_recipients = neighboring_rulers
+	}
+	ai_will_do = {
+		base = 0
+
+		modifier = {
+			add = 100
+			scope:recipient = {
+				has_relation_rival = scope:actor
+			}
+		}
+		# 斗争/对峙期：引外力打压比自己强的邻国
+		modifier = {
+			add = 30
+			scope:recipient = {
+				character_is_land_realm_neighbor = scope:actor
+				max_military_strength > scope:actor.max_military_strength
+			}
+		}
+		modifier = {
+			add = 20
+			has_trait = deceitful
+		}
+		modifier = {
+			add = -30
+			OR = {
+				has_trait = honest
+				has_trait = just
+			}
+		}
+
+		modifier = {
+			factor = 0
+			scope:recipient = {
+				has_character_flag = incursion_ai_pacing
+			}
+		}
+		modifier = {
+			factor = 0
+			scope:recipient = {
+				is_at_war = yes
+				is_ai = no
+			}
+		}
+		modifier = {
+			factor = 0
+			scope:recipient = {
+				OR = {
+					has_relation_friend = scope:actor
+					has_relation_lover = scope:actor
+					is_allied_to = scope:actor
+					opinion = {
+						target = scope:actor
+						value >= 45
+					}
+				}
+			}
+		}
+	}
+}

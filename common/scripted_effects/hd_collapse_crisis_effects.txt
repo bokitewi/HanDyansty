@@ -1,0 +1,516 @@
+﻿# 天朝循环大修：崩溃期内容。
+# 危机流程借鉴 All Under Heaven Crisis Overhaul（已获授权）：先邀请成员，次日隐藏事件结算开战。
+# 性能：年度只在局势 scope 计数；遍历只限皇帝直属封臣 / 皇帝国内县 / 独立统治者。
+
+############################################################
+# 年度脉冲（Scope：dynastic_cycle 局势，崩溃期）
+############################################################
+hd_collapse_yearly_effect = {
+	change_variable = { name = hd_collapse_crisis_years add = 1 }
+	change_variable = { name = hd_collapse_faction_years add = 1 }
+	change_variable = { name = hd_collapse_disaster_years add = 1 }
+	change_variable = { name = hd_collapse_adventurer_years add = 1 }
+
+	# 危机抽签：每 2 年一次，在 60 天内随机时间由皇帝结算
+	if = {
+		limit = { var:hd_collapse_crisis_years >= hd_collapse_crisis_interval_years }
+		set_variable = { name = hd_collapse_crisis_years value = 0 }
+		title:h_china.holder ?= {
+			trigger_event = { id = hd_collapse.0001 days = { 1 60 } }
+		}
+	}
+
+	# 高风险封臣强制建派系：每 5 年 15%
+	if = {
+		limit = { var:hd_collapse_faction_years >= hd_collapse_faction_interval_years }
+		set_variable = { name = hd_collapse_faction_years value = 0 }
+		random = {
+			chance = hd_collapse_faction_chance
+			title:h_china.holder ?= {
+				trigger_event = { id = hd_collapse.0002 days = { 1 60 } }
+			}
+		}
+	}
+
+	# 灾害保底：每 3 年检测，3% 起，未触发每次 +8%，触发后重置
+	if = {
+		limit = { var:hd_collapse_disaster_years >= hd_collapse_disaster_interval_years }
+		set_variable = { name = hd_collapse_disaster_years value = 0 }
+		random = {
+			chance = var:hd_collapse_disaster_chance
+			set_variable = { name = hd_collapse_disaster_fired value = yes }
+			title:h_china.holder ?= {
+				trigger_event = { id = hd_collapse.0003 days = { 1 60 } }
+			}
+		}
+		if = {
+			limit = { has_variable = hd_collapse_disaster_fired }
+			remove_variable = hd_collapse_disaster_fired
+			set_variable = { name = hd_collapse_disaster_chance value = hd_collapse_disaster_base_chance }
+		}
+		else = {
+			change_variable = { name = hd_collapse_disaster_chance add = hd_collapse_disaster_chance_step }
+		}
+	}
+
+	# 冒险者：每 10 年 5%
+	if = {
+		limit = { var:hd_collapse_adventurer_years >= hd_collapse_adventurer_interval_years }
+		set_variable = { name = hd_collapse_adventurer_years value = 0 }
+		random = {
+			chance = hd_collapse_adventurer_chance
+			title:h_china.holder ?= {
+				trigger_event = { id = hd_collapse.0004 days = { 1 60 } }
+			}
+		}
+	}
+}
+
+############################################################
+# 危机抽签（Scope：皇帝）
+############################################################
+hd_collapse_select_crisis_effect = {
+	random_list = {
+		100 = {	# 集体独立
+			trigger = { hd_collapse_independence_target_valid_trigger = yes }
+			trigger_event = hd_collapse.1001
+		}
+		100 = {	# 军阀称帝叛乱
+			trigger = { hd_collapse_warlord_target_valid_trigger = yes }
+			hd_collapse_start_warlord_revolt_effect = yes
+		}
+		100 = {	# 大规模民变
+			trigger = { hd_collapse_peasant_target_valid_trigger = yes }
+			hd_collapse_start_peasant_uprising_effect = yes
+		}
+		100 = {	# 权威危机
+			trigger_event = hd_collapse.4001
+		}
+	}
+}
+
+# 危机得逞（D4：叛方达成目的/天子让步时才发射）：崩溃 -> 斗争
+hd_collapse_crisis_succeeded_effect = {
+	hd_dc_kit_fire_global_effect = { CATALYST = catalyst_hd_collapse_crisis_succeeded }
+}
+# 危机爆发（D4）：崩溃 -> 斗争
+hd_collapse_crisis_outbreak_effect = {
+	hd_dc_kit_fire_global_effect = { CATALYST = catalyst_hd_collapse_crisis_outbreak }
+}
+
+############################################################
+# 1. 集体独立（Scope：皇帝）
+############################################################
+
+# 皇帝同意：一次性和平放走全部合格封臣
+hd_collapse_accept_independence_effect = {
+	save_scope_as = hd_collapse_emperor
+	every_vassal = {
+		limit = { hd_collapse_independence_vassal_eligible_trigger = yes }
+		add_to_temporary_list = hd_collapse_conceded_vassals
+	}
+	if = {
+		limit = { any_in_list = { list = hd_collapse_conceded_vassals always = yes } }
+		create_title_and_vassal_change = {
+			type = independency
+			save_scope_as = hd_collapse_independence_change
+			add_claim_on_loss = no
+		}
+		every_in_list = {
+			list = hd_collapse_conceded_vassals
+			if = {
+				limit = { exists = joined_faction }
+				leave_faction = joined_faction
+			}
+			becomes_independent = { change = scope:hd_collapse_independence_change }
+			add_truce_both_ways = {
+				character = scope:hd_collapse_emperor
+				days = 1825
+				name = TRUCE_GRANT_INDEPENDENCE
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_collapse_independence_change
+		hd_collapse_crisis_succeeded_effect = yes
+	}
+}
+
+# 皇帝拒绝：组建/复用独立派系，邀请全部合格封臣，次日结算
+hd_collapse_refuse_independence_effect = {
+	save_scope_as = hd_collapse_emperor
+	clear_saved_scope = hd_collapse_independence_faction
+	if = {
+		limit = { hd_collapse_independence_target_valid_trigger = yes }
+		random_targeting_faction = {
+			limit = {
+				faction_is_type = independence_faction
+				faction_is_at_war = no
+			}
+			save_scope_as = hd_collapse_independence_faction
+		}
+		if = {
+			limit = { NOT = { exists = scope:hd_collapse_independence_faction } }
+			ordered_vassal = {
+				limit = {
+					hd_collapse_independence_vassal_eligible_trigger = yes
+					can_create_faction = { type = independence_faction target = scope:hd_collapse_emperor }
+				}
+				order_by = military_power
+				max = 1
+				create_faction = { type = independence_faction target = scope:hd_collapse_emperor }
+				joined_faction ?= { save_scope_as = hd_collapse_independence_faction }
+			}
+		}
+		if = {
+			limit = { exists = scope:hd_collapse_independence_faction }
+			add_character_flag = hd_collapse_independence_pending
+			set_variable = { name = hd_collapse_independence_faction value = scope:hd_collapse_independence_faction }
+			every_vassal = {
+				limit = { hd_collapse_independence_vassal_eligible_trigger = yes }
+				add_character_flag = hd_collapse_independence_invited
+				if = {
+					limit = { is_ai = yes }
+					hd_collapse_join_independence_effect = yes
+				}
+				else = { trigger_event = hd_collapse.1002 }
+			}
+			trigger_event = { id = hd_collapse.1003 days = 1 }
+		}
+	}
+}
+
+# Scope：受邀封臣。加入独立派系
+hd_collapse_join_independence_effect = {
+	if = {
+		limit = {
+			has_character_flag = hd_collapse_independence_invited
+			exists = liege.var:hd_collapse_independence_faction
+		}
+		liege.var:hd_collapse_independence_faction = { save_scope_as = hd_collapse_invited_faction }
+		if = {
+			limit = {
+				exists = joined_faction
+				NOT = { joined_faction = scope:hd_collapse_invited_faction }
+			}
+			leave_faction = joined_faction
+		}
+		if = {
+			limit = { NOT = { joined_faction ?= scope:hd_collapse_invited_faction } }
+			join_faction_skip_check = scope:hd_collapse_invited_faction
+		}
+	}
+	remove_character_flag = hd_collapse_independence_invited
+}
+
+# Scope：受邀封臣。拒绝
+hd_collapse_refuse_invitation_effect = {
+	remove_character_flag = hd_collapse_independence_invited
+	remove_character_flag = hd_collapse_warlord_invited
+}
+
+# Scope：皇帝（次日）。人数 >= 2 则开战，否则解散
+hd_collapse_finalize_independence_effect = {
+	save_scope_as = hd_collapse_emperor
+	if = {
+		limit = { exists = var:hd_collapse_independence_faction }
+		var:hd_collapse_independence_faction = {
+			if = {
+				limit = {
+					faction_is_at_war = no
+					faction_target = scope:hd_collapse_emperor
+					any_faction_member = { count >= 2 }
+				}
+				faction_start_war = {}
+				scope:hd_collapse_emperor = { hd_collapse_crisis_outbreak_effect = yes }
+			}
+		}
+	}
+	every_vassal = { remove_character_flag = hd_collapse_independence_invited }
+	remove_variable = hd_collapse_independence_faction
+	remove_character_flag = hd_collapse_independence_pending
+}
+
+############################################################
+# 2. 军阀称帝叛乱（Scope：皇帝）
+############################################################
+hd_collapse_start_warlord_revolt_effect = {
+	save_scope_as = hd_collapse_emperor
+	clear_saved_scope = hd_collapse_warlord_faction
+	clear_saved_scope = hd_collapse_warlord_claimant
+	ordered_vassal = {
+		limit = { hd_collapse_warlord_candidate_trigger = yes }
+		order_by = military_power
+		max = 1
+		save_scope_as = hd_collapse_warlord_claimant
+	}
+	if = {
+		limit = { exists = scope:hd_collapse_warlord_claimant }
+		add_character_flag = hd_collapse_warlord_assembling
+		add_character_flag = hd_collapse_warlord_pending
+		scope:hd_collapse_warlord_claimant = {
+			create_faction = { type = hd_collapse_warlord_faction target = scope:hd_collapse_emperor }
+			joined_faction ?= {
+				save_scope_as = hd_collapse_warlord_faction
+				set_special_character = scope:hd_collapse_warlord_claimant
+				set_special_title = title:h_china
+			}
+		}
+		if = {
+			limit = { exists = scope:hd_collapse_warlord_faction }
+			set_variable = { name = hd_collapse_warlord_faction value = scope:hd_collapse_warlord_faction }
+			every_vassal = {
+				limit = {
+					hd_collapse_warlord_member_trigger = yes
+					NOT = { this = scope:hd_collapse_warlord_claimant }
+				}
+				add_character_flag = hd_collapse_warlord_invited
+				if = {
+					limit = { is_ai = yes }
+					hd_collapse_join_warlord_effect = yes
+				}
+				else = { trigger_event = hd_collapse.2002 }
+			}
+			trigger_event = { id = hd_collapse.2003 days = 1 }
+		}
+		else = {
+			remove_character_flag = hd_collapse_warlord_assembling
+			remove_character_flag = hd_collapse_warlord_pending
+		}
+	}
+}
+
+# Scope：受邀封臣
+hd_collapse_join_warlord_effect = {
+	if = {
+		limit = {
+			has_character_flag = hd_collapse_warlord_invited
+			exists = liege.var:hd_collapse_warlord_faction
+		}
+		liege.var:hd_collapse_warlord_faction = { save_scope_as = hd_collapse_invited_faction }
+		if = {
+			limit = {
+				exists = joined_faction
+				NOT = { joined_faction = scope:hd_collapse_invited_faction }
+			}
+			leave_faction = joined_faction
+		}
+		if = {
+			limit = { NOT = { joined_faction ?= scope:hd_collapse_invited_faction } }
+			join_faction_skip_check = scope:hd_collapse_invited_faction
+		}
+	}
+	remove_character_flag = hd_collapse_warlord_invited
+}
+
+# Scope：皇帝（次日）
+hd_collapse_finalize_warlord_revolt_effect = {
+	save_scope_as = hd_collapse_emperor
+	if = {
+		limit = { exists = var:hd_collapse_warlord_faction }
+		var:hd_collapse_warlord_faction = {
+			if = {
+				limit = {
+					faction_is_at_war = no
+					faction_target = scope:hd_collapse_emperor
+					any_faction_member = { count >= 2 }
+					exists = special_character
+				}
+				remove_variable = hd_collapse_warlord_assembling
+				faction_start_war = { title = title:h_china }
+				scope:hd_collapse_emperor = { hd_collapse_crisis_outbreak_effect = yes }
+			}
+			else_if = {
+				limit = { faction_is_at_war = no }
+				destroy_faction = yes
+			}
+		}
+	}
+	every_vassal = { remove_character_flag = hd_collapse_warlord_invited }
+	remove_variable = hd_collapse_warlord_faction
+	remove_character_flag = hd_collapse_warlord_assembling
+	remove_character_flag = hd_collapse_warlord_pending
+}
+
+############################################################
+# 3. 大规模民变（Scope：皇帝）：以一个公国为单位全县响应
+############################################################
+hd_collapse_start_peasant_uprising_effect = {
+	save_scope_as = hd_collapse_emperor
+	clear_saved_scope = hd_collapse_peasant_seed
+	random_realm_county = {
+		limit = { county_opinion <= -25 }
+		weight = {
+			base = 1
+			modifier = { factor = 3 county_opinion <= -50 }
+			modifier = { factor = 2 county_opinion <= -75 }
+			modifier = { factor = 3 has_county_modifier = hd_famine_county_modifier }
+		}
+		save_scope_as = hd_collapse_peasant_seed
+	}
+	if = {
+		limit = { exists = scope:hd_collapse_peasant_seed }
+		scope:hd_collapse_peasant_seed = {
+			holder = { save_scope_as = hd_collapse_peasant_target }
+			if = {
+				limit = {
+					can_title_create_faction = {
+						type = peasant_faction
+						target = scope:hd_collapse_peasant_target
+					}
+				}
+				title_create_faction = {
+					type = peasant_faction
+					target = scope:hd_collapse_peasant_target
+				}
+				random_title_joined_faction = {
+					limit = { faction_is_type = peasant_faction }
+					save_scope_as = hd_collapse_peasant_faction
+				}
+			}
+		}
+		# 同公国其他县响应（同一目标、可加入者）
+		if = {
+			limit = { exists = scope:hd_collapse_peasant_faction }
+			scope:hd_collapse_peasant_seed.duchy = {
+				every_de_jure_county = {
+					limit = {
+						NOT = { this = scope:hd_collapse_peasant_seed }
+						holder ?= scope:hd_collapse_peasant_target
+						county_opinion < 0
+					}
+					title_join_faction = scope:hd_collapse_peasant_faction
+				}
+			}
+			hd_collapse_crisis_outbreak_effect = yes
+		}
+	}
+}
+
+############################################################
+# 4. 权威危机：见事件 hd_collapse.4001
+############################################################
+
+############################################################
+# 高风险封臣强制建派系（Scope：皇帝）
+############################################################
+hd_collapse_force_faction_effect = {
+	save_scope_as = hd_collapse_emperor
+	random_vassal = {
+		limit = { hd_collapse_faction_risk_vassal_trigger = yes }
+		random_list = {
+			50 = {
+				trigger = { can_create_faction = { type = independence_faction target = scope:hd_collapse_emperor } }
+				create_faction = { type = independence_faction target = scope:hd_collapse_emperor }
+			}
+			50 = {
+				trigger = { can_create_faction = { type = nation_fracturing_faction target = scope:hd_collapse_emperor } }
+				create_faction = { type = nation_fracturing_faction target = scope:hd_collapse_emperor }
+			}
+		}
+	}
+}
+
+############################################################
+# 冒险者（Scope：皇帝）：在皇帝国内随机汉地县生成
+############################################################
+hd_collapse_spawn_adventurer_effect = {
+	random_realm_county = {
+		limit = { target_is_de_jure_liege_or_above = title:h_china }
+		save_scope_as = hd_collapse_adventurer_county
+	}
+	if = {
+		limit = { exists = scope:hd_collapse_adventurer_county }
+		create_character = {
+			location = scope:hd_collapse_adventurer_county.title_province
+			culture = scope:hd_collapse_adventurer_county.culture
+			faith = scope:hd_collapse_adventurer_county.faith
+			gender_female_chance = 0
+			age = { 22 40 }
+			martial = { 10 18 }
+			prowess = { 8 16 }
+			random_traits = yes
+			trait = education_martial_3
+			save_scope_as = hd_collapse_adventurer
+		}
+		scope:hd_collapse_adventurer = {
+			random_list = {
+				50 = { add_trait = ambitious }
+				50 = { add_trait = cynical }
+			}
+			if = { limit = { has_trait = content } remove_trait = content }
+			if = { limit = { has_trait = craven } remove_trait = craven }
+			create_landless_adventurer_title_effect = {
+				REASON = flag:runaway_allowed
+				FLAVOR_CHAR = scope:hd_collapse_adventurer
+			}
+			domicile ?= { change_provisions = 1000 }
+			add_gold = 200
+			spawn_army = {
+				name = hd_collapse_adventurer_army
+				levies = scope:hd_collapse_adventurer_county.hd_collapse_adventurer_troops_value
+				location = scope:hd_collapse_adventurer_county.title_province
+				inheritable = yes
+			}
+			if = {
+				limit = { NOT = { owns_story_of_type = story_adventurer_ai } }
+				create_story = { type = story_adventurer_ai }
+			}
+		}
+	}
+}
+
+############################################################
+# 灾害保底（Scope：皇帝）：洪水 / 地震 / 饥荒 随机一种，限汉地
+############################################################
+hd_collapse_spawn_disaster_effect = {
+	random_list = {
+		1 = {
+			random_list = {
+				1 = { spawn_flood_in_region_effect = { REGION = geographical_region:yellow_river_region } }
+				1 = { spawn_flood_in_region_effect = { REGION = geographical_region:yangtze_river_region } }
+				1 = { spawn_flood_in_region_effect = { REGION = geographical_region:pearl_river_region } }
+			}
+		}
+		1 = {
+			random_list = {
+				1 = { spawn_earthquake_in_region_effect = { REGION = geographical_region:north_china_earthquake_region } }
+				1 = { spawn_earthquake_in_region_effect = { REGION = geographical_region:sichuan_myanmar_earthquake_region } }
+				1 = { spawn_earthquake_in_region_effect = { REGION = geographical_region:south_china_coastaline_earthquake_region } }
+			}
+		}
+		1 = {
+			random_realm_county = {
+				limit = { target_is_de_jure_liege_or_above = title:h_china }
+				kingdom ?= { save_scope_as = hd_famine_kingdom }
+			}
+			if = {
+				limit = { exists = scope:hd_famine_kingdom }
+				spawn_famine_in_kingdom_effect = { KINGDOM = scope:hd_famine_kingdom }
+			}
+		}
+	}
+}
+
+############################################################
+# 四夷旧 modifier 清理（Scope：任意）
+############################################################
+hd_cycle_siyi_refresh_effect = {
+	# 天朝循环大修·朋党：四夷效果改由 hd_siyi_movement 参与者组的时代效果承载；
+	# 此 effect 仅保留为清理旧存档中的四夷 modifier。
+	hd_cycle_siyi_clear_effect = yes
+}
+
+# 阶段变化时清除四夷 modifier，避免跨阶段残留（Scope：任意）
+hd_cycle_siyi_clear_effect = {
+	every_independent_ruler = {
+		limit = {
+			OR = {
+				has_character_modifier = hd_siyi_recovery_modifier
+				has_character_modifier = hd_siyi_collapse_modifier
+				has_character_modifier = hd_siyi_struggle_modifier
+			}
+		}
+		remove_character_modifier = hd_siyi_recovery_modifier
+		remove_character_modifier = hd_siyi_collapse_modifier
+		remove_character_modifier = hd_siyi_struggle_modifier
+	}
+}

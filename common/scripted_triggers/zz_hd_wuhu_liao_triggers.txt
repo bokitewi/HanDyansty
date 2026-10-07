@@ -1,0 +1,337 @@
+﻿# 五胡内附 / 僚人入蜀 公共触发器（见 docs/五胡内附_僚人入蜀_设计草案.md）。
+
+### 动乱阶段：动荡 / 新朝征服 / 斗争 / 对峙 / 崩溃（任意 scope）
+hd_wuhu_dongluan_phase_trigger = {
+	situation:dynastic_cycle ?= {
+		OR = {
+			situation_current_phase = situation_dynastic_cycle_phase_instability
+			situation_current_phase = situation_dynastic_cycle_phase_instability_conquest
+			situation_current_phase = situation_dynastic_cycle_phase_chaos
+			situation_current_phase = situation_dynastic_cycle_phase_hd_standoff
+			situation_current_phase = situation_dynastic_cycle_phase_hd_collapse
+		}
+	}
+}
+
+############################
+# 游戏规则
+############################
+
+hd_liao_enabled_trigger = {
+	NOT = { has_game_rule = hd_liao_rule_off }
+}
+
+# AI 可自动发起（史实 / 随机）
+hd_liao_ai_enabled_trigger = {
+	OR = {
+		has_game_rule = hd_liao_rule_historical
+		has_game_rule = hd_liao_rule_random
+	}
+}
+
+# 年份门槛：随机规则忽略年份
+hd_liao_year_ok_trigger = {
+	OR = {
+		has_game_rule = hd_liao_rule_random
+		current_year >= 280
+	}
+}
+
+hd_wuhu_enabled_trigger = {
+	NOT = { has_game_rule = hd_wuhu_rule_off }
+}
+
+hd_wuhu_ai_enabled_trigger = {
+	OR = {
+		has_game_rule = hd_wuhu_rule_historical
+		has_game_rule = hd_wuhu_rule_random
+	}
+}
+
+# 年份窗口 [$START$, $END$]：随机规则忽略窗口
+hd_wuhu_window_trigger = {
+	OR = {
+		has_game_rule = hd_wuhu_rule_random
+		AND = {
+			current_year >= $START$
+			current_year <= $END$
+		}
+	}
+}
+
+# 不早于 $START$：随机规则忽略
+hd_wuhu_year_from_trigger = {
+	OR = {
+		has_game_rule = hd_wuhu_rule_random
+		current_year >= $START$
+	}
+}
+
+############################
+# 族群识别（character 或 county scope，需有 culture）
+############################
+
+hd_wuhu_is_qiang_culture_trigger = {
+	exists = culture
+	culture = { has_cultural_pillar = heritage_qiang }
+}
+
+hd_wuhu_six_culture_trigger = {
+	exists = culture
+	OR = {
+		culture = culture:xiongnu
+		culture = culture:xianbei
+		culture = culture:jieren
+		culture = culture:diren
+		culture = culture:wuhuan
+		hd_wuhu_is_qiang_culture_trigger = yes
+	}
+}
+
+# $TRIBE$ 为 flag 形式的族群（flag:xiongnu / xianbei / jieren / diren / qiang / wuhuan）
+hd_wuhu_culture_is_tribe_trigger = {
+	exists = culture
+	trigger_if = {
+		limit = { $TRIBE$ = flag:xiongnu }
+		culture = culture:xiongnu
+	}
+	trigger_else_if = {
+		limit = { $TRIBE$ = flag:xianbei }
+		culture = culture:xianbei
+	}
+	trigger_else_if = {
+		limit = { $TRIBE$ = flag:jieren }
+		culture = culture:jieren
+	}
+	trigger_else_if = {
+		limit = { $TRIBE$ = flag:diren }
+		culture = culture:diren
+	}
+	trigger_else_if = {
+		limit = { $TRIBE$ = flag:wuhuan }
+		culture = culture:wuhuan
+	}
+	trigger_else_if = {
+		limit = { $TRIBE$ = flag:qiang }
+		hd_wuhu_is_qiang_culture_trigger = yes
+	}
+	trigger_else = { always = no }
+}
+
+# Province scope：位于 $TRIBE$ 的史实安置区
+hd_wuhu_province_in_tribe_region_trigger = {
+	trigger_if = {
+		limit = { $TRIBE$ = flag:xiongnu }
+		geographical_region = hd_wuhu_xiongnu_settle_region
+	}
+	trigger_else_if = {
+		limit = { $TRIBE$ = flag:xianbei }
+		geographical_region = hd_wuhu_xianbei_settle_region
+	}
+	trigger_else_if = {
+		limit = { $TRIBE$ = flag:jieren }
+		geographical_region = hd_wuhu_jieren_settle_region
+	}
+	trigger_else_if = {
+		limit = { $TRIBE$ = flag:diren }
+		geographical_region = hd_wuhu_diren_settle_region
+	}
+	trigger_else_if = {
+		limit = { $TRIBE$ = flag:wuhuan }
+		geographical_region = hd_wuhu_wuhuan_settle_region
+	}
+	trigger_else_if = {
+		limit = { $TRIBE$ = flag:qiang }
+		geographical_region = hd_wuhu_qiang_settle_region
+	}
+	trigger_else = { always = no }
+}
+
+# Title scope（伯爵领/公爵领）：首府位于 $TRIBE$ 安置区
+hd_wuhu_title_in_tribe_region_trigger = {
+	title_capital_county.title_province = {
+		hd_wuhu_province_in_tribe_region_trigger = { TRIBE = $TRIBE$ }
+	}
+}
+
+# 游牧制族群（匈奴、鲜卑、乌桓）
+hd_wuhu_tribe_is_nomadic_trigger = {
+	OR = {
+		$TRIBE$ = flag:xiongnu
+		$TRIBE$ = flag:xianbei
+		$TRIBE$ = flag:wuhuan
+	}
+}
+
+############################
+# 内附标记
+############################
+
+# Character：三层机制产生的内附胡首（或其继承人）
+hd_wuhu_is_settled_trigger = {
+	has_variable = hd_wuhu_settled
+}
+
+# Character：会推动独立的内附封臣（AI）
+hd_wuhu_uprising_candidate_trigger = {
+	is_ai = yes
+	is_alive = yes
+	is_landed = yes
+	hd_wuhu_is_settled_trigger = yes
+	is_independent_ruler = no
+	exists = liege
+	is_imprisoned = no
+	NOT = { has_character_flag = hd_wuhu_independence_cd }
+}
+
+############################
+# 求地目标
+############################
+
+# Duchy scope：可作为求地目标的公爵领。$RECEIVER$ 为受地者（目标所在国最高宗主）
+hd_wuhu_petition_duchy_valid_trigger = {
+	tier = tier_duchy
+	any_de_jure_county = {
+		holder ?= { target_is_same_character_or_above = $RECEIVER$ }
+	}
+	# 不夺受地者首都所在公爵领
+	NOT = { this = $RECEIVER$.capital_county.duchy }
+	# 不夺玩家持有的公爵领
+	OR = {
+		NOT = { exists = holder }
+		holder = { is_ai = yes }
+	}
+}
+
+# Character：可以收到求地的统治者
+hd_wuhu_petition_receiver_trigger = {
+	is_alive = yes
+	is_landed = yes
+	is_independent_ruler = yes
+	highest_held_title_tier >= tier_duchy
+	hd_wuhu_six_culture_trigger = no
+}
+
+############################
+# 边疆收留链
+############################
+
+# Character：可以触发边疆收留链的非胡族统治者（不判断族群，族群在事件里确定）
+hd_wuhu_frontier_receiver_trigger = {
+	is_alive = yes
+	is_landed = yes
+	is_available_adult = yes
+	highest_held_title_tier >= tier_county
+	hd_wuhu_six_culture_trigger = no
+	NOT = { has_character_flag = hd_wuhu_frontier_cd }
+	NOT = { any_owned_story = { story_type = story_hd_wuhu_frontier } }
+	exists = capital_province
+	capital_province = { geographical_region = hd_wuhu_all_settle_region }
+}
+
+# County scope：与胡族伯爵领接壤的本国伯爵领（$OWNER$ 为统治者）
+hd_wuhu_frontier_border_county_trigger = {
+	holder ?= { target_is_same_character_or_above = $OWNER$ }
+	any_neighboring_county = {
+		hd_wuhu_six_culture_trigger = yes
+	}
+}
+
+############################
+# 僚人入蜀
+############################
+
+# Character：可发起僚人入蜀的 AI 僚帅
+hd_liao_ai_initiator_trigger = {
+	is_ai = yes
+	is_alive = yes
+	is_landed = yes
+	is_available_adult = yes
+	is_at_war = no
+	culture = culture:liaoren
+	highest_held_title_tier <= tier_kingdom
+	OR = {
+		is_independent_ruler = yes
+		NOT = { liege = { culture = culture:liaoren } }
+	}
+}
+
+# Character：玩家决定资格（不含年份 / 阶段）
+hd_liao_player_initiator_trigger = {
+	culture = culture:liaoren
+	is_landed = yes
+	OR = {
+		is_independent_ruler = yes
+		NOT = { liege = { culture = culture:liaoren } }
+	}
+}
+
+# Character：统治者在目标区域内持有（含封臣）的伯爵领少于 12 个
+hd_liao_not_yet_settled_trigger = {
+	NOT = {
+		any_realm_county = {
+			count >= 12
+			title_province = { geographical_region = hd_liao_target_region }
+		}
+	}
+}
+
+# County scope：可被渐进僚化的伯爵领（$OWNER$ 为僚化故事主）
+hd_liao_convertible_county_trigger = {
+	NOT = { culture = culture:liaoren }
+	title_province = { geographical_region = hd_liao_target_region }
+	holder ?= { target_is_same_character_or_above = $OWNER$ }
+	any_neighboring_county = { culture = culture:liaoren }
+}
+
+# County scope：可被渐进胡化的伯爵领（$TRIBE$ 族，$LIEGE$ 为胡首宗主）。
+# 注意：$TRIBE$ 必须传已保存的 scope（如 scope:hd_wuhu_tribe），不能传 var:，否则在伯爵领作用域里取不到。
+hd_wuhu_convertible_county_trigger = {
+	NOT = { hd_wuhu_culture_is_tribe_trigger = { TRIBE = $TRIBE$ } }
+	title_province = { hd_wuhu_province_in_tribe_region_trigger = { TRIBE = $TRIBE$ } }
+	holder ?= { target_is_same_character_or_above = $LIEGE$ }
+	any_neighboring_county = { hd_wuhu_culture_is_tribe_trigger = { TRIBE = $TRIBE$ } }
+}
+
+############################
+# 外族内迁决定（第一层）候选伯爵领
+############################
+
+# Title scope：自己或直属封臣持有、非其首都、位于 $TRIBE$ 安置区的伯爵领
+hd_wuhu_decision_region_candidate_county_trigger = {
+	tier = tier_county
+	is_landless_type_title = no
+	exists = holder
+	NOT = { this = holder.capital_county }
+	title_province = { hd_wuhu_province_in_tribe_region_trigger = { TRIBE = $TRIBE$ } }
+}
+
+# Title scope：兜底——与 $TRIBE$ 族伯爵领接壤的伯爵领
+hd_wuhu_decision_border_candidate_county_trigger = {
+	tier = tier_county
+	is_landless_type_title = no
+	exists = holder
+	NOT = { this = holder.capital_county }
+	any_neighboring_county = { hd_wuhu_culture_is_tribe_trigger = { TRIBE = $TRIBE$ } }
+}
+
+# Character：安置区内有候选
+hd_wuhu_decision_has_region_candidate_trigger = {
+	OR = {
+		any_held_title = { hd_wuhu_decision_region_candidate_county_trigger = { TRIBE = $TRIBE$ } }
+		any_vassal = {
+			any_held_title = { hd_wuhu_decision_region_candidate_county_trigger = { TRIBE = $TRIBE$ } }
+		}
+	}
+}
+
+# Character：安置区内或兜底范围内有候选
+hd_wuhu_decision_has_candidate_trigger = {
+	OR = {
+		hd_wuhu_decision_has_region_candidate_trigger = { TRIBE = $TRIBE$ }
+		any_held_title = { hd_wuhu_decision_border_candidate_county_trigger = { TRIBE = $TRIBE$ } }
+		any_vassal = {
+			any_held_title = { hd_wuhu_decision_border_candidate_county_trigger = { TRIBE = $TRIBE$ } }
+		}
+	}
+}

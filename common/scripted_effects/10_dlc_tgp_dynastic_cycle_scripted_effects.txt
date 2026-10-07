@@ -1019,6 +1019,71 @@ tgp_assign_china_realm_name_options_effect = {
 		}
 	}
 	clear_variable_list = hd_regional_realm_names
+
+	# Dynasty preference: Liu -> Han, Cao -> Wei, Sun -> Wu. Always offered (unless another
+	# realm already uses the name) and favoured by the AI in tgp_dynastic_cycle.9001.
+	remove_variable = hd_preferred_realm_name
+	if = {
+		limit = { dynasty ?= dynasty:liu }
+		hd_offer_preferred_realm_name_effect = { NAME = dynn_title_han }
+	}
+	else_if = {
+		limit = {
+			OR = {
+				dynasty ?= dynasty:uuii_book_dyn_cao
+				dynasty ?= dynasty:cao
+			}
+		}
+		hd_offer_preferred_realm_name_effect = { NAME = dynn_title_wei }
+	}
+	else_if = {
+		limit = { dynasty ?= dynasty:sun }
+		hd_offer_preferred_realm_name_effect = { NAME = dynn_title_wu }
+	}
+}
+
+# Re-apply the dynasty's fixed realm name to the current primary title. A stale record
+# (custom-text title gone or renamed) is dropped so the player/AI is asked again.
+hd_apply_fixed_realm_name_effect = {
+	if = {
+		limit = { dynasty ?= { has_variable = hd_fixed_realm_name } }
+		set_variable = {
+			name = new_realm_title_name
+			value = dynasty.var:hd_fixed_realm_name
+		}
+		primary_title = {
+			set_title_name_dynamic = new_realm_title_name_from_var
+		}
+		remove_variable = new_realm_title_name
+	}
+	else_if = {
+		limit = {
+			dynasty ?= { has_variable = hd_fixed_realm_title }
+			dynasty.var:hd_fixed_realm_title = {
+				has_custom_title_name = yes
+			}
+		}
+		if = {
+			limit = { dynasty.var:hd_fixed_realm_title != primary_title }
+			dynasty.var:hd_fixed_realm_title = {
+				move_title_name_to = root.primary_title
+			}
+		}
+	}
+	else = {
+		dynasty ?= { remove_variable = hd_fixed_realm_title }
+	}
+}
+
+hd_offer_preferred_realm_name_effect = {
+	if = {
+		limit = { NOT = { is_title_localization_key_used = $NAME$ } }
+		set_variable = { name = hd_preferred_realm_name value = flag:$NAME$ }
+		if = {
+			limit = { NOT = { is_target_in_variable_list = { name = realm_title_names target = flag:$NAME$ } } }
+			add_to_variable_list = { name = realm_title_names target = flag:$NAME$ }
+		}
+	}
 }
 
 tgp_fire_china_realm_name_event_effect = {
@@ -1077,7 +1142,7 @@ tgp_dynastic_cycle_record_history_phase_change_effect = {
 		if = {
 			limit = {
 				situation:dynastic_cycle = {
-					situation_current_phase = situation_dynastic_cycle_phase_chaos
+					OR = { situation_current_phase = situation_dynastic_cycle_phase_chaos situation_current_phase = situation_dynastic_cycle_phase_hd_standoff }
 				}
 			}
 			situation:dynastic_cycle = {

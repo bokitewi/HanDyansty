@@ -1,0 +1,466 @@
+﻿# 天朝循环大修：战略区 AI（统一派发器）。本文件由脚本生成邻接分支，邻接表：
+#   guanzhong <-> xiliang / bashu / zhongyuan / shanxi / xia
+#   zhongyuan <-> hebei / guanzhong / shanxi / jiangnan / bashu
+#   hebei <-> zhongyuan / shanxi / xianbei
+#   shanxi <-> hebei / guanzhong / zhongyuan / xia / xianbei
+#   xia <-> xiliang / guanzhong / shanxi / xianbei
+#   xiliang <-> guanzhong / xia / bashu
+#   bashu <-> guanzhong / xiliang / zhongyuan / jiangnan / lingnan
+#   jiangnan <-> zhongyuan / bashu / lingnan
+#   lingnan <-> jiangnan / bashu
+#   xianbei <-> hebei / shanxi / xia
+
+# 记录当前战略区（region 供地理判定，key 供邻接表分支）。Scope：发动者
+hd_strat_set_region_effect = {
+	set_variable = { name = hd_strat_region value = geographical_region:$REGION$ }
+	set_variable = { name = hd_strat_region_key value = flag:$REGION$ }
+}
+
+# 初始化：首都所在战略区（交叉地带随机一个，选定后不再重抽）+ 扩张/守成。Scope：发动者
+hd_strat_init_effect = {
+	if = {
+		limit = { NOT = { has_variable = hd_strat_region } }
+		random_list = {
+			1 = {
+				trigger = { capital_province ?= { geographical_region = strategic_region_guanzhong } }
+				hd_strat_set_region_effect = { REGION = strategic_region_guanzhong }
+			}
+			1 = {
+				trigger = { capital_province ?= { geographical_region = strategic_region_zhongyuan } }
+				hd_strat_set_region_effect = { REGION = strategic_region_zhongyuan }
+			}
+			1 = {
+				trigger = { capital_province ?= { geographical_region = strategic_region_hebei } }
+				hd_strat_set_region_effect = { REGION = strategic_region_hebei }
+			}
+			1 = {
+				trigger = { capital_province ?= { geographical_region = strategic_region_shanxi } }
+				hd_strat_set_region_effect = { REGION = strategic_region_shanxi }
+			}
+			1 = {
+				trigger = { capital_province ?= { geographical_region = strategic_region_xia } }
+				hd_strat_set_region_effect = { REGION = strategic_region_xia }
+			}
+			1 = {
+				trigger = { capital_province ?= { geographical_region = strategic_region_xiliang } }
+				hd_strat_set_region_effect = { REGION = strategic_region_xiliang }
+			}
+			1 = {
+				trigger = { capital_province ?= { geographical_region = strategic_region_bashu } }
+				hd_strat_set_region_effect = { REGION = strategic_region_bashu }
+			}
+			1 = {
+				trigger = { capital_province ?= { geographical_region = strategic_region_jiangnan } }
+				hd_strat_set_region_effect = { REGION = strategic_region_jiangnan }
+			}
+			1 = {
+				trigger = { capital_province ?= { geographical_region = strategic_region_lingnan } }
+				hd_strat_set_region_effect = { REGION = strategic_region_lingnan }
+			}
+			1 = {
+				trigger = { capital_province ?= { geographical_region = strategic_region_xianbei } }
+				hd_strat_set_region_effect = { REGION = strategic_region_xianbei }
+			}
+		}
+	}
+	hd_strat_assign_mode_effect = yes
+}
+
+# 只看性格：扩张分 > 守成分则扩张（两者皆 0 时扩张）。Scope：发动者
+hd_strat_assign_mode_effect = {
+	if = {
+		limit = {
+			OR = {
+				hd_strat_expand_score_value > hd_strat_hold_score_value
+				AND = {
+					hd_strat_expand_score_value = 0
+					hd_strat_hold_score_value = 0
+				}
+			}
+		}
+		set_variable = { name = hd_strat_mode value = flag:expand }
+		if = {
+			limit = { NOT = { has_character_modifier = hd_strat_expander_modifier } }
+			add_character_modifier = hd_strat_expander_modifier
+		}
+	}
+	else = {
+		set_variable = { name = hd_strat_mode value = flag:hold }
+		remove_character_modifier = hd_strat_expander_modifier
+	}
+}
+
+# story 结束时清理。Scope：发动者
+hd_strat_cleanup_effect = {
+	remove_variable = hd_strat_region
+	remove_variable = hd_strat_region_key
+	remove_variable = hd_strat_mode
+	remove_character_modifier = hd_strat_expander_modifier
+}
+
+# 脉冲。Scope：发动者
+hd_strat_pulse_effect = {
+	if = {
+		limit = {
+			hd_strat_pulse_ready_trigger = yes
+			var:hd_strat_mode ?= flag:expand
+			has_variable = hd_strat_region
+		}
+		save_scope_as = hd_strat_actor
+		var:hd_strat_region = { save_scope_as = hd_strat_region }
+		hd_strat_find_target_effect = yes
+		if = {
+			limit = { exists = scope:hd_strat_target }
+			hd_strat_engage_target_effect = yes
+		}
+		else = {
+			hd_strat_next_region_effect = yes
+			hd_submission_queue_followup_effect = { DELAY_MIN = 10 DELAY_MAX = 40 }
+		}
+	}
+}
+
+# 选目标：1) 相邻且非挚友 2) 区内兜底扫描（每年最多一次）3) 相邻挚友（最后才打）
+hd_strat_find_target_effect = {
+	clear_saved_scope = hd_strat_target
+	ordered_neighboring_top_liege_realm_owner = {
+		limit = {
+			hd_strat_region_target_trigger = yes
+			hd_strat_friendly_target_trigger = no
+		}
+		order_by = hd_strat_target_priority_value
+		save_scope_as = hd_strat_target
+	}
+	if = {
+		limit = {
+			NOT = { exists = scope:hd_strat_target }
+			NOT = { has_character_flag = hd_strat_scan_cooldown }
+		}
+		add_character_flag = { flag = hd_strat_scan_cooldown days = 365 }
+		every_county_in_region = {
+			region = scope:hd_strat_region
+			limit = { exists = holder }
+			holder.top_liege = {
+				if = {
+					limit = {
+						NOT = { is_in_list = hd_strat_candidates }
+						hd_strat_region_target_trigger = yes
+						hd_strat_friendly_target_trigger = no
+					}
+					add_to_list = hd_strat_candidates
+				}
+			}
+		}
+		ordered_in_list = {
+			list = hd_strat_candidates
+			order_by = hd_strat_target_priority_value
+			save_scope_as = hd_strat_target
+		}
+	}
+	if = {
+		limit = { NOT = { exists = scope:hd_strat_target } }
+		ordered_neighboring_top_liege_realm_owner = {
+			limit = { hd_strat_region_target_trigger = yes }
+			order_by = hd_strat_target_priority_value
+			save_scope_as = hd_strat_target
+		}
+	}
+}
+
+# 先招降：1) 仁义性格或挚友目标 -> 无论胜算都先招降 2) 其余目标只要对方按现有条件“可能接受”也先招降
+# 被拒/无效后下次脉冲（offer_from 标记 120 天内）直接宣战。
+hd_strat_engage_target_effect = {
+	if = {
+		limit = {
+			scope:hd_strat_target = {
+				NOT = { var:hd_strat_offer_from ?= scope:hd_strat_actor }
+				highest_held_title_tier < scope:hd_strat_actor.highest_held_title_tier
+				hd_submission_recipient_legal_trigger = { LIEGE = scope:hd_strat_actor }
+				NOT = { hd_submission_ai_refuses_trigger = { LIEGE = scope:hd_strat_actor } }
+			}
+			hd_submission_liege_trigger = yes
+			OR = {
+				hd_strat_offers_first_trigger = yes
+				scope:hd_strat_target = { hd_strat_friendly_target_trigger = yes }
+				is_character_interaction_potentially_accepted = {
+					recipient = scope:hd_strat_target
+					interaction = hd_warlord_offer_vassalization_interaction
+				}
+			}
+		}
+		# 互动自带冷却：发起方 90 天、同一对象 2 年；冷却中不重复发送（避免大量脚本报错），也不转为宣战
+		if = {
+			limit = { NOT = { has_variable = hd_strat_offer_cd } }
+			set_variable = { name = hd_strat_offer_cd days = 90 }
+			scope:hd_strat_target = {
+				set_variable = { name = hd_strat_offer_from value = scope:hd_strat_actor days = 730 }
+			}
+			run_interaction = {
+				interaction = hd_warlord_offer_vassalization_interaction
+				actor = scope:hd_strat_actor
+				recipient = scope:hd_strat_target
+				send_threshold = decline
+			}
+		}
+	}
+	else = {
+		hd_strat_declare_war_effect = yes
+	}
+}
+
+# 按阶段选 CB：斗争=兼并；对峙且帝国级=统一战争；否则逐鹿中原（区内、与本国相邻的公国）
+hd_strat_declare_war_effect = {
+	clear_saved_scope = hd_strat_war_title
+	if = {
+		limit = {
+			hd_cycle_phase_is_struggle_trigger = yes
+			can_declare_war = {
+				defender = scope:hd_strat_target
+				casus_belli = hd_strategic_annex_cb
+			}
+		}
+		start_war = {
+			cb = hd_strategic_annex_cb
+			target = scope:hd_strat_target
+		}
+	}
+	else_if = {
+		limit = {
+			hd_cycle_phase_is_standoff_trigger = yes
+			highest_held_title_tier >= tier_empire
+			can_declare_war = {
+				defender = scope:hd_strat_target
+				casus_belli = hd_unification_cb
+			}
+		}
+		start_war = {
+			cb = hd_unification_cb
+			target = scope:hd_strat_target
+		}
+	}
+	else = {
+		scope:hd_strat_target = {
+			random_realm_county = {
+				limit = {
+					title_province = { geographical_region = scope:hd_strat_region }
+					any_neighboring_county = { holder.top_liege ?= scope:hd_strat_actor }
+				}
+				duchy ?= { save_scope_as = hd_strat_war_title }
+			}
+		}
+		if = {
+			limit = {
+				exists = scope:hd_strat_war_title
+				can_declare_war = {
+					defender = scope:hd_strat_target
+					casus_belli = chinese_consolidation_cb
+					target_titles = { scope:hd_strat_war_title }
+				}
+			}
+			start_war = {
+				cb = chinese_consolidation_cb
+				target = scope:hd_strat_target
+				target_title = scope:hd_strat_war_title
+			}
+		}
+	}
+	add_character_flag = { flag = hd_strat_war_cooldown days = 30 }
+}
+
+# 本区无目标：在邻接区中找"有合法目标且最弱"的相邻势力，转向其所在的邻区
+hd_strat_next_region_effect = {
+	clear_saved_scope = hd_strat_next_owner
+	ordered_neighboring_top_liege_realm_owner = {
+		limit = {
+			hd_strat_base_target_trigger = yes
+			any_realm_county = { hd_strat_county_in_adjacent_region_trigger = yes }
+		}
+		order_by = { value = current_military_strength multiply = -1 }
+		save_scope_as = hd_strat_next_owner
+	}
+	if = {
+		limit = { exists = scope:hd_strat_next_owner }
+		if = {
+			limit = { var:hd_strat_region_key = flag:strategic_region_guanzhong }
+			if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_xiliang } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_xiliang }
+			}
+			else_if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_bashu } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_bashu }
+			}
+			else_if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_zhongyuan } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_zhongyuan }
+			}
+			else_if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_shanxi } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_shanxi }
+			}
+			else_if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_xia } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_xia }
+			}
+		}
+		else_if = {
+			limit = { var:hd_strat_region_key = flag:strategic_region_zhongyuan }
+			if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_hebei } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_hebei }
+			}
+			else_if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_guanzhong } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_guanzhong }
+			}
+			else_if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_shanxi } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_shanxi }
+			}
+			else_if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_jiangnan } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_jiangnan }
+			}
+			else_if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_bashu } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_bashu }
+			}
+		}
+		else_if = {
+			limit = { var:hd_strat_region_key = flag:strategic_region_hebei }
+			if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_zhongyuan } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_zhongyuan }
+			}
+			else_if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_shanxi } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_shanxi }
+			}
+			else_if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_xianbei } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_xianbei }
+			}
+		}
+		else_if = {
+			limit = { var:hd_strat_region_key = flag:strategic_region_shanxi }
+			if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_hebei } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_hebei }
+			}
+			else_if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_guanzhong } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_guanzhong }
+			}
+			else_if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_zhongyuan } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_zhongyuan }
+			}
+			else_if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_xia } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_xia }
+			}
+			else_if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_xianbei } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_xianbei }
+			}
+		}
+		else_if = {
+			limit = { var:hd_strat_region_key = flag:strategic_region_xia }
+			if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_xiliang } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_xiliang }
+			}
+			else_if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_guanzhong } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_guanzhong }
+			}
+			else_if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_shanxi } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_shanxi }
+			}
+			else_if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_xianbei } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_xianbei }
+			}
+		}
+		else_if = {
+			limit = { var:hd_strat_region_key = flag:strategic_region_xiliang }
+			if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_guanzhong } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_guanzhong }
+			}
+			else_if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_xia } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_xia }
+			}
+			else_if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_bashu } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_bashu }
+			}
+		}
+		else_if = {
+			limit = { var:hd_strat_region_key = flag:strategic_region_bashu }
+			if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_guanzhong } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_guanzhong }
+			}
+			else_if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_xiliang } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_xiliang }
+			}
+			else_if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_zhongyuan } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_zhongyuan }
+			}
+			else_if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_jiangnan } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_jiangnan }
+			}
+			else_if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_lingnan } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_lingnan }
+			}
+		}
+		else_if = {
+			limit = { var:hd_strat_region_key = flag:strategic_region_jiangnan }
+			if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_zhongyuan } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_zhongyuan }
+			}
+			else_if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_bashu } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_bashu }
+			}
+			else_if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_lingnan } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_lingnan }
+			}
+		}
+		else_if = {
+			limit = { var:hd_strat_region_key = flag:strategic_region_lingnan }
+			if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_jiangnan } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_jiangnan }
+			}
+			else_if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_bashu } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_bashu }
+			}
+		}
+		else_if = {
+			limit = { var:hd_strat_region_key = flag:strategic_region_xianbei }
+			if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_hebei } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_hebei }
+			}
+			else_if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_shanxi } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_shanxi }
+			}
+			else_if = {
+				limit = { scope:hd_strat_next_owner = { any_realm_county = { title_province = { geographical_region = strategic_region_xia } } } }
+				hd_strat_set_region_effect = { REGION = strategic_region_xia }
+			}
+		}
+	}
+}

@@ -286,6 +286,7 @@ mpo_nomad_invasion_cb = {
 			limit = {
 				is_ai = yes
 			}
+			highest_held_title_tier >= tier_kingdom # HD: duchy/county nomads must use the duchy CB
 			OR = {
 				is_landed = no
 				capital_county = {
@@ -312,7 +313,7 @@ mpo_nomad_invasion_cb = {
 					}
 				}
 				NOT = {
-					sub_realm_size > 40
+					sub_realm_size > 80 # HD: raised from 40
 				}
 			}
 		}
@@ -758,14 +759,6 @@ mpo_nomad_invasion_cb = {
 				name = invading_herd_value
 				value = domicile.herd
 			}
-			if = {
-				limit = {
-					exists = confederation
-				}
-				confederation = {
-					remove_confederation_member = scope:attacker
-				}
-			}
 		}
 	
 		scope:attacker = { show_pow_release_message_effect = yes }
@@ -846,14 +839,7 @@ mpo_nomad_invasion_cb = {
 			}
 		}
 
-		#Wrap up being a nomad
-		scope:attacker = {
-			mpo_overrunning_ending_nomadism_effect = yes
-			every_tributary = {
-				custom = custom.every_tributary
-				end_tributary = yes
-			}
-		}
+		# HD: nomads stay nomads: no domicile/herd conversion, tributaries kept
 
 		#Tooltip that defender will lose vassals after losing title
 		scope:defender = {
@@ -1096,137 +1082,11 @@ mpo_nomad_invasion_cb = {
 			}
 		}
 
-		#Change attacker's government
-		scope:attacker = {
-			if = {
-				limit = {
-					exists = scope:becoming_tribal
-				}
-				nomad_convert_people_to_tribe_effect = yes
-			}
-			else_if = {
-				limit = {
-					exists = scope:becoming_clan
-				}
-				nomad_convert_people_to_clan_effect = yes
-			}
-			else = {
-				nomad_convert_people_to_feudal_effect = yes
-			}
-		}
+		# HD: government stays nomad_government
 
-		#Change capital to somewhere in new lands
-		scope:target = {
-			custom_tooltip = overrunning_move_capital_tt
-		}
+		# HD: no capital move / realm conversion for nomads
 
-		hidden_effect = {
-			scope:attacker = {
-				#Capital of kingdom, if available
-				if = {
-					limit = {
-						scope:target.title_capital_county = {
-							holder = scope:attacker
-							NOT = {
-								any_county_province = {
-									OR = {
-										has_holding_type = nomad_holding
-										has_holding_type = herder_holding
-									}
-								}
-							}
-						}
-					}
-					scope:target.title_capital_county = {
-						culture = { save_scope_as = expelled_culture }
-					}
-					scope:attacker = {
-						set_realm_capital = scope:target.title_capital_county
-					}
-				}
-				#Most developed duchy capital available
-				else_if = {
-					limit = {
-						scope:attacker = {
-							any_realm_de_jure_duchy = {
-								kingdom = scope:target
-								title_capital_county = {
-									holder = scope:attacker
-									NOT = {
-										any_county_province = {
-											OR = {
-												has_holding_type = nomad_holding
-												has_holding_type = herder_holding
-											}
-										}
-									}
-								}
-							}
-						}
-					}
-					scope:attacker = {
-						every_realm_de_jure_duchy = {
-							limit = {
-								kingdom = scope:target
-								title_capital_county = {
-									holder = scope:attacker
-									NOT = {
-										any_county_province = {
-											OR = {
-												has_holding_type = nomad_holding
-												has_holding_type = herder_holding
-											}
-										}
-									}
-								}
-							}
-							title_capital_county = {
-								add_to_list = duchy_capitals
-							}
-						}
-					}
-					ordered_in_list = {
-						list = duchy_capitals
-						order_by = development_level
-						culture = { save_scope_as = expelled_culture }
-						scope:attacker = {
-							set_realm_capital = prev
-						}
-					}
-				}
-				#Most developed county
-				else = {
-					ordered_realm_county = {
-						order_by = development_level
-						limit = {
-							kingdom = scope:target
-							NOT = {
-								any_county_province = {
-									OR = {
-										has_holding_type = nomad_holding
-										has_holding_type = herder_holding
-									}
-								}
-							}
-						}
-						culture = { save_scope_as = expelled_culture }
-						scope:attacker = {
-							set_realm_capital = prev
-						}
-					}
-				}
-				capital_county.duchy = {
-					save_scope_as = new_capital_duchy
-				}
-			}
-		}
-
-		#Vassals gain titles
-		hidden_effect = {
-			scope:attacker = {
-				mpo_overrunning_vassal_title_distribution_effect = yes
-			}
-		}
+		# HD: conquered titles stay with the nomad ruler
 
 		#Make sure defender vassals who should be independent... are
 		hidden_effect = {
@@ -1252,113 +1112,8 @@ mpo_nomad_invasion_cb = {
 			}
 		}
 
-		scope:target = {
-			#Vassals tooltip
-			custom_tooltip = overrunning_vassals_gain_titles_tt
-			#We have the capital duchy and are ready to convert
-			custom_tooltip = overrunning_convert_capital_duchy_tt
-			custom_tooltip = overrunning_convert_dukes_capitals_tt
-			custom_tooltip = overrunning_convert_tribal_counties_tt
-		}
-		hidden_effect = {
-			scope:attacker.capital_county = {
-				duchy = {
-					save_scope_as = target_duchy
-				}
-			}
-			scope:attacker.capital_county = {
-				set_county_culture = scope:invading_culture
-				set_county_faith = scope:invading_faith
-			}
-			scope:attacker = {
-				every_vassal = {
-					limit = {
-						capital_county.kingdom = scope:target
-						highest_held_title_tier >= tier_duchy
-					}
-					#Convert capital to their culture
-					capital_county = {
-						set_county_culture = scope:invading_culture
-						set_county_faith = scope:invading_faith
-					}
-				}
-				while = {
-					limit = {
-						scope:invading_herd_value >= 5000
-						any_sub_realm_county = {
-							NOT = {
-								culture = scope:invading_culture
-							}
-						}
-					}
-					random_sub_realm_county = {
-						limit = {
-							NOT = {
-								culture = scope:invading_culture
-							}
-						}
-						weight = {
-							base = 1
-							modifier = {
-								add = {
-									every_neighboring_county = {
-										limit = {
-											culture = scope:invading_culture
-										}
-										add = 100
-									}
-								}
-								any_neighboring_county = {
-									culture = scope:invading_culture
-								}
-							}
-							modifier = {
-								add = 10000
-								any_neighboring_county = {
-									this = scope:attacker.capital_county
-								}
-							}
-							modifier = {
-								factor = 10
-								is_coastal_county = yes
-							}
-						}
-						set_county_culture = scope:invading_culture
-						set_county_faith = scope:invading_faith
-						#Convert additional tribal county if possible
-						ordered_neighboring_county = {
-							order_by = {
-								value = development_level
-								multiply = -1
-							}
-							limit = {
-								NOT = { culture = scope:invading_culture }
-								title_province = {
-									has_holding_type = tribal_holding
-								}
-								OR = {
-									holder = scope:attacker
-									holder = {
-										any_liege_or_above = {
-											this = scope:attacker
-										}
-									}
-								}
-							}
-							set_county_culture = scope:invading_culture
-							set_county_faith = scope:invading_faith
-						}
-					}
-					save_scope_value_as = {
-						name = invading_herd_value
-						value = {
-							add = scope:invading_herd_value
-							subtract = 5000
-						}
-					}
-				}
-			}
-		}
+		# HD: no feudal conversion tooltips / county culture conversion
+
 		#Counties lose development levels
 		scope:target = {
 			custom_tooltip = attackers_counties_lose_development
@@ -1970,14 +1725,6 @@ mpo_nomad_duchy_invasion_cb = {
 				name = invading_herd_value
 				value = domicile.herd
 			}
-			if = {
-				limit = {
-					exists = confederation
-				}
-				confederation = {
-					remove_confederation_member = scope:attacker
-				}
-			}
 		}
 	
 		scope:attacker = { show_pow_release_message_effect = yes }
@@ -2058,14 +1805,7 @@ mpo_nomad_duchy_invasion_cb = {
 			}
 		}
 
-		#Wrap up being a nomad
-		scope:attacker = {
-			mpo_overrunning_ending_nomadism_effect = yes
-			every_tributary = {
-				custom = custom.every_tributary
-				end_tributary = yes
-			}
-		}
+		# HD: nomads stay nomads: no domicile/herd conversion, tributaries kept
 
 		#Tooltip that defender will lose vassals after losing title
 		scope:defender = {
@@ -2247,87 +1987,11 @@ mpo_nomad_duchy_invasion_cb = {
 			}
 		}
 
-		#Change attacker's government
-		scope:attacker = {
-			if = {
-				limit = {
-					exists = scope:becoming_tribal
-				}
-				nomad_convert_people_to_tribe_effect = yes
-			}
-			else_if = {
-				limit = {
-					exists = scope:becoming_clan
-				}
-				nomad_convert_people_to_clan_effect = yes
-			}
-			else = {
-				nomad_convert_people_to_feudal_effect = yes
-			}
-		}
+		# HD: government stays nomad_government
 
-		#Change capital to somewhere in new lands
-		scope:target = {
-			custom_tooltip = overrunning_move_capital_tt
-		}
+		# HD: no capital move / realm conversion for nomads
 
-		hidden_effect = {
-			scope:attacker = {
-				#Capital of duchy, if available
-				if = {
-					limit = {
-						scope:target.title_capital_county = {
-							holder = scope:attacker
-							NOT = {
-								any_county_province = {
-									OR = {
-										has_holding_type = nomad_holding
-										has_holding_type = herder_holding
-									}
-								}
-							}
-						}
-					}
-					scope:target.title_capital_county = {
-						culture = { save_scope_as = expelled_culture }
-					}
-					scope:attacker = {
-						set_realm_capital = scope:target.title_capital_county
-					}
-				}
-				#Most developed county
-				else = {
-					ordered_realm_county = {
-						order_by = development_level
-						limit = {
-							kingdom = scope:target
-							NOT = {
-								any_county_province = {
-									OR = {
-										has_holding_type = nomad_holding
-										has_holding_type = herder_holding
-									}
-								}
-							}
-						}
-						culture = { save_scope_as = expelled_culture }
-						scope:attacker = {
-							set_realm_capital = prev
-						}
-					}
-				}
-				capital_county.duchy = {
-					save_scope_as = new_capital_duchy
-				}
-			}
-		}
-
-		#Vassals gain titles
-		hidden_effect = {
-			scope:attacker = {
-				mpo_duchy_overrunning_vassal_title_distribution_effect = yes
-			}
-		}
+		# HD: conquered titles stay with the nomad ruler
 
 		#Make sure defender vassals who should be independent... are
 		hidden_effect = {
@@ -2353,10 +2017,8 @@ mpo_nomad_duchy_invasion_cb = {
 			}
 		}
 
-		scope:target = {
-			#Vassals tooltip
-			custom_tooltip = overrunning_vassals_gain_titles_duchy_tt
-		}
+		# HD: no feudal conversion tooltips / county culture conversion
+
 		#Counties lose development levels if not tribal
 		if = {
 			limit = {

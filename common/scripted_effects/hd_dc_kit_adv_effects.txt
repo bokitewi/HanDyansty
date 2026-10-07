@@ -1,0 +1,443 @@
+﻿# 天朝循环·时代特色：进取期套件（docs/天朝循环_时代特色重制计划.md §3.2）效果
+# 诱因一律经 hd_dc_kit_fire_effect 发射；ACTOR 只传已保存的 scope 或 root（包装体内部 this 是局势）
+# 多年事件链的进度挂在 h_china 头衔（修典）或天子本人（变法，每帝一次）上，由局势年度脉冲推进
+
+############################################################
+# 年度推进（Scope：dynastic_cycle 局势；各阶段都运行，进行中的工程不因换期而中断）
+############################################################
+hd_dc_kit_adv_yearly_effect = {
+	title:h_china ?= {
+		# 修大典：第 2 年中期事件，满 5 年成书
+		if = {
+			limit = { has_variable = hd_dc_adv_canon_years }
+			change_variable = { name = hd_dc_adv_canon_years add = 1 }
+			if = {
+				limit = { var:hd_dc_adv_canon_years >= hd_dc_adv_canon_duration_years }
+				holder ?= { trigger_event = hd_dc_adv.0003 }
+			}
+			else_if = {
+				limit = { var:hd_dc_adv_canon_years = 2 }
+				holder ?= { trigger_event = hd_dc_adv.0002 }
+			}
+		}
+		# 修律令：满 1 年颁行
+		if = {
+			limit = { has_variable = hd_dc_adv_code_years }
+			change_variable = { name = hd_dc_adv_code_years add = 1 }
+			if = {
+				limit = { var:hd_dc_adv_code_years >= hd_dc_adv_code_duration_years }
+				holder ?= { trigger_event = hd_dc_adv.0011 }
+			}
+		}
+	}
+	# 变法：第 1、3 年角力事件，满 5 年见分晓（天子身故则变法随之中辍）
+	title:h_china.holder ?= {
+		if = {
+			limit = { has_variable = hd_dc_adv_reform_years }
+			change_variable = { name = hd_dc_adv_reform_years add = 1 }
+			if = {
+				limit = { var:hd_dc_adv_reform_years >= hd_dc_adv_reform_duration_years }
+				trigger_event = hd_dc_adv.0024
+			}
+			else_if = {
+				limit = { var:hd_dc_adv_reform_years = 3 }
+				trigger_event = hd_dc_adv.0023
+			}
+			else_if = {
+				limit = { var:hd_dc_adv_reform_years = 1 }
+				trigger_event = hd_dc_adv.0022
+			}
+		}
+	}
+}
+
+############################################################
+# 修典
+############################################################
+# Scope：天子。开馆修大典：记冷却（头衔）、选参修学者（礼部尚书 + 学识最高的廷臣/封臣，至多 3 人）、开始计年
+hd_dc_kit_adv_canon_start_effect = {
+	save_scope_as = hd_dc_adv_emperor
+	title:h_china = {
+		set_variable = { name = hd_dc_adv_compile_cd value = yes years = hd_dc_adv_compile_cd_years }
+		set_variable = { name = hd_dc_adv_canon_years value = 0 }
+		clear_variable_list = hd_dc_adv_canon_scholars
+	}
+	title:e_minister_of_rites.holder ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_adult = yes
+				NOT = { this = scope:hd_dc_adv_emperor }
+			}
+			add_to_list = hd_dc_adv_scholar_cands
+		}
+	}
+	every_courtier = {
+		limit = {
+			is_adult = yes
+			learning >= 10
+			NOT = { is_in_list = hd_dc_adv_scholar_cands }
+		}
+		add_to_list = hd_dc_adv_scholar_cands
+	}
+	every_vassal = {
+		limit = {
+			is_adult = yes
+			learning >= 10
+			NOT = { is_in_list = hd_dc_adv_scholar_cands }
+		}
+		add_to_list = hd_dc_adv_scholar_cands
+	}
+	ordered_in_list = {
+		list = hd_dc_adv_scholar_cands
+		order_by = learning
+		max = 3
+		check_range_bounds = no
+		title:h_china = { add_to_variable_list = { name = hd_dc_adv_canon_scholars target = prev } }
+		add_opinion = {
+			target = scope:hd_dc_adv_emperor
+			modifier = hd_dc_kit_adv_compile_opinion
+		}
+	}
+}
+
+# Scope：天子。大典成书：威望、文化风尚进度、参修学者学识 +1、典籍宝物、诱因
+hd_dc_kit_adv_canon_complete_effect = {
+	save_scope_as = hd_dc_adv_emperor
+	add_prestige = hd_dc_adv_canon_prestige
+	culture ?= {
+		if = {
+			limit = { culture_has_any_fascination = yes }
+			add_fascination_progress = 15	# = hd_dc_adv_canon_fascination
+		}
+		else = {
+			scope:hd_dc_adv_emperor = {
+				add_character_modifier = {
+					modifier = hd_dc_kit_adv_canon_culture_modifier
+					years = 10
+				}
+			}
+		}
+	}
+	title:h_china = {
+		ordered_in_list = {
+			variable = hd_dc_adv_canon_scholars
+			limit = { is_alive = yes }
+			order_by = learning
+			save_scope_as = hd_dc_adv_chief_scholar
+		}
+		every_in_list = {
+			variable = hd_dc_adv_canon_scholars
+			limit = { is_alive = yes }
+			add_learning_skill = 1
+		}
+	}
+	hd_dc_kit_adv_compile_book_effect = { KIND = canon SUBJECT = learning }
+	hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_compile_classics ACTOR = scope:hd_dc_adv_emperor }
+	title:h_china = {
+		remove_variable = hd_dc_adv_canon_years
+		clear_variable_list = hd_dc_adv_canon_scholars
+	}
+}
+
+# Scope：天子。开局修律令
+hd_dc_kit_adv_code_start_effect = {
+	title:h_china = {
+		set_variable = { name = hd_dc_adv_compile_cd value = yes years = hd_dc_adv_compile_cd_years }
+		set_variable = { name = hd_dc_adv_code_years value = 0 }
+	}
+}
+
+# Scope：天子。律令颁行：20 年修正、典籍宝物、诱因
+hd_dc_kit_adv_code_complete_effect = {
+	save_scope_as = hd_dc_adv_emperor
+	add_character_modifier = {
+		modifier = hd_dc_kit_adv_code_modifier
+		years = hd_dc_adv_code_modifier_years
+	}
+	title:e_minister_of_justice.holder ?= {
+		if = {
+			limit = { is_alive = yes }
+			save_scope_as = hd_dc_adv_chief_scholar
+		}
+	}
+	hd_dc_kit_adv_compile_book_effect = { KIND = code SUBJECT = stewardship }
+	hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_compile_classics ACTOR = scope:hd_dc_adv_emperor }
+	title:h_china = { remove_variable = hd_dc_adv_code_years }
+}
+
+# Scope：天子（scope:hd_dc_adv_emperor）。生成典籍宝物（原版 create_artifact_book_effect）后改名
+# $KIND$ = canon / code；$SUBJECT$ = 原版书籍主题旗标
+hd_dc_kit_adv_compile_book_effect = {
+	if = {
+		limit = { exists = scope:hd_dc_adv_chief_scholar }
+		scope:hd_dc_adv_chief_scholar = { save_scope_as = hd_dc_adv_book_author }
+	}
+	else = {
+		scope:hd_dc_adv_emperor = { save_scope_as = hd_dc_adv_book_author }
+	}
+	save_scope_value_as = {
+		name = quality
+		value = hd_dc_adv_$KIND$_quality
+	}
+	create_artifact_book_effect = {
+		OWNER = scope:hd_dc_adv_emperor
+		CREATOR = scope:hd_dc_adv_book_author
+		SET_SUBJECT = flag:$SUBJECT$
+		SET_TOPIC = flag:no
+	}
+	hidden_effect_new_object = {
+		scope:newly_created_artifact ?= {
+			set_artifact_name = hd_dc_adv_$KIND$_book_name
+			set_artifact_description = hd_dc_adv_$KIND$_book_desc
+		}
+	}
+}
+
+############################################################
+# 变法
+############################################################
+# Scope：天子。发起变法：每帝一次；主持大臣 = 天朝大臣中内政最高者
+hd_dc_kit_adv_reform_start_effect = {
+	save_scope_as = hd_dc_adv_emperor
+	set_variable = hd_dc_adv_reform_done
+	set_variable = { name = hd_dc_adv_reform_years value = 0 }
+	set_variable = { name = hd_dc_adv_reform_bonus value = 0 }
+	title:e_minister_of_revenue.holder ?= { add_to_list = hd_dc_adv_reform_cands }
+	title:e_minister_chancellor.holder ?= { add_to_list = hd_dc_adv_reform_cands }
+	title:e_minister_of_personnel.holder ?= { add_to_list = hd_dc_adv_reform_cands }
+	title:e_minister_of_works.holder ?= { add_to_list = hd_dc_adv_reform_cands }
+	ordered_in_list = {
+		list = hd_dc_adv_reform_cands
+		limit = {
+			is_alive = yes
+			NOT = { this = scope:hd_dc_adv_emperor }
+		}
+		order_by = stewardship
+		scope:hd_dc_adv_emperor = {
+			set_variable = { name = hd_dc_adv_reform_minister value = prev }
+		}
+	}
+}
+
+# Scope：天子。事件链对成功率的调整
+hd_dc_kit_adv_reform_adjust_effect = {
+	change_variable = { name = hd_dc_adv_reform_bonus add = $VALUE$ }
+}
+
+# Scope：天子。变法成功
+hd_dc_kit_adv_reform_success_effect = {
+	save_scope_as = hd_dc_adv_emperor
+	add_character_modifier = hd_dc_kit_adv_reform_modifier
+	every_held_title = {
+		limit = { tier = tier_county }
+		change_county_control = 15	# = hd_dc_adv_reform_control_gain
+	}
+	var:hd_dc_adv_reform_minister ?= {
+		if = {
+			limit = { is_alive = yes }
+			add_prestige = 200
+			add_opinion = {
+				target = scope:hd_dc_adv_emperor
+				modifier = hd_dc_kit_adv_reform_promoted_opinion
+			}
+		}
+	}
+	hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_reform_success ACTOR = scope:hd_dc_adv_emperor }
+	hd_dc_kit_adv_reform_cleanup_effect = yes
+}
+
+# Scope：天子。变法失败
+hd_dc_kit_adv_reform_failure_effect = {
+	save_scope_as = hd_dc_adv_emperor
+	add_prestige = -200
+	add_character_modifier = {
+		modifier = hd_dc_kit_adv_reform_failed_modifier
+		years = 5
+	}
+	hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_reform_failed ACTOR = scope:hd_dc_adv_emperor }
+	hd_dc_kit_adv_reform_cleanup_effect = yes
+}
+
+hd_dc_kit_adv_reform_cleanup_effect = {
+	remove_variable = hd_dc_adv_reform_years
+	remove_variable = hd_dc_adv_reform_bonus
+	remove_variable = hd_dc_adv_reform_minister
+}
+
+# Scope：天子（朋党朝廷）。$G$ 党事件满意度 / 临时势力调整（朋党未初始化时无效）
+hd_dc_kit_adv_party_nudge_effect = {
+	if = {
+		limit = { hd_party_court_initialized_trigger = yes }
+		hd_party_add_var_effect = { NAME = hd_party_$G$_sat_mod VALUE = $SAT$ }
+		hd_party_add_var_effect = { NAME = hd_party_$G$_power_mod VALUE = $POWER$ }
+	}
+}
+
+############################################################
+# 文会雅集（debate.txt 辩论阶段 on_end 中调用；Scope：参与者，scope:activity / scope:host）
+############################################################
+# 原版奖励发放前：记录威望
+hd_dc_kit_adv_debate_before_effect = {
+	if = {
+		limit = { hd_dc_phase_is_trigger = { PHASE = stability_advancement } }
+		set_variable = {
+			name = hd_dc_adv_pre_prestige
+			value = prestige
+			days = 1
+		}
+	}
+}
+
+# 原版奖励发放后、清理前：威望与儒学经验 ×1.5；东道主另结算合作朋党好感与诱因
+hd_dc_kit_adv_debate_after_effect = {
+	if = {
+		limit = {
+			hd_dc_phase_is_trigger = { PHASE = stability_advancement }
+			exists = var:hd_dc_adv_pre_prestige
+		}
+		if = {
+			limit = { hd_dc_kit_adv_debate_prestige_bonus_value > 0 }
+			add_prestige = hd_dc_kit_adv_debate_prestige_bonus_value
+		}
+		# 与原版 debate_guest_rewards 的领取者一致：非东道主的玩家
+		if = {
+			limit = {
+				NOT = { this = scope:host }
+				is_ai = no
+			}
+			add_trait_xp = {
+				trait = confucian_education
+				value = hd_dc_kit_adv_debate_xp_bonus_value
+			}
+		}
+		if = {
+			limit = { this = scope:host }
+			hd_dc_kit_adv_gathering_effect = yes
+		}
+	}
+	remove_variable = hd_dc_adv_pre_prestige
+}
+
+# Scope：东道主。合作朋党的党魁同时与会 → 互加好感；发射"文会雅集"
+hd_dc_kit_adv_gathering_effect = {
+	save_scope_as = hd_dc_adv_gathering_host
+	title:h_china.holder ?= {
+		if = {
+			limit = { hd_party_court_initialized_trigger = yes }
+			hd_dc_kit_adv_gathering_pair_effect = { A = huanguan B = waiqi }
+			hd_dc_kit_adv_gathering_pair_effect = { A = huanguan B = wuxun }
+			hd_dc_kit_adv_gathering_pair_effect = { A = huanguan B = shizu }
+			hd_dc_kit_adv_gathering_pair_effect = { A = huanguan B = hanmen }
+			hd_dc_kit_adv_gathering_pair_effect = { A = waiqi B = wuxun }
+			hd_dc_kit_adv_gathering_pair_effect = { A = waiqi B = shizu }
+			hd_dc_kit_adv_gathering_pair_effect = { A = waiqi B = hanmen }
+			hd_dc_kit_adv_gathering_pair_effect = { A = wuxun B = shizu }
+			hd_dc_kit_adv_gathering_pair_effect = { A = wuxun B = hanmen }
+			hd_dc_kit_adv_gathering_pair_effect = { A = shizu B = hanmen }
+		}
+	}
+	hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_literary_gathering ACTOR = scope:hd_dc_adv_gathering_host }
+}
+
+# Scope：天子（朋党朝廷）。$A$、$B$ 两党合作，且两党党魁都出席本次活动
+hd_dc_kit_adv_gathering_pair_effect = {
+	if = {
+		limit = {
+			var:hd_party_rel_$A$_$B$ ?= flag:coop
+			exists = var:hd_party_$A$_leader
+			exists = var:hd_party_$B$_leader
+		}
+		var:hd_party_$A$_leader = { save_temporary_scope_as = hd_dc_adv_la }
+		var:hd_party_$B$_leader = { save_temporary_scope_as = hd_dc_adv_lb }
+		if = {
+			limit = {
+				scope:activity = {
+					any_attending_character = { this = scope:hd_dc_adv_la }
+					any_attending_character = { this = scope:hd_dc_adv_lb }
+				}
+			}
+			scope:hd_dc_adv_la = {
+				add_opinion = {
+					target = scope:hd_dc_adv_lb
+					modifier = hd_dc_kit_adv_gathering_opinion
+				}
+			}
+			scope:hd_dc_adv_lb = {
+				add_opinion = {
+					target = scope:hd_dc_adv_la
+					modifier = hd_dc_kit_adv_gathering_opinion
+				}
+			}
+		}
+	}
+}
+
+############################################################
+# 太学联动（zz_hd_taixue_effects.txt 年度联动内调用；Scope：太学所在郡的持有者）
+############################################################
+hd_dc_kit_adv_taixue_linkage_effect = {
+	save_scope_as = hd_dc_adv_taixue_holder
+	if = {
+		limit = { hd_dc_phase_is_trigger = { PHASE = stability_advancement } }
+		# 进取期 ×2：再给一份清议经验与子女就学加成
+		WJ_ziwang_qingyi_xp_effect = { VALUE = 1 }
+		every_child = {
+			limit = {
+				is_alive = yes
+				age >= 3
+				age < 16
+			}
+			add_character_modifier = {
+				modifier = hd_dc_kit_adv_taixue_student_modifier
+				years = 1
+			}
+		}
+		# 太学专属事件
+		random = {
+			chance = 30	# = hd_dc_adv_taixue_event_chance
+			random_list = {
+				50 = { trigger_event = { id = hd_dc_adv.0201 days = { 10 60 } } }
+				50 = { trigger_event = { id = hd_dc_adv.0202 days = { 10 60 } } }
+			}
+		}
+	}
+	# 太学年度联动计"开科取士"
+	hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_exam_held ACTOR = scope:hd_dc_adv_taixue_holder }
+}
+
+############################################################
+# 奢靡（月度轮询，进取期；Scope：dynastic_cycle 局势）
+# 原版没有"活动创建"的通用 on_action，故轮询天子当前参与的活动：
+# 天子为东道主、且任一花费类别选了最高档 → 计一次（每个活动只判一次）
+############################################################
+hd_dc_kit_adv_extravagance_check_effect = {
+	title:h_china.holder ?= {
+		save_scope_as = hd_dc_adv_lux_host
+		involved_activity ?= {
+			if = {
+				limit = {
+					activity_host = scope:hd_dc_adv_lux_host
+					NOT = { has_variable = hd_dc_adv_lux_checked }
+				}
+				set_variable = hd_dc_adv_lux_checked
+				if = {
+					limit = { hd_dc_kit_adv_luxurious_activity_trigger = yes }
+					hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_extravagance ACTOR = scope:hd_dc_adv_lux_host }
+				}
+			}
+		}
+	}
+}
+
+# Scope：辩论参与者。随机选一名同席者存为 scope:hd_dc_adv_guest
+hd_dc_kit_adv_debate_pick_guest_effect = {
+	involved_activity ?= {
+		random_attending_character = {
+			limit = {
+				NOT = { this = root }
+			}
+			save_scope_as = hd_dc_adv_guest
+		}
+	}
+}

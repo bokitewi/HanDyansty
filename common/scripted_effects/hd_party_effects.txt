@@ -1,0 +1,2070 @@
+﻿# 天朝循环大修·朋党：核心效果（由 docs/tools/gen_party_effects.py 生成，勿手改）
+# 数据统一存放在"朝廷君主"身上：var:hd_party_<组>_*；天子朝廷的领袖/势力/青睐同步写回原版全局组。
+# 成员身上：var:hd_party_my_court / hd_party_my_group / hd_party_my_stance（400 天过期，年度刷新）
+
+############################################################
+# 年度总流程（Scope：dynastic_cycle 局势，局势 on_yearly 调用）
+############################################################
+hd_party_yearly_effect = {
+	# 1. 收集朝廷
+	situation:dynastic_cycle.situation_participant_group:hegemon_ruler = {
+		every_situation_group_participant = {
+			limit = { hd_party_court_ruler_trigger = yes }
+			add_to_list = hd_party_courts
+		}
+	}
+	situation:dynastic_cycle.situation_participant_group:other_rulers = {
+		every_situation_group_participant = {
+			limit = {
+				has_variable = hd_party_court
+				hd_party_court_ruler_trigger = no
+			}
+			hd_party_clear_court_effect = yes
+		}
+		every_situation_group_participant = {
+			limit = { hd_party_court_ruler_trigger = yes }
+			add_to_list = hd_party_courts
+		}
+	}
+	every_in_list = {
+		list = hd_party_courts
+		if = {
+			limit = { NOT = { has_variable = hd_party_court } }
+			hd_party_init_court_effect = yes
+		}
+		set_variable = { name = hd_party_my_court value = this days = 400 }
+		clear_variable_list = hd_party_huanguan_members
+		clear_variable_list = hd_party_waiqi_members
+		clear_variable_list = hd_party_wuxun_members
+		clear_variable_list = hd_party_shizu_members
+		clear_variable_list = hd_party_hanmen_members
+		save_scope_as = hd_party_court
+		hd_party_add_manual_participants_effect = yes
+	}
+	# 2. 按身份组归入各朝廷的成员列表
+	situation:dynastic_cycle.situation_participant_group:undecided_movement = {
+		every_situation_group_participant = {
+			hd_party_member_pass_effect = { G = huanguan }
+		}
+	}
+	situation:dynastic_cycle.situation_participant_group:pro_hegemon_movement = {
+		every_situation_group_participant = {
+			hd_party_member_pass_effect = { G = waiqi }
+		}
+	}
+	situation:dynastic_cycle.situation_participant_group:expansion_movement = {
+		every_situation_group_participant = {
+			hd_party_member_pass_effect = { G = wuxun }
+		}
+	}
+	situation:dynastic_cycle.situation_participant_group:conservative_movement = {
+		every_situation_group_participant = {
+			hd_party_member_pass_effect = { G = shizu }
+		}
+	}
+	situation:dynastic_cycle.situation_participant_group:advancement_movement = {
+		every_situation_group_participant = {
+			hd_party_member_pass_effect = { G = hanmen }
+		}
+	}
+	# 3. 各朝廷分散到 60 天内结算
+	every_in_list = {
+		list = hd_party_courts
+		trigger_event = {
+			id = hd_party.0001
+			days = { 1 60 }
+		}
+	}
+}
+
+# Scope：成员角色。归入所在朝廷 $G$ 党的成员列表
+hd_party_member_pass_effect = {
+	if = {
+		limit = { is_alive = yes }
+		hd_party_member_pass_alive_effect = { G = $G$ }
+	}
+}
+
+hd_party_member_pass_alive_effect = {
+	if = {
+		limit = { has_variable = hd_party_court }
+		hd_party_clear_court_effect = yes
+	}
+	if = {
+		limit = {
+			has_variable = hd_party_manual
+			NOT = { hd_party_manual_participant_valid_trigger = yes }
+		}
+		remove_variable = hd_party_manual
+		situation:dynastic_cycle = { remove_manual_participant = prev }
+	}
+	else = {
+		clear_saved_scope = hd_party_mc
+		hd_party_save_member_court_effect = yes
+		if = {
+			limit = {
+				exists = scope:hd_party_mc
+				scope:hd_party_mc = { is_in_list = hd_party_courts }
+			}
+			scope:hd_party_mc = {
+				add_to_variable_list = { name = hd_party_$G$_members target = prev }
+			}
+			set_variable = { name = hd_party_my_court value = scope:hd_party_mc days = 400 }
+			set_variable = { name = hd_party_my_group value = flag:$G$ days = 400 }
+			if = {
+				limit = { exists = scope:hd_party_mc.var:hd_party_$G$_stance }
+				set_variable = { name = hd_party_my_stance value = scope:hd_party_mc.var:hd_party_$G$_stance days = 400 }
+			}
+		}
+	}
+}
+
+# Scope：角色。把所在朝廷的君主存为 scope:hd_party_mc（没有朝廷则不存）
+hd_party_save_member_court_effect = {
+	if = {
+		limit = {
+			exists = title:h_china.holder
+			OR = {
+				top_liege = title:h_china.holder
+				is_tributary_of = title:h_china.holder
+			}
+		}
+		title:h_china.holder = { save_scope_as = hd_party_mc }
+	}
+	else_if = {
+		limit = {
+			exists = top_liege
+			top_liege != this
+		}
+		top_liege = { save_scope_as = hd_party_mc }
+	}
+}
+
+# Scope：君主（scope:hd_party_court）。把有政治分量的无地廷臣加入局势
+hd_party_add_manual_participants_effect = {
+	every_courtier = {
+		limit = {
+			is_adult = yes
+			NOT = { has_variable = hd_party_manual }
+			hd_party_manual_participant_valid_trigger = yes
+			NOT = { any_character_situation = { situation_type = dynastic_cycle } }
+		}
+		set_variable = hd_party_manual
+		situation:dynastic_cycle = { add_manual_participant = prev }
+	}
+}
+
+############################################################
+# 朝廷初始化 / 清除 / 继承
+############################################################
+# Scope：君主
+hd_party_init_court_effect = {
+	set_variable = { name = hd_party_court value = this }
+	set_variable = { name = hd_party_huanguan_attitude value = flag:neutral }
+	set_variable = { name = hd_party_waiqi_attitude value = flag:neutral }
+	set_variable = { name = hd_party_wuxun_attitude value = flag:neutral }
+	set_variable = { name = hd_party_shizu_attitude value = flag:neutral }
+	set_variable = { name = hd_party_hanmen_attitude value = flag:neutral }
+}
+
+# Scope：君主。清除全部朋党数据与 modifier
+hd_party_clear_court_effect = {
+	remove_variable = hd_party_court
+	remove_variable = hd_party_favored
+	remove_variable = hd_party_favor_cd
+	remove_variable = hd_party_favor_years
+	remove_variable = hd_party_chain_tick
+	remove_variable = hd_party_huanguan_leader
+	remove_variable = hd_party_huanguan_power
+	remove_variable = hd_party_huanguan_power_mod
+	remove_variable = hd_party_huanguan_share
+	remove_variable = hd_party_huanguan_stance
+	remove_variable = hd_party_huanguan_attitude
+	remove_variable = hd_party_huanguan_policy
+	remove_variable = hd_party_huanguan_policy_cd
+	remove_variable = hd_party_huanguan_satisfaction
+	remove_variable = hd_party_huanguan_score
+	remove_variable = hd_party_huanguan_disgrace
+	remove_variable = hd_party_huanguan_sat_mod
+	remove_variable = hd_party_huanguan_loyalty_lock
+	remove_variable = hd_party_huanguan_loyalty_cd
+	remove_variable = hd_party_huanguan_oppose_lock
+	remove_variable = hd_party_huanguan_oppose_years
+	remove_variable = hd_party_huanguan_debate_lock
+	remove_variable = hd_party_huanguan_debating
+	remove_variable = hd_party_huanguan_chain_stage
+	remove_variable = hd_party_huanguan_chain_paused
+	clear_variable_list = hd_party_huanguan_members
+	clear_variable_list = hd_party_huanguan_top
+	remove_variable = hd_party_waiqi_leader
+	remove_variable = hd_party_waiqi_power
+	remove_variable = hd_party_waiqi_power_mod
+	remove_variable = hd_party_waiqi_share
+	remove_variable = hd_party_waiqi_stance
+	remove_variable = hd_party_waiqi_attitude
+	remove_variable = hd_party_waiqi_policy
+	remove_variable = hd_party_waiqi_policy_cd
+	remove_variable = hd_party_waiqi_satisfaction
+	remove_variable = hd_party_waiqi_score
+	remove_variable = hd_party_waiqi_disgrace
+	remove_variable = hd_party_waiqi_sat_mod
+	remove_variable = hd_party_waiqi_loyalty_lock
+	remove_variable = hd_party_waiqi_loyalty_cd
+	remove_variable = hd_party_waiqi_oppose_lock
+	remove_variable = hd_party_waiqi_oppose_years
+	remove_variable = hd_party_waiqi_debate_lock
+	remove_variable = hd_party_waiqi_debating
+	remove_variable = hd_party_waiqi_chain_stage
+	remove_variable = hd_party_waiqi_chain_paused
+	clear_variable_list = hd_party_waiqi_members
+	clear_variable_list = hd_party_waiqi_top
+	remove_variable = hd_party_wuxun_leader
+	remove_variable = hd_party_wuxun_power
+	remove_variable = hd_party_wuxun_power_mod
+	remove_variable = hd_party_wuxun_share
+	remove_variable = hd_party_wuxun_stance
+	remove_variable = hd_party_wuxun_attitude
+	remove_variable = hd_party_wuxun_policy
+	remove_variable = hd_party_wuxun_policy_cd
+	remove_variable = hd_party_wuxun_satisfaction
+	remove_variable = hd_party_wuxun_score
+	remove_variable = hd_party_wuxun_disgrace
+	remove_variable = hd_party_wuxun_sat_mod
+	remove_variable = hd_party_wuxun_loyalty_lock
+	remove_variable = hd_party_wuxun_loyalty_cd
+	remove_variable = hd_party_wuxun_oppose_lock
+	remove_variable = hd_party_wuxun_oppose_years
+	remove_variable = hd_party_wuxun_debate_lock
+	remove_variable = hd_party_wuxun_debating
+	remove_variable = hd_party_wuxun_chain_stage
+	remove_variable = hd_party_wuxun_chain_paused
+	clear_variable_list = hd_party_wuxun_members
+	clear_variable_list = hd_party_wuxun_top
+	remove_variable = hd_party_shizu_leader
+	remove_variable = hd_party_shizu_power
+	remove_variable = hd_party_shizu_power_mod
+	remove_variable = hd_party_shizu_share
+	remove_variable = hd_party_shizu_stance
+	remove_variable = hd_party_shizu_attitude
+	remove_variable = hd_party_shizu_policy
+	remove_variable = hd_party_shizu_policy_cd
+	remove_variable = hd_party_shizu_satisfaction
+	remove_variable = hd_party_shizu_score
+	remove_variable = hd_party_shizu_disgrace
+	remove_variable = hd_party_shizu_sat_mod
+	remove_variable = hd_party_shizu_loyalty_lock
+	remove_variable = hd_party_shizu_loyalty_cd
+	remove_variable = hd_party_shizu_oppose_lock
+	remove_variable = hd_party_shizu_oppose_years
+	remove_variable = hd_party_shizu_debate_lock
+	remove_variable = hd_party_shizu_debating
+	remove_variable = hd_party_shizu_chain_stage
+	remove_variable = hd_party_shizu_chain_paused
+	clear_variable_list = hd_party_shizu_members
+	clear_variable_list = hd_party_shizu_top
+	remove_variable = hd_party_hanmen_leader
+	remove_variable = hd_party_hanmen_power
+	remove_variable = hd_party_hanmen_power_mod
+	remove_variable = hd_party_hanmen_share
+	remove_variable = hd_party_hanmen_stance
+	remove_variable = hd_party_hanmen_attitude
+	remove_variable = hd_party_hanmen_policy
+	remove_variable = hd_party_hanmen_policy_cd
+	remove_variable = hd_party_hanmen_satisfaction
+	remove_variable = hd_party_hanmen_score
+	remove_variable = hd_party_hanmen_disgrace
+	remove_variable = hd_party_hanmen_sat_mod
+	remove_variable = hd_party_hanmen_loyalty_lock
+	remove_variable = hd_party_hanmen_loyalty_cd
+	remove_variable = hd_party_hanmen_oppose_lock
+	remove_variable = hd_party_hanmen_oppose_years
+	remove_variable = hd_party_hanmen_debate_lock
+	remove_variable = hd_party_hanmen_debating
+	remove_variable = hd_party_hanmen_chain_stage
+	remove_variable = hd_party_hanmen_chain_paused
+	clear_variable_list = hd_party_hanmen_members
+	clear_variable_list = hd_party_hanmen_top
+	hd_party_remove_ruler_modifiers_effect = yes
+}
+
+# Scope：继承人；$OLD$ = 将死的前任（on_death 时仍可读变量）。继承时沿用前任的朋党数据（Q58）
+hd_party_inherit_court_effect = {
+	set_variable = { name = hd_party_court value = this }
+	if = { limit = { exists = $OLD$.var:hd_party_huanguan_leader } set_variable = { name = hd_party_huanguan_leader value = $OLD$.var:hd_party_huanguan_leader } }
+	if = { limit = { exists = $OLD$.var:hd_party_huanguan_power } set_variable = { name = hd_party_huanguan_power value = $OLD$.var:hd_party_huanguan_power } }
+	if = { limit = { exists = $OLD$.var:hd_party_huanguan_power_mod } set_variable = { name = hd_party_huanguan_power_mod value = $OLD$.var:hd_party_huanguan_power_mod } }
+	if = { limit = { exists = $OLD$.var:hd_party_huanguan_share } set_variable = { name = hd_party_huanguan_share value = $OLD$.var:hd_party_huanguan_share } }
+	if = { limit = { exists = $OLD$.var:hd_party_huanguan_stance } set_variable = { name = hd_party_huanguan_stance value = $OLD$.var:hd_party_huanguan_stance } }
+	if = { limit = { exists = $OLD$.var:hd_party_huanguan_attitude } set_variable = { name = hd_party_huanguan_attitude value = $OLD$.var:hd_party_huanguan_attitude } }
+	if = { limit = { exists = $OLD$.var:hd_party_huanguan_satisfaction } set_variable = { name = hd_party_huanguan_satisfaction value = $OLD$.var:hd_party_huanguan_satisfaction } }
+	if = { limit = { exists = $OLD$.var:hd_party_huanguan_disgrace } set_variable = { name = hd_party_huanguan_disgrace value = $OLD$.var:hd_party_huanguan_disgrace } }
+	if = { limit = { exists = $OLD$.var:hd_party_huanguan_sat_mod } set_variable = { name = hd_party_huanguan_sat_mod value = $OLD$.var:hd_party_huanguan_sat_mod } }
+	if = { limit = { exists = $OLD$.var:hd_party_huanguan_debate_lock } set_variable = { name = hd_party_huanguan_debate_lock value = $OLD$.var:hd_party_huanguan_debate_lock } }
+	if = { limit = { exists = $OLD$.var:hd_party_huanguan_oppose_years } set_variable = { name = hd_party_huanguan_oppose_years value = $OLD$.var:hd_party_huanguan_oppose_years } }
+	if = { limit = { exists = $OLD$.var:hd_party_waiqi_leader } set_variable = { name = hd_party_waiqi_leader value = $OLD$.var:hd_party_waiqi_leader } }
+	if = { limit = { exists = $OLD$.var:hd_party_waiqi_power } set_variable = { name = hd_party_waiqi_power value = $OLD$.var:hd_party_waiqi_power } }
+	if = { limit = { exists = $OLD$.var:hd_party_waiqi_power_mod } set_variable = { name = hd_party_waiqi_power_mod value = $OLD$.var:hd_party_waiqi_power_mod } }
+	if = { limit = { exists = $OLD$.var:hd_party_waiqi_share } set_variable = { name = hd_party_waiqi_share value = $OLD$.var:hd_party_waiqi_share } }
+	if = { limit = { exists = $OLD$.var:hd_party_waiqi_stance } set_variable = { name = hd_party_waiqi_stance value = $OLD$.var:hd_party_waiqi_stance } }
+	if = { limit = { exists = $OLD$.var:hd_party_waiqi_attitude } set_variable = { name = hd_party_waiqi_attitude value = $OLD$.var:hd_party_waiqi_attitude } }
+	if = { limit = { exists = $OLD$.var:hd_party_waiqi_satisfaction } set_variable = { name = hd_party_waiqi_satisfaction value = $OLD$.var:hd_party_waiqi_satisfaction } }
+	if = { limit = { exists = $OLD$.var:hd_party_waiqi_disgrace } set_variable = { name = hd_party_waiqi_disgrace value = $OLD$.var:hd_party_waiqi_disgrace } }
+	if = { limit = { exists = $OLD$.var:hd_party_waiqi_sat_mod } set_variable = { name = hd_party_waiqi_sat_mod value = $OLD$.var:hd_party_waiqi_sat_mod } }
+	if = { limit = { exists = $OLD$.var:hd_party_waiqi_debate_lock } set_variable = { name = hd_party_waiqi_debate_lock value = $OLD$.var:hd_party_waiqi_debate_lock } }
+	if = { limit = { exists = $OLD$.var:hd_party_waiqi_oppose_years } set_variable = { name = hd_party_waiqi_oppose_years value = $OLD$.var:hd_party_waiqi_oppose_years } }
+	if = { limit = { exists = $OLD$.var:hd_party_wuxun_leader } set_variable = { name = hd_party_wuxun_leader value = $OLD$.var:hd_party_wuxun_leader } }
+	if = { limit = { exists = $OLD$.var:hd_party_wuxun_power } set_variable = { name = hd_party_wuxun_power value = $OLD$.var:hd_party_wuxun_power } }
+	if = { limit = { exists = $OLD$.var:hd_party_wuxun_power_mod } set_variable = { name = hd_party_wuxun_power_mod value = $OLD$.var:hd_party_wuxun_power_mod } }
+	if = { limit = { exists = $OLD$.var:hd_party_wuxun_share } set_variable = { name = hd_party_wuxun_share value = $OLD$.var:hd_party_wuxun_share } }
+	if = { limit = { exists = $OLD$.var:hd_party_wuxun_stance } set_variable = { name = hd_party_wuxun_stance value = $OLD$.var:hd_party_wuxun_stance } }
+	if = { limit = { exists = $OLD$.var:hd_party_wuxun_attitude } set_variable = { name = hd_party_wuxun_attitude value = $OLD$.var:hd_party_wuxun_attitude } }
+	if = { limit = { exists = $OLD$.var:hd_party_wuxun_satisfaction } set_variable = { name = hd_party_wuxun_satisfaction value = $OLD$.var:hd_party_wuxun_satisfaction } }
+	if = { limit = { exists = $OLD$.var:hd_party_wuxun_disgrace } set_variable = { name = hd_party_wuxun_disgrace value = $OLD$.var:hd_party_wuxun_disgrace } }
+	if = { limit = { exists = $OLD$.var:hd_party_wuxun_sat_mod } set_variable = { name = hd_party_wuxun_sat_mod value = $OLD$.var:hd_party_wuxun_sat_mod } }
+	if = { limit = { exists = $OLD$.var:hd_party_wuxun_debate_lock } set_variable = { name = hd_party_wuxun_debate_lock value = $OLD$.var:hd_party_wuxun_debate_lock } }
+	if = { limit = { exists = $OLD$.var:hd_party_wuxun_oppose_years } set_variable = { name = hd_party_wuxun_oppose_years value = $OLD$.var:hd_party_wuxun_oppose_years } }
+	if = { limit = { exists = $OLD$.var:hd_party_shizu_leader } set_variable = { name = hd_party_shizu_leader value = $OLD$.var:hd_party_shizu_leader } }
+	if = { limit = { exists = $OLD$.var:hd_party_shizu_power } set_variable = { name = hd_party_shizu_power value = $OLD$.var:hd_party_shizu_power } }
+	if = { limit = { exists = $OLD$.var:hd_party_shizu_power_mod } set_variable = { name = hd_party_shizu_power_mod value = $OLD$.var:hd_party_shizu_power_mod } }
+	if = { limit = { exists = $OLD$.var:hd_party_shizu_share } set_variable = { name = hd_party_shizu_share value = $OLD$.var:hd_party_shizu_share } }
+	if = { limit = { exists = $OLD$.var:hd_party_shizu_stance } set_variable = { name = hd_party_shizu_stance value = $OLD$.var:hd_party_shizu_stance } }
+	if = { limit = { exists = $OLD$.var:hd_party_shizu_attitude } set_variable = { name = hd_party_shizu_attitude value = $OLD$.var:hd_party_shizu_attitude } }
+	if = { limit = { exists = $OLD$.var:hd_party_shizu_satisfaction } set_variable = { name = hd_party_shizu_satisfaction value = $OLD$.var:hd_party_shizu_satisfaction } }
+	if = { limit = { exists = $OLD$.var:hd_party_shizu_disgrace } set_variable = { name = hd_party_shizu_disgrace value = $OLD$.var:hd_party_shizu_disgrace } }
+	if = { limit = { exists = $OLD$.var:hd_party_shizu_sat_mod } set_variable = { name = hd_party_shizu_sat_mod value = $OLD$.var:hd_party_shizu_sat_mod } }
+	if = { limit = { exists = $OLD$.var:hd_party_shizu_debate_lock } set_variable = { name = hd_party_shizu_debate_lock value = $OLD$.var:hd_party_shizu_debate_lock } }
+	if = { limit = { exists = $OLD$.var:hd_party_shizu_oppose_years } set_variable = { name = hd_party_shizu_oppose_years value = $OLD$.var:hd_party_shizu_oppose_years } }
+	if = { limit = { exists = $OLD$.var:hd_party_hanmen_leader } set_variable = { name = hd_party_hanmen_leader value = $OLD$.var:hd_party_hanmen_leader } }
+	if = { limit = { exists = $OLD$.var:hd_party_hanmen_power } set_variable = { name = hd_party_hanmen_power value = $OLD$.var:hd_party_hanmen_power } }
+	if = { limit = { exists = $OLD$.var:hd_party_hanmen_power_mod } set_variable = { name = hd_party_hanmen_power_mod value = $OLD$.var:hd_party_hanmen_power_mod } }
+	if = { limit = { exists = $OLD$.var:hd_party_hanmen_share } set_variable = { name = hd_party_hanmen_share value = $OLD$.var:hd_party_hanmen_share } }
+	if = { limit = { exists = $OLD$.var:hd_party_hanmen_stance } set_variable = { name = hd_party_hanmen_stance value = $OLD$.var:hd_party_hanmen_stance } }
+	if = { limit = { exists = $OLD$.var:hd_party_hanmen_attitude } set_variable = { name = hd_party_hanmen_attitude value = $OLD$.var:hd_party_hanmen_attitude } }
+	if = { limit = { exists = $OLD$.var:hd_party_hanmen_satisfaction } set_variable = { name = hd_party_hanmen_satisfaction value = $OLD$.var:hd_party_hanmen_satisfaction } }
+	if = { limit = { exists = $OLD$.var:hd_party_hanmen_disgrace } set_variable = { name = hd_party_hanmen_disgrace value = $OLD$.var:hd_party_hanmen_disgrace } }
+	if = { limit = { exists = $OLD$.var:hd_party_hanmen_sat_mod } set_variable = { name = hd_party_hanmen_sat_mod value = $OLD$.var:hd_party_hanmen_sat_mod } }
+	if = { limit = { exists = $OLD$.var:hd_party_hanmen_debate_lock } set_variable = { name = hd_party_hanmen_debate_lock value = $OLD$.var:hd_party_hanmen_debate_lock } }
+	if = { limit = { exists = $OLD$.var:hd_party_hanmen_oppose_years } set_variable = { name = hd_party_hanmen_oppose_years value = $OLD$.var:hd_party_hanmen_oppose_years } }
+	# 君主更替：青睐清空、政策回到中立、要求效忠锁定解除（拥护/对抗随后重算）
+	$OLD$ = { hd_party_clear_court_effect = yes }
+	trigger_event = { id = hd_party.0001 days = 1 }
+}
+
+# Scope：君主。移除君主身上所有朋党 modifier
+hd_party_remove_ruler_modifiers_effect = {
+	remove_character_modifier = hd_party_attitude_huanguan_support_modifier
+	remove_character_modifier = hd_party_attitude_huanguan_oppose_modifier
+	remove_character_modifier = hd_party_policy_cost_huanguan_inf_low_modifier
+	remove_character_modifier = hd_party_policy_cost_huanguan_inf_high_modifier
+	remove_character_modifier = hd_party_policy_cost_huanguan_pre_low_modifier
+	remove_character_modifier = hd_party_policy_cost_huanguan_pre_high_modifier
+	remove_character_modifier = hd_party_attitude_waiqi_support_modifier
+	remove_character_modifier = hd_party_attitude_waiqi_oppose_modifier
+	remove_character_modifier = hd_party_policy_cost_waiqi_inf_low_modifier
+	remove_character_modifier = hd_party_policy_cost_waiqi_inf_high_modifier
+	remove_character_modifier = hd_party_policy_cost_waiqi_pre_low_modifier
+	remove_character_modifier = hd_party_policy_cost_waiqi_pre_high_modifier
+	remove_character_modifier = hd_party_attitude_wuxun_support_modifier
+	remove_character_modifier = hd_party_attitude_wuxun_oppose_modifier
+	remove_character_modifier = hd_party_policy_cost_wuxun_inf_low_modifier
+	remove_character_modifier = hd_party_policy_cost_wuxun_inf_high_modifier
+	remove_character_modifier = hd_party_policy_cost_wuxun_pre_low_modifier
+	remove_character_modifier = hd_party_policy_cost_wuxun_pre_high_modifier
+	remove_character_modifier = hd_party_attitude_shizu_support_modifier
+	remove_character_modifier = hd_party_attitude_shizu_oppose_modifier
+	remove_character_modifier = hd_party_policy_cost_shizu_inf_low_modifier
+	remove_character_modifier = hd_party_policy_cost_shizu_inf_high_modifier
+	remove_character_modifier = hd_party_policy_cost_shizu_pre_low_modifier
+	remove_character_modifier = hd_party_policy_cost_shizu_pre_high_modifier
+	remove_character_modifier = hd_party_attitude_hanmen_support_modifier
+	remove_character_modifier = hd_party_attitude_hanmen_oppose_modifier
+	remove_character_modifier = hd_party_policy_cost_hanmen_inf_low_modifier
+	remove_character_modifier = hd_party_policy_cost_hanmen_inf_high_modifier
+	remove_character_modifier = hd_party_policy_cost_hanmen_pre_low_modifier
+	remove_character_modifier = hd_party_policy_cost_hanmen_pre_high_modifier
+	hd_party_remove_favor_copy_effect = yes
+}
+
+# Scope：君主。移除青睐复制 modifier
+hd_party_remove_favor_copy_effect = {
+	remove_character_modifier = hd_party_favor_huanguan_stability_expansion_modifier
+	remove_character_modifier = hd_party_favor_huanguan_stability_advancement_modifier
+	remove_character_modifier = hd_party_favor_huanguan_instability_conquest_modifier
+	remove_character_modifier = hd_party_favor_huanguan_instability_modifier
+	remove_character_modifier = hd_party_favor_huanguan_chaos_modifier
+	remove_character_modifier = hd_party_favor_huanguan_hd_recovery_modifier
+	remove_character_modifier = hd_party_favor_huanguan_hd_collapse_modifier
+	remove_character_modifier = hd_party_favor_huanguan_hd_standoff_modifier
+	remove_character_modifier = hd_party_favor_waiqi_stability_expansion_modifier
+	remove_character_modifier = hd_party_favor_waiqi_stability_advancement_modifier
+	remove_character_modifier = hd_party_favor_waiqi_instability_conquest_modifier
+	remove_character_modifier = hd_party_favor_waiqi_instability_modifier
+	remove_character_modifier = hd_party_favor_waiqi_chaos_modifier
+	remove_character_modifier = hd_party_favor_waiqi_hd_recovery_modifier
+	remove_character_modifier = hd_party_favor_waiqi_hd_collapse_modifier
+	remove_character_modifier = hd_party_favor_waiqi_hd_standoff_modifier
+	remove_character_modifier = hd_party_favor_wuxun_stability_expansion_modifier
+	remove_character_modifier = hd_party_favor_wuxun_stability_advancement_modifier
+	remove_character_modifier = hd_party_favor_wuxun_instability_conquest_modifier
+	remove_character_modifier = hd_party_favor_wuxun_instability_modifier
+	remove_character_modifier = hd_party_favor_wuxun_chaos_modifier
+	remove_character_modifier = hd_party_favor_wuxun_hd_recovery_modifier
+	remove_character_modifier = hd_party_favor_wuxun_hd_collapse_modifier
+	remove_character_modifier = hd_party_favor_wuxun_hd_standoff_modifier
+	remove_character_modifier = hd_party_favor_shizu_stability_expansion_modifier
+	remove_character_modifier = hd_party_favor_shizu_stability_advancement_modifier
+	remove_character_modifier = hd_party_favor_shizu_instability_conquest_modifier
+	remove_character_modifier = hd_party_favor_shizu_instability_modifier
+	remove_character_modifier = hd_party_favor_shizu_chaos_modifier
+	remove_character_modifier = hd_party_favor_shizu_hd_recovery_modifier
+	remove_character_modifier = hd_party_favor_shizu_hd_collapse_modifier
+	remove_character_modifier = hd_party_favor_shizu_hd_standoff_modifier
+	remove_character_modifier = hd_party_favor_hanmen_stability_expansion_modifier
+	remove_character_modifier = hd_party_favor_hanmen_stability_advancement_modifier
+	remove_character_modifier = hd_party_favor_hanmen_instability_conquest_modifier
+	remove_character_modifier = hd_party_favor_hanmen_instability_modifier
+	remove_character_modifier = hd_party_favor_hanmen_chaos_modifier
+	remove_character_modifier = hd_party_favor_hanmen_hd_recovery_modifier
+	remove_character_modifier = hd_party_favor_hanmen_hd_collapse_modifier
+	remove_character_modifier = hd_party_favor_hanmen_hd_standoff_modifier
+}
+
+# Scope：君主。按当前时代给被青睐朋党的组效果复制件
+hd_party_apply_favor_copy_effect = {
+	hd_party_remove_favor_copy_effect = yes
+	if = {
+		limit = { var:hd_party_favored ?= flag:huanguan }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_stability_expansion } } add_character_modifier = hd_party_favor_huanguan_stability_expansion_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_stability_advancement } } add_character_modifier = hd_party_favor_huanguan_stability_advancement_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_instability_conquest } } add_character_modifier = hd_party_favor_huanguan_instability_conquest_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_instability } } add_character_modifier = hd_party_favor_huanguan_instability_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_chaos } } add_character_modifier = hd_party_favor_huanguan_chaos_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_hd_recovery } } add_character_modifier = hd_party_favor_huanguan_hd_recovery_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_hd_collapse } } add_character_modifier = hd_party_favor_huanguan_hd_collapse_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_hd_standoff } } add_character_modifier = hd_party_favor_huanguan_hd_standoff_modifier }
+	}
+	if = {
+		limit = { var:hd_party_favored ?= flag:waiqi }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_stability_expansion } } add_character_modifier = hd_party_favor_waiqi_stability_expansion_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_stability_advancement } } add_character_modifier = hd_party_favor_waiqi_stability_advancement_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_instability_conquest } } add_character_modifier = hd_party_favor_waiqi_instability_conquest_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_instability } } add_character_modifier = hd_party_favor_waiqi_instability_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_chaos } } add_character_modifier = hd_party_favor_waiqi_chaos_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_hd_recovery } } add_character_modifier = hd_party_favor_waiqi_hd_recovery_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_hd_collapse } } add_character_modifier = hd_party_favor_waiqi_hd_collapse_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_hd_standoff } } add_character_modifier = hd_party_favor_waiqi_hd_standoff_modifier }
+	}
+	if = {
+		limit = { var:hd_party_favored ?= flag:wuxun }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_stability_expansion } } add_character_modifier = hd_party_favor_wuxun_stability_expansion_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_stability_advancement } } add_character_modifier = hd_party_favor_wuxun_stability_advancement_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_instability_conquest } } add_character_modifier = hd_party_favor_wuxun_instability_conquest_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_instability } } add_character_modifier = hd_party_favor_wuxun_instability_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_chaos } } add_character_modifier = hd_party_favor_wuxun_chaos_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_hd_recovery } } add_character_modifier = hd_party_favor_wuxun_hd_recovery_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_hd_collapse } } add_character_modifier = hd_party_favor_wuxun_hd_collapse_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_hd_standoff } } add_character_modifier = hd_party_favor_wuxun_hd_standoff_modifier }
+	}
+	if = {
+		limit = { var:hd_party_favored ?= flag:shizu }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_stability_expansion } } add_character_modifier = hd_party_favor_shizu_stability_expansion_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_stability_advancement } } add_character_modifier = hd_party_favor_shizu_stability_advancement_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_instability_conquest } } add_character_modifier = hd_party_favor_shizu_instability_conquest_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_instability } } add_character_modifier = hd_party_favor_shizu_instability_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_chaos } } add_character_modifier = hd_party_favor_shizu_chaos_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_hd_recovery } } add_character_modifier = hd_party_favor_shizu_hd_recovery_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_hd_collapse } } add_character_modifier = hd_party_favor_shizu_hd_collapse_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_hd_standoff } } add_character_modifier = hd_party_favor_shizu_hd_standoff_modifier }
+	}
+	if = {
+		limit = { var:hd_party_favored ?= flag:hanmen }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_stability_expansion } } add_character_modifier = hd_party_favor_hanmen_stability_expansion_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_stability_advancement } } add_character_modifier = hd_party_favor_hanmen_stability_advancement_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_instability_conquest } } add_character_modifier = hd_party_favor_hanmen_instability_conquest_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_instability } } add_character_modifier = hd_party_favor_hanmen_instability_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_chaos } } add_character_modifier = hd_party_favor_hanmen_chaos_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_hd_recovery } } add_character_modifier = hd_party_favor_hanmen_hd_recovery_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_hd_collapse } } add_character_modifier = hd_party_favor_hanmen_hd_collapse_modifier }
+		if = { limit = { situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_hd_standoff } } add_character_modifier = hd_party_favor_hanmen_hd_standoff_modifier }
+	}
+}
+
+# Scope：君主。重建后族宗族列表（母亲、正妻与嫔妃、子女配偶的宗族；不含本宗族）
+hd_party_refresh_waiqi_list_effect = {
+	clear_variable_list = hd_party_waiqi_dynasties
+	save_temporary_scope_as = hd_party_wq_ruler
+	mother ?= {
+		if = {
+			limit = { exists = dynasty dynasty != scope:hd_party_wq_ruler.dynasty }
+			scope:hd_party_wq_ruler = { add_to_variable_list = { name = hd_party_waiqi_dynasties target = prev.dynasty } }
+		}
+	}
+	every_spouse = {
+		limit = { exists = dynasty dynasty != scope:hd_party_wq_ruler.dynasty }
+		scope:hd_party_wq_ruler = { add_to_variable_list = { name = hd_party_waiqi_dynasties target = prev.dynasty } }
+	}
+	every_consort = {
+		limit = { exists = dynasty dynasty != scope:hd_party_wq_ruler.dynasty }
+		scope:hd_party_wq_ruler = { add_to_variable_list = { name = hd_party_waiqi_dynasties target = prev.dynasty } }
+	}
+	every_child = {
+		every_spouse = {
+			limit = { exists = dynasty dynasty != scope:hd_party_wq_ruler.dynasty }
+			scope:hd_party_wq_ruler = { add_to_variable_list = { name = hd_party_waiqi_dynasties target = prev.dynasty } }
+		}
+	}
+}
+
+############################################################
+# 朝廷结算（Scope：君主；事件 hd_party.0001 调用）
+############################################################
+hd_party_court_refresh_effect = {
+	save_scope_as = hd_party_court
+	if = {
+		limit = { NOT = { has_variable = hd_party_court } }
+		hd_party_init_court_effect = yes
+	}
+	# 界面用：君主自身也指向本朝廷
+	set_variable = { name = hd_party_my_court value = this days = 400 }
+	# 记录战争、饥荒
+	if = {
+		limit = { is_at_war = yes }
+		set_variable = { name = hd_party_recent_war days = 3650 }
+	}
+	if = {
+		limit = { any_sub_realm_county = { has_county_modifier = hd_famine_county_modifier } }
+		set_variable = { name = hd_party_famine_flag days = 400 }
+	}
+	else = {
+		remove_variable = hd_party_famine_flag
+	}
+	hd_party_refresh_waiqi_list_effect = yes
+	# 第一轮：领袖、前三名、势力
+	hd_party_refresh_leader_and_power_effect = { G = huanguan KEY = undecided_movement }
+	hd_party_refresh_leader_and_power_effect = { G = waiqi KEY = pro_hegemon_movement }
+	hd_party_refresh_leader_and_power_effect = { G = wuxun KEY = expansion_movement }
+	hd_party_refresh_leader_and_power_effect = { G = shizu KEY = conservative_movement }
+	hd_party_refresh_leader_and_power_effect = { G = hanmen KEY = advancement_movement }
+	# 第二轮：占比、满意度、拥护/对抗、成员效果
+	set_variable = { name = hd_party_total_power value = hd_party_total_power_value }
+	hd_party_refresh_party_effect = { G = huanguan }
+	hd_party_refresh_party_effect = { G = waiqi }
+	hd_party_refresh_party_effect = { G = wuxun }
+	hd_party_refresh_party_effect = { G = shizu }
+	hd_party_refresh_party_effect = { G = hanmen }
+	hd_party_refresh_policy_cost_effect = yes
+	hd_party_apply_favor_copy_effect = yes
+	hd_party_refresh_relations_effect = yes
+	hd_party_favor_chain_tick_effect = yes
+	if = {
+		limit = { is_ai = yes }
+		hd_party_ai_ruler_effect = yes
+	}
+	hd_party_ai_leader_debate_effect = yes
+}
+
+# Scope：君主。$G$ 党领袖、前三名与势力
+hd_party_refresh_leader_and_power_effect = {
+	# 领袖失效：死亡、离开、被禁
+	if = {
+		limit = {
+			exists = var:hd_party_$G$_leader
+			var:hd_party_$G$_leader = {
+				OR = {
+					is_alive = no
+					has_variable = hd_party_leader_ban
+					NOT = { scope:hd_party_court = { is_target_in_variable_list = { name = hd_party_$G$_members target = prev } } }
+				}
+			}
+		}
+		remove_variable = hd_party_$G$_leader
+	}
+	if = {
+		limit = { NOT = { exists = var:hd_party_$G$_leader } }
+		clear_saved_scope = hd_party_new_leader
+		# 天子朝廷：优先沿用原版组领袖
+		if = {
+			limit = { has_title = title:h_china }
+			situation:dynastic_cycle.situation_participant_group:$KEY$.var:movement_leader ?= {
+				if = {
+					limit = {
+						is_alive = yes
+						NOT = { has_variable = hd_party_leader_ban }
+						scope:hd_party_court = { is_target_in_variable_list = { name = hd_party_$G$_members target = prev } }
+					}
+					save_scope_as = hd_party_new_leader
+				}
+			}
+		}
+		if = {
+			limit = { NOT = { exists = scope:hd_party_new_leader } }
+			ordered_in_list = {
+				variable = hd_party_$G$_members
+				limit = {
+					is_alive = yes
+					exists = var:movement_power
+					NOT = { has_variable = hd_party_leader_ban }
+				}
+				order_by = var:movement_power
+				save_scope_as = hd_party_new_leader
+			}
+		}
+		if = {
+			limit = { exists = scope:hd_party_new_leader }
+			set_variable = { name = hd_party_$G$_leader value = scope:hd_party_new_leader }
+			hd_party_on_new_leader_effect = { G = $G$ KEY = $KEY$ }
+		}
+	}
+	# 前三名
+	clear_variable_list = hd_party_$G$_top
+	ordered_in_list = {
+		variable = hd_party_$G$_members
+		limit = {
+			is_alive = yes
+			exists = var:movement_power
+		}
+		order_by = var:movement_power
+		max = 3
+		check_range_bounds = no
+		scope:hd_party_court = { add_to_variable_list = { name = hd_party_$G$_top target = prev } }
+	}
+	# 势力：一律只计本朝廷成员（乱世中天子与诸侯各自独立计算）
+	if = {
+		limit = { always = yes }
+		set_variable = { name = hd_party_$G$_power value = 0 }
+		every_in_list = {
+			variable = hd_party_$G$_members
+			limit = {
+				is_alive = yes
+				exists = var:movement_power
+			}
+			scope:hd_party_court = { hd_party_add_var_effect = { NAME = hd_party_$G$_power VALUE = prev.var:movement_power } }
+		}
+		if = {
+			limit = { var:hd_party_favored ?= flag:$G$ }
+			hd_party_add_var_effect = { NAME = hd_party_$G$_power VALUE = hd_party_favored_power_bonus }
+		}
+	}
+	if = {
+		limit = { exists = var:hd_party_$G$_power_mod }
+		hd_party_add_var_effect = { NAME = hd_party_$G$_power VALUE = var:hd_party_$G$_power_mod }
+		# 临时势力每年衰减 20%
+		change_variable = { name = hd_party_$G$_power_mod multiply = 0.8 }
+		if = {
+			limit = {
+				var:hd_party_$G$_power_mod > -5
+				var:hd_party_$G$_power_mod < 5
+			}
+			remove_variable = hd_party_$G$_power_mod
+		}
+	}
+	# 天朝循环·时代特色：紧张期乱象（该党势力 +40%）、党锢"一网打尽"（势力归零 10 年）
+	if = {
+		limit = { has_variable = hd_dc_ten_boost_$G$ }
+		change_variable = { name = hd_party_$G$_power multiply = 1.4 }
+	}
+	if = {
+		limit = { has_variable = hd_dc_ten_purged_$G$ }
+		set_variable = { name = hd_party_$G$_power value = 0 }
+	}
+	if = {
+		limit = { var:hd_party_$G$_power < 0 }
+		set_variable = { name = hd_party_$G$_power value = 0 }
+	}
+}
+
+# Scope：君主。新领袖上任：解除要求效忠锁定并按新领袖性格免辩论重选一次；天子朝廷同步原版组领袖
+hd_party_on_new_leader_effect = {
+	if = {
+		limit = { has_variable = hd_party_$G$_loyalty_lock }
+		remove_variable = hd_party_$G$_loyalty_lock
+		hd_party_pick_stance_effect = { G = $G$ }
+	}
+	if = {
+		limit = { NOT = { exists = var:hd_party_$G$_stance } }
+		hd_party_pick_stance_effect = { G = $G$ }
+	}
+	if = {
+		limit = { has_title = title:h_china }
+		situation:dynastic_cycle.situation_participant_group:$KEY$ = {
+			set_variable = { name = movement_leader value = scope:hd_party_court.var:hd_party_$G$_leader }
+		}
+	}
+}
+
+# Scope：君主。$G$ 党按领袖性格加权随机选择立场；没有领袖时为中立
+hd_party_pick_stance_effect = {
+	if = {
+		limit = { exists = var:hd_party_$G$_leader }
+		save_temporary_scope_as = hd_party_court
+		var:hd_party_$G$_leader = {
+			save_temporary_scope_value_as = { name = hd_party_w_zunwang value = hd_party_stance_weight_zunwang_value }
+			save_temporary_scope_value_as = { name = hd_party_w_kaituo value = hd_party_stance_weight_kaituo_value }
+			save_temporary_scope_value_as = { name = hd_party_w_jinqu value = hd_party_stance_weight_jinqu_value }
+			save_temporary_scope_value_as = { name = hd_party_w_shoujiu value = hd_party_stance_weight_shoujiu_value }
+			save_temporary_scope_value_as = { name = hd_party_w_zhongli value = hd_party_stance_weight_zhongli_value }
+		}
+		random_list = {
+			0 = {
+				modifier = { add = scope:hd_party_w_zunwang }
+				hd_party_set_stance_effect = { G = $G$ STANCE = zunwang }
+			}
+			0 = {
+				modifier = { add = scope:hd_party_w_kaituo }
+				hd_party_set_stance_effect = { G = $G$ STANCE = kaituo }
+			}
+			0 = {
+				modifier = { add = scope:hd_party_w_jinqu }
+				hd_party_set_stance_effect = { G = $G$ STANCE = jinqu }
+			}
+			0 = {
+				modifier = { add = scope:hd_party_w_shoujiu }
+				hd_party_set_stance_effect = { G = $G$ STANCE = shoujiu }
+			}
+			0 = {
+				modifier = { add = scope:hd_party_w_zhongli }
+				hd_party_set_stance_effect = { G = $G$ STANCE = zhongli }
+			}
+		}
+	}
+	else = {
+		hd_party_set_stance_effect = { G = $G$ STANCE = zhongli }
+	}
+}
+
+# Scope：君主。把 $G$ 党立场设为 $STANCE$，立即更新成员变量
+hd_party_set_stance_effect = {
+	set_variable = { name = hd_party_$G$_stance value = flag:$STANCE$ }
+	every_in_list = {
+		variable = hd_party_$G$_members
+		limit = { is_alive = yes }
+		set_variable = { name = hd_party_my_stance value = flag:$STANCE$ days = 400 }
+		if = {
+			limit = { var:hd_party_my_stance = flag:zunwang }
+			add_character_modifier = { modifier = hd_party_stance_zunwang_modifier days = 400 }
+		}
+		else = {
+			remove_character_modifier = hd_party_stance_zunwang_modifier
+		}
+	}
+}
+
+# Scope：君主。$G$ 党：占比、满意度、拥护/对抗、成员效果
+hd_party_refresh_party_effect = {
+	set_variable = {
+		name = hd_party_$G$_share
+		value = {
+			value = var:hd_party_$G$_power
+			multiply = 100
+			divide = var:hd_party_total_power
+		}
+	}
+	# 失宠衰减（年）
+	if = {
+		limit = { exists = var:hd_party_$G$_disgrace }
+		hd_party_add_var_effect = { NAME = hd_party_$G$_disgrace VALUE = -1 }
+		if = {
+			limit = { var:hd_party_$G$_disgrace <= 0 }
+			remove_variable = hd_party_$G$_disgrace
+		}
+	}
+	set_variable = { name = hd_party_$G$_satisfaction value = hd_party_satisfaction_$G$_value }
+	# 事件造成的满意度变化每年衰减 20%
+	if = {
+		limit = { exists = var:hd_party_$G$_sat_mod }
+		change_variable = { name = hd_party_$G$_sat_mod multiply = 0.8 }
+		if = {
+			limit = {
+				var:hd_party_$G$_sat_mod > -3
+				var:hd_party_$G$_sat_mod < 3
+			}
+			remove_variable = hd_party_$G$_sat_mod
+		}
+	}
+	set_variable = { name = hd_party_$G$_score value = hd_party_attitude_score_$G$_value }
+	# 拥护/对抗（玩家领袖自行选择；失败锁定期间维持对抗）
+	if = {
+		limit = {
+			NOT = { has_variable = hd_party_$G$_oppose_lock }
+			NOT = { var:hd_party_$G$_leader ?= { is_ai = no } }
+		}
+		if = {
+			limit = { var:hd_party_$G$_attitude ?= flag:support }
+			if = {
+				limit = { var:hd_party_$G$_score < 20 }
+				hd_party_set_attitude_effect = { G = $G$ ATTITUDE = neutral }
+			}
+		}
+		else_if = {
+			limit = { var:hd_party_$G$_attitude ?= flag:oppose }
+			if = {
+				limit = { var:hd_party_$G$_score > -20 }
+				hd_party_set_attitude_effect = { G = $G$ ATTITUDE = neutral }
+			}
+		}
+		else = {
+			if = {
+				limit = { var:hd_party_$G$_score >= 50 }
+				hd_party_set_attitude_effect = { G = $G$ ATTITUDE = support }
+			}
+			else_if = {
+				limit = { var:hd_party_$G$_score <= -50 }
+				hd_party_set_attitude_effect = { G = $G$ ATTITUDE = oppose }
+			}
+		}
+	}
+	if = {
+		limit = { var:hd_party_$G$_attitude ?= flag:oppose }
+		hd_party_add_var_effect = { NAME = hd_party_$G$_oppose_years VALUE = 1 }
+	}
+	else = {
+		remove_variable = hd_party_$G$_oppose_years
+	}
+	hd_party_apply_attitude_modifier_effect = { G = $G$ }
+	hd_party_apply_member_effects_effect = { G = $G$ }
+}
+
+# Scope：君主。设置 $G$ 党态度
+hd_party_set_attitude_effect = {
+	set_variable = { name = hd_party_$G$_attitude value = flag:$ATTITUDE$ }
+	hd_party_apply_attitude_modifier_effect = { G = $G$ }
+}
+
+# Scope：君主。按 $G$ 党态度给君主拥护/对抗 modifier（势力衰微时不施加）
+hd_party_apply_attitude_modifier_effect = {
+	remove_character_modifier = hd_party_attitude_$G$_support_modifier
+	remove_character_modifier = hd_party_attitude_$G$_oppose_modifier
+	if = {
+		limit = { NOT = { hd_party_is_weak_trigger = { G = $G$ } } }
+		if = {
+			limit = { var:hd_party_$G$_attitude ?= flag:support }
+			add_character_modifier = hd_party_attitude_$G$_support_modifier
+		}
+		else_if = {
+			limit = { var:hd_party_$G$_attitude ?= flag:oppose }
+			add_character_modifier = hd_party_attitude_$G$_oppose_modifier
+		}
+	}
+}
+
+# Scope：君主。$G$ 党成员：政策 modifier 与好感、尊王 modifier、被青睐好感
+hd_party_apply_member_effects_effect = {
+	every_in_list = {
+		variable = hd_party_$G$_members
+		limit = { is_alive = yes }
+		remove_character_modifier = hd_party_policy_ban_modifier
+		remove_character_modifier = hd_party_policy_restrict_modifier
+		remove_character_modifier = hd_party_policy_promote_modifier
+		if = {
+			limit = { scope:hd_party_court.var:hd_party_$G$_policy ?= flag:ban }
+			add_character_modifier = { modifier = hd_party_policy_ban_modifier days = 400 }
+			add_opinion = { target = scope:hd_party_court modifier = hd_party_policy_ban_opinion years = 1 }
+		}
+		else_if = {
+			limit = { scope:hd_party_court.var:hd_party_$G$_policy ?= flag:restrict }
+			add_character_modifier = { modifier = hd_party_policy_restrict_modifier days = 400 }
+			add_opinion = { target = scope:hd_party_court modifier = hd_party_policy_restrict_opinion years = 1 }
+		}
+		else_if = {
+			limit = { scope:hd_party_court.var:hd_party_$G$_policy ?= flag:promote }
+			add_character_modifier = { modifier = hd_party_policy_promote_modifier days = 400 }
+			add_opinion = { target = scope:hd_party_court modifier = hd_party_policy_promote_opinion years = 1 }
+		}
+		if = {
+			limit = { scope:hd_party_court.var:hd_party_$G$_stance ?= flag:zunwang }
+			add_character_modifier = { modifier = hd_party_stance_zunwang_modifier days = 400 }
+		}
+		else = {
+			remove_character_modifier = hd_party_stance_zunwang_modifier
+		}
+		if = {
+			limit = { scope:hd_party_court.var:hd_party_favored ?= flag:$G$ }
+			add_opinion = { target = scope:hd_party_court modifier = hd_party_favored_opinion years = 1 }
+		}
+	}
+}
+
+# Scope：君主。政治运作的每月花费 modifier；资源透支时全部回到中立
+hd_party_refresh_policy_cost_effect = {
+	remove_character_modifier = hd_party_policy_cost_huanguan_inf_low_modifier
+	remove_character_modifier = hd_party_policy_cost_huanguan_inf_high_modifier
+	remove_character_modifier = hd_party_policy_cost_huanguan_pre_low_modifier
+	remove_character_modifier = hd_party_policy_cost_huanguan_pre_high_modifier
+	remove_character_modifier = hd_party_policy_cost_waiqi_inf_low_modifier
+	remove_character_modifier = hd_party_policy_cost_waiqi_inf_high_modifier
+	remove_character_modifier = hd_party_policy_cost_waiqi_pre_low_modifier
+	remove_character_modifier = hd_party_policy_cost_waiqi_pre_high_modifier
+	remove_character_modifier = hd_party_policy_cost_wuxun_inf_low_modifier
+	remove_character_modifier = hd_party_policy_cost_wuxun_inf_high_modifier
+	remove_character_modifier = hd_party_policy_cost_wuxun_pre_low_modifier
+	remove_character_modifier = hd_party_policy_cost_wuxun_pre_high_modifier
+	remove_character_modifier = hd_party_policy_cost_shizu_inf_low_modifier
+	remove_character_modifier = hd_party_policy_cost_shizu_inf_high_modifier
+	remove_character_modifier = hd_party_policy_cost_shizu_pre_low_modifier
+	remove_character_modifier = hd_party_policy_cost_shizu_pre_high_modifier
+	remove_character_modifier = hd_party_policy_cost_hanmen_inf_low_modifier
+	remove_character_modifier = hd_party_policy_cost_hanmen_inf_high_modifier
+	remove_character_modifier = hd_party_policy_cost_hanmen_pre_low_modifier
+	remove_character_modifier = hd_party_policy_cost_hanmen_pre_high_modifier
+	if = {
+		limit = {
+			OR = {
+				AND = {
+					government_has_flag = government_has_influence
+					influence < 0
+				}
+				AND = {
+					NOT = { government_has_flag = government_has_influence }
+					prestige < 0
+				}
+			}
+		}
+		remove_variable = hd_party_huanguan_policy
+		remove_variable = hd_party_waiqi_policy
+		remove_variable = hd_party_wuxun_policy
+		remove_variable = hd_party_shizu_policy
+		remove_variable = hd_party_hanmen_policy
+		if = {
+			limit = { is_ai = no }
+			send_interface_toast = {
+				type = event_toast_effect_bad
+				title = hd_party_policy_unpaid_toast
+			}
+		}
+	}
+	if = {
+		limit = { var:hd_party_huanguan_policy ?= flag:ban }
+		if = {
+			limit = { government_has_flag = government_has_influence }
+			add_character_modifier = hd_party_policy_cost_huanguan_inf_high_modifier
+		}
+		else = {
+			add_character_modifier = hd_party_policy_cost_huanguan_pre_high_modifier
+		}
+	}
+	else_if = {
+		limit = {
+			OR = {
+				var:hd_party_huanguan_policy ?= flag:restrict
+				var:hd_party_huanguan_policy ?= flag:promote
+			}
+		}
+		if = {
+			limit = { government_has_flag = government_has_influence }
+			add_character_modifier = hd_party_policy_cost_huanguan_inf_low_modifier
+		}
+		else = {
+			add_character_modifier = hd_party_policy_cost_huanguan_pre_low_modifier
+		}
+	}
+	if = {
+		limit = { var:hd_party_waiqi_policy ?= flag:ban }
+		if = {
+			limit = { government_has_flag = government_has_influence }
+			add_character_modifier = hd_party_policy_cost_waiqi_inf_high_modifier
+		}
+		else = {
+			add_character_modifier = hd_party_policy_cost_waiqi_pre_high_modifier
+		}
+	}
+	else_if = {
+		limit = {
+			OR = {
+				var:hd_party_waiqi_policy ?= flag:restrict
+				var:hd_party_waiqi_policy ?= flag:promote
+			}
+		}
+		if = {
+			limit = { government_has_flag = government_has_influence }
+			add_character_modifier = hd_party_policy_cost_waiqi_inf_low_modifier
+		}
+		else = {
+			add_character_modifier = hd_party_policy_cost_waiqi_pre_low_modifier
+		}
+	}
+	if = {
+		limit = { var:hd_party_wuxun_policy ?= flag:ban }
+		if = {
+			limit = { government_has_flag = government_has_influence }
+			add_character_modifier = hd_party_policy_cost_wuxun_inf_high_modifier
+		}
+		else = {
+			add_character_modifier = hd_party_policy_cost_wuxun_pre_high_modifier
+		}
+	}
+	else_if = {
+		limit = {
+			OR = {
+				var:hd_party_wuxun_policy ?= flag:restrict
+				var:hd_party_wuxun_policy ?= flag:promote
+			}
+		}
+		if = {
+			limit = { government_has_flag = government_has_influence }
+			add_character_modifier = hd_party_policy_cost_wuxun_inf_low_modifier
+		}
+		else = {
+			add_character_modifier = hd_party_policy_cost_wuxun_pre_low_modifier
+		}
+	}
+	if = {
+		limit = { var:hd_party_shizu_policy ?= flag:ban }
+		if = {
+			limit = { government_has_flag = government_has_influence }
+			add_character_modifier = hd_party_policy_cost_shizu_inf_high_modifier
+		}
+		else = {
+			add_character_modifier = hd_party_policy_cost_shizu_pre_high_modifier
+		}
+	}
+	else_if = {
+		limit = {
+			OR = {
+				var:hd_party_shizu_policy ?= flag:restrict
+				var:hd_party_shizu_policy ?= flag:promote
+			}
+		}
+		if = {
+			limit = { government_has_flag = government_has_influence }
+			add_character_modifier = hd_party_policy_cost_shizu_inf_low_modifier
+		}
+		else = {
+			add_character_modifier = hd_party_policy_cost_shizu_pre_low_modifier
+		}
+	}
+	if = {
+		limit = { var:hd_party_hanmen_policy ?= flag:ban }
+		if = {
+			limit = { government_has_flag = government_has_influence }
+			add_character_modifier = hd_party_policy_cost_hanmen_inf_high_modifier
+		}
+		else = {
+			add_character_modifier = hd_party_policy_cost_hanmen_pre_high_modifier
+		}
+	}
+	else_if = {
+		limit = {
+			OR = {
+				var:hd_party_hanmen_policy ?= flag:restrict
+				var:hd_party_hanmen_policy ?= flag:promote
+			}
+		}
+		if = {
+			limit = { government_has_flag = government_has_influence }
+			add_character_modifier = hd_party_policy_cost_hanmen_inf_low_modifier
+		}
+		else = {
+			add_character_modifier = hd_party_policy_cost_hanmen_pre_low_modifier
+		}
+	}
+}
+
+# Scope：君主（scope:hd_party_court）。对立/合作朋党的领袖与前三名之间互加好感
+hd_party_refresh_relations_effect = {
+	if = {
+		limit = { hd_party_hostile_trigger = { A = huanguan B = waiqi } }
+		hd_party_pair_hostile_effect = { A = huanguan B = waiqi }	# 天朝循环·时代特色：按时代/乱象换档
+		set_variable = { name = hd_party_rel_huanguan_waiqi value = flag:hostile }
+		set_variable = { name = hd_party_rel_waiqi_huanguan value = flag:hostile }
+	}
+	else_if = {
+		limit = { hd_party_coop_trigger = { A = huanguan B = waiqi } }
+		hd_party_pair_coop_effect = { A = huanguan B = waiqi }	# 天朝循环·时代特色：按时代换档
+		set_variable = { name = hd_party_rel_huanguan_waiqi value = flag:coop }
+		set_variable = { name = hd_party_rel_waiqi_huanguan value = flag:coop }
+	}
+	else = {
+		set_variable = { name = hd_party_rel_huanguan_waiqi value = flag:none }
+		set_variable = { name = hd_party_rel_waiqi_huanguan value = flag:none }
+	}
+	if = {
+		limit = { hd_party_hostile_trigger = { A = huanguan B = wuxun } }
+		hd_party_pair_hostile_effect = { A = huanguan B = wuxun }	# 天朝循环·时代特色：按时代/乱象换档
+		set_variable = { name = hd_party_rel_huanguan_wuxun value = flag:hostile }
+		set_variable = { name = hd_party_rel_wuxun_huanguan value = flag:hostile }
+	}
+	else_if = {
+		limit = { hd_party_coop_trigger = { A = huanguan B = wuxun } }
+		hd_party_pair_coop_effect = { A = huanguan B = wuxun }	# 天朝循环·时代特色：按时代换档
+		set_variable = { name = hd_party_rel_huanguan_wuxun value = flag:coop }
+		set_variable = { name = hd_party_rel_wuxun_huanguan value = flag:coop }
+	}
+	else = {
+		set_variable = { name = hd_party_rel_huanguan_wuxun value = flag:none }
+		set_variable = { name = hd_party_rel_wuxun_huanguan value = flag:none }
+	}
+	if = {
+		limit = { hd_party_hostile_trigger = { A = huanguan B = shizu } }
+		hd_party_pair_hostile_effect = { A = huanguan B = shizu }	# 天朝循环·时代特色：按时代/乱象换档
+		set_variable = { name = hd_party_rel_huanguan_shizu value = flag:hostile }
+		set_variable = { name = hd_party_rel_shizu_huanguan value = flag:hostile }
+	}
+	else_if = {
+		limit = { hd_party_coop_trigger = { A = huanguan B = shizu } }
+		hd_party_pair_coop_effect = { A = huanguan B = shizu }	# 天朝循环·时代特色：按时代换档
+		set_variable = { name = hd_party_rel_huanguan_shizu value = flag:coop }
+		set_variable = { name = hd_party_rel_shizu_huanguan value = flag:coop }
+	}
+	else = {
+		set_variable = { name = hd_party_rel_huanguan_shizu value = flag:none }
+		set_variable = { name = hd_party_rel_shizu_huanguan value = flag:none }
+	}
+	if = {
+		limit = { hd_party_hostile_trigger = { A = huanguan B = hanmen } }
+		hd_party_pair_hostile_effect = { A = huanguan B = hanmen }	# 天朝循环·时代特色：按时代/乱象换档
+		set_variable = { name = hd_party_rel_huanguan_hanmen value = flag:hostile }
+		set_variable = { name = hd_party_rel_hanmen_huanguan value = flag:hostile }
+	}
+	else_if = {
+		limit = { hd_party_coop_trigger = { A = huanguan B = hanmen } }
+		hd_party_pair_coop_effect = { A = huanguan B = hanmen }	# 天朝循环·时代特色：按时代换档
+		set_variable = { name = hd_party_rel_huanguan_hanmen value = flag:coop }
+		set_variable = { name = hd_party_rel_hanmen_huanguan value = flag:coop }
+	}
+	else = {
+		set_variable = { name = hd_party_rel_huanguan_hanmen value = flag:none }
+		set_variable = { name = hd_party_rel_hanmen_huanguan value = flag:none }
+	}
+	if = {
+		limit = { hd_party_hostile_trigger = { A = waiqi B = wuxun } }
+		hd_party_pair_hostile_effect = { A = waiqi B = wuxun }	# 天朝循环·时代特色：按时代/乱象换档
+		set_variable = { name = hd_party_rel_waiqi_wuxun value = flag:hostile }
+		set_variable = { name = hd_party_rel_wuxun_waiqi value = flag:hostile }
+	}
+	else_if = {
+		limit = { hd_party_coop_trigger = { A = waiqi B = wuxun } }
+		hd_party_pair_coop_effect = { A = waiqi B = wuxun }	# 天朝循环·时代特色：按时代换档
+		set_variable = { name = hd_party_rel_waiqi_wuxun value = flag:coop }
+		set_variable = { name = hd_party_rel_wuxun_waiqi value = flag:coop }
+	}
+	else = {
+		set_variable = { name = hd_party_rel_waiqi_wuxun value = flag:none }
+		set_variable = { name = hd_party_rel_wuxun_waiqi value = flag:none }
+	}
+	if = {
+		limit = { hd_party_hostile_trigger = { A = waiqi B = shizu } }
+		hd_party_pair_hostile_effect = { A = waiqi B = shizu }	# 天朝循环·时代特色：按时代/乱象换档
+		set_variable = { name = hd_party_rel_waiqi_shizu value = flag:hostile }
+		set_variable = { name = hd_party_rel_shizu_waiqi value = flag:hostile }
+	}
+	else_if = {
+		limit = { hd_party_coop_trigger = { A = waiqi B = shizu } }
+		hd_party_pair_coop_effect = { A = waiqi B = shizu }	# 天朝循环·时代特色：按时代换档
+		set_variable = { name = hd_party_rel_waiqi_shizu value = flag:coop }
+		set_variable = { name = hd_party_rel_shizu_waiqi value = flag:coop }
+	}
+	else = {
+		set_variable = { name = hd_party_rel_waiqi_shizu value = flag:none }
+		set_variable = { name = hd_party_rel_shizu_waiqi value = flag:none }
+	}
+	if = {
+		limit = { hd_party_hostile_trigger = { A = waiqi B = hanmen } }
+		hd_party_pair_hostile_effect = { A = waiqi B = hanmen }	# 天朝循环·时代特色：按时代/乱象换档
+		set_variable = { name = hd_party_rel_waiqi_hanmen value = flag:hostile }
+		set_variable = { name = hd_party_rel_hanmen_waiqi value = flag:hostile }
+	}
+	else_if = {
+		limit = { hd_party_coop_trigger = { A = waiqi B = hanmen } }
+		hd_party_pair_coop_effect = { A = waiqi B = hanmen }	# 天朝循环·时代特色：按时代换档
+		set_variable = { name = hd_party_rel_waiqi_hanmen value = flag:coop }
+		set_variable = { name = hd_party_rel_hanmen_waiqi value = flag:coop }
+	}
+	else = {
+		set_variable = { name = hd_party_rel_waiqi_hanmen value = flag:none }
+		set_variable = { name = hd_party_rel_hanmen_waiqi value = flag:none }
+	}
+	if = {
+		limit = { hd_party_hostile_trigger = { A = wuxun B = shizu } }
+		hd_party_pair_hostile_effect = { A = wuxun B = shizu }	# 天朝循环·时代特色：按时代/乱象换档
+		set_variable = { name = hd_party_rel_wuxun_shizu value = flag:hostile }
+		set_variable = { name = hd_party_rel_shizu_wuxun value = flag:hostile }
+	}
+	else_if = {
+		limit = { hd_party_coop_trigger = { A = wuxun B = shizu } }
+		hd_party_pair_coop_effect = { A = wuxun B = shizu }	# 天朝循环·时代特色：按时代换档
+		set_variable = { name = hd_party_rel_wuxun_shizu value = flag:coop }
+		set_variable = { name = hd_party_rel_shizu_wuxun value = flag:coop }
+	}
+	else = {
+		set_variable = { name = hd_party_rel_wuxun_shizu value = flag:none }
+		set_variable = { name = hd_party_rel_shizu_wuxun value = flag:none }
+	}
+	if = {
+		limit = { hd_party_hostile_trigger = { A = wuxun B = hanmen } }
+		hd_party_pair_hostile_effect = { A = wuxun B = hanmen }	# 天朝循环·时代特色：按时代/乱象换档
+		set_variable = { name = hd_party_rel_wuxun_hanmen value = flag:hostile }
+		set_variable = { name = hd_party_rel_hanmen_wuxun value = flag:hostile }
+	}
+	else_if = {
+		limit = { hd_party_coop_trigger = { A = wuxun B = hanmen } }
+		hd_party_pair_coop_effect = { A = wuxun B = hanmen }	# 天朝循环·时代特色：按时代换档
+		set_variable = { name = hd_party_rel_wuxun_hanmen value = flag:coop }
+		set_variable = { name = hd_party_rel_hanmen_wuxun value = flag:coop }
+	}
+	else = {
+		set_variable = { name = hd_party_rel_wuxun_hanmen value = flag:none }
+		set_variable = { name = hd_party_rel_hanmen_wuxun value = flag:none }
+	}
+	if = {
+		limit = { hd_party_hostile_trigger = { A = shizu B = hanmen } }
+		hd_party_pair_hostile_effect = { A = shizu B = hanmen }	# 天朝循环·时代特色：按时代/乱象换档
+		set_variable = { name = hd_party_rel_shizu_hanmen value = flag:hostile }
+		set_variable = { name = hd_party_rel_hanmen_shizu value = flag:hostile }
+	}
+	else_if = {
+		limit = { hd_party_coop_trigger = { A = shizu B = hanmen } }
+		hd_party_pair_coop_effect = { A = shizu B = hanmen }	# 天朝循环·时代特色：按时代换档
+		set_variable = { name = hd_party_rel_shizu_hanmen value = flag:coop }
+		set_variable = { name = hd_party_rel_hanmen_shizu value = flag:coop }
+	}
+	else = {
+		set_variable = { name = hd_party_rel_shizu_hanmen value = flag:none }
+		set_variable = { name = hd_party_rel_hanmen_shizu value = flag:none }
+	}
+}
+
+# 天朝循环·时代特色：党际好感按时代换档（docs/天朝循环_时代特色重制计划.md §3.2/§3.3）
+# 天子朝廷进取期：对立减半、合作加倍；紧张期"党争内耗"乱象：对立加倍。换档时先移除其他档位，避免叠加
+# Scope：君主（scope:hd_party_court）
+hd_party_pair_hostile_effect = {
+	if = {
+		limit = {
+			has_title = title:h_china
+			hd_dc_phase_is_trigger = { PHASE = stability_advancement }
+		}
+		hd_party_pair_remove_opinion_effect = { A = $A$ B = $B$ OPINION = hd_party_hostile_opinion }
+		hd_party_pair_remove_opinion_effect = { A = $A$ B = $B$ OPINION = hd_party_hostile_double_opinion }
+		hd_party_pair_opinion_effect = { A = $A$ B = $B$ OPINION = hd_party_hostile_half_opinion }
+	}
+	else_if = {
+		limit = { has_character_modifier = hd_dc_kit_ten_chaos_partisan_modifier }
+		hd_party_pair_remove_opinion_effect = { A = $A$ B = $B$ OPINION = hd_party_hostile_opinion }
+		hd_party_pair_remove_opinion_effect = { A = $A$ B = $B$ OPINION = hd_party_hostile_half_opinion }
+		hd_party_pair_opinion_effect = { A = $A$ B = $B$ OPINION = hd_party_hostile_double_opinion }
+	}
+	else = {
+		hd_party_pair_remove_opinion_effect = { A = $A$ B = $B$ OPINION = hd_party_hostile_half_opinion }
+		hd_party_pair_remove_opinion_effect = { A = $A$ B = $B$ OPINION = hd_party_hostile_double_opinion }
+		hd_party_pair_opinion_effect = { A = $A$ B = $B$ OPINION = hd_party_hostile_opinion }
+	}
+}
+hd_party_pair_coop_effect = {
+	if = {
+		limit = {
+			has_title = title:h_china
+			hd_dc_phase_is_trigger = { PHASE = stability_advancement }
+		}
+		hd_party_pair_remove_opinion_effect = { A = $A$ B = $B$ OPINION = hd_party_coop_opinion }
+		hd_party_pair_opinion_effect = { A = $A$ B = $B$ OPINION = hd_party_coop_double_opinion }
+	}
+	else = {
+		hd_party_pair_remove_opinion_effect = { A = $A$ B = $B$ OPINION = hd_party_coop_double_opinion }
+		hd_party_pair_opinion_effect = { A = $A$ B = $B$ OPINION = hd_party_coop_opinion }
+	}
+}
+# Scope：君主。$A$ 与 $B$ 两党的前三名互相移除好感 $OPINION$
+hd_party_pair_remove_opinion_effect = {
+	every_in_list = {
+		variable = hd_party_$A$_top
+		limit = { is_alive = yes }
+		save_temporary_scope_as = hd_party_pa
+		scope:hd_party_court = {
+			every_in_list = {
+				variable = hd_party_$B$_top
+				limit = { is_alive = yes }
+				remove_opinion = { target = scope:hd_party_pa modifier = $OPINION$ }
+				scope:hd_party_pa = { remove_opinion = { target = prev modifier = $OPINION$ } }
+			}
+		}
+	}
+}
+
+# Scope：君主。$A$ 与 $B$ 两党的前三名互加好感 $OPINION$
+hd_party_pair_opinion_effect = {
+	every_in_list = {
+		variable = hd_party_$A$_top
+		limit = { is_alive = yes }
+		save_temporary_scope_as = hd_party_pa
+		scope:hd_party_court = {
+			every_in_list = {
+				variable = hd_party_$B$_top
+				limit = { is_alive = yes }
+				add_opinion = { target = scope:hd_party_pa modifier = $OPINION$ years = 1 }
+				scope:hd_party_pa = { add_opinion = { target = prev modifier = $OPINION$ years = 1 } }
+			}
+		}
+	}
+}
+
+############################################################
+# 青睐
+############################################################
+# Scope：君主。青睐 $G$ 党（$G$ = none 时取消青睐）。调用前已扣除花费
+hd_party_set_favored_effect = {
+	save_temporary_scope_value_as = { name = hd_party_new_fav value = flag:$G$ }
+	# 原被青睐的朋党失宠
+	if = {
+		limit = {
+			var:hd_party_favored ?= flag:huanguan
+			NOT = { scope:hd_party_new_fav = flag:huanguan }
+		}
+		set_variable = { name = hd_party_huanguan_disgrace value = 10 }
+		var:hd_party_huanguan_leader ?= {
+			add_opinion = { target = prev modifier = hd_party_disgraced_opinion }
+		}
+	}
+	if = {
+		limit = {
+			var:hd_party_favored ?= flag:waiqi
+			NOT = { scope:hd_party_new_fav = flag:waiqi }
+		}
+		set_variable = { name = hd_party_waiqi_disgrace value = 10 }
+		var:hd_party_waiqi_leader ?= {
+			add_opinion = { target = prev modifier = hd_party_disgraced_opinion }
+		}
+	}
+	if = {
+		limit = {
+			var:hd_party_favored ?= flag:wuxun
+			NOT = { scope:hd_party_new_fav = flag:wuxun }
+		}
+		set_variable = { name = hd_party_wuxun_disgrace value = 10 }
+		var:hd_party_wuxun_leader ?= {
+			add_opinion = { target = prev modifier = hd_party_disgraced_opinion }
+		}
+	}
+	if = {
+		limit = {
+			var:hd_party_favored ?= flag:shizu
+			NOT = { scope:hd_party_new_fav = flag:shizu }
+		}
+		set_variable = { name = hd_party_shizu_disgrace value = 10 }
+		var:hd_party_shizu_leader ?= {
+			add_opinion = { target = prev modifier = hd_party_disgraced_opinion }
+		}
+	}
+	if = {
+		limit = {
+			var:hd_party_favored ?= flag:hanmen
+			NOT = { scope:hd_party_new_fav = flag:hanmen }
+		}
+		set_variable = { name = hd_party_hanmen_disgrace value = 10 }
+		var:hd_party_hanmen_leader ?= {
+			add_opinion = { target = prev modifier = hd_party_disgraced_opinion }
+		}
+	}
+	remove_variable = hd_party_favored
+	remove_variable = hd_party_favor_years
+	if = {
+		limit = { NOT = { scope:hd_party_new_fav = flag:none } }
+		set_variable = { name = hd_party_favored value = flag:$G$ }
+		set_variable = { name = hd_party_favor_years value = 0 }
+	}
+	set_variable = { name = hd_party_favor_cd days = hd_party_favor_cd_days }
+	# 天子朝廷：同步原版"当权朋党"
+	if = {
+		limit = { has_title = title:h_china }
+		situation:dynastic_cycle ?= {
+			every_participant_group = {
+				limit = { has_variable = movement_favored }
+				remove_variable = movement_favored
+			}
+		}
+		if = { limit = { scope:hd_party_new_fav = flag:huanguan } situation:dynastic_cycle.situation_participant_group:undecided_movement = { make_movement_favored_effect = yes } }
+		if = { limit = { scope:hd_party_new_fav = flag:waiqi } situation:dynastic_cycle.situation_participant_group:pro_hegemon_movement = { make_movement_favored_effect = yes } }
+		if = { limit = { scope:hd_party_new_fav = flag:wuxun } situation:dynastic_cycle.situation_participant_group:expansion_movement = { make_movement_favored_effect = yes } }
+		if = { limit = { scope:hd_party_new_fav = flag:shizu } situation:dynastic_cycle.situation_participant_group:conservative_movement = { make_movement_favored_effect = yes } }
+		if = { limit = { scope:hd_party_new_fav = flag:hanmen } situation:dynastic_cycle.situation_participant_group:advancement_movement = { make_movement_favored_effect = yes } }
+	}
+	hd_party_apply_favor_copy_effect = yes
+	trigger_event = { id = hd_party.0001 days = 1 }
+}
+
+# Scope：君主。青睐事件链计数（每年）
+hd_party_favor_chain_tick_effect = {
+	if = {
+		limit = { exists = var:hd_party_favor_years }
+		hd_party_add_var_effect = { NAME = hd_party_favor_years VALUE = 1 }
+		if = {
+			limit = { var:hd_party_favor_years >= 5 }
+			hd_party_add_var_effect = { NAME = hd_party_chain_tick VALUE = 1 }
+		}
+		if = {
+			limit = {
+				var:hd_party_favor_years >= 5
+				OR = {
+					var:hd_party_favor_years = 5
+					var:hd_party_chain_tick >= 5
+				}
+			}
+			set_variable = { name = hd_party_chain_tick value = 0 }
+			if = {
+				limit = {
+					var:hd_party_favored ?= flag:huanguan
+					NOT = { var:hd_party_huanguan_chain_stage ?= 3 }
+				}
+				random = {
+					chance = hd_party_chain_chance
+					modifier = {
+						add = 20
+						has_variable = hd_party_huanguan_chain_paused
+					}
+					remove_variable = hd_party_huanguan_chain_paused
+					if = {
+						limit = { NOT = { exists = var:hd_party_huanguan_chain_stage } }
+						trigger_event = hd_party_chain.11
+					}
+					else_if = {
+						limit = { var:hd_party_huanguan_chain_stage = 1 }
+						trigger_event = hd_party_chain.12
+					}
+					else = {
+						trigger_event = hd_party_chain.13
+					}
+				}
+			}
+			if = {
+				limit = {
+					var:hd_party_favored ?= flag:waiqi
+					NOT = { var:hd_party_waiqi_chain_stage ?= 3 }
+				}
+				random = {
+					chance = hd_party_chain_chance
+					modifier = {
+						add = 20
+						has_variable = hd_party_waiqi_chain_paused
+					}
+					remove_variable = hd_party_waiqi_chain_paused
+					if = {
+						limit = { NOT = { exists = var:hd_party_waiqi_chain_stage } }
+						trigger_event = hd_party_chain.21
+					}
+					else_if = {
+						limit = { var:hd_party_waiqi_chain_stage = 1 }
+						trigger_event = hd_party_chain.22
+					}
+					else = {
+						trigger_event = hd_party_chain.23
+					}
+				}
+			}
+			if = {
+				limit = {
+					var:hd_party_favored ?= flag:wuxun
+					NOT = { var:hd_party_wuxun_chain_stage ?= 3 }
+				}
+				random = {
+					chance = hd_party_chain_chance
+					modifier = {
+						add = 20
+						has_variable = hd_party_wuxun_chain_paused
+					}
+					remove_variable = hd_party_wuxun_chain_paused
+					if = {
+						limit = { NOT = { exists = var:hd_party_wuxun_chain_stage } }
+						trigger_event = hd_party_chain.31
+					}
+					else_if = {
+						limit = { var:hd_party_wuxun_chain_stage = 1 }
+						trigger_event = hd_party_chain.32
+					}
+					else = {
+						trigger_event = hd_party_chain.33
+					}
+				}
+			}
+			if = {
+				limit = {
+					var:hd_party_favored ?= flag:shizu
+					NOT = { var:hd_party_shizu_chain_stage ?= 3 }
+				}
+				random = {
+					chance = hd_party_chain_chance
+					modifier = {
+						add = 20
+						has_variable = hd_party_shizu_chain_paused
+					}
+					remove_variable = hd_party_shizu_chain_paused
+					if = {
+						limit = { NOT = { exists = var:hd_party_shizu_chain_stage } }
+						trigger_event = hd_party_chain.41
+					}
+					else_if = {
+						limit = { var:hd_party_shizu_chain_stage = 1 }
+						trigger_event = hd_party_chain.42
+					}
+					else = {
+						trigger_event = hd_party_chain.43
+					}
+				}
+			}
+			if = {
+				limit = {
+					var:hd_party_favored ?= flag:hanmen
+					NOT = { var:hd_party_hanmen_chain_stage ?= 3 }
+				}
+				random = {
+					chance = hd_party_chain_chance
+					modifier = {
+						add = 20
+						has_variable = hd_party_hanmen_chain_paused
+					}
+					remove_variable = hd_party_hanmen_chain_paused
+					if = {
+						limit = { NOT = { exists = var:hd_party_hanmen_chain_stage } }
+						trigger_event = hd_party_chain.51
+					}
+					else_if = {
+						limit = { var:hd_party_hanmen_chain_stage = 1 }
+						trigger_event = hd_party_chain.52
+					}
+					else = {
+						trigger_event = hd_party_chain.53
+					}
+				}
+			}
+		}
+	}
+}
+
+############################################################
+# 政策 / 要求效忠 / 态度（玩家与 AI 共用）
+############################################################
+# Scope：君主。把 $G$ 党政策设为 $POLICY$（neutral = 清除）
+hd_party_set_policy_effect = {
+	save_scope_as = hd_party_court
+	remove_variable = hd_party_$G$_policy
+	save_temporary_scope_value_as = { name = hd_party_new_policy value = flag:$POLICY$ }
+	if = {
+		limit = { NOT = { scope:hd_party_new_policy = flag:neutral } }
+		set_variable = { name = hd_party_$G$_policy value = flag:$POLICY$ }
+		set_variable = { name = hd_party_$G$_policy_cd days = hd_party_policy_cd_days }
+	}
+	hd_party_refresh_policy_cost_effect = yes
+	set_variable = { name = hd_party_$G$_satisfaction value = hd_party_satisfaction_$G$_value }
+	hd_party_apply_member_effects_effect = { G = $G$ }
+	# 天朝循环·时代特色：天子查禁/抑制朋党 → 诱因"打压朋党"（C2）
+	if = {
+		limit = {
+			has_title = title:h_china
+			OR = {
+				scope:hd_party_new_policy = flag:ban
+				scope:hd_party_new_policy = flag:restrict
+			}
+		}
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_suppress_party ACTOR = scope:hd_party_court }
+	}
+}
+
+# Scope：君主（scope:hd_party_court）。对 $G$ 党要求效忠的结算（花费已扣）
+hd_party_loyalty_resolve_effect = {
+	set_variable = { name = hd_party_$G$_loyalty_cd days = hd_party_loyalty_cd_days }
+	random = {
+		chance = hd_party_loyalty_chance_$G$_value
+		save_scope_value_as = { name = hd_party_loyalty_success value = flag:yes }
+	}
+	if = {
+		limit = { exists = scope:hd_party_loyalty_success }
+		hd_party_set_stance_effect = { G = $G$ STANCE = zunwang }
+		set_variable = { name = hd_party_$G$_loyalty_lock value = var:hd_party_$G$_leader }
+		custom_tooltip = hd_party_loyalty_success_tt
+	}
+	else = {
+		hd_party_set_attitude_effect = { G = $G$ ATTITUDE = oppose }
+		set_variable = { name = hd_party_$G$_oppose_lock days = hd_party_loyalty_fail_lock_days }
+		custom_tooltip = hd_party_loyalty_fail_tt
+	}
+}
+
+############################################################
+# AI
+############################################################
+# Scope：AI 君主（scope:hd_party_court）
+hd_party_ai_ruler_effect = {
+	# 青睐：无青睐或被青睐朋党对抗时，换成满意度最高且不衰微的朋党
+	if = {
+		limit = {
+			NOT = { has_variable = hd_party_favor_cd }
+			prestige >= hd_party_favor_prestige_cost
+			OR = {
+				NOT = { exists = var:hd_party_favored }
+				AND = { var:hd_party_favored ?= flag:huanguan var:hd_party_huanguan_attitude ?= flag:oppose }
+				AND = { var:hd_party_favored ?= flag:waiqi var:hd_party_waiqi_attitude ?= flag:oppose }
+				AND = { var:hd_party_favored ?= flag:wuxun var:hd_party_wuxun_attitude ?= flag:oppose }
+				AND = { var:hd_party_favored ?= flag:shizu var:hd_party_shizu_attitude ?= flag:oppose }
+				AND = { var:hd_party_favored ?= flag:hanmen var:hd_party_hanmen_attitude ?= flag:oppose }
+			}
+		}
+		random = {
+			chance = 50
+			clear_saved_scope = hd_party_ai_pick
+			save_temporary_scope_value_as = { name = hd_party_ai_best value = -1000 }
+			if = {
+				limit = {
+					NOT = { var:hd_party_favored ?= flag:huanguan }
+					NOT = { var:hd_party_huanguan_attitude ?= flag:oppose }
+					NOT = { hd_party_is_weak_trigger = { G = huanguan } }
+					exists = var:hd_party_huanguan_satisfaction
+					var:hd_party_huanguan_satisfaction > scope:hd_party_ai_best
+				}
+				save_temporary_scope_value_as = { name = hd_party_ai_best value = var:hd_party_huanguan_satisfaction }
+				save_temporary_scope_value_as = { name = hd_party_ai_pick value = 1 }
+			}
+			if = {
+				limit = {
+					NOT = { var:hd_party_favored ?= flag:waiqi }
+					NOT = { var:hd_party_waiqi_attitude ?= flag:oppose }
+					NOT = { hd_party_is_weak_trigger = { G = waiqi } }
+					exists = var:hd_party_waiqi_satisfaction
+					var:hd_party_waiqi_satisfaction > scope:hd_party_ai_best
+				}
+				save_temporary_scope_value_as = { name = hd_party_ai_best value = var:hd_party_waiqi_satisfaction }
+				save_temporary_scope_value_as = { name = hd_party_ai_pick value = 2 }
+			}
+			if = {
+				limit = {
+					NOT = { var:hd_party_favored ?= flag:wuxun }
+					NOT = { var:hd_party_wuxun_attitude ?= flag:oppose }
+					NOT = { hd_party_is_weak_trigger = { G = wuxun } }
+					exists = var:hd_party_wuxun_satisfaction
+					var:hd_party_wuxun_satisfaction > scope:hd_party_ai_best
+				}
+				save_temporary_scope_value_as = { name = hd_party_ai_best value = var:hd_party_wuxun_satisfaction }
+				save_temporary_scope_value_as = { name = hd_party_ai_pick value = 3 }
+			}
+			if = {
+				limit = {
+					NOT = { var:hd_party_favored ?= flag:shizu }
+					NOT = { var:hd_party_shizu_attitude ?= flag:oppose }
+					NOT = { hd_party_is_weak_trigger = { G = shizu } }
+					exists = var:hd_party_shizu_satisfaction
+					var:hd_party_shizu_satisfaction > scope:hd_party_ai_best
+				}
+				save_temporary_scope_value_as = { name = hd_party_ai_best value = var:hd_party_shizu_satisfaction }
+				save_temporary_scope_value_as = { name = hd_party_ai_pick value = 4 }
+			}
+			if = {
+				limit = {
+					NOT = { var:hd_party_favored ?= flag:hanmen }
+					NOT = { var:hd_party_hanmen_attitude ?= flag:oppose }
+					NOT = { hd_party_is_weak_trigger = { G = hanmen } }
+					exists = var:hd_party_hanmen_satisfaction
+					var:hd_party_hanmen_satisfaction > scope:hd_party_ai_best
+				}
+				save_temporary_scope_value_as = { name = hd_party_ai_best value = var:hd_party_hanmen_satisfaction }
+				save_temporary_scope_value_as = { name = hd_party_ai_pick value = 5 }
+			}
+			if = {
+				limit = { exists = scope:hd_party_ai_pick }
+				add_prestige = { value = hd_party_favor_prestige_cost multiply = -1 }
+				if = { limit = { scope:hd_party_ai_pick = 1 } hd_party_set_favored_effect = { G = huanguan } }
+				if = { limit = { scope:hd_party_ai_pick = 2 } hd_party_set_favored_effect = { G = waiqi } }
+				if = { limit = { scope:hd_party_ai_pick = 3 } hd_party_set_favored_effect = { G = wuxun } }
+				if = { limit = { scope:hd_party_ai_pick = 4 } hd_party_set_favored_effect = { G = shizu } }
+				if = { limit = { scope:hd_party_ai_pick = 5 } hd_party_set_favored_effect = { G = hanmen } }
+			}
+		}
+	}
+	# 宦官：政策
+	if = {
+		limit = { NOT = { has_variable = hd_party_huanguan_policy_cd } }
+		if = {
+			limit = {
+				var:hd_party_huanguan_policy ?= flag:restrict
+				exists = var:hd_party_huanguan_oppose_years
+				var:hd_party_huanguan_oppose_years >= 10
+			}
+			hd_party_set_policy_effect = { G = huanguan POLICY = ban }
+		}
+		else_if = {
+			limit = {
+				NOT = { exists = var:hd_party_huanguan_policy }
+				var:hd_party_huanguan_attitude ?= flag:oppose
+				exists = var:hd_party_huanguan_share
+				var:hd_party_huanguan_share >= 30
+			}
+			hd_party_set_policy_effect = { G = huanguan POLICY = restrict }
+		}
+		else_if = {
+			limit = {
+				NOT = { exists = var:hd_party_huanguan_policy }
+				var:hd_party_favored ?= flag:huanguan
+			}
+			hd_party_set_policy_effect = { G = huanguan POLICY = promote }
+		}
+		else_if = {
+			limit = {
+				exists = var:hd_party_huanguan_policy
+				NOT = { var:hd_party_huanguan_attitude ?= flag:oppose }
+				NOT = { var:hd_party_favored ?= flag:huanguan }
+			}
+			hd_party_set_policy_effect = { G = huanguan POLICY = neutral }
+		}
+	}
+	# 宦官：要求效忠
+	if = {
+		limit = {
+			var:hd_party_huanguan_attitude ?= flag:oppose
+			NOT = { has_variable = hd_party_huanguan_loyalty_cd }
+			NOT = { var:hd_party_huanguan_stance ?= flag:zunwang }
+			exists = var:hd_party_huanguan_leader
+			hd_party_loyalty_chance_huanguan_value >= 50
+		}
+		if = {
+			limit = {
+				government_has_flag = government_has_influence
+				influence >= hd_party_loyalty_influence_cost
+			}
+			change_influence = { value = hd_party_loyalty_influence_cost multiply = -1 }
+			hd_party_loyalty_resolve_effect = { G = huanguan }
+		}
+		else_if = {
+			limit = { legitimacy >= 100 }
+			add_legitimacy = { value = hd_party_loyalty_legitimacy_cost multiply = -1 }
+			hd_party_loyalty_resolve_effect = { G = huanguan }
+		}
+		else_if = {
+			limit = { prestige >= hd_party_loyalty_prestige_cost }
+			add_prestige = { value = hd_party_loyalty_prestige_cost multiply = -1 }
+			hd_party_loyalty_resolve_effect = { G = huanguan }
+		}
+	}
+	# 外戚：政策
+	if = {
+		limit = { NOT = { has_variable = hd_party_waiqi_policy_cd } }
+		if = {
+			limit = {
+				var:hd_party_waiqi_policy ?= flag:restrict
+				exists = var:hd_party_waiqi_oppose_years
+				var:hd_party_waiqi_oppose_years >= 10
+			}
+			hd_party_set_policy_effect = { G = waiqi POLICY = ban }
+		}
+		else_if = {
+			limit = {
+				NOT = { exists = var:hd_party_waiqi_policy }
+				var:hd_party_waiqi_attitude ?= flag:oppose
+				exists = var:hd_party_waiqi_share
+				var:hd_party_waiqi_share >= 30
+			}
+			hd_party_set_policy_effect = { G = waiqi POLICY = restrict }
+		}
+		else_if = {
+			limit = {
+				NOT = { exists = var:hd_party_waiqi_policy }
+				var:hd_party_favored ?= flag:waiqi
+			}
+			hd_party_set_policy_effect = { G = waiqi POLICY = promote }
+		}
+		else_if = {
+			limit = {
+				exists = var:hd_party_waiqi_policy
+				NOT = { var:hd_party_waiqi_attitude ?= flag:oppose }
+				NOT = { var:hd_party_favored ?= flag:waiqi }
+			}
+			hd_party_set_policy_effect = { G = waiqi POLICY = neutral }
+		}
+	}
+	# 外戚：要求效忠
+	if = {
+		limit = {
+			var:hd_party_waiqi_attitude ?= flag:oppose
+			NOT = { has_variable = hd_party_waiqi_loyalty_cd }
+			NOT = { var:hd_party_waiqi_stance ?= flag:zunwang }
+			exists = var:hd_party_waiqi_leader
+			hd_party_loyalty_chance_waiqi_value >= 50
+		}
+		if = {
+			limit = {
+				government_has_flag = government_has_influence
+				influence >= hd_party_loyalty_influence_cost
+			}
+			change_influence = { value = hd_party_loyalty_influence_cost multiply = -1 }
+			hd_party_loyalty_resolve_effect = { G = waiqi }
+		}
+		else_if = {
+			limit = { legitimacy >= 100 }
+			add_legitimacy = { value = hd_party_loyalty_legitimacy_cost multiply = -1 }
+			hd_party_loyalty_resolve_effect = { G = waiqi }
+		}
+		else_if = {
+			limit = { prestige >= hd_party_loyalty_prestige_cost }
+			add_prestige = { value = hd_party_loyalty_prestige_cost multiply = -1 }
+			hd_party_loyalty_resolve_effect = { G = waiqi }
+		}
+	}
+	# 武勋：政策
+	if = {
+		limit = { NOT = { has_variable = hd_party_wuxun_policy_cd } }
+		if = {
+			limit = {
+				var:hd_party_wuxun_policy ?= flag:restrict
+				exists = var:hd_party_wuxun_oppose_years
+				var:hd_party_wuxun_oppose_years >= 10
+			}
+			hd_party_set_policy_effect = { G = wuxun POLICY = ban }
+		}
+		else_if = {
+			limit = {
+				NOT = { exists = var:hd_party_wuxun_policy }
+				var:hd_party_wuxun_attitude ?= flag:oppose
+				exists = var:hd_party_wuxun_share
+				var:hd_party_wuxun_share >= 30
+			}
+			hd_party_set_policy_effect = { G = wuxun POLICY = restrict }
+		}
+		else_if = {
+			limit = {
+				NOT = { exists = var:hd_party_wuxun_policy }
+				var:hd_party_favored ?= flag:wuxun
+			}
+			hd_party_set_policy_effect = { G = wuxun POLICY = promote }
+		}
+		else_if = {
+			limit = {
+				exists = var:hd_party_wuxun_policy
+				NOT = { var:hd_party_wuxun_attitude ?= flag:oppose }
+				NOT = { var:hd_party_favored ?= flag:wuxun }
+			}
+			hd_party_set_policy_effect = { G = wuxun POLICY = neutral }
+		}
+	}
+	# 武勋：要求效忠
+	if = {
+		limit = {
+			var:hd_party_wuxun_attitude ?= flag:oppose
+			NOT = { has_variable = hd_party_wuxun_loyalty_cd }
+			NOT = { var:hd_party_wuxun_stance ?= flag:zunwang }
+			exists = var:hd_party_wuxun_leader
+			hd_party_loyalty_chance_wuxun_value >= 50
+		}
+		if = {
+			limit = {
+				government_has_flag = government_has_influence
+				influence >= hd_party_loyalty_influence_cost
+			}
+			change_influence = { value = hd_party_loyalty_influence_cost multiply = -1 }
+			hd_party_loyalty_resolve_effect = { G = wuxun }
+		}
+		else_if = {
+			limit = { legitimacy >= 100 }
+			add_legitimacy = { value = hd_party_loyalty_legitimacy_cost multiply = -1 }
+			hd_party_loyalty_resolve_effect = { G = wuxun }
+		}
+		else_if = {
+			limit = { prestige >= hd_party_loyalty_prestige_cost }
+			add_prestige = { value = hd_party_loyalty_prestige_cost multiply = -1 }
+			hd_party_loyalty_resolve_effect = { G = wuxun }
+		}
+	}
+	# 世族：政策
+	if = {
+		limit = { NOT = { has_variable = hd_party_shizu_policy_cd } }
+		if = {
+			limit = {
+				var:hd_party_shizu_policy ?= flag:restrict
+				exists = var:hd_party_shizu_oppose_years
+				var:hd_party_shizu_oppose_years >= 10
+			}
+			hd_party_set_policy_effect = { G = shizu POLICY = ban }
+		}
+		else_if = {
+			limit = {
+				NOT = { exists = var:hd_party_shizu_policy }
+				var:hd_party_shizu_attitude ?= flag:oppose
+				exists = var:hd_party_shizu_share
+				var:hd_party_shizu_share >= 30
+			}
+			hd_party_set_policy_effect = { G = shizu POLICY = restrict }
+		}
+		else_if = {
+			limit = {
+				NOT = { exists = var:hd_party_shizu_policy }
+				var:hd_party_favored ?= flag:shizu
+			}
+			hd_party_set_policy_effect = { G = shizu POLICY = promote }
+		}
+		else_if = {
+			limit = {
+				exists = var:hd_party_shizu_policy
+				NOT = { var:hd_party_shizu_attitude ?= flag:oppose }
+				NOT = { var:hd_party_favored ?= flag:shizu }
+			}
+			hd_party_set_policy_effect = { G = shizu POLICY = neutral }
+		}
+	}
+	# 世族：要求效忠
+	if = {
+		limit = {
+			var:hd_party_shizu_attitude ?= flag:oppose
+			NOT = { has_variable = hd_party_shizu_loyalty_cd }
+			NOT = { var:hd_party_shizu_stance ?= flag:zunwang }
+			exists = var:hd_party_shizu_leader
+			hd_party_loyalty_chance_shizu_value >= 50
+		}
+		if = {
+			limit = {
+				government_has_flag = government_has_influence
+				influence >= hd_party_loyalty_influence_cost
+			}
+			change_influence = { value = hd_party_loyalty_influence_cost multiply = -1 }
+			hd_party_loyalty_resolve_effect = { G = shizu }
+		}
+		else_if = {
+			limit = { legitimacy >= 100 }
+			add_legitimacy = { value = hd_party_loyalty_legitimacy_cost multiply = -1 }
+			hd_party_loyalty_resolve_effect = { G = shizu }
+		}
+		else_if = {
+			limit = { prestige >= hd_party_loyalty_prestige_cost }
+			add_prestige = { value = hd_party_loyalty_prestige_cost multiply = -1 }
+			hd_party_loyalty_resolve_effect = { G = shizu }
+		}
+	}
+	# 寒门：政策
+	if = {
+		limit = { NOT = { has_variable = hd_party_hanmen_policy_cd } }
+		if = {
+			limit = {
+				var:hd_party_hanmen_policy ?= flag:restrict
+				exists = var:hd_party_hanmen_oppose_years
+				var:hd_party_hanmen_oppose_years >= 10
+			}
+			hd_party_set_policy_effect = { G = hanmen POLICY = ban }
+		}
+		else_if = {
+			limit = {
+				NOT = { exists = var:hd_party_hanmen_policy }
+				var:hd_party_hanmen_attitude ?= flag:oppose
+				exists = var:hd_party_hanmen_share
+				var:hd_party_hanmen_share >= 30
+			}
+			hd_party_set_policy_effect = { G = hanmen POLICY = restrict }
+		}
+		else_if = {
+			limit = {
+				NOT = { exists = var:hd_party_hanmen_policy }
+				var:hd_party_favored ?= flag:hanmen
+			}
+			hd_party_set_policy_effect = { G = hanmen POLICY = promote }
+		}
+		else_if = {
+			limit = {
+				exists = var:hd_party_hanmen_policy
+				NOT = { var:hd_party_hanmen_attitude ?= flag:oppose }
+				NOT = { var:hd_party_favored ?= flag:hanmen }
+			}
+			hd_party_set_policy_effect = { G = hanmen POLICY = neutral }
+		}
+	}
+	# 寒门：要求效忠
+	if = {
+		limit = {
+			var:hd_party_hanmen_attitude ?= flag:oppose
+			NOT = { has_variable = hd_party_hanmen_loyalty_cd }
+			NOT = { var:hd_party_hanmen_stance ?= flag:zunwang }
+			exists = var:hd_party_hanmen_leader
+			hd_party_loyalty_chance_hanmen_value >= 50
+		}
+		if = {
+			limit = {
+				government_has_flag = government_has_influence
+				influence >= hd_party_loyalty_influence_cost
+			}
+			change_influence = { value = hd_party_loyalty_influence_cost multiply = -1 }
+			hd_party_loyalty_resolve_effect = { G = hanmen }
+		}
+		else_if = {
+			limit = { legitimacy >= 100 }
+			add_legitimacy = { value = hd_party_loyalty_legitimacy_cost multiply = -1 }
+			hd_party_loyalty_resolve_effect = { G = hanmen }
+		}
+		else_if = {
+			limit = { prestige >= hd_party_loyalty_prestige_cost }
+			add_prestige = { value = hd_party_loyalty_prestige_cost multiply = -1 }
+			hd_party_loyalty_resolve_effect = { G = hanmen }
+		}
+	}
+}
+
+# Scope：君主（scope:hd_party_court）。AI 领袖年度考虑发起立场辩论
+hd_party_ai_leader_debate_effect = {
+	var:hd_party_huanguan_leader ?= {
+		if = {
+			limit = {
+				is_ai = yes
+				hd_party_can_start_debate_trigger = yes
+			}
+			hd_party_ai_consider_debate_effect = { G = huanguan }
+		}
+	}
+	var:hd_party_waiqi_leader ?= {
+		if = {
+			limit = {
+				is_ai = yes
+				hd_party_can_start_debate_trigger = yes
+			}
+			hd_party_ai_consider_debate_effect = { G = waiqi }
+		}
+	}
+	var:hd_party_wuxun_leader ?= {
+		if = {
+			limit = {
+				is_ai = yes
+				hd_party_can_start_debate_trigger = yes
+			}
+			hd_party_ai_consider_debate_effect = { G = wuxun }
+		}
+	}
+	var:hd_party_shizu_leader ?= {
+		if = {
+			limit = {
+				is_ai = yes
+				hd_party_can_start_debate_trigger = yes
+			}
+			hd_party_ai_consider_debate_effect = { G = shizu }
+		}
+	}
+	var:hd_party_hanmen_leader ?= {
+		if = {
+			limit = {
+				is_ai = yes
+				hd_party_can_start_debate_trigger = yes
+			}
+			hd_party_ai_consider_debate_effect = { G = hanmen }
+		}
+	}
+}
+
+# Scope：AI 领袖（scope:hd_party_court）。另一立场的权重比当前立场高 30 以上时，25% 发起辩论
+hd_party_ai_consider_debate_effect = {
+	save_temporary_scope_value_as = { name = hd_party_w_zunwang value = hd_party_stance_weight_zunwang_value }
+	save_temporary_scope_value_as = { name = hd_party_w_kaituo value = hd_party_stance_weight_kaituo_value }
+	save_temporary_scope_value_as = { name = hd_party_w_jinqu value = hd_party_stance_weight_jinqu_value }
+	save_temporary_scope_value_as = { name = hd_party_w_shoujiu value = hd_party_stance_weight_shoujiu_value }
+	save_temporary_scope_value_as = { name = hd_party_w_zhongli value = hd_party_stance_weight_zhongli_value }
+	save_temporary_scope_value_as = { name = hd_party_w_cur value = 0 }
+	if = { limit = { scope:hd_party_court.var:hd_party_$G$_stance ?= flag:zunwang } save_temporary_scope_value_as = { name = hd_party_w_cur value = scope:hd_party_w_zunwang } }
+	if = { limit = { scope:hd_party_court.var:hd_party_$G$_stance ?= flag:kaituo } save_temporary_scope_value_as = { name = hd_party_w_cur value = scope:hd_party_w_kaituo } }
+	if = { limit = { scope:hd_party_court.var:hd_party_$G$_stance ?= flag:jinqu } save_temporary_scope_value_as = { name = hd_party_w_cur value = scope:hd_party_w_jinqu } }
+	if = { limit = { scope:hd_party_court.var:hd_party_$G$_stance ?= flag:shoujiu } save_temporary_scope_value_as = { name = hd_party_w_cur value = scope:hd_party_w_shoujiu } }
+	if = { limit = { scope:hd_party_court.var:hd_party_$G$_stance ?= flag:zhongli } save_temporary_scope_value_as = { name = hd_party_w_cur value = scope:hd_party_w_zhongli } }
+	save_temporary_scope_value_as = { name = hd_party_w_thr value = { value = scope:hd_party_w_cur add = 30 } }
+	if = {
+		limit = {
+			OR = {
+				AND = { NOT = { scope:hd_party_court.var:hd_party_$G$_stance ?= flag:zunwang } scope:hd_party_w_zunwang > scope:hd_party_w_thr }
+				AND = { NOT = { scope:hd_party_court.var:hd_party_$G$_stance ?= flag:kaituo } scope:hd_party_w_kaituo > scope:hd_party_w_thr }
+				AND = { NOT = { scope:hd_party_court.var:hd_party_$G$_stance ?= flag:jinqu } scope:hd_party_w_jinqu > scope:hd_party_w_thr }
+				AND = { NOT = { scope:hd_party_court.var:hd_party_$G$_stance ?= flag:shoujiu } scope:hd_party_w_shoujiu > scope:hd_party_w_thr }
+				AND = { NOT = { scope:hd_party_court.var:hd_party_$G$_stance ?= flag:zhongli } scope:hd_party_w_zhongli > scope:hd_party_w_thr }
+			}
+		}
+		random = {
+			chance = 25
+			set_variable = { name = hd_party_ai_debate_wish days = 60 }
+			ai_attempt_to_host_activity = activity_hd_party_debate
+		}
+	}
+}
+
