@@ -1,0 +1,124 @@
+﻿WJ_kaoke_find_reviewer = {
+ # Start without a usable reviewer; no emperor fallback when personnel is vacant.
+ scope:actor = { save_scope_as = recipient }
+ scope:actor = {
+  if = {
+   limit = { WJ_kaoke_under_king_trigger = yes }
+   every_liege_or_above = { limit = { highest_held_title_tier = tier_kingdom } save_scope_as = recipient }
+  }
+  else = { top_liege.cp:minister_personnel ?= { save_scope_as = recipient } }
+ }
+}
+# Candidate scope; recipient is the actual approver. Manual table never calls this effect.
+WJ_kaoke_add_request_points = {
+ if = {
+  limit = { scope:recipient = { has_council_position = minister_personnel is_councillor_of = scope:actor.top_liege } }
+  if = { limit = { NOT = { has_variable = wj_kaoke_central_points } } set_variable = { name = wj_kaoke_central_points value = 0 } }
+  change_variable = { name = wj_kaoke_central_points add = $POINTS$ }
+ }
+ else = {
+  if = { limit = { NOT = { has_variable = wj_kaoke_superior_points } } set_variable = { name = wj_kaoke_superior_points value = 0 } }
+  change_variable = { name = wj_kaoke_superior_points add = $POINTS$ }
+ }
+}
+WJ_ai_kaoke_clear_period = {
+ remove_variable ?= wj_ai_kaoke_attempted
+ remove_variable ?= wj_ai_kaoke_pending
+}
+WJ_ai_kaoke_begin_request = {
+ scope:actor = {
+  if = { limit = { NOT = { has_variable = wj_ai_kaoke_serial } } set_variable = { name = wj_ai_kaoke_serial value = 0 } }
+  change_variable = { name = wj_ai_kaoke_serial add = 1 }
+  save_scope_value_as = { name = wj_ai_kaoke_serial value = var:wj_ai_kaoke_serial }
+  save_scope_value_as = { name = wj_kaoke_request_epoch value = var:wj_kaoke_window_epoch }
+  save_scope_value_as = { name = wj_kaoke_request_start value = var:wj_kaoke_start }
+  var:wj_kaoke_realm = { save_scope_as = wj_kaoke_request_realm }
+  top_liege = { save_scope_as = wj_kaoke_request_emperor }
+  liege = { save_scope_as = wj_kaoke_request_liege }
+  set_variable = { name = wj_ai_kaoke_attempted value = 1 }
+  set_variable = { name = wj_ai_kaoke_pending value = scope:recipient }
+ }
+}
+WJ_ai_kaoke_accept = {
+ if = {
+  limit = { WJ_ai_kaoke_reply_valid = yes NOT = { scope:recipient = { is_ai = yes has_trait = just } } }
+  scope:actor = {
+   remove_short_term_gold = 300
+   WJ_kaoke_add_request_points = { POINTS = 30 }
+   set_variable = { name = wj_kaoke_central_request_used value = 1 }
+   remove_variable = wj_ai_kaoke_pending
+  }
+  scope:recipient = {
+   add_gold = 300
+   if = { limit = { is_ai = no } stress_impact = { just = major_stress_impact_gain honest = minor_stress_impact_gain } }
+   WJ_kaoke_generate_malpractice_effect = { TARGET = scope:wj_kaoke_request_emperor IMPACT = 30 }
+  }
+  scope:wj_kaoke_generated_secret ?= { reveal_to = scope:actor }
+ }
+ else = { WJ_ai_kaoke_cancel = yes }
+}
+WJ_ai_kaoke_decline = {
+ if = {
+  limit = { WJ_ai_kaoke_reply_valid = yes }
+  scope:actor = { remove_variable = wj_ai_kaoke_pending }
+ }
+ else = { WJ_ai_kaoke_cancel = yes }
+}
+WJ_ai_kaoke_cancel = {
+ if = {
+  limit = { WJ_ai_kaoke_reply_current = yes }
+  scope:actor = { WJ_ai_kaoke_clear_period = yes }
+ }
+}
+# AI 年度公务：不进事件，按性格权重随机计一次公务。调用方已在当日校验资格、周期与朝廷。
+WJ_kaoke_ai_annual_effect = {
+ change_variable = { name = wj_kaoke_choice_count add = 1 }
+ random_list = {
+  40 = {
+   modifier = { factor = 0.5 has_trait = diligent }
+   modifier = { factor = 0.5 has_trait = ambitious }
+   modifier = { factor = 2 has_trait = lazy }
+   modifier = { factor = 1.5 has_trait = content }
+  }
+  35 = {
+   modifier = { factor = 1.5 has_trait = just }
+   change_variable = { name = wj_kaoke_choice_points add = 10 }
+  }
+  25 = {
+   modifier = { factor = 2 has_trait = diligent }
+   modifier = { factor = 1.5 has_trait = ambitious }
+   modifier = { factor = 0.25 has_trait = lazy }
+   modifier = { factor = 0.5 has_trait = content }
+   change_variable = { name = wj_kaoke_choice_points add = 20 }
+  }
+ }
+}
+# AI 五年定第：与 wj_kaoke.1000 immediate 同序结算，再按原选项 ai_chance 自动领奖一次。
+WJ_kaoke_ai_finish_effect = {
+ WJ_kaoke_finish_effect = yes
+ if = {
+  limit = { WJ_kaoke_reward_available_trigger = yes }
+  save_scope_value_as = { name = wj_kaoke_reward_epoch value = var:wj_kaoke_window_epoch }
+  save_scope_value_as = { name = wj_kaoke_reward_date value = var:wj_kaoke_last_date }
+  var:wj_kaoke_realm = { save_scope_as = wj_kaoke_reward_realm }
+  random_list = {
+   30 = {
+    modifier = { factor = 2 has_trait = ambitious }
+    WJ_kaoke_claim_reward_effect = { CHOICE = 1 }
+   }
+   25 = {
+    trigger = { has_treasury = yes }
+    modifier = { factor = 3 treasury < 150 }
+    WJ_kaoke_claim_reward_effect = { CHOICE = 2 }
+   }
+   30 = {
+    modifier = { factor = 2 has_trait = diligent }
+    WJ_kaoke_claim_reward_effect = { CHOICE = 3 }
+   }
+   15 = {
+    trigger = { WJ_kaoke_xp_reward_available_trigger = yes }
+    WJ_kaoke_claim_reward_effect = { CHOICE = 4 }
+   }
+  }
+ }
+}

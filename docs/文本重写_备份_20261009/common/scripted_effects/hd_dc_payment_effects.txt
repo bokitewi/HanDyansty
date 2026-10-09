@@ -1,0 +1,68 @@
+﻿# Shared by the 426 option contracts and COM-05 installments. The proposal
+# response creates the two signatures; this effect does not accept on anyone's
+# behalf. The caller presents and validates the specific political terms.
+# commit: absent = unpaid, 1 = processing, 2 = paid, 3 = amount mismatch.
+hd_dc_execute_payment_effect = {
+	if = {
+		limit = { hd_dc_payment_authorized_trigger = yes }
+		scope:hd_dc_payment = {
+			set_variable = { name = hd_dc_payment_commit value = 1 }
+			if = {
+				limit = { var:hd_dc_debit_kind = 1 }
+				set_variable = { name = hd_dc_debit_before value = var:hd_dc_payer.gold }
+				var:hd_dc_payer = {
+					remove_short_term_gold = scope:hd_dc_payment.var:hd_dc_amount_due # add_gold rejects negative values
+				}
+				set_variable = {
+					name = hd_dc_actual_debit
+					value = { value = var:hd_dc_debit_before subtract = var:hd_dc_payer.gold }
+				}
+			}
+			else = {
+				set_variable = { name = hd_dc_debit_before value = var:hd_dc_payer.treasury }
+				var:hd_dc_payer = {
+					remove_treasury = scope:hd_dc_payment.var:hd_dc_amount_due # add_treasury rejects negative values
+				}
+				set_variable = {
+					name = hd_dc_actual_debit
+					value = { value = var:hd_dc_debit_before subtract = var:hd_dc_payer.treasury }
+				}
+			}
+			# Credit only an amount actually debited. A partial engine operation
+			# is recorded for settlement, never retried as a new full payment.
+			if = {
+				limit = { var:hd_dc_credit_kind = 1 }
+				set_variable = { name = hd_dc_credit_before value = var:hd_dc_payee.gold }
+				var:hd_dc_payee = { add_gold = scope:hd_dc_payment.var:hd_dc_actual_debit }
+				set_variable = {
+					name = hd_dc_actual_credit
+					value = { value = var:hd_dc_payee.gold subtract = var:hd_dc_credit_before }
+				}
+			}
+			else = {
+				set_variable = { name = hd_dc_credit_before value = var:hd_dc_payee.treasury }
+				var:hd_dc_payee = { add_treasury = scope:hd_dc_payment.var:hd_dc_actual_debit }
+				set_variable = {
+					name = hd_dc_actual_credit
+					value = { value = var:hd_dc_payee.treasury subtract = var:hd_dc_credit_before }
+				}
+			}
+			set_variable = { name = hd_dc_payment_date value = current_date }
+			# Preserve the actual transfer shortfall for the common ledger.
+			# A later cancellation/refund consumer may track its own remaining
+			# return obligation here; this transaction is never automatically retried.
+			set_variable = {
+				name = hd_dc_unreturned_debit
+				value = { value = var:hd_dc_actual_debit subtract = var:hd_dc_actual_credit min = 0 }
+			}
+			if = {
+				limit = {
+					var:hd_dc_actual_debit = var:hd_dc_amount_due
+					var:hd_dc_actual_credit = var:hd_dc_amount_due
+				}
+				set_variable = { name = hd_dc_payment_commit value = 2 }
+			}
+			else = { set_variable = { name = hd_dc_payment_commit value = 3 } }
+		}
+	}
+}

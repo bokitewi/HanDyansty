@@ -1,0 +1,471 @@
+﻿# ============================================================================
+# 月旦评（清议重制，2026-10-08）
+#
+# 活动变量（scope:activity）：
+#   wj_yd_active          本场为月旦评
+#   wj_yd_n               提名计数
+#   wj_yd_c1 … wj_yd_c8   提名槽位（角色）
+#   wj_yd_winner          当选者
+# 候选人变量：
+#   wj_yd_host            所属评主（同一时间只在一场月旦评名单中）
+#   wj_yd_round           1 提名 / 2 入第三轮 / 3 当选
+#   wj_yd_nom_score       提名分（平票比较用）
+#   wj_yd_class           品评模板类别 1–6
+#   wj_yd_line            评语序号 1–3
+#   wj_yd_votes           本轮票数
+#   wj_yd_bonus           本轮拉票加成
+#   wj_yd_tmp             单个投票者的临时打分
+# 投票者变量：
+#   wj_yd_voted_for       玩家本轮所投之人
+# 评主变量：
+#   wj_yuedan_host_cooldown  15 年冷却
+# ============================================================================
+
+# Root = 评主；scope:activity、scope:host 有效。
+WJ_qingyi_yuedan_nominate_effect = {
+	scope:activity = {
+		set_variable = { name = wj_yd_active value = yes }
+		set_variable = { name = wj_yd_n value = 0 }
+	}
+
+	# 候选来源：天下统治者、评主宫廷、在席者、朝中有官职者
+	every_ruler = {
+		limit = { WJ_qingyi_yuedan_candidate_trigger = yes }
+		add_to_list = wj_yd_pool
+	}
+	every_courtier = {
+		limit = {
+			NOT = { is_in_list = wj_yd_pool }
+			WJ_qingyi_yuedan_candidate_trigger = yes
+		}
+		add_to_list = wj_yd_pool
+	}
+	scope:activity = {
+		every_attending_character = {
+			limit = {
+				NOT = { is_in_list = wj_yd_pool }
+				WJ_qingyi_yuedan_candidate_trigger = yes
+			}
+			add_to_list = wj_yd_pool
+		}
+	}
+	top_liege = {
+		every_courtier = {
+			limit = {
+				NOT = { is_in_list = wj_yd_pool }
+				tgp_is_any_minister = yes
+				WJ_qingyi_yuedan_candidate_trigger = yes
+			}
+			add_to_list = wj_yd_pool
+		}
+	}
+
+	# 提名分只掷一次，写入变量后排序
+	every_in_list = {
+		list = wj_yd_pool
+		set_variable = { name = wj_yd_nom_score value = WJ_qingyi_yuedan_nom_score }
+	}
+	ordered_in_list = {
+		list = wj_yd_pool
+		order_by = var:wj_yd_nom_score
+		max = 8
+		check_range_bounds = no
+		WJ_qingyi_yuedan_enroll_effect = yes
+	}
+	every_in_list = {
+		list = wj_yd_pool
+		limit = { NOT = { has_variable = wj_yd_host } }
+		remove_variable = wj_yd_nom_score
+	}
+
+	# 一个都提不出来时，本场退回普通清议
+	if = {
+		limit = { scope:activity = { var:wj_yd_n = 0 } }
+		scope:activity = { remove_variable = wj_yd_active }
+	}
+	else = {
+		scope:activity = {
+			add_activity_log_entry = {
+				key = WJ_qingyi_yd_log_nominate
+				tags = { positive }
+				score = 30
+				character = scope:host
+				show_in_conclusion = yes
+			}
+		}
+	}
+}
+
+# Character scope（候选人）。登记入名单并占一个槽位。
+WJ_qingyi_yuedan_enroll_effect = {
+	set_variable = { name = wj_yd_host value = scope:host }
+	set_variable = { name = wj_yd_round value = 1 }
+	set_variable = { name = wj_yd_votes value = 0 }
+	set_variable = { name = wj_yd_bonus value = 0 }
+	if = {
+		limit = { WJ_qingyi_yd_class_xiongzhu_trigger = yes }
+		set_variable = { name = wj_yd_class value = 1 }
+	}
+	else_if = {
+		limit = { WJ_qingyi_yd_class_jianxiong_trigger = yes }
+		set_variable = { name = wj_yd_class value = 2 }
+	}
+	else_if = {
+		limit = { martial >= WJ_qingyi_max_skill }
+		set_variable = { name = wj_yd_class value = 3 }
+	}
+	else_if = {
+		limit = { stewardship >= WJ_qingyi_max_skill }
+		set_variable = { name = wj_yd_class value = 4 }
+	}
+	else_if = {
+		limit = { intrigue >= WJ_qingyi_max_skill }
+		set_variable = { name = wj_yd_class value = 5 }
+	}
+	else = {
+		set_variable = { name = wj_yd_class value = 6 }
+	}
+	set_variable = {
+		name = wj_yd_line
+		value = { integer_range = { min = 1 max = 3 } }
+	}
+	save_scope_as = wj_yd_new
+	scope:activity = {
+		change_variable = { name = wj_yd_n add = 1 }
+		if = {
+			limit = { var:wj_yd_n = 1 }
+			set_variable = { name = wj_yd_c1 value = scope:wj_yd_new }
+		}
+		else_if = {
+			limit = { var:wj_yd_n = 2 }
+			set_variable = { name = wj_yd_c2 value = scope:wj_yd_new }
+		}
+		else_if = {
+			limit = { var:wj_yd_n = 3 }
+			set_variable = { name = wj_yd_c3 value = scope:wj_yd_new }
+		}
+		else_if = {
+			limit = { var:wj_yd_n = 4 }
+			set_variable = { name = wj_yd_c4 value = scope:wj_yd_new }
+		}
+		else_if = {
+			limit = { var:wj_yd_n = 5 }
+			set_variable = { name = wj_yd_c5 value = scope:wj_yd_new }
+		}
+		else_if = {
+			limit = { var:wj_yd_n = 6 }
+			set_variable = { name = wj_yd_c6 value = scope:wj_yd_new }
+		}
+		else_if = {
+			limit = { var:wj_yd_n = 7 }
+			set_variable = { name = wj_yd_c7 value = scope:wj_yd_new }
+		}
+		else_if = {
+			limit = { var:wj_yd_n = 8 }
+			set_variable = { name = wj_yd_c8 value = scope:wj_yd_new }
+		}
+	}
+}
+
+# 任意 scope；scope:activity 有效。把仍在第 $ROUND$ 轮及以后的候选人加入 wj_yd_round_list。
+WJ_qingyi_yuedan_list_round_effect = {
+	scope:activity = {
+		if = {
+			limit = { var:wj_yd_c1 ?= { WJ_qingyi_yuedan_in_round_trigger = { ROUND = $ROUND$ } } }
+			var:wj_yd_c1 = { add_to_list = wj_yd_round_list }
+		}
+		if = {
+			limit = { var:wj_yd_c2 ?= { WJ_qingyi_yuedan_in_round_trigger = { ROUND = $ROUND$ } } }
+			var:wj_yd_c2 = { add_to_list = wj_yd_round_list }
+		}
+		if = {
+			limit = { var:wj_yd_c3 ?= { WJ_qingyi_yuedan_in_round_trigger = { ROUND = $ROUND$ } } }
+			var:wj_yd_c3 = { add_to_list = wj_yd_round_list }
+		}
+		if = {
+			limit = { var:wj_yd_c4 ?= { WJ_qingyi_yuedan_in_round_trigger = { ROUND = $ROUND$ } } }
+			var:wj_yd_c4 = { add_to_list = wj_yd_round_list }
+		}
+		if = {
+			limit = { var:wj_yd_c5 ?= { WJ_qingyi_yuedan_in_round_trigger = { ROUND = $ROUND$ } } }
+			var:wj_yd_c5 = { add_to_list = wj_yd_round_list }
+		}
+		if = {
+			limit = { var:wj_yd_c6 ?= { WJ_qingyi_yuedan_in_round_trigger = { ROUND = $ROUND$ } } }
+			var:wj_yd_c6 = { add_to_list = wj_yd_round_list }
+		}
+		if = {
+			limit = { var:wj_yd_c7 ?= { WJ_qingyi_yuedan_in_round_trigger = { ROUND = $ROUND$ } } }
+			var:wj_yd_c7 = { add_to_list = wj_yd_round_list }
+		}
+		if = {
+			limit = { var:wj_yd_c8 ?= { WJ_qingyi_yuedan_in_round_trigger = { ROUND = $ROUND$ } } }
+			var:wj_yd_c8 = { add_to_list = wj_yd_round_list }
+		}
+	}
+}
+
+# Character scope（投票者），scope:wj_yd_voter = 本人；需已有 wj_yd_round_list。
+# 玩家按本轮所选投票；未选或所选无效时，与 AI 同样按打分投给最高者。在席候选人不投自己。
+WJ_qingyi_yuedan_cast_vote_effect = {
+	if = {
+		limit = {
+			is_ai = no
+			has_variable = wj_yd_voted_for
+			var:wj_yd_voted_for = {
+				is_in_list = wj_yd_round_list
+				NOT = { this = scope:wj_yd_voter }
+			}
+		}
+		var:wj_yd_voted_for = { change_variable = { name = wj_yd_votes add = 1 } }
+	}
+	else = {
+		every_in_list = {
+			list = wj_yd_round_list
+			limit = { NOT = { this = scope:wj_yd_voter } }
+			set_variable = { name = wj_yd_tmp value = WJ_qingyi_yuedan_vote_score }
+		}
+		ordered_in_list = {
+			list = wj_yd_round_list
+			limit = { NOT = { this = scope:wj_yd_voter } }
+			order_by = var:wj_yd_tmp
+			max = 1
+			check_range_bounds = no
+			change_variable = { name = wj_yd_votes add = 1 }
+		}
+	}
+	remove_variable = wj_yd_voted_for
+}
+
+# Root = 评主；scope:activity 有效。
+# 计第 $ROUND$ 轮的票，留前 $KEEP$ 名进入第 $NEXT$ 轮，再清空票数与加成。
+WJ_qingyi_yuedan_tally_effect = {
+	WJ_qingyi_yuedan_list_round_effect = { ROUND = $ROUND$ }
+	scope:activity = {
+		every_attending_character = {
+			limit = { is_alive = yes }
+			save_scope_as = wj_yd_voter
+			WJ_qingyi_yuedan_cast_vote_effect = yes
+		}
+	}
+	ordered_in_list = {
+		list = wj_yd_round_list
+		order_by = WJ_qingyi_yuedan_tally_score
+		max = $KEEP$
+		check_range_bounds = no
+		set_variable = { name = wj_yd_round value = $NEXT$ }
+	}
+	every_in_list = {
+		list = wj_yd_round_list
+		set_variable = { name = wj_yd_votes value = 0 }
+		set_variable = { name = wj_yd_bonus value = 0 }
+		remove_variable = wj_yd_tmp
+	}
+}
+
+# Root = 评主；scope:activity 有效。第二阶段结束：8 → 4。
+WJ_qingyi_yuedan_round_two_end_effect = {
+	if = {
+		limit = { scope:activity = { has_variable = wj_yd_active } }
+		WJ_qingyi_yuedan_tally_effect = { ROUND = 1 KEEP = 4 NEXT = 2 }
+		scope:activity = {
+			add_activity_log_entry = {
+				key = WJ_qingyi_yd_log_round_two
+				tags = { positive }
+				score = 30
+				character = scope:host
+				show_in_conclusion = yes
+			}
+		}
+	}
+}
+
+# Root = 评主；scope:activity 有效。第三阶段结束：4 → 1，发奖、冷却、通知。
+WJ_qingyi_yuedan_final_effect = {
+	if = {
+		limit = { scope:activity = { has_variable = wj_yd_active } }
+		WJ_qingyi_yuedan_tally_effect = { ROUND = 2 KEEP = 1 NEXT = 3 }
+		scope:activity = { set_variable = { name = wj_yd_done value = yes } }
+		WJ_qingyi_yuedan_list_round_effect = { ROUND = 3 }
+		random_in_list = {
+			list = wj_yd_round_list
+			limit = { var:wj_yd_round = 3 }
+			save_scope_as = wj_yd_winner
+		}
+		if = {
+			limit = { exists = scope:wj_yd_winner }
+			scope:activity = { set_variable = { name = wj_yd_winner value = scope:wj_yd_winner } }
+			WJ_qingyi_yuedan_award_effect = yes
+		}
+		# 评主：办成一场月旦评，威望 major，15 年冷却
+		add_prestige = major_prestige_gain
+		set_variable = {
+			name = wj_yuedan_host_cooldown
+			value = yes
+			years = 15
+		}
+		complete_activity_intent = yes
+	}
+}
+
+# Root = 评主；scope:wj_yd_winner、scope:activity 有效。
+WJ_qingyi_yuedan_award_effect = {
+	scope:activity = {
+		add_activity_log_entry = {
+			key = WJ_qingyi_yd_log_winner
+			tags = { completed }
+			score = 60
+			character = scope:wj_yd_winner
+			target = scope:host
+			show_in_conclusion = yes
+			scope:wj_yd_winner = {
+				add_prestige = massive_prestige_gain
+				if = {
+					limit = { government_has_flag = government_has_influence }
+					change_influence = major_influence_gain
+				}
+				add_trait = hd_yuedan_mingshi
+				# 名士（宦海沉浮）特质：没有时先授予，再直接加清议轨道 +25（绕过统一入口的 1–3 上限）。
+				# 只在汉晋官制下授予，否则 WJ_reconcile 会立刻清掉。
+				if = {
+					limit = {
+						NOT = { has_trait = WJ_mingshi_trait }
+						government_has_flag = government_is_celestial
+					}
+					add_trait = WJ_mingshi_trait
+				}
+				if = {
+					limit = { has_trait = WJ_mingshi_trait }
+					add_trait_xp = {
+						trait = WJ_mingshi_trait
+						track = qingtan
+						value = 25
+					}
+				}
+			}
+		}
+		add_activity_log_entry = {
+			key = WJ_qingyi_yd_log_finalists
+			tags = { positive }
+			score = 40
+			character = scope:host
+			show_in_conclusion = yes
+			every_in_list = {
+				list = wj_yd_round_list
+				limit = {
+					is_alive = yes
+					var:wj_yd_round = 2
+				}
+				custom = WJ_qingyi_yd_all_finalists
+				add_prestige = minor_prestige_gain
+			}
+		}
+	}
+
+	# 通知：在席玩家看定评事件；缺席的玩家当选者 / 入围者收到事件；外交范围内其余玩家收消息
+	scope:activity = {
+		every_attending_character = {
+			limit = { is_ai = no }
+			trigger_event = WJ_qingyi.3401
+		}
+	}
+	every_in_list = {
+		list = wj_yd_round_list
+		limit = {
+			is_ai = no
+			is_alive = yes
+			NOT = { is_participant_in_activity = scope:activity }
+		}
+		trigger_event = WJ_qingyi.3501
+	}
+	every_player = {
+		limit = {
+			NOT = { is_participant_in_activity = scope:activity }
+			NOT = { is_in_list = wj_yd_round_list }
+			in_diplomatic_range = scope:host
+		}
+		send_interface_message = {
+			type = event_generic_neutral
+			title = WJ_qingyi_yd_msg_title
+			desc = WJ_qingyi_yd_msg_desc
+			left_icon = scope:wj_yd_winner
+			right_icon = scope:host
+		}
+	}
+}
+
+# Character scope（拉票者），scope:activity 有效。为本人本轮所投之人拉票。
+WJ_qingyi_yuedan_canvass_add_effect = {
+	if = {
+		limit = {
+			has_variable = wj_yd_voted_for
+			var:wj_yd_voted_for = { is_alive = yes }
+		}
+		var:wj_yd_voted_for = {
+			change_variable = { name = wj_yd_bonus add = $VOTES$ }
+		}
+	}
+}
+
+# Activity scope（root = 活动；scope:host 可能已失效）。清理名单上所有候选人的变量。
+WJ_qingyi_yuedan_cleanup_effect = {
+	activity_host ?= { save_scope_as = wj_yd_cleanup_host }
+	WJ_qingyi_yuedan_cleanup_slot_effect = { SLOT = wj_yd_c1 }
+	WJ_qingyi_yuedan_cleanup_slot_effect = { SLOT = wj_yd_c2 }
+	WJ_qingyi_yuedan_cleanup_slot_effect = { SLOT = wj_yd_c3 }
+	WJ_qingyi_yuedan_cleanup_slot_effect = { SLOT = wj_yd_c4 }
+	WJ_qingyi_yuedan_cleanup_slot_effect = { SLOT = wj_yd_c5 }
+	WJ_qingyi_yuedan_cleanup_slot_effect = { SLOT = wj_yd_c6 }
+	WJ_qingyi_yuedan_cleanup_slot_effect = { SLOT = wj_yd_c7 }
+	WJ_qingyi_yuedan_cleanup_slot_effect = { SLOT = wj_yd_c8 }
+	every_attending_character = { remove_variable = wj_yd_voted_for }
+}
+
+WJ_qingyi_yuedan_cleanup_slot_effect = {
+	if = {
+		limit = { has_variable = $SLOT$ }
+		var:$SLOT$ = {
+			if = {
+				limit = {
+					is_alive = yes
+					has_variable = wj_yd_host
+					OR = {
+						NOT = { exists = scope:wj_yd_cleanup_host }
+						var:wj_yd_host = scope:wj_yd_cleanup_host
+					}
+				}
+				remove_variable = wj_yd_host
+				remove_variable = wj_yd_round
+				remove_variable = wj_yd_nom_score
+				remove_variable = wj_yd_class
+				remove_variable = wj_yd_line
+				remove_variable = wj_yd_votes
+				remove_variable = wj_yd_bonus
+				remove_variable = wj_yd_tmp
+			}
+		}
+	}
+}
+
+# 会期事件联动（清议重制·旧事件改写，2026-10-08）
+# 任意 scope；scope:activity 有效。从本轮有效候选人中随机取一人存为 scope:wj_qingyi_subject（不取 root，也不取事件对象 scope:wj_qingyi_partner）。
+WJ_qingyi_yuedan_pick_subject_effect = {
+	WJ_qingyi_yuedan_list_round_effect = { ROUND = 1 }
+	random_in_list = {
+		list = wj_yd_round_list
+		limit = {
+			WJ_qingyi_yuedan_live_candidate_trigger = yes
+			NOT = { this = root }
+			NOT = { scope:wj_qingyi_partner ?= this }
+		}
+		save_scope_as = wj_qingyi_subject
+	}
+}
+
+# Character scope（候选人），scope:activity 有效。会期事件中的褒贬，计入本轮票数加成。
+WJ_qingyi_yuedan_nudge_effect = {
+	if = {
+		limit = { WJ_qingyi_yuedan_live_candidate_trigger = yes }
+		change_variable = { name = wj_yd_bonus add = $VOTES$ }
+	}
+}

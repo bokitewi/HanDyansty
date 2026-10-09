@@ -867,22 +867,38 @@ hd_party_set_policy_effect = {
 }
 
 # Scope：君主（scope:hd_party_court）。对 $G$ 党要求效忠的结算（花费已扣）
+# 2026-10-09 U11：改为 random_list，选项提示同时显示成败两种结果及几率（原 random + if 在预览时只显示失败一支），结果以 toast 告知
 hd_party_loyalty_resolve_effect = {
 	set_variable = { name = hd_party_$G$_loyalty_cd days = hd_party_loyalty_cd_days }
-	random = {
-		chance = hd_party_loyalty_chance_$G$_value
-		save_scope_value_as = { name = hd_party_loyalty_success value = flag:yes }
+	random_list = {
+		0 = {
+			modifier = { add = hd_party_loyalty_chance_$G$_value }
+			desc = hd_party_loyalty_success_tt
+			set_local_variable = hd_party_loyalty_ok
+		}
+		0 = {
+			modifier = {
+				add = {
+					value = 100
+					subtract = hd_party_loyalty_chance_$G$_value
+				}
+			}
+			desc = hd_party_loyalty_fail_tt
+		}
 	}
+	hidden_effect = {	# 实际结算（预览时不显示，以免只列出失败一支）
 	if = {
-		limit = { exists = scope:hd_party_loyalty_success }
+		limit = { has_local_variable = hd_party_loyalty_ok }
 		hd_party_set_stance_effect = { G = $G$ STANCE = zunwang }
 		set_variable = { name = hd_party_$G$_loyalty_lock value = var:hd_party_$G$_leader }
-		custom_tooltip = hd_party_loyalty_success_tt
+		send_interface_toast = { type = event_toast_effect_good title = hd_party_loyalty_success_tt }
 	}
 	else = {
 		hd_party_set_attitude_effect = { G = $G$ ATTITUDE = oppose }
 		set_variable = { name = hd_party_$G$_oppose_lock days = hd_party_loyalty_fail_lock_days }
-		custom_tooltip = hd_party_loyalty_fail_tt
+		send_interface_toast = { type = event_toast_effect_bad title = hd_party_loyalty_fail_tt }
+	}
+	remove_local_variable = hd_party_loyalty_ok	# AI 一次结算可能连续处理多党，用后即清
 	}
 }
 

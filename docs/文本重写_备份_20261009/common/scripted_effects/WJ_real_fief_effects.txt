@@ -1,0 +1,482 @@
+# Picker ROOT stays the chooser, not necessarily the emperor.
+WJ_rf_end = {
+ remove_variable = wj_rf_target remove_variable = wj_rf_emperor remove_variable = wj_rf_mode
+ remove_variable = wj_rf_stage remove_variable = wj_rf_parent remove_variable = wj_rf_capital
+ remove_variable = wj_rf_second remove_variable = wj_rf_third remove_variable = wj_rf_page_offset
+ remove_variable = wj_rf_fief remove_variable = wj_rf_active_grant
+ remove_variable = wj_rf_name_code remove_variable = wj_rf_use_county_name
+ clear_variable_list = wj_rf_choices clear_variable_list = wj_rf_pool clear_variable_list = wj_rf_neighbors
+}
+WJ_rf_begin = {
+ WJ_rf_end = yes
+ if = { limit = { NOT = { has_variable = wj_rf_ticket } } set_variable = { name = wj_rf_ticket value = 0 } }
+ change_variable = { name = wj_rf_ticket add = 1 }
+ save_scope_value_as = { name = wj_rf_ticket value = var:wj_rf_ticket }
+ set_variable = { name = wj_rf_target value = scope:wj_rf_recipient }
+ set_variable = { name = wj_rf_emperor value = scope:wj_rf_recipient.top_liege }
+ set_variable = { name = wj_rf_mode value = 1 }
+ set_variable = { name = wj_rf_stage value = 0 }
+ if = { limit = { this = var:wj_rf_emperor } set_variable = { name = wj_rf_active_grant value = yes } }
+ if = { limit = { var:wj_rf_target = { WJ_rf_local = yes } }
+  set_variable = { name = wj_rf_stage value = 2 }
+  set_variable = { name = wj_rf_capital value = var:wj_rf_target.capital_county.duchy }
+ }
+ if = { limit = { var:wj_rf_stage = 0 } WJ_rf_collect_pool = yes }
+ WJ_rf_build_choices = yes trigger_event = WJ_rf.1
+}
+WJ_rf_begin_expansion = {
+ WJ_rf_end = yes
+ if = { limit = { NOT = { has_variable = wj_rf_ticket } } set_variable = { name = wj_rf_ticket value = 0 } }
+ change_variable = { name = wj_rf_ticket add = 1 }
+ save_scope_value_as = { name = wj_rf_ticket value = var:wj_rf_ticket }
+ set_variable = { name = wj_rf_target value = this }
+ set_variable = { name = wj_rf_emperor value = top_liege }
+ set_variable = { name = wj_rf_mode value = 2 } set_variable = { name = wj_rf_stage value = 2 }
+ every_held_title = { limit = { tier = tier_kingdom has_variable = wj_rf_rank var:wj_rf_rank = 1 } root = { set_variable = { name = wj_rf_fief value = prev } } }
+ WJ_rf_build_choices = yes trigger_event = WJ_rf.1
+}
+# Capture the court's duchies once per flow; page/option display never rescan it.
+WJ_rf_collect_pool = {
+ clear_variable_list = wj_rf_pool
+ save_scope_as = wj_rf_picker
+ var:wj_rf_emperor = { every_sub_realm_county = {
+  duchy ?= { save_scope_as = wj_rf_list_title }
+  if = { limit = { exists = scope:wj_rf_list_title }
+   scope:wj_rf_picker = {
+    if = { limit = { NOT = { is_target_in_variable_list = { name = wj_rf_pool target = scope:wj_rf_list_title } } }
+     add_to_variable_list = { name = wj_rf_pool target = scope:wj_rf_list_title }
+    }
+   }
+  }
+  clear_saved_scope = wj_rf_list_title
+ } }
+}
+WJ_rf_build_choices = {
+ clear_variable_list = wj_rf_choices set_variable = { name = wj_rf_page_offset value = 0 }
+ save_scope_as = wj_rf_picker
+ if = { limit = { var:wj_rf_stage = 1 }
+  var:wj_rf_parent = { every_direct_de_jure_vassal_title = {
+   limit = { tier = tier_duchy WJ_rf_option_available = yes }
+   scope:wj_rf_picker = { add_to_variable_list = { name = wj_rf_choices target = prev } }
+  } }
+ }
+ else_if = { limit = { var:wj_rf_stage = 0 }
+  every_in_list = { variable = wj_rf_pool
+   kingdom ?= { save_scope_as = wj_rf_list_title }
+   if = { limit = { exists = scope:wj_rf_list_title }
+    scope:wj_rf_picker = {
+     if = { limit = {
+      NOT = { is_target_in_variable_list = { name = wj_rf_choices target = scope:wj_rf_list_title } }
+      scope:wj_rf_list_title = { WJ_rf_option_available = yes }
+     } add_to_variable_list = { name = wj_rf_choices target = scope:wj_rf_list_title } }
+    }
+   }
+   clear_saved_scope = wj_rf_list_title
+  }
+ }
+ else = {
+  clear_variable_list = wj_rf_neighbors
+  if = { limit = { var:wj_rf_mode = 2 }
+   var:wj_rf_fief = { every_de_jure_county = {
+    limit = { WJ_rf_in_fief = yes }
+    WJ_rf_collect_neighbors = yes
+   } }
+  }
+  else = {
+   var:wj_rf_capital = { every_de_jure_county = { WJ_rf_collect_neighbors = yes } }
+   if = { limit = { has_variable = wj_rf_second }
+    var:wj_rf_second = { every_de_jure_county = { WJ_rf_collect_neighbors = yes } }
+   }
+  }
+  every_in_list = { variable = wj_rf_neighbors limit = { WJ_rf_option_available = yes }
+   scope:wj_rf_picker = { add_to_variable_list = { name = wj_rf_choices target = prev } }
+  }
+  clear_variable_list = wj_rf_neighbors
+ }
+}
+# Native neighboring counties narrow the pool; existing province guard still excludes sea crossings.
+WJ_rf_collect_neighbors = {
+ every_neighboring_county = {
+  duchy ?= { save_scope_as = wj_rf_neighbor_title }
+  if = { limit = { exists = scope:wj_rf_neighbor_title }
+   scope:wj_rf_picker = {
+    if = { limit = { NOT = { is_target_in_variable_list = { name = wj_rf_neighbors target = scope:wj_rf_neighbor_title } } }
+     add_to_variable_list = { name = wj_rf_neighbors target = scope:wj_rf_neighbor_title }
+    }
+   }
+  }
+  clear_saved_scope = wj_rf_neighbor_title
+ }
+}
+WJ_rf_prepare_page = {
+ save_scope_value_as = { name = wj_rf_page_count value = 0 }
+ save_scope_value_as = { name = wj_rf_more value = no }
+ clear_saved_scope = wj_rf_slot_1
+ clear_saved_scope = wj_rf_slot_2
+ clear_saved_scope = wj_rf_slot_3
+ clear_saved_scope = wj_rf_slot_4
+ clear_saved_scope = wj_rf_slot_5
+ clear_saved_scope = wj_rf_slot_6
+ clear_saved_scope = wj_rf_slot_7
+ clear_saved_scope = wj_rf_slot_8
+ clear_saved_scope = wj_rf_slot_9
+ clear_saved_scope = wj_rf_slot_10
+ clear_saved_scope = wj_rf_slot_11
+ clear_saved_scope = wj_rf_slot_12
+ clear_saved_scope = wj_rf_slot_13
+ clear_saved_scope = wj_rf_slot_14
+ clear_saved_scope = wj_rf_slot_15
+ clear_saved_scope = wj_rf_slot_16
+ clear_saved_scope = wj_rf_slot_17
+ clear_saved_scope = wj_rf_slot_18
+ clear_saved_scope = wj_rf_slot_19
+ clear_saved_scope = wj_rf_slot_20
+ clear_saved_scope = wj_rf_slot_21
+ clear_saved_scope = wj_rf_slot_22
+ clear_saved_scope = wj_rf_slot_23
+ clear_saved_scope = wj_rf_slot_24
+ clear_saved_scope = wj_rf_slot_25
+ clear_saved_scope = wj_rf_slot_26
+ clear_saved_scope = wj_rf_slot_27
+ clear_saved_scope = wj_rf_slot_28
+ clear_saved_scope = wj_rf_slot_29
+ clear_saved_scope = wj_rf_slot_30
+ set_variable = { name = wj_rf_cursor value = 0 }
+ set_variable = { name = wj_rf_page_index value = 0 }
+ every_in_list = {
+  variable = wj_rf_choices
+  root = { change_variable = { name = wj_rf_cursor add = 1 } }
+  if = { limit = { root = { var:wj_rf_cursor > var:wj_rf_page_offset } }
+   root = { change_variable = { name = wj_rf_page_index add = 1 } }
+   switch = { trigger = root.var:wj_rf_page_index
+    1 = { save_scope_as = wj_rf_slot_1 }
+    2 = { save_scope_as = wj_rf_slot_2 }
+    3 = { save_scope_as = wj_rf_slot_3 }
+    4 = { save_scope_as = wj_rf_slot_4 }
+    5 = { save_scope_as = wj_rf_slot_5 }
+    6 = { save_scope_as = wj_rf_slot_6 }
+    7 = { save_scope_as = wj_rf_slot_7 }
+    8 = { save_scope_as = wj_rf_slot_8 }
+    9 = { save_scope_as = wj_rf_slot_9 }
+    10 = { save_scope_as = wj_rf_slot_10 }
+    11 = { save_scope_as = wj_rf_slot_11 }
+    12 = { save_scope_as = wj_rf_slot_12 }
+    13 = { save_scope_as = wj_rf_slot_13 }
+    14 = { save_scope_as = wj_rf_slot_14 }
+    15 = { save_scope_as = wj_rf_slot_15 }
+    16 = { save_scope_as = wj_rf_slot_16 }
+    17 = { save_scope_as = wj_rf_slot_17 }
+    18 = { save_scope_as = wj_rf_slot_18 }
+    19 = { save_scope_as = wj_rf_slot_19 }
+    20 = { save_scope_as = wj_rf_slot_20 }
+    21 = { save_scope_as = wj_rf_slot_21 }
+    22 = { save_scope_as = wj_rf_slot_22 }
+    23 = { save_scope_as = wj_rf_slot_23 }
+    24 = { save_scope_as = wj_rf_slot_24 }
+    25 = { save_scope_as = wj_rf_slot_25 }
+    26 = { save_scope_as = wj_rf_slot_26 }
+    27 = { save_scope_as = wj_rf_slot_27 }
+    28 = { save_scope_as = wj_rf_slot_28 }
+    29 = { save_scope_as = wj_rf_slot_29 }
+    30 = { save_scope_as = wj_rf_slot_30 }
+   }
+   if = { limit = { root = { var:wj_rf_page_index > 30 } } save_scope_value_as = { name = wj_rf_more value = yes } }
+  }
+ }
+ save_scope_value_as = { name = wj_rf_page_count value = { value = var:wj_rf_page_index max = 30 } }
+ remove_variable = wj_rf_cursor remove_variable = wj_rf_page_index
+}
+WJ_rf_back = {
+ if = { limit = { WJ_rf_flow_valid = yes }
+  if = { limit = { var:wj_rf_stage = 3 } remove_variable = wj_rf_second set_variable = { name = wj_rf_stage value = 2 } }
+  else_if = { limit = { var:wj_rf_stage = 2 var:wj_rf_mode = 1 var:wj_rf_target = { WJ_rf_local = no } }
+   remove_variable = wj_rf_capital set_variable = { name = wj_rf_stage value = 1 }
+  }
+  else_if = { limit = { var:wj_rf_stage = 1 var:wj_rf_target = { WJ_rf_local = no } }
+   remove_variable = wj_rf_parent set_variable = { name = wj_rf_stage value = 0 }
+  }
+  WJ_rf_build_choices = yes trigger_event = WJ_rf.1
+ }
+}
+WJ_rf_select = {
+ if = { limit = { WJ_rf_choice_valid = yes }
+  if = { limit = { var:wj_rf_stage = 0 }
+   set_variable = { name = wj_rf_parent value = scope:wj_rf_choice }
+   set_variable = { name = wj_rf_stage value = 1 } WJ_rf_build_choices = yes trigger_event = WJ_rf.1
+  }
+  else_if = { limit = { var:wj_rf_stage = 1 }
+   set_variable = { name = wj_rf_capital value = scope:wj_rf_choice }
+   set_variable = { name = wj_rf_stage value = 2 } WJ_rf_build_choices = yes trigger_event = WJ_rf.1
+  }
+  else_if = { limit = { var:wj_rf_mode = 2 } WJ_rf_expand = yes }
+  else_if = { limit = { var:wj_rf_stage = 2 }
+   set_variable = { name = wj_rf_second value = scope:wj_rf_choice }
+   set_variable = { name = wj_rf_stage value = 3 } WJ_rf_build_choices = yes trigger_event = WJ_rf.1
+  }
+  else = { set_variable = { name = wj_rf_third value = scope:wj_rf_choice } WJ_rf_commit = yes }
+ }
+ else = { WJ_rf_retry = yes }
+}
+WJ_rf_retry = {
+ remove_variable = wj_rf_third remove_variable = wj_rf_second remove_variable = wj_rf_capital
+ if = { limit = { WJ_rf_flow_valid = yes }
+  if = { limit = { var:wj_rf_mode = 1 }
+   set_variable = { name = wj_rf_stage value = 0 } remove_variable = wj_rf_parent
+   if = { limit = { var:wj_rf_target = { WJ_rf_local = yes } }
+    set_variable = { name = wj_rf_stage value = 2 }
+    set_variable = { name = wj_rf_capital value = var:wj_rf_target.capital_county.duchy }
+   }
+  }
+  WJ_rf_build_choices = yes trigger_event = WJ_rf.1
+ }
+ else = { WJ_rf_end = yes }
+}
+# Native transactions; preserve ordinary officers and allow their other holdings to follow.
+WJ_rf_transfer_duchy = {
+ save_scope_as = wj_rf_transfer_duchy
+ # Remember the actual pre-transfer parent, once for this incorporation.
+ if = { limit = { NOT = { has_variable = wj_rf_original_liege } exists = de_jure_liege }
+  set_variable = { name = wj_rf_original_liege value = de_jure_liege }
+ }
+ scope:wj_rf_new_fief = {
+  if = { limit = { NOT = { is_target_in_variable_list = { name = wj_rf_duchies target = scope:wj_rf_transfer_duchy } } }
+   add_to_variable_list = { name = wj_rf_duchies target = scope:wj_rf_transfer_duchy }
+  }
+ }
+ if = { limit = { exists = holder holder.top_liege = scope:wj_rf_sovereign holder = { highest_held_title_tier < tier_kingdom NOT = { this = scope:wj_rf_beneficiary } } }
+  holder = { change_liege = { liege = scope:wj_rf_beneficiary change = scope:wj_rf_change } }
+ }
+ else = { change_title_holder = { holder = scope:wj_rf_beneficiary change = scope:wj_rf_change government_base = scope:wj_rf_sovereign } }
+ every_de_jure_county = {
+  limit = { exists = holder holder.top_liege = scope:wj_rf_sovereign }
+  if = { limit = { NOT = { this = scope:wj_rf_capital_county } NOT = { holder = scope:wj_rf_beneficiary } }
+   if = { limit = { holder = { highest_held_title_tier < tier_kingdom } }
+    # County officers remain below their own retained commandery, not flattened unnecessarily.
+    if = { limit = { holder = { highest_held_title_tier < tier_duchy } exists = scope:wj_rf_transfer_duchy.holder
+      scope:wj_rf_transfer_duchy.holder = { top_liege = scope:wj_rf_sovereign highest_held_title_tier < tier_kingdom NOT = { this = scope:wj_rf_beneficiary } } }
+     holder = { change_liege = { liege = scope:wj_rf_transfer_duchy.holder change = scope:wj_rf_change } }
+    }
+    else = { holder = { change_liege = { liege = scope:wj_rf_beneficiary change = scope:wj_rf_change } } }
+   }
+   else = { change_title_holder = { holder = scope:wj_rf_beneficiary change = scope:wj_rf_change government_base = scope:wj_rf_sovereign } }
+  }
+ }
+ set_de_jure_liege_title = scope:wj_rf_new_fief
+}
+WJ_rf_commit = {
+ if = { limit = { WJ_rf_three_valid = yes }
+  var:wj_rf_target = { save_scope_as = wj_rf_beneficiary }
+  var:wj_rf_emperor = { save_scope_as = wj_rf_sovereign }
+  var:wj_rf_capital = { save_scope_as = wj_rf_capital_duchy title_capital_county = { save_scope_as = wj_rf_capital_county } }
+  var:wj_rf_second = { save_scope_as = wj_rf_second_duchy }
+  var:wj_rf_third = { save_scope_as = wj_rf_third_duchy }
+  WJ_rf_choose_name = yes
+  create_dynamic_title = { tier = kingdom name = WJ_rf_dynamic_name }
+  scope:new_title = {
+   save_scope_as = wj_rf_new_fief
+   set_variable = { name = wj_rf_rank value = 1 }
+   set_variable = { name = wj_rf_name_source value = scope:wj_rf_capital_duchy.kingdom }
+   set_capital_county = scope:wj_rf_capital_county
+   set_coa = scope:wj_rf_capital_duchy set_color_from_title = scope:wj_rf_capital_duchy
+  }
+  create_title_and_vassal_change = { type = granted save_scope_as = wj_rf_change add_claim_on_loss = no }
+  scope:wj_rf_new_fief = { change_title_holder = { holder = scope:wj_rf_beneficiary change = scope:wj_rf_change government_base = scope:wj_rf_sovereign } }
+  scope:wj_rf_beneficiary = { change_liege = { liege = scope:wj_rf_sovereign change = scope:wj_rf_change } }
+  scope:wj_rf_capital_duchy = { WJ_rf_transfer_duchy = yes }
+  scope:wj_rf_second_duchy = { WJ_rf_transfer_duchy = yes }
+  scope:wj_rf_third_duchy = { WJ_rf_transfer_duchy = yes }
+  scope:wj_rf_capital_county = {
+   change_title_holder = { holder = scope:wj_rf_beneficiary change = scope:wj_rf_change government_base = scope:wj_rf_sovereign }
+   set_variable = { name = wj_rf_capital_of value = scope:wj_rf_new_fief }
+  }
+  resolve_title_and_vassal_change = scope:wj_rf_change
+  if = { limit = { scope:wj_rf_new_fief.holder = scope:wj_rf_beneficiary scope:wj_rf_capital_county.holder = scope:wj_rf_beneficiary }
+   scope:wj_rf_beneficiary = {
+    if = { limit = { has_variable = wj_peer_rank } WJ_peer_clear = yes }
+    set_realm_capital = scope:wj_rf_capital_county
+    set_primary_title_to = scope:wj_rf_new_fief
+    WJ_rf_release_outside_offices = yes
+    set_variable = { name = wj_rf_cooldown value = yes years = 3 }
+    WJ_rf_refresh_holder = yes
+    scope:wj_rf_new_fief = { save_scope_as = wj_rf_law_title }
+    trigger_event = WJ_rf.4
+   }
+   if = { limit = { has_variable = wj_rf_active_grant } scope:wj_rf_sovereign = { add_legitimacy = -200 } }
+   WJ_rf_end = yes trigger_event = WJ_rf.2
+  }
+  else = { WJ_rf_end = yes trigger_event = WJ_rf.3 }
+ }
+ else = { WJ_rf_retry = yes }
+}
+WJ_rf_expand = {
+ if = { limit = { WJ_rf_choice_valid = yes var:wj_rf_mode = 2 }
+  var:wj_rf_target = { save_scope_as = wj_rf_beneficiary }
+  var:wj_rf_emperor = { save_scope_as = wj_rf_sovereign }
+  var:wj_rf_fief = { save_scope_as = wj_rf_new_fief }
+  scope:wj_rf_new_fief.title_capital_county = { save_scope_as = wj_rf_capital_county }
+  create_title_and_vassal_change = { type = granted save_scope_as = wj_rf_change add_claim_on_loss = no }
+  scope:wj_rf_choice = { WJ_rf_transfer_duchy = yes }
+  resolve_title_and_vassal_change = scope:wj_rf_change
+  if = { limit = { scope:wj_rf_choice = {
+    de_jure_liege = scope:wj_rf_new_fief
+    any_de_jure_county = { WJ_rf_in_fief = yes }
+   } }
+   scope:wj_rf_beneficiary = { set_variable = { name = wj_rf_cooldown value = yes years = 3 } }
+   WJ_rf_end = yes trigger_event = WJ_rf.2
+  }
+  else = { WJ_rf_end = yes trigger_event = WJ_rf.3 }
+ }
+ else = { WJ_rf_retry = yes }
+}
+WJ_rf_promote = {
+ if = { limit = { WJ_rf_can_promote = yes }
+  save_scope_as = wj_rf_beneficiary top_liege = { save_scope_as = wj_rf_sovereign }
+  every_held_title = { limit = { tier = tier_kingdom has_variable = wj_rf_rank var:wj_rf_rank = 1 } save_scope_as = wj_rf_new_fief }
+  create_dynamic_title = { tier = empire name = WJ_rf_promoted_name }
+  scope:new_title = {
+   save_scope_as = wj_rf_new_kingdom set_variable = { name = wj_rf_rank value = 2 }
+   set_variable = { name = wj_rf_constituent_fief value = scope:wj_rf_new_fief }
+   set_capital_county = scope:wj_rf_new_fief.title_capital_county
+   set_coa = scope:wj_rf_new_fief set_color_from_title = scope:wj_rf_new_fief
+  }
+  create_title_and_vassal_change = { type = granted save_scope_as = wj_rf_change add_claim_on_loss = no }
+  scope:wj_rf_new_kingdom = { change_title_holder = { holder = scope:wj_rf_beneficiary change = scope:wj_rf_change } }
+  change_liege = { liege = scope:wj_rf_sovereign change = scope:wj_rf_change }
+  resolve_title_and_vassal_change = scope:wj_rf_change
+  if = { limit = { scope:wj_rf_new_kingdom.holder = scope:wj_rf_beneficiary }
+   scope:wj_rf_new_fief = { set_de_jure_liege_title = scope:wj_rf_new_kingdom }
+   set_primary_title_to = scope:wj_rf_new_kingdom WJ_rf_refresh_holder = yes
+   WJ_rf_release_outside_offices = yes
+   scope:wj_rf_new_kingdom = { save_scope_as = wj_rf_law_title }
+   scope:wj_rf_new_fief.title_capital_county = { save_scope_as = wj_rf_capital_county }
+   trigger_event = WJ_rf.4
+   trigger_event = WJ_rf.2
+  }
+  else = { trigger_event = WJ_rf.3 }
+ }
+}
+# One reference to an actually held title for display; no separate inheritance/state ledger.
+WJ_rf_refresh_holder = {
+ remove_variable = wj_rf_owned_title
+ every_held_title = { limit = { has_variable = wj_rf_rank var:wj_rf_rank = 1 } prev = { set_variable = { name = wj_rf_owned_title value = prev } } }
+ every_held_title = { limit = { has_variable = wj_rf_rank var:wj_rf_rank = 2 } prev = { set_variable = { name = wj_rf_owned_title value = prev } } }
+ WJ_title_style_reconcile = yes
+}
+
+# Retire only the beneficiary's own out-of-fief offices. Ministry contracts are exempt.
+# Reuse native tgp_step_down_title_recipient_tooltip_effect's heir/appointment transaction.
+WJ_rf_release_outside_offices = {
+ if = { limit = {
+  government_has_flag = government_is_celestial
+  NOT = { AND = { tgp_has_minister_title = yes vassal_contract_has_flag = celestial_minister_obligation } }
+  NOT = { vassal_contract_has_flag = celestial_grand_marshal_obligation }
+  exists = scope:wj_rf_new_fief exists = scope:wj_rf_sovereign
+ }
+  save_scope_as = wj_rf_retiring_holder
+  create_title_and_vassal_change = { type = appointment save_scope_as = wj_rf_retirement add_claim_on_loss = no }
+  every_held_title = {
+   limit = {
+    is_noble_family_title = no tgp_is_minister_title = no
+    NOT = { has_variable = wj_rf_rank }
+    NOT = { this = scope:wj_rf_new_fief }
+    NOT = { is_de_jure_liege_or_above_target = scope:wj_rf_new_fief }
+    NOT = { scope:wj_rf_new_fief = { is_de_jure_liege_or_above_target = prev } }
+   }
+   clear_saved_scope = wj_rf_office_successor
+   current_heir ?= {
+    if = { limit = { is_alive = yes NOT = { this = scope:wj_rf_retiring_holder } }
+     save_scope_as = wj_rf_office_successor
+    }
+   }
+   if = { limit = { NOT = { exists = scope:wj_rf_office_successor } }
+    scope:wj_rf_sovereign = { save_scope_as = wj_rf_office_successor }
+   }
+   change_title_holder = { holder = scope:wj_rf_office_successor change = scope:wj_rf_retirement }
+  }
+  resolve_title_and_vassal_change = scope:wj_rf_retirement
+  set_primary_title_to = scope:wj_rf_new_fief
+  if = { limit = { exists = scope:wj_rf_new_kingdom scope:wj_rf_new_kingdom.holder = scope:wj_rf_retiring_holder }
+   set_primary_title_to = scope:wj_rf_new_kingdom
+  }
+  WJ_rf_refresh_holder = yes
+ }
+}
+
+# on_death runs before succession: capture the direct lord, not an assumed top emperor.
+WJ_rf_capture_succession_liege = {
+ if = { limit = { exists = liege }
+  save_scope_as = wj_rf_dying_holder
+  every_held_title = { limit = { has_variable = wj_rf_rank }
+   set_variable = { name = wj_rf_previous_liege value = scope:wj_rf_dying_holder.liege }
+   set_variable = { name = wj_rf_previous_liege_title value = scope:wj_rf_dying_holder.liege.primary_title }
+  }
+ }
+}
+WJ_rf_restore_succession_liege = {
+ clear_saved_scope = wj_rf_inherited_liege
+ if = { limit = { exists = scope:title.var:wj_rf_previous_liege scope:title.var:wj_rf_previous_liege = { is_alive = yes } }
+  scope:title.var:wj_rf_previous_liege = { save_scope_as = wj_rf_inherited_liege }
+ }
+ else_if = { limit = { exists = scope:title.var:wj_rf_previous_liege_title.holder }
+  scope:title.var:wj_rf_previous_liege_title.holder = { save_scope_as = wj_rf_inherited_liege }
+ }
+ if = { limit = {
+  exists = scope:wj_rf_inherited_liege
+  scope:wj_rf_inherited_liege = { is_alive = yes NOT = { this = root } NOT = { is_vassal_or_below_of = root } }
+  NOT = { liege = scope:wj_rf_inherited_liege }
+ }
+  create_title_and_vassal_change = { type = swear_fealty save_scope_as = wj_rf_succession_change add_claim_on_loss = no }
+  change_liege = { liege = scope:wj_rf_inherited_liege change = scope:wj_rf_succession_change }
+  resolve_title_and_vassal_change = scope:wj_rf_succession_change
+ }
+ scope:title = { remove_variable = wj_rf_previous_liege remove_variable = wj_rf_previous_liege_title }
+}
+
+# Called by the native destruction hook while the old title and its tracked duchies remain accessible.
+WJ_rf_restore_destroyed_fief = {
+ save_scope_as = wj_rf_destroyed_fief
+ every_in_list = { variable = wj_rf_duchies
+  limit = { de_jure_liege = scope:wj_rf_destroyed_fief }
+  save_scope_as = wj_rf_restoring_duchy
+  clear_saved_scope = wj_rf_restored_parent
+  if = { limit = { exists = var:wj_rf_original_liege.holder var:wj_rf_original_liege = { tier = tier_kingdom NOT = { has_variable = wj_rf_rank } } }
+   var:wj_rf_original_liege = { save_scope_as = wj_rf_restored_parent }
+  }
+  else = {
+   clear_variable_list = wj_rf_restore_candidates
+   every_de_jure_county = { every_county_province = { every_neighboring_province = {
+    limit = {
+     exists = county.kingdom.holder
+     county.duchy != scope:wj_rf_restoring_duchy
+     county.kingdom = { NOT = { has_variable = wj_rf_rank } }
+     WJ_rf_physical_neighbor = { OTHER = prev }
+    }
+    county.kingdom = { save_scope_as = wj_rf_neighbor_parent }
+    scope:wj_rf_restoring_duchy = {
+     if = { limit = { NOT = { is_target_in_variable_list = { name = wj_rf_restore_candidates target = scope:wj_rf_neighbor_parent } } }
+      add_to_variable_list = { name = wj_rf_restore_candidates target = scope:wj_rf_neighbor_parent }
+     }
+    }
+   } } }
+   random_in_list = { variable = wj_rf_restore_candidates
+    limit = { exists = holder root.top_liege = holder.top_liege }
+    save_scope_as = wj_rf_restored_parent
+   }
+   if = { limit = { NOT = { exists = scope:wj_rf_restored_parent } }
+    random_in_list = { variable = wj_rf_restore_candidates save_scope_as = wj_rf_restored_parent }
+   }
+   clear_variable_list = wj_rf_restore_candidates
+  }
+  if = { limit = { exists = scope:wj_rf_restored_parent }
+   set_de_jure_liege_title = scope:wj_rf_restored_parent
+  }
+  # No valid parent: native destruction detaches this duchy; do not invent a title.
+  remove_variable = wj_rf_original_liege
+  every_de_jure_county = {
+   limit = { has_variable = wj_rf_capital_of var:wj_rf_capital_of = scope:wj_rf_destroyed_fief }
+   remove_variable = wj_rf_capital_of
+   remove_title_law = noble_family_succession_law
+  }
+ }
+ clear_variable_list = wj_rf_duchies
+}

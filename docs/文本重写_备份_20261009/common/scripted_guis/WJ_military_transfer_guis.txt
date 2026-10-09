@@ -1,0 +1,182 @@
+﻿WJ_mt_ui_authority = { scope = character is_shown = { WJ_mt_authority = yes } }
+WJ_mt_ui_zw = { scope = character is_shown = { WJ_zw_valid = yes } }
+# 原生军事窗仍使用原生Hire／改派，仅补同一军权与兵源身份门禁；归还／回收不走此门禁。
+WJ_mt_ui_native_orders_allowed = {
+ scope = character
+ is_shown = {
+  OR = {
+   NOT = { government_has_flag = government_is_celestial }
+   AND = {
+    WJ_mt_authority = yes
+    exists = scope:person
+    scope:person = { WJ_mt_person_allowed = { OP = root } }
+   }
+  }
+ }
+}
+WJ_mt_ui_huangyue = { scope = character is_shown = { WJ_zw_huangyue_valid = yes } }
+WJ_mt_ui_person_zw = { scope = character is_shown = { exists = scope:person scope:person ?= { WJ_zw_valid = yes } } }
+WJ_mt_ui_person_huangyue = { scope = character is_shown = { exists = scope:person scope:person ?= { WJ_zw_huangyue_valid = yes } } }
+WJ_mt_ui_close = { scope = character effect = { WJ_mt_clear_draft = yes remove_variable = wj_mt_mode } }
+WJ_mt_ui_confirm = {
+ scope = character
+ is_valid = { custom_tooltip = { text = WJ_mt_confirm_requires WJ_mt_order_valid = yes } }
+ effect = { hidden_effect = { WJ_mt_commit = yes } }
+}
+WJ_mt_ui_refresh = { scope = character effect = { if = { limit = { has_variable = wj_mt_open } WJ_mt_refresh = yes } } }
+WJ_mt_ui_open_title = {
+ scope = character
+ is_valid = {
+  WJ_mt_authority = yes
+  custom_tooltip = { text = WJ_mt_need_pair
+    WJ_mt_authority = yes exists = var:wj_mt_title_source exists = var:wj_mt_title_receiver
+    custom_tooltip = { text = WJ_mt_different_pair_tt NOT = { var:wj_mt_title_source = var:wj_mt_title_receiver } }
+   var:wj_mt_title_source = { WJ_mt_person_allowed = { OP = root } highest_held_title_tier >= tier_duchy }
+   var:wj_mt_title_receiver = { WJ_mt_person_allowed = { OP = root } highest_held_title_tier >= tier_duchy }
+  }
+ }
+ effect = { hidden_effect = {
+  if = { limit = { WJ_mt_authority = yes exists = var:wj_mt_title_source exists = var:wj_mt_title_receiver } WJ_mt_open = { MODE = 1 } }
+ } }
+}
+WJ_mt_ui_open_private = {
+ scope = character
+ is_valid = {
+  WJ_mt_authority = yes
+  custom_tooltip = { text = WJ_mt_need_pair
+    WJ_mt_authority = yes exists = var:wj_mt_private_source exists = var:wj_mt_private_receiver
+    custom_tooltip = { text = WJ_mt_different_pair_tt NOT = { var:wj_mt_private_source = var:wj_mt_private_receiver } }
+   var:wj_mt_private_source = { WJ_mt_person_allowed = { OP = root }  }
+   var:wj_mt_private_receiver = { WJ_mt_person_allowed = { OP = root } highest_held_title_tier >= tier_duchy }
+  }
+ }
+ effect = { hidden_effect = {
+  if = { limit = { WJ_mt_authority = yes exists = var:wj_mt_private_source exists = var:wj_mt_private_receiver } WJ_mt_open = { MODE = 2 } }
+ } }
+}
+WJ_mt_ui_title_a = {
+ scope = character
+ effect = { if = { limit = { WJ_mt_pair_valid = yes scope:title = { WJ_mt_title_legal = yes holder = root.var:wj_mt_a } }
+  clear_variable_list = wj_mt_pending
+  set_variable = { name = wj_mt_title_a value = scope:title }
+  WJ_mt_refresh = yes
+ } }
+}
+WJ_mt_ui_title_b = {
+ scope = character
+ effect = { if = { limit = { WJ_mt_pair_valid = yes scope:title = { WJ_mt_title_legal = yes holder = root.var:wj_mt_b } }
+  clear_variable_list = wj_mt_pending
+  set_variable = { name = wj_mt_title_b value = scope:title }
+  WJ_mt_refresh = yes
+ } }
+}
+WJ_mt_ui_add = {
+ scope = character
+ effect = { if = { limit = {
+  WJ_mt_pair_valid = yes WJ_mt_title_b_valid = yes
+  scope:regiment = { WJ_mt_source_regiment = { OP = root } }
+  NOT = { is_target_in_variable_list = { name = wj_mt_pending target = scope:regiment } }
+ }
+  add_to_variable_list = { name = wj_mt_pending target = scope:regiment }
+  WJ_mt_refresh = yes
+ } }
+}
+WJ_mt_ui_remove = {
+ scope = character effect = {
+  remove_list_variable = { name = wj_mt_pending target = scope:regiment }
+  WJ_mt_refresh = yes
+ }
+}
+WJ_mt_ui_all = { scope = character effect = { if = { limit = { WJ_mt_pair_valid = yes WJ_mt_title_b_valid = yes } WJ_mt_preview_all = yes } } }
+WJ_mt_ui_none = { scope = character effect = { clear_variable_list = wj_mt_pending WJ_mt_refresh = yes } }
+WJ_mt_ui_roster_current = {
+ scope = character
+ is_shown = { exists = var:wj_mt_realm var:wj_mt_realm = top_liege exists = var:wj_mt_viewer var:wj_mt_viewer = this }
+}
+WJ_mt_ui_central = {
+ scope = character
+ effect = {
+  clear_variable_list = wj_mt_generals clear_variable_list = wj_mt_officials
+  remove_variable = wj_mt_realm remove_variable = wj_mt_viewer
+  if = { limit = { government_has_flag = government_is_celestial top_liege = { WJ_inner_emperor_trigger = yes } }
+   set_variable = { name = wj_mt_realm value = top_liege }
+   set_variable = { name = wj_mt_viewer value = this }
+   save_temporary_scope_as = wj_mt_viewer
+   top_liege = {
+    ordered_vassal = {
+     limit = { WJ_mt_military_person = yes NOT = { has_title = title:e_minister_grand_marshal } } order_by = highest_held_title_tier
+     max = { value = 0 every_vassal = { limit = { WJ_mt_military_person = yes NOT = { has_title = title:e_minister_grand_marshal } } add = 1 } } check_range_bounds = no
+     if = { limit = { highest_held_title_tier >= tier_kingdom }
+      scope:wj_mt_viewer = { add_to_variable_list = { name = wj_mt_generals target = prev } }
+     }
+     else = { scope:wj_mt_viewer = { add_to_variable_list = { name = wj_mt_officials target = prev } } }
+    }
+   }
+  }
+ }
+}
+WJ_mt_ui_subordinates = {
+ scope = character
+ effect = {
+  if = { limit = { government_has_flag = government_is_celestial scope:person = { is_alive = yes top_liege = root.top_liege } }
+   set_variable = { name = wj_mt_subordinate_head value = scope:person }
+   clear_variable_list = wj_mt_subordinates
+   clear_variable_list = wj_mt_subordinates_kingdom
+   clear_variable_list = wj_mt_subordinates_duchy
+   clear_variable_list = wj_mt_subordinates_county
+   save_temporary_scope_as = wj_mt_viewer
+   scope:person = { ordered_vassal_or_below = {
+    limit = { WJ_mt_military_person = yes } order_by = highest_held_title_tier
+    max = { value = 0 every_vassal_or_below = { limit = { WJ_mt_military_person = yes } add = 1 } } check_range_bounds = no
+    scope:wj_mt_viewer = { add_to_variable_list = { name = wj_mt_subordinates target = prev } }
+    save_temporary_scope_as = wj_mt_subordinate
+    if = { limit = { highest_held_title_tier >= tier_kingdom }
+     scope:wj_mt_viewer = { add_to_variable_list = { name = wj_mt_subordinates_kingdom target = scope:wj_mt_subordinate } }
+    }
+    else_if = { limit = { highest_held_title_tier = tier_duchy }
+     scope:wj_mt_viewer = { add_to_variable_list = { name = wj_mt_subordinates_duchy target = scope:wj_mt_subordinate } }
+    }
+    else_if = { limit = { highest_held_title_tier = tier_county }
+     scope:wj_mt_viewer = { add_to_variable_list = { name = wj_mt_subordinates_county target = scope:wj_mt_subordinate } }
+    }
+   } }
+  }
+ }
+}
+WJ_mt_ui_subordinates_close = {
+ scope = character
+ effect = {
+  remove_variable = wj_mt_subordinate_head
+  clear_variable_list = wj_mt_subordinates
+  clear_variable_list = wj_mt_subordinates_kingdom
+  clear_variable_list = wj_mt_subordinates_duchy
+  clear_variable_list = wj_mt_subordinates_county
+ }
+}
+
+# Read-only effect tooltip: each applicable trait is displayed, never rolled here.
+WJ_mt_ui_chance_details = {
+ scope = character
+ effect = {
+  custom_tooltip = WJ_mt_chance_header
+  if = { limit = { exists = var:wj_mt_a var:wj_mt_a = this }
+   custom_tooltip = WJ_mt_chance_self
+  }
+  else = {
+   custom_tooltip = WJ_mt_chance_base
+   if = { limit = { var:wj_mt_a = { has_trait = loyal } } custom_tooltip = WJ_mt_trait_loyal }
+   if = { limit = { var:wj_mt_a = { has_trait = disloyal } } custom_tooltip = WJ_mt_trait_disloyal }
+   if = { limit = { var:wj_mt_a = { has_trait = ambitious } } custom_tooltip = WJ_mt_trait_ambitious }
+   if = { limit = { var:wj_mt_a = { has_trait = content } } custom_tooltip = WJ_mt_trait_content }
+   if = { limit = { var:wj_mt_a = { has_trait = humble } } custom_tooltip = WJ_mt_trait_humble }
+   if = { limit = { var:wj_mt_a = { has_trait = arrogant } } custom_tooltip = WJ_mt_trait_arrogant }
+   if = { limit = { var:wj_mt_a = { has_trait = generous } } custom_tooltip = WJ_mt_trait_generous }
+   if = { limit = { var:wj_mt_a = { has_trait = greedy } } custom_tooltip = WJ_mt_trait_greedy }
+   if = { limit = { var:wj_mt_a = { has_trait = calm } } custom_tooltip = WJ_mt_trait_calm }
+   if = { limit = { var:wj_mt_a = { has_trait = wrathful } } custom_tooltip = WJ_mt_trait_wrathful }
+   if = { limit = { var:wj_mt_a = { has_trait = stubborn } } custom_tooltip = WJ_mt_trait_stubborn }
+   if = { limit = { var:wj_mt_a = { has_trait = patient } } custom_tooltip = WJ_mt_trait_patient }
+   custom_tooltip = WJ_mt_chance_factors
+  }
+ }
+}

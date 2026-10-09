@@ -1,0 +1,1676 @@
+﻿# ============================================================================
+# WJ 察举交互 —— 举孝廉 / 举茂才 / 辟召
+# xinsanguo-MOD 2026-08-19
+# 举孝廉: 天朝公国级有地官员 → 无禄秩角色
+# 辟召:   由 WJ_bizhao_request_interaction 统一处理，覆盖同一 top_liege 内的 NPC
+# ============================================================================
+
+# 举孝廉: 公国级有地官员 → 无门士人(入郎官署为郎, 待考校转正)
+wj_xiaolian_interaction = {
+	icon = scroll_scales
+	category = interaction_category_friendly
+	common_interaction = yes
+
+	name = wj_xiaolian_interaction
+	send_name = wj_xiaolian_interaction_send_name
+	desc = wj_xiaolian_interaction_desc
+	greeting = positive
+	auto_accept = { WJ_yinshi_recipient_is_hermit_trigger = yes }
+	notification_text = WJ_XIAOLIAN_NOTIFICATION
+	reply_item_key = wj_xiaolian_interaction_reply_item_key
+	popup_on_receive = yes
+	pause_on_receive = yes
+	pre_answer_yes_key = ACCEPT
+	pre_answer_no_key = DECLINE
+
+	is_shown = {
+		scope:actor = {
+			government_has_flag = government_is_celestial
+			government_has_flag = government_is_celestial
+			is_landed = yes
+			primary_title.tier = tier_duchy
+		}
+		scope:recipient = {
+			government_has_flag = government_is_celestial
+			top_liege = scope:actor.top_liege
+		}
+	}
+
+	is_valid_showing_failures_only = {
+		scope:actor = {
+			government_has_flag = government_is_celestial
+			is_incapable = no
+			is_imprisoned = no
+			custom_tooltip = {
+				text = wj_xiaolian_yearly_quota_tt
+				NOT = { has_character_flag = wj_xiaolian_nomination_yearly_quota }
+			}
+		}
+
+
+			scope:recipient = {
+				WJ_can_be_recommended_xiaolian_candidate_trigger = {
+					RECOMMENDER = scope:actor
+				}
+			}
+
+	}
+
+	cost = {
+		influence = {
+			value = major_influence_value
+			add = {
+				value = 10
+				multiply = scope:recipient.number_of_disciples
+			}
+		}
+	}
+
+	options_heading = invite_agent_to_scheme_interaction.t.options_header
+	send_option = {
+		flag = gift
+		is_valid = { scope:recipient.gold > 0 }
+		localization = WJ_ACTIVE_DEMAND_GOLD_OPTION
+		current_description = {
+			triggered_desc = {
+				trigger = { scope:recipient.gold > 0 }
+				desc = WJ_ACTIVE_DEMAND_GOLD_VALID
+			}
+		}
+	}
+	send_option = {
+		flag = offer_hook
+		is_valid = {
+			custom_tooltip = {
+				text = offer_hook.tt.cannot_offer_both_hooks
+				scope:offer_hook_strong = no
+			}
+			scope:actor = { NOT = { has_hook = scope:recipient } }
+		}
+		localization = WJ_ACTIVE_DEMAND_HOOK_OPTION
+	}
+	send_option = {
+		flag = offer_hook_strong
+		is_shown = { scope:recipient = { has_trait_with_flag = can_offer_strong_hook_to_agents } }
+		is_valid = {
+			custom_tooltip = {
+				text = offer_hook.tt.cannot_offer_both_hooks
+				scope:offer_hook = no
+			}
+			scope:actor = { NOT = { has_strong_hook = scope:recipient } }
+		}
+		localization = WJ_ACTIVE_DEMAND_STRONG_HOOK_OPTION
+	}
+	send_option = {
+		flag = influence
+		is_shown = {
+			scope:actor.top_liege ?= scope:recipient.top_liege
+			scope:actor = { government_has_mechanic = administrative }
+			scope:recipient = {
+				OR = {
+					government_has_mechanic = administrative
+					host = { government_has_mechanic = administrative }
+					AND = {
+						highest_held_title_tier = tier_barony
+						liege = { government_has_mechanic = administrative }
+					}
+				}
+			}
+		}
+		is_valid = { scope:recipient.influence >= influence_bribe_value }
+		localization = WJ_ACTIVE_DEMAND_INFLUENCE_OPTION
+		current_description = {
+			triggered_desc = {
+				trigger = { scope:recipient.influence >= influence_bribe_value }
+				desc = WJ_ACTIVE_DEMAND_INFLUENCE_VALID
+			}
+		}
+	}
+	send_option = {
+		flag = hook
+		is_valid = { scope:actor = { has_usable_hook = scope:recipient } }
+		localization = SCHEME_HOOK
+	}
+	should_use_extra_icon = {
+		scope:actor = { has_usable_hook = scope:recipient }
+	}
+	extra_icon = "gfx/interface/icons/character_interactions/hook_icon.dds"
+	send_option = {
+		flag = wj_take_disciple
+		localization = WJ_TAKE_DISCIPLE_OPTION
+		is_valid = {
+			custom_tooltip = {
+				text = wj_recommender_cannot_take_disciple_tt
+				scope:actor = {
+					NOT = { has_relation_disciple = scope:recipient }
+					WJ_can_recommend_candidate_as_disciple_trigger = {
+						CANDIDATE = scope:recipient
+					}
+				}
+			}
+		}
+	}
+	send_options_exclusive = no
+	ai_min_reply_days = 4
+	ai_max_reply_days = 9
+
+	ai_accept = {
+		WJ_dd_jie_acceptance_modifier = yes
+		base = 100
+		opinion_modifier = {
+			opinion_target = scope:actor
+			who = scope:recipient
+			multiplier = 0.5
+		}
+		modifier = {
+			add = 500
+			scope:actor = { has_relation_disciple = scope:recipient }
+			desc = is_actors_disciple
+		}
+		modifier = {
+			scope:actor.merit_level != scope:recipient.merit_level
+			add = {
+				add = { add = 10 multiply = scope:actor.merit_level }
+				subtract = { add = 10 multiply = scope:recipient.merit_level }
+			}
+			desc = difference_in_merit_level_reason
+		}
+		modifier = {
+			add = 15
+			scope:actor.house ?= { is_powerful_family = yes }
+			scope:recipient.house ?= { is_powerful_family = no is_dominant_family = no }
+			desc = your_house_is_powerful_reason
+		}
+		modifier = {
+			add = 25
+			scope:actor.house ?= { is_dominant_family = yes }
+			scope:recipient.house ?= { is_dominant_family = no }
+			desc = your_house_is_dominant_reason
+		}
+		modifier = {
+			add = -15
+			scope:recipient.house ?= { is_powerful_family = yes }
+			scope:actor.house ?= { is_powerful_family = no is_dominant_family = no }
+			desc = their_house_is_powerful_reason
+		}
+		modifier = {
+			add = -25
+			scope:recipient.house ?= { is_dominant_family = yes }
+			scope:actor.house ?= { is_dominant_family = no }
+			desc = their_house_is_dominant_reason
+		}
+		modifier = {
+			scope:actor.influence_level != scope:recipient.influence_level
+			add = {
+				add = { add = 5 multiply = scope:actor.influence_level }
+				subtract = { add = 5 multiply = scope:recipient.influence_level }
+			}
+			desc = difference_in_influence_level_reason
+		}
+		modifier = {
+			add = -10
+			scope:recipient = { is_powerful_vassal = yes }
+			scope:actor = { is_powerful_vassal = no }
+			desc = RECIPIENT_POWERFUL_VASSAL
+		}
+		modifier = {
+			add = 5
+			scope:actor = { is_powerful_vassal = yes }
+			scope:recipient = { is_powerful_vassal = no }
+			desc = AI_POWERFUL_VASSAL
+		}
+		modifier = {
+			add = 10
+			is_ai = yes
+			scope:recipient = { is_ai = no }
+			has_game_rule = easy_difficulty
+			desc = easy_difficulty
+		}
+		modifier = {
+			add = 20
+			is_ai = yes
+			scope:recipient = { is_ai = no }
+			has_game_rule = very_easy_difficulty
+			desc = very_easy_difficulty
+		}
+		modifier = {
+			add = -20
+			scope:actor = {
+				has_relation_rival = scope:recipient
+				NOT = { has_relation_nemesis = scope:recipient }
+			}
+			desc = SCHEME_AGAINST_RIVAL
+		}
+		modifier = {
+			add = -1000
+			scope:actor = { has_relation_nemesis = scope:recipient }
+			desc = SCHEME_AGAINST_NEMESIS
+		}
+		modifier = {
+			add = 10
+			scope:actor = {
+				has_relation_friend = scope:recipient
+				NOT = { has_relation_best_friend = scope:recipient }
+			}
+			desc = SCHEME_AGAINST_FRIEND
+		}
+		modifier = {
+			add = 1000
+			scope:actor = { has_relation_best_friend = scope:recipient }
+			desc = SCHEME_AGAINST_BEST_FRIEND
+		}
+		modifier = {
+			add = 1000
+			scope:actor = { has_relation_soulmate = scope:recipient }
+			desc = SCHEME_AGAINST_SOULMATE
+		}
+		modifier = {
+			add = 10
+			scope:actor = {
+				is_consort_of = scope:recipient
+				opinion = { target = scope:recipient value > 0 }
+			}
+			desc = SCHEME_AGAINST_SPOUSE
+		}
+		modifier = {
+			add = {
+				add = wj_active_recommendation_gold_acceptance_value
+				scope:recipient = { if = { limit = { has_trait = greedy } add = -10 } }
+			}
+			scope:gift ?= yes
+			desc = WJ_ACTIVE_DEMAND_GOLD_REASON
+		}
+		modifier = { add = -20 scope:offer_hook ?= yes desc = WJ_ACTIVE_DEMAND_HOOK_REASON }
+		modifier = { add = -50 scope:offer_hook_strong ?= yes desc = WJ_ACTIVE_DEMAND_STRONG_HOOK_REASON }
+		modifier = { add = 100 scope:hook ?= yes desc = SCHEME_WEAK_HOOK_USED }
+		modifier = {
+			add = {
+				value = -20
+				scope:recipient = {
+					if = { limit = { has_trait = ambitious } add = -10 }
+					if = { limit = { has_trait = content } add = 10 }
+				}
+			}
+			scope:influence ?= yes
+			desc = WJ_ACTIVE_DEMAND_INFLUENCE_REASON
+		}
+		modifier = {
+			add = wj_active_recommendation_disciple_acceptance_value
+			scope:wj_take_disciple ?= yes
+			desc = WJ_ACTIVE_RECOMMENDATION_DISCIPLE_REASON
+		}
+	}
+
+	can_send = {
+		scope:actor = {
+			custom_description = { text = WJ_failure_31
+NOR = {
+				has_character_flag = wj_xiaolian_nomination_yearly_quota
+				has_character_flag = wj_xiaolian_nomination_pending
+			}
+}
+		}
+	}
+
+	on_send = {
+		scope:actor = {
+			add_character_flag = {
+				flag = wj_xiaolian_nomination_pending
+				days = 61
+			}
+		}
+	}
+
+	on_accept = {
+		# 隐士收到举荐：自动受理并转为隐士的"乡论入郡府"事件，由其决定出山与否。
+		if = {
+			limit = { WJ_yinshi_recipient_is_hermit_trigger = yes }
+			save_scope_value_as = { name = wj_yinshi_via value = flag:interaction }
+			scope:recipient = {
+				save_scope_as = wj_yinshi_subject
+				trigger_event = WJ_yinshi.5002
+			}
+		}
+		else = { WJ_xiaolian_interaction_accept_effect = yes }
+	}
+
+	on_decline = {
+		scope:actor = {
+			remove_character_flag = wj_xiaolian_nomination_pending
+			trigger_event = WJ_recommendation_reply.0002
+		}
+	}
+
+	ai_targets = {
+		ai_recipients = scripted_relations
+		max = 20
+	}
+	ai_frequency_by_tier = {
+		barony = 0
+		county = 0
+		duchy = 12
+		kingdom = 0
+		empire = 0
+		hegemony = 0
+	}
+	ai_potential = {
+		government_has_flag = government_is_celestial
+		government_has_flag = government_is_celestial
+		is_landed = yes
+		primary_title.tier = tier_duchy
+		NOR = {
+			has_character_flag = wj_xiaolian_nomination_yearly_quota
+			has_character_flag = wj_xiaolian_nomination_pending
+		}
+	}
+	ai_will_do = {
+		base = 0
+		modifier = {
+			add = 100
+			scope:actor = { has_relation_disciple = scope:recipient }
+			scope:recipient = { is_ai = no }
+		}
+		modifier = {
+			add = 30
+			scope:actor = { has_relation_disciple = scope:recipient }
+			scope:recipient = { is_ai = yes }
+		}
+		modifier = {
+			factor = 0.1
+			WJ_yinshi_recipient_is_hermit_trigger = yes
+		}
+	}
+}
+
+# 请求举孝廉: 无门士人(玩家) → 公国级有地官员(对方同意即举)
+wj_request_xiaolian_interaction = {
+ is_available = { is_ai = no }
+	icon = scroll_scales
+	interface_priority = 25
+	category = interaction_category_friendly
+	common_interaction = yes
+	needs_recipient_to_open = yes
+	cooldown = { years = 1 }
+
+	name = wj_request_xiaolian_interaction
+	send_name = wj_request_xiaolian_interaction_send_name
+	desc = wj_request_xiaolian_interaction_desc
+	greeting = positive
+	notification_text = WJ_REQUEST_XIAOLIAN_NOTIFICATION
+	reply_item_key = wj_request_xiaolian_interaction_reply_item_key
+	popup_on_receive = yes
+	pause_on_receive = yes
+	pre_answer_yes_key = ACCEPT
+	pre_answer_no_key = DECLINE
+
+	populate_actor_list = {
+			scope:actor = {
+			if = {
+				limit = {
+					is_male = yes
+					NOT = { has_trait = WJ_yangwang_trait } # 隐士不自请举荐
+					WJ_can_be_recommended_xiaolian_candidate_trigger = {
+						RECOMMENDER = scope:recipient
+					}
+				}
+				add_to_list = characters
+			}
+				every_courtier_or_guest = {
+					limit = {
+						is_male = yes
+						NOT = { has_trait = WJ_yangwang_trait } # 隐士不自请举荐
+						WJ_can_be_recommended_xiaolian_candidate_trigger = {
+							RECOMMENDER = scope:recipient
+						}
+					}
+				add_to_list = characters
+			}
+		}
+	}
+
+	is_shown = {
+		scope:actor = {
+			government_has_flag = government_is_celestial
+			government_has_flag = government_is_celestial
+			is_adult = yes
+			this != scope:recipient
+		}
+		scope:recipient = {
+			government_has_flag = government_is_celestial
+			is_landed = yes
+			primary_title.tier = tier_duchy
+			top_liege = scope:actor.top_liege
+			is_incapable = no
+			is_imprisoned = no
+		}
+	}
+
+	is_valid_showing_failures_only = {
+		scope:actor = {
+			government_has_flag = government_is_celestial
+			NOT = { is_at_war_with = scope:recipient }
+			is_incapable = no
+			is_imprisoned = no
+		}
+			scope:recipient = {
+				is_incapable = no
+				is_imprisoned = no
+				custom_tooltip = {
+					text = wj_xiaolian_yearly_quota_tt
+					NOT = { has_character_flag = wj_xiaolian_nomination_yearly_quota }
+				}
+		}
+		custom_tooltip = {
+			text = wj_no_valid_recommendation_candidate_tt
+			OR = {
+				scope:actor = {
+					is_male = yes
+					NOT = { has_trait = WJ_yangwang_trait } # 隐士不自请举荐
+					WJ_can_be_recommended_xiaolian_candidate_trigger = {
+						RECOMMENDER = scope:recipient
+					}
+				}
+				scope:actor = {
+					any_courtier_or_guest = {
+						is_male = yes
+						NOT = { has_trait = WJ_yangwang_trait } # 隐士不自请举荐
+						WJ_can_be_recommended_xiaolian_candidate_trigger = {
+							RECOMMENDER = scope:recipient
+						}
+					}
+				}
+			}
+		}
+	}
+
+	can_be_picked = {
+		is_male = yes
+		NOT = { has_trait = WJ_yangwang_trait } # 隐士不自请举荐
+		WJ_can_be_recommended_xiaolian_candidate_trigger = {
+			RECOMMENDER = scope:recipient
+		}
+	}
+
+	can_send = {
+		scope:secondary_actor = {
+			is_male = yes
+			NOT = { has_trait = WJ_yangwang_trait } # 隐士不自请举荐
+			WJ_can_be_recommended_xiaolian_candidate_trigger = {
+				RECOMMENDER = scope:recipient
+			}
+		}
+		scope:recipient = {
+			custom_description = { text = WJ_failure_33
+NOR = {
+				has_character_flag = wj_xiaolian_nomination_yearly_quota
+				has_character_flag = wj_xiaolian_nomination_pending
+			}
+}
+		}
+	}
+
+	cost = {
+		influence = {
+			value = major_influence_value
+			add = {
+				value = 10
+				multiply = scope:recipient.number_of_disciples
+			}
+		}
+	}
+
+	options_heading = invite_agent_to_scheme_interaction.t.options_header
+	send_option = {
+		flag = prestige
+		is_valid = { scope:actor.prestige >= prestige_bribe_value }
+		localization = SCHEME_AGENT_PRESTIGE
+		current_description = {
+			triggered_desc = {
+				trigger = { scope:actor.prestige >= prestige_bribe_value }
+				desc = SCHEME_AGENT_PRESTIGE_VALID
+			}
+		}
+	}
+	send_option = {
+		flag = gift
+		is_valid = { scope:actor.gold > 0 }
+		localization = WJ_REQUEST_RECOMMENDATION_GOLD_OPTION
+		current_description = {
+			triggered_desc = {
+				trigger = { scope:actor.gold > 0 }
+				desc = WJ_REQUEST_RECOMMENDATION_GOLD_VALID
+			}
+		}
+	}
+	send_option = {
+		flag = offer_hook
+		is_valid = {
+			custom_tooltip = {
+				text = offer_hook.tt.cannot_offer_both_hooks
+				scope:offer_hook_strong = no
+			}
+			scope:recipient = { NOT = { has_hook = scope:actor } }
+		}
+		localization = SCHEME_AGENT_HOOK
+	}
+	send_option = {
+		flag = offer_hook_strong
+		is_shown = { scope:actor = { has_trait_with_flag = can_offer_strong_hook_to_agents } }
+		is_valid = {
+			custom_tooltip = {
+				text = offer_hook.tt.cannot_offer_both_hooks
+				scope:offer_hook = no
+			}
+			scope:recipient = { NOT = { has_strong_hook = scope:actor } }
+		}
+		localization = SCHEME_AGENT_HOOK_STRONG
+	}
+	send_option = {
+		flag = influence
+		is_shown = {
+			scope:actor.top_liege ?= scope:recipient.top_liege
+			scope:actor = { government_has_mechanic = administrative }
+			scope:recipient = {
+				OR = {
+					government_has_mechanic = administrative
+					host = { government_has_mechanic = administrative }
+					AND = {
+						highest_held_title_tier = tier_barony
+						liege = { government_has_mechanic = administrative }
+					}
+				}
+			}
+		}
+		is_valid = { scope:actor.influence >= influence_bribe_value }
+		localization = SCHEME_AGENT_INFLUENCE
+		current_description = {
+			triggered_desc = {
+				trigger = { scope:actor.influence >= influence_bribe_value }
+				desc = SCHEME_AGENT_INFLUENCE_VALID
+			}
+		}
+	}
+	send_option = {
+		flag = hook
+		is_valid = { scope:actor = { has_usable_hook = scope:recipient } }
+		localization = SCHEME_HOOK
+	}
+	should_use_extra_icon = {
+		scope:actor = { has_usable_hook = scope:recipient }
+	}
+	extra_icon = "gfx/interface/icons/character_interactions/hook_icon.dds"
+	send_option = {
+		flag = wj_become_disciple
+		localization = WJ_BECOME_DISCIPLE_OPTION
+		is_valid = {
+			custom_tooltip = {
+				text = wj_requester_cannot_become_disciple_tt
+				scope:recipient = {
+					NOT = { has_relation_disciple = scope:secondary_actor }
+					WJ_can_recommend_candidate_as_disciple_trigger = {
+						CANDIDATE = scope:secondary_actor
+					}
+				}
+			}
+		}
+	}
+	send_options_exclusive = no
+	ai_min_reply_days = 4
+	ai_max_reply_days = 9
+
+	# 原版 00_defines 的 CHARACTER_INTERACTION_EXPIRATION_DAYS 为 60；
+	# 多留一天，使未答复/失效的请求自动释放名额锁。
+	on_send = {
+		scope:recipient = {
+			add_character_flag = {
+				flag = wj_xiaolian_nomination_pending
+				days = 61
+			}
+		}
+	}
+
+	ai_accept = {
+		WJ_dd_jie_acceptance_modifier = yes
+		base = -30
+		opinion_modifier = {
+			opinion_target = scope:actor
+			who = scope:recipient
+			multiplier = 0.5
+		}
+		modifier = {
+			add = 500
+			scope:recipient = { has_relation_disciple = scope:secondary_actor }
+			desc = is_actors_disciple
+		}
+		modifier = {
+			scope:secondary_actor.merit_level != scope:recipient.merit_level
+			add = {
+				add = { add = 10 multiply = scope:secondary_actor.merit_level }
+				subtract = { add = 10 multiply = scope:recipient.merit_level }
+			}
+			desc = difference_in_merit_level_reason
+		}
+		modifier = {
+			add = 15
+			scope:secondary_actor.house ?= { is_powerful_family = yes }
+			scope:recipient.house ?= { is_powerful_family = no is_dominant_family = no }
+			desc = your_house_is_powerful_reason
+		}
+		modifier = {
+			add = 25
+			scope:secondary_actor.house ?= { is_dominant_family = yes }
+			scope:recipient.house ?= { is_dominant_family = no }
+			desc = your_house_is_dominant_reason
+		}
+		modifier = {
+			add = -15
+			scope:recipient.house ?= { is_powerful_family = yes }
+			scope:secondary_actor.house ?= { is_powerful_family = no is_dominant_family = no }
+			desc = their_house_is_powerful_reason
+		}
+		modifier = {
+			add = -25
+			scope:recipient.house ?= { is_dominant_family = yes }
+			scope:secondary_actor.house ?= { is_dominant_family = no }
+			desc = their_house_is_dominant_reason
+		}
+		modifier = {
+			scope:actor.influence_level != scope:recipient.influence_level
+			add = {
+				add = { add = 5 multiply = scope:actor.influence_level }
+				subtract = { add = 5 multiply = scope:recipient.influence_level }
+			}
+			desc = difference_in_influence_level_reason
+		}
+		modifier = {
+			add = -10
+			scope:recipient = { is_powerful_vassal = yes }
+			scope:actor = { is_powerful_vassal = no }
+			desc = RECIPIENT_POWERFUL_VASSAL
+		}
+		modifier = {
+			add = 5
+			scope:actor = { is_powerful_vassal = yes }
+			scope:recipient = { is_powerful_vassal = no }
+			desc = AI_POWERFUL_VASSAL
+		}
+		modifier = {
+			add = 10
+			is_ai = yes
+			scope:recipient = { is_ai = no }
+			has_game_rule = easy_difficulty
+			desc = easy_difficulty
+		}
+		modifier = {
+			add = 20
+			is_ai = yes
+			scope:recipient = { is_ai = no }
+			has_game_rule = very_easy_difficulty
+			desc = very_easy_difficulty
+		}
+		modifier = {
+			add = -20
+			scope:secondary_actor = {
+				has_relation_rival = scope:recipient
+				NOT = { has_relation_nemesis = scope:recipient }
+			}
+			desc = SCHEME_AGAINST_RIVAL
+		}
+		modifier = {
+			add = -1000
+			scope:secondary_actor = { has_relation_nemesis = scope:recipient }
+			desc = SCHEME_AGAINST_NEMESIS
+		}
+		modifier = {
+			add = 10
+			scope:secondary_actor = {
+				has_relation_friend = scope:recipient
+				NOT = { has_relation_best_friend = scope:recipient }
+			}
+			desc = SCHEME_AGAINST_FRIEND
+		}
+		modifier = {
+			add = 1000
+			scope:secondary_actor = { has_relation_best_friend = scope:recipient }
+			desc = SCHEME_AGAINST_BEST_FRIEND
+		}
+		modifier = {
+			add = 1000
+			scope:secondary_actor = { has_relation_soulmate = scope:recipient }
+			desc = SCHEME_AGAINST_SOULMATE
+		}
+		modifier = {
+			add = 10
+			scope:secondary_actor = {
+				is_consort_of = scope:recipient
+				opinion = { target = scope:recipient value > 0 }
+			}
+			desc = SCHEME_AGAINST_SPOUSE
+		}
+		modifier = {
+			add = {
+				add = wj_request_recommendation_gold_acceptance_value
+				scope:recipient = { if = { limit = { has_trait = greedy } add = 10 } }
+			}
+			scope:gift ?= yes
+			desc = WJ_REQUEST_RECOMMENDATION_GOLD_REASON
+		}
+		modifier = { add = 20 scope:offer_hook ?= yes desc = SCHEME_WITH_OFFER_HOOK }
+		modifier = { add = 50 scope:offer_hook_strong ?= yes desc = SCHEME_WITH_OFFER_HOOK_STRONG }
+		modifier = { add = 100 scope:hook ?= yes desc = SCHEME_WEAK_HOOK_USED }
+		modifier = {
+			add = {
+				value = 20
+				scope:recipient = {
+					if = { limit = { has_trait = arrogant } add = 10 }
+					if = { limit = { has_trait = humble } add = -10 }
+				}
+			}
+			scope:prestige ?= yes
+			desc = SCHEME_WITH_PRESTIGE
+		}
+		modifier = {
+			add = {
+				value = 20
+				scope:recipient = {
+					if = { limit = { has_trait = ambitious } add = 10 }
+					if = { limit = { has_trait = content } add = -10 }
+				}
+			}
+			scope:influence ?= yes
+			desc = SCHEME_WITH_INFLUENCE
+		}
+		modifier = {
+			add = wj_request_recommendation_disciple_acceptance_value
+			scope:wj_become_disciple = yes
+			desc = WJ_REQUEST_RECOMMENDATION_DISCIPLE_REASON
+		}
+	}
+
+	on_accept = {
+		# scope:secondary_actor = { WJ_grant_langguan_effect = yes } # 郎官全部暂停。
+		scope:secondary_actor = { WJ_grant_road_xiaolian_effect = yes }
+		WJ_settle_recommendation_movement_options_effect = yes
+		if = {
+			limit = { scope:wj_become_disciple = yes }
+			WJ_establish_recommender_disciple_effect = {
+				RECOMMENDER = scope:recipient
+				CANDIDATE = scope:secondary_actor
+			}
+		}
+		scope:recipient = {
+			remove_character_flag = wj_xiaolian_nomination_pending
+			add_character_flag = {
+				flag = wj_xiaolian_nomination_yearly_quota
+				years = 1
+			}
+		}
+		scope:actor = { trigger_event = WJ_recommendation_reply.0101 }
+	}
+
+	on_decline = {
+		scope:recipient = {
+			remove_character_flag = wj_xiaolian_nomination_pending
+		}
+		scope:actor = { trigger_event = WJ_recommendation_reply.0102 }
+	}
+}
+
+# 王国级以上官员主动举茂才：直接取得禄轶资格，不调用旧活动排名奖励。
+wj_maocai_interaction = {
+	icon = scroll_scales
+	category = interaction_category_friendly
+	common_interaction = yes
+
+	name = wj_maocai_interaction
+	send_name = wj_maocai_interaction_send_name
+	desc = wj_maocai_interaction_desc
+	greeting = positive
+	auto_accept = { WJ_yinshi_recipient_is_hermit_trigger = yes }
+	notification_text = WJ_MAOCAI_NOTIFICATION
+	reply_item_key = wj_maocai_interaction_reply_item_key
+	popup_on_receive = yes
+	pause_on_receive = yes
+	pre_answer_yes_key = ACCEPT
+	pre_answer_no_key = DECLINE
+
+	is_shown = {
+		scope:actor = { WJ_langguan_real_emperor_trigger = no }
+		scope:recipient = { WJ_langguan_real_emperor_trigger = no }
+		scope:actor = {
+			government_has_flag = government_is_celestial
+			government_has_flag = government_is_celestial
+			is_landed = yes
+			primary_title.tier >= tier_kingdom
+		}
+		scope:recipient = {
+			government_has_flag = government_is_celestial
+			top_liege = scope:actor.top_liege
+		}
+	}
+
+	is_valid_showing_failures_only = {
+		scope:actor = { WJ_langguan_real_emperor_trigger = no }
+		scope:recipient = { WJ_langguan_real_emperor_trigger = no }
+		scope:actor = {
+			government_has_flag = government_is_celestial
+			is_incapable = no
+			is_imprisoned = no
+			custom_tooltip = {
+				text = wj_maocai_yearly_quota_tt
+				NOT = { has_character_flag = wj_maocai_nomination_yearly_quota }
+			}
+		}
+
+
+			scope:recipient = {
+				WJ_can_be_recommended_maocai_candidate_trigger = {
+					RECOMMENDER = scope:actor
+				}
+			}
+
+	}
+
+	cost = {
+		influence = {
+			value = major_influence_value
+			add = {
+				value = 10
+				multiply = scope:recipient.number_of_disciples
+			}
+		}
+	}
+
+	options_heading = invite_agent_to_scheme_interaction.t.options_header
+	send_option = {
+		flag = gift
+		is_valid = { scope:recipient.gold > 0 }
+		localization = WJ_ACTIVE_DEMAND_GOLD_OPTION
+		current_description = {
+			triggered_desc = {
+				trigger = { scope:recipient.gold > 0 }
+				desc = WJ_ACTIVE_DEMAND_GOLD_VALID
+			}
+		}
+	}
+	send_option = {
+		flag = offer_hook
+		is_valid = {
+			custom_tooltip = {
+				text = offer_hook.tt.cannot_offer_both_hooks
+				scope:offer_hook_strong = no
+			}
+			scope:actor = { NOT = { has_hook = scope:recipient } }
+		}
+		localization = WJ_ACTIVE_DEMAND_HOOK_OPTION
+	}
+	send_option = {
+		flag = offer_hook_strong
+		is_shown = { scope:recipient = { has_trait_with_flag = can_offer_strong_hook_to_agents } }
+		is_valid = {
+			custom_tooltip = {
+				text = offer_hook.tt.cannot_offer_both_hooks
+				scope:offer_hook = no
+			}
+			scope:actor = { NOT = { has_strong_hook = scope:recipient } }
+		}
+		localization = WJ_ACTIVE_DEMAND_STRONG_HOOK_OPTION
+	}
+	send_option = {
+		flag = influence
+		is_shown = {
+			scope:actor.top_liege ?= scope:recipient.top_liege
+			scope:actor = { government_has_mechanic = administrative }
+			scope:recipient = {
+				OR = {
+					government_has_mechanic = administrative
+					host = { government_has_mechanic = administrative }
+					AND = {
+						highest_held_title_tier = tier_barony
+						liege = { government_has_mechanic = administrative }
+					}
+				}
+			}
+		}
+		is_valid = { scope:recipient.influence >= influence_bribe_value }
+		localization = WJ_ACTIVE_DEMAND_INFLUENCE_OPTION
+		current_description = {
+			triggered_desc = {
+				trigger = { scope:recipient.influence >= influence_bribe_value }
+				desc = WJ_ACTIVE_DEMAND_INFLUENCE_VALID
+			}
+		}
+	}
+	send_option = {
+		flag = hook
+		is_valid = { scope:actor = { has_usable_hook = scope:recipient } }
+		localization = SCHEME_HOOK
+	}
+	should_use_extra_icon = {
+		scope:actor = { has_usable_hook = scope:recipient }
+	}
+	extra_icon = "gfx/interface/icons/character_interactions/hook_icon.dds"
+	send_option = {
+		flag = wj_take_disciple
+		localization = WJ_TAKE_DISCIPLE_OPTION
+		is_valid = {
+			custom_tooltip = {
+				text = wj_recommender_cannot_take_disciple_tt
+				scope:actor = {
+					NOT = { has_relation_disciple = scope:recipient }
+					WJ_can_recommend_candidate_as_disciple_trigger = {
+						CANDIDATE = scope:recipient
+					}
+				}
+			}
+		}
+	}
+	send_options_exclusive = no
+	ai_min_reply_days = 4
+	ai_max_reply_days = 9
+
+	ai_accept = {
+		WJ_dd_jie_acceptance_modifier = yes
+		base = 150
+		opinion_modifier = {
+			opinion_target = scope:actor
+			who = scope:recipient
+			multiplier = 0.5
+		}
+		modifier = {
+			add = 500
+			scope:actor = { has_relation_disciple = scope:recipient }
+			desc = is_actors_disciple
+		}
+		modifier = {
+			scope:actor.merit_level != scope:recipient.merit_level
+			add = {
+				add = { add = 10 multiply = scope:actor.merit_level }
+				subtract = { add = 10 multiply = scope:recipient.merit_level }
+			}
+			desc = difference_in_merit_level_reason
+		}
+		modifier = {
+			add = 15
+			scope:actor.house ?= { is_powerful_family = yes }
+			scope:recipient.house ?= { is_powerful_family = no is_dominant_family = no }
+			desc = your_house_is_powerful_reason
+		}
+		modifier = {
+			add = 25
+			scope:actor.house ?= { is_dominant_family = yes }
+			scope:recipient.house ?= { is_dominant_family = no }
+			desc = your_house_is_dominant_reason
+		}
+		modifier = {
+			add = -15
+			scope:recipient.house ?= { is_powerful_family = yes }
+			scope:actor.house ?= { is_powerful_family = no is_dominant_family = no }
+			desc = their_house_is_powerful_reason
+		}
+		modifier = {
+			add = -25
+			scope:recipient.house ?= { is_dominant_family = yes }
+			scope:actor.house ?= { is_dominant_family = no }
+			desc = their_house_is_dominant_reason
+		}
+		modifier = {
+			scope:actor.influence_level != scope:recipient.influence_level
+			add = {
+				add = { add = 5 multiply = scope:actor.influence_level }
+				subtract = { add = 5 multiply = scope:recipient.influence_level }
+			}
+			desc = difference_in_influence_level_reason
+		}
+		modifier = {
+			add = -10
+			scope:recipient = { is_powerful_vassal = yes }
+			scope:actor = { is_powerful_vassal = no }
+			desc = RECIPIENT_POWERFUL_VASSAL
+		}
+		modifier = {
+			add = 5
+			scope:actor = { is_powerful_vassal = yes }
+			scope:recipient = { is_powerful_vassal = no }
+			desc = AI_POWERFUL_VASSAL
+		}
+		modifier = {
+			add = 10
+			is_ai = yes
+			scope:recipient = { is_ai = no }
+			has_game_rule = easy_difficulty
+			desc = easy_difficulty
+		}
+		modifier = {
+			add = 20
+			is_ai = yes
+			scope:recipient = { is_ai = no }
+			has_game_rule = very_easy_difficulty
+			desc = very_easy_difficulty
+		}
+		modifier = {
+			add = -20
+			scope:actor = {
+				has_relation_rival = scope:recipient
+				NOT = { has_relation_nemesis = scope:recipient }
+			}
+			desc = SCHEME_AGAINST_RIVAL
+		}
+		modifier = {
+			add = -1000
+			scope:actor = { has_relation_nemesis = scope:recipient }
+			desc = SCHEME_AGAINST_NEMESIS
+		}
+		modifier = {
+			add = 10
+			scope:actor = {
+				has_relation_friend = scope:recipient
+				NOT = { has_relation_best_friend = scope:recipient }
+			}
+			desc = SCHEME_AGAINST_FRIEND
+		}
+		modifier = {
+			add = 1000
+			scope:actor = { has_relation_best_friend = scope:recipient }
+			desc = SCHEME_AGAINST_BEST_FRIEND
+		}
+		modifier = {
+			add = 1000
+			scope:actor = { has_relation_soulmate = scope:recipient }
+			desc = SCHEME_AGAINST_SOULMATE
+		}
+		modifier = {
+			add = 10
+			scope:actor = {
+				is_consort_of = scope:recipient
+				opinion = { target = scope:recipient value > 0 }
+			}
+			desc = SCHEME_AGAINST_SPOUSE
+		}
+		modifier = {
+			add = {
+				add = wj_active_recommendation_gold_acceptance_value
+				scope:recipient = { if = { limit = { has_trait = greedy } add = -10 } }
+			}
+			scope:gift ?= yes
+			desc = WJ_ACTIVE_DEMAND_GOLD_REASON
+		}
+		modifier = { add = -20 scope:offer_hook ?= yes desc = WJ_ACTIVE_DEMAND_HOOK_REASON }
+		modifier = { add = -50 scope:offer_hook_strong ?= yes desc = WJ_ACTIVE_DEMAND_STRONG_HOOK_REASON }
+		modifier = { add = 100 scope:hook ?= yes desc = SCHEME_WEAK_HOOK_USED }
+		modifier = {
+			add = {
+				value = -20
+				scope:recipient = {
+					if = { limit = { has_trait = ambitious } add = -10 }
+					if = { limit = { has_trait = content } add = 10 }
+				}
+			}
+			scope:influence ?= yes
+			desc = WJ_ACTIVE_DEMAND_INFLUENCE_REASON
+		}
+		modifier = {
+			add = wj_active_recommendation_disciple_acceptance_value
+			scope:wj_take_disciple ?= yes
+			desc = WJ_ACTIVE_RECOMMENDATION_DISCIPLE_REASON
+		}
+	}
+
+	can_send = {
+		scope:actor = { WJ_langguan_real_emperor_trigger = no }
+		scope:recipient = { WJ_langguan_real_emperor_trigger = no }
+		scope:actor = {
+			custom_description = { text = WJ_failure_34
+NOR = {
+				has_character_flag = wj_maocai_nomination_yearly_quota
+				has_character_flag = wj_maocai_nomination_pending
+			}
+}
+		}
+	}
+
+	on_send = {
+		scope:actor = {
+			add_character_flag = {
+				flag = wj_maocai_nomination_pending
+				days = 61
+			}
+		}
+	}
+
+	on_accept = {
+		# 隐士收到举荐：自动受理并转为隐士的"山中亦有经世学"事件，由其决定出山与否。
+		if = {
+			limit = { WJ_yinshi_recipient_is_hermit_trigger = yes }
+			save_scope_value_as = { name = wj_yinshi_via value = flag:interaction }
+			scope:recipient = {
+				save_scope_as = wj_yinshi_subject
+				trigger_event = WJ_yinshi.5003
+			}
+		}
+		else = { WJ_maocai_interaction_accept_effect = yes }
+	}
+	on_decline = {
+		scope:actor = {
+			remove_character_flag = wj_maocai_nomination_pending
+			trigger_event = WJ_recommendation_reply.0202
+		}
+	}
+
+	ai_targets = {
+		ai_recipients = scripted_relations
+		max = 20
+	}
+	ai_frequency_by_tier = {
+		barony = 0
+		county = 0
+		duchy = 0
+		kingdom = 12
+		empire = 12
+		hegemony = 12
+	}
+	ai_potential = {
+		WJ_langguan_real_emperor_trigger = no
+		government_has_flag = government_is_celestial
+		government_has_flag = government_is_celestial
+		is_landed = yes
+		primary_title.tier >= tier_kingdom
+		NOR = {
+			has_character_flag = wj_maocai_nomination_yearly_quota
+			has_character_flag = wj_maocai_nomination_pending
+		}
+	}
+	ai_will_do = {
+		base = 0
+		modifier = {
+			add = 100
+			scope:actor = { has_relation_disciple = scope:recipient }
+			scope:recipient = { is_ai = no }
+		}
+		modifier = {
+			add = 30
+			scope:actor = { has_relation_disciple = scope:recipient }
+			scope:recipient = { is_ai = yes }
+		}
+		modifier = {
+			factor = 0.1
+			WJ_yinshi_recipient_is_hermit_trigger = yes
+		}
+	}
+}
+
+# 向王国级以上官员请求举茂才：请求者可选择自己、自己的廷臣或宾客。
+wj_request_maocai_interaction = {
+ is_available = { is_ai = no }
+	icon = scroll_scales
+	interface_priority = 24
+	category = interaction_category_friendly
+	common_interaction = yes
+	needs_recipient_to_open = yes
+	cooldown = { years = 1 }
+
+	name = wj_request_maocai_interaction
+	send_name = wj_request_maocai_interaction_send_name
+	desc = wj_request_maocai_interaction_desc
+	greeting = positive
+	notification_text = WJ_REQUEST_MAOCAI_NOTIFICATION
+	reply_item_key = wj_request_maocai_interaction_reply_item_key
+	popup_on_receive = yes
+	pause_on_receive = yes
+	pre_answer_yes_key = ACCEPT
+	pre_answer_no_key = DECLINE
+
+	populate_actor_list = {
+			scope:actor = {
+			if = {
+				limit = {
+					is_male = yes
+					NOT = { has_trait = WJ_yangwang_trait } # 隐士不自请举荐
+					WJ_can_be_recommended_maocai_candidate_trigger = {
+						RECOMMENDER = scope:recipient
+					}
+				}
+				add_to_list = characters
+			}
+				every_courtier_or_guest = {
+					limit = {
+						is_male = yes
+						NOT = { has_trait = WJ_yangwang_trait } # 隐士不自请举荐
+						WJ_can_be_recommended_maocai_candidate_trigger = {
+							RECOMMENDER = scope:recipient
+						}
+					}
+				add_to_list = characters
+			}
+		}
+	}
+
+	is_shown = {
+		scope:actor = { WJ_langguan_real_emperor_trigger = no }
+		scope:recipient = { WJ_langguan_real_emperor_trigger = no }
+		scope:actor = {
+			government_has_flag = government_is_celestial
+			government_has_flag = government_is_celestial
+			is_adult = yes
+			this != scope:recipient
+		}
+			scope:recipient = {
+			government_has_flag = government_is_celestial
+			is_landed = yes
+			primary_title.tier >= tier_kingdom
+			top_liege = scope:actor.top_liege
+		}
+	}
+
+	is_valid_showing_failures_only = {
+		scope:actor = { WJ_langguan_real_emperor_trigger = no }
+		scope:recipient = { WJ_langguan_real_emperor_trigger = no }
+		scope:actor = {
+			government_has_flag = government_is_celestial
+			NOT = { is_at_war_with = scope:recipient }
+			is_incapable = no
+			is_imprisoned = no
+		}
+		scope:recipient = {
+			is_incapable = no
+			is_imprisoned = no
+			custom_tooltip = {
+				text = wj_maocai_yearly_quota_tt
+				NOT = { has_character_flag = wj_maocai_nomination_yearly_quota }
+			}
+		}
+		custom_tooltip = {
+			text = wj_no_valid_recommendation_candidate_tt
+			OR = {
+				scope:actor = {
+					is_male = yes
+					NOT = { has_trait = WJ_yangwang_trait } # 隐士不自请举荐
+					WJ_can_be_recommended_maocai_candidate_trigger = {
+						RECOMMENDER = scope:recipient
+					}
+				}
+				scope:actor = {
+					any_courtier_or_guest = {
+						is_male = yes
+						NOT = { has_trait = WJ_yangwang_trait } # 隐士不自请举荐
+						WJ_can_be_recommended_maocai_candidate_trigger = {
+							RECOMMENDER = scope:recipient
+						}
+					}
+				}
+			}
+		}
+	}
+
+	can_be_picked = {
+		is_male = yes
+		NOT = { has_trait = WJ_yangwang_trait } # 隐士不自请举荐
+		WJ_can_be_recommended_maocai_candidate_trigger = {
+			RECOMMENDER = scope:recipient
+		}
+	}
+
+	can_send = {
+		scope:actor = { WJ_langguan_real_emperor_trigger = no }
+		scope:recipient = { WJ_langguan_real_emperor_trigger = no }
+		scope:secondary_actor = {
+			is_male = yes
+			NOT = { has_trait = WJ_yangwang_trait } # 隐士不自请举荐
+			WJ_can_be_recommended_maocai_candidate_trigger = {
+				RECOMMENDER = scope:recipient
+			}
+		}
+		scope:recipient = {
+			custom_description = { text = WJ_failure_35
+NOR = {
+				has_character_flag = wj_maocai_nomination_yearly_quota
+				has_character_flag = wj_maocai_nomination_pending
+			}
+}
+		}
+	}
+
+	cost = {
+		influence = {
+			value = major_influence_value
+			add = {
+				value = 10
+				multiply = scope:recipient.number_of_disciples
+			}
+		}
+	}
+
+	options_heading = invite_agent_to_scheme_interaction.t.options_header
+	send_option = {
+		flag = prestige
+		is_valid = { scope:actor.prestige >= prestige_bribe_value }
+		localization = SCHEME_AGENT_PRESTIGE
+		current_description = {
+			triggered_desc = {
+				trigger = { scope:actor.prestige >= prestige_bribe_value }
+				desc = SCHEME_AGENT_PRESTIGE_VALID
+			}
+		}
+	}
+	send_option = {
+		flag = gift
+		is_valid = { scope:actor.gold > 0 }
+		localization = WJ_REQUEST_RECOMMENDATION_GOLD_OPTION
+		current_description = {
+			triggered_desc = {
+				trigger = { scope:actor.gold > 0 }
+				desc = WJ_REQUEST_RECOMMENDATION_GOLD_VALID
+			}
+		}
+	}
+	send_option = {
+		flag = offer_hook
+		is_valid = {
+			custom_tooltip = {
+				text = offer_hook.tt.cannot_offer_both_hooks
+				scope:offer_hook_strong = no
+			}
+			scope:recipient = { NOT = { has_hook = scope:actor } }
+		}
+		localization = SCHEME_AGENT_HOOK
+	}
+	send_option = {
+		flag = offer_hook_strong
+		is_shown = { scope:actor = { has_trait_with_flag = can_offer_strong_hook_to_agents } }
+		is_valid = {
+			custom_tooltip = {
+				text = offer_hook.tt.cannot_offer_both_hooks
+				scope:offer_hook = no
+			}
+			scope:recipient = { NOT = { has_strong_hook = scope:actor } }
+		}
+		localization = SCHEME_AGENT_HOOK_STRONG
+	}
+	send_option = {
+		flag = influence
+		is_shown = {
+			scope:actor.top_liege ?= scope:recipient.top_liege
+			scope:actor = { government_has_mechanic = administrative }
+			scope:recipient = {
+				OR = {
+					government_has_mechanic = administrative
+					host = { government_has_mechanic = administrative }
+					AND = {
+						highest_held_title_tier = tier_barony
+						liege = { government_has_mechanic = administrative }
+					}
+				}
+			}
+		}
+		is_valid = { scope:actor.influence >= influence_bribe_value }
+		localization = SCHEME_AGENT_INFLUENCE
+		current_description = {
+			triggered_desc = {
+				trigger = { scope:actor.influence >= influence_bribe_value }
+				desc = SCHEME_AGENT_INFLUENCE_VALID
+			}
+		}
+	}
+	send_option = {
+		flag = hook
+		is_valid = { scope:actor = { has_usable_hook = scope:recipient } }
+		localization = SCHEME_HOOK
+	}
+	should_use_extra_icon = {
+		scope:actor = { has_usable_hook = scope:recipient }
+	}
+	extra_icon = "gfx/interface/icons/character_interactions/hook_icon.dds"
+	send_option = {
+		flag = wj_become_disciple
+		localization = WJ_BECOME_DISCIPLE_OPTION
+		is_valid = {
+			custom_tooltip = {
+				text = wj_requester_cannot_become_disciple_tt
+				scope:recipient = {
+					NOT = { has_relation_disciple = scope:secondary_actor }
+					WJ_can_recommend_candidate_as_disciple_trigger = {
+						CANDIDATE = scope:secondary_actor
+					}
+				}
+			}
+		}
+	}
+	send_options_exclusive = no
+	ai_min_reply_days = 4
+	ai_max_reply_days = 9
+
+	# 与请求举孝廉相同，锁覆盖原版 60 天交互有效期。
+	on_send = {
+		scope:recipient = {
+			add_character_flag = {
+				flag = wj_maocai_nomination_pending
+				days = 61
+			}
+		}
+	}
+
+	ai_accept = {
+		WJ_dd_jie_acceptance_modifier = yes
+		base = -30
+		opinion_modifier = {
+			opinion_target = scope:actor
+			who = scope:recipient
+			multiplier = 0.5
+		}
+		modifier = {
+			add = 500
+			scope:recipient = { has_relation_disciple = scope:secondary_actor }
+			desc = is_actors_disciple
+		}
+		modifier = {
+			scope:secondary_actor.merit_level != scope:recipient.merit_level
+			add = {
+				add = { add = 10 multiply = scope:secondary_actor.merit_level }
+				subtract = { add = 10 multiply = scope:recipient.merit_level }
+			}
+			desc = difference_in_merit_level_reason
+		}
+		modifier = {
+			add = 15
+			scope:secondary_actor.house ?= { is_powerful_family = yes }
+			scope:recipient.house ?= { is_powerful_family = no is_dominant_family = no }
+			desc = your_house_is_powerful_reason
+		}
+		modifier = {
+			add = 25
+			scope:secondary_actor.house ?= { is_dominant_family = yes }
+			scope:recipient.house ?= { is_dominant_family = no }
+			desc = your_house_is_dominant_reason
+		}
+		modifier = {
+			add = -15
+			scope:recipient.house ?= { is_powerful_family = yes }
+			scope:secondary_actor.house ?= { is_powerful_family = no is_dominant_family = no }
+			desc = their_house_is_powerful_reason
+		}
+		modifier = {
+			add = -25
+			scope:recipient.house ?= { is_dominant_family = yes }
+			scope:secondary_actor.house ?= { is_dominant_family = no }
+			desc = their_house_is_dominant_reason
+		}
+		modifier = {
+			scope:actor.influence_level != scope:recipient.influence_level
+			add = {
+				add = { add = 5 multiply = scope:actor.influence_level }
+				subtract = { add = 5 multiply = scope:recipient.influence_level }
+			}
+			desc = difference_in_influence_level_reason
+		}
+		modifier = {
+			add = -10
+			scope:recipient = { is_powerful_vassal = yes }
+			scope:actor = { is_powerful_vassal = no }
+			desc = RECIPIENT_POWERFUL_VASSAL
+		}
+		modifier = {
+			add = 5
+			scope:actor = { is_powerful_vassal = yes }
+			scope:recipient = { is_powerful_vassal = no }
+			desc = AI_POWERFUL_VASSAL
+		}
+		modifier = {
+			add = 10
+			is_ai = yes
+			scope:recipient = { is_ai = no }
+			has_game_rule = easy_difficulty
+			desc = easy_difficulty
+		}
+		modifier = {
+			add = 20
+			is_ai = yes
+			scope:recipient = { is_ai = no }
+			has_game_rule = very_easy_difficulty
+			desc = very_easy_difficulty
+		}
+		modifier = {
+			add = -20
+			scope:secondary_actor = {
+				has_relation_rival = scope:recipient
+				NOT = { has_relation_nemesis = scope:recipient }
+			}
+			desc = SCHEME_AGAINST_RIVAL
+		}
+		modifier = {
+			add = -1000
+			scope:secondary_actor = { has_relation_nemesis = scope:recipient }
+			desc = SCHEME_AGAINST_NEMESIS
+		}
+		modifier = {
+			add = 10
+			scope:secondary_actor = {
+				has_relation_friend = scope:recipient
+				NOT = { has_relation_best_friend = scope:recipient }
+			}
+			desc = SCHEME_AGAINST_FRIEND
+		}
+		modifier = {
+			add = 1000
+			scope:secondary_actor = { has_relation_best_friend = scope:recipient }
+			desc = SCHEME_AGAINST_BEST_FRIEND
+		}
+		modifier = {
+			add = 1000
+			scope:secondary_actor = { has_relation_soulmate = scope:recipient }
+			desc = SCHEME_AGAINST_SOULMATE
+		}
+		modifier = {
+			add = 10
+			scope:secondary_actor = {
+				is_consort_of = scope:recipient
+				opinion = { target = scope:recipient value > 0 }
+			}
+			desc = SCHEME_AGAINST_SPOUSE
+		}
+		modifier = {
+			add = {
+				add = wj_request_recommendation_gold_acceptance_value
+				scope:recipient = { if = { limit = { has_trait = greedy } add = 10 } }
+			}
+			scope:gift ?= yes
+			desc = WJ_REQUEST_RECOMMENDATION_GOLD_REASON
+		}
+		modifier = { add = 20 scope:offer_hook ?= yes desc = SCHEME_WITH_OFFER_HOOK }
+		modifier = { add = 50 scope:offer_hook_strong ?= yes desc = SCHEME_WITH_OFFER_HOOK_STRONG }
+		modifier = { add = 100 scope:hook ?= yes desc = SCHEME_WEAK_HOOK_USED }
+		modifier = {
+			add = {
+				value = 20
+				scope:recipient = {
+					if = { limit = { has_trait = arrogant } add = 10 }
+					if = { limit = { has_trait = humble } add = -10 }
+				}
+			}
+			scope:prestige ?= yes
+			desc = SCHEME_WITH_PRESTIGE
+		}
+		modifier = {
+			add = {
+				value = 20
+				scope:recipient = {
+					if = { limit = { has_trait = ambitious } add = 10 }
+					if = { limit = { has_trait = content } add = -10 }
+				}
+			}
+			scope:influence ?= yes
+			desc = SCHEME_WITH_INFLUENCE
+		}
+		modifier = {
+			add = wj_request_recommendation_disciple_acceptance_value
+			scope:wj_become_disciple = yes
+			desc = WJ_REQUEST_RECOMMENDATION_DISCIPLE_REASON
+		}
+	}
+
+	on_accept = {
+		if = {
+			limit = {
+				scope:actor = { WJ_langguan_real_emperor_trigger = no }
+				scope:recipient = { WJ_langguan_real_emperor_trigger = no }
+				scope:secondary_actor = { WJ_can_be_recommended_maocai_candidate_trigger = { RECOMMENDER = scope:recipient } }
+			}
+	scope:secondary_actor = { WJ_grant_road_maocai_effect = yes }
+			WJ_settle_recommendation_movement_options_effect = yes
+			if = {
+				limit = { scope:wj_become_disciple = yes }
+				WJ_establish_recommender_disciple_effect = {
+					RECOMMENDER = scope:recipient
+					CANDIDATE = scope:secondary_actor
+				}
+			}
+			scope:recipient = {
+				remove_character_flag = wj_maocai_nomination_pending
+				add_character_flag = {
+					flag = wj_maocai_nomination_yearly_quota
+					years = 1
+				}
+			}
+			scope:actor = { trigger_event = WJ_recommendation_reply.0301 }
+		}
+		else = { scope:recipient = { remove_character_flag ?= wj_maocai_nomination_pending } }
+	}
+	on_decline = {
+		scope:recipient = {
+			remove_character_flag = wj_maocai_nomination_pending
+		}
+		scope:actor = { trigger_event = WJ_recommendation_reply.0302 }
+	}
+}
+
+wj_bizhao_interaction = {
+	icon = mentor
+	category = interaction_category_friendly
+	common_interaction = yes
+
+	name = wj_bizhao_interaction
+	desc = wj_bizhao_interaction_desc
+
+	is_shown = {
+		always = no
+	}
+
+	is_valid_showing_failures_only = {
+		scope:actor = {
+			is_incapable = no
+			is_imprisoned = no
+		}
+		scope:recipient = {
+			is_incapable = no
+			is_imprisoned = no
+			is_adult = yes
+		}
+	}
+
+	auto_accept = no
+
+	on_accept = {
+		scope:recipient = {
+			WJ_grant_road_bizhao_effect = yes
+		}
+	}
+}

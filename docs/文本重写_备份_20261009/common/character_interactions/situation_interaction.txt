@@ -1,0 +1,131 @@
+﻿# Spring and Autumn political interactions.
+
+demand_faction_switch = {
+	category = interaction_category_diplomacy
+	common_interaction = no
+	interface_priority = 20
+	icon = icon_culture
+	use_diplomatic_range = yes
+	auto_accept = no
+	cooldown_against_recipient = { years = 5 }
+
+	is_shown = {
+		# Retired with the custom Spring-and-Autumn stance system. The vanilla
+		# dynastic-cycle movement decision is the authoritative way to switch.
+		always = no
+		scope:actor = {
+			saas_eligible_participant_trigger = yes
+			always = no
+			OR = {
+				saas_is_wangdao_trigger = yes
+				saas_is_badao_trigger = yes
+				saas_is_neutral_trigger = yes
+			}
+		}
+		scope:recipient = {
+			saas_eligible_participant_trigger = yes
+			always = no
+			NOT = { has_character_flag = recently_switched_faction_flag }
+		}
+		scope:recipient != scope:actor
+	}
+
+	is_valid = {
+		NOT = {
+			OR = {
+				AND = { scope:actor = { saas_is_wangdao_trigger = yes } scope:recipient = { saas_is_wangdao_trigger = yes } }
+				AND = { scope:actor = { saas_is_badao_trigger = yes } scope:recipient = { saas_is_badao_trigger = yes } }
+				AND = { scope:actor = { saas_is_neutral_trigger = yes } scope:recipient = { saas_is_neutral_trigger = yes } }
+			}
+		}
+	}
+
+	send_option = {
+		flag = bribe_small
+		localization = demand_faction_switch_bribe_small
+		current_description = demand_faction_switch_bribe_small_desc
+		is_valid = { scope:actor.gold >= { value = scope:recipient.gold multiply = 0.1 } }
+	}
+	send_option = {
+		flag = bribe_medium
+		localization = demand_faction_switch_bribe_medium
+		current_description = demand_faction_switch_bribe_medium_desc
+		is_valid = { scope:actor.gold >= { value = scope:recipient.gold multiply = 0.3 } }
+	}
+	send_option = {
+		flag = bribe_large
+		localization = demand_faction_switch_bribe_large
+		current_description = demand_faction_switch_bribe_large_desc
+		is_valid = { scope:actor.gold >= scope:recipient.gold }
+	}
+	send_option = {
+		flag = force_switch
+		localization = demand_faction_switch_force
+		current_description = demand_faction_switch_force_desc
+		is_valid = { scope:actor.prestige >= { value = scope:recipient.prestige multiply = 0.6 } }
+	}
+	send_option = {
+		flag = use_hook
+		localization = demand_faction_switch_hook
+		current_description = demand_faction_switch_hook_desc
+		is_shown = { scope:actor = { has_strong_hook = scope:recipient } }
+	}
+	send_options_exclusive = yes
+
+	on_accept = {
+		scope:recipient = {
+			saas_clear_participant_stance_effect = yes
+			add_character_flag = { flag = recently_switched_faction_flag years = 5 }
+		}
+		if = {
+			limit = { scope:actor = { saas_is_wangdao_trigger = yes } }
+			scope:recipient = { add_trait = character_involve_supporters_of_zhou_dynasty }
+		}
+		else_if = {
+			limit = { scope:actor = { saas_is_badao_trigger = yes } }
+			scope:recipient = { add_trait = character_involve_opponents_of_zhou_dynasty }
+		}
+		else = {
+			scope:recipient = { add_trait = character_involve_neutral_of_zhou_dynasty }
+		}
+		if = {
+			limit = { scope:bribe_small = yes }
+			scope:actor = { pay_short_term_gold = { target = scope:recipient gold = { value = scope:recipient.gold multiply = 0.1 } } }
+		}
+		else_if = {
+			limit = { scope:bribe_medium = yes }
+			scope:actor = { pay_short_term_gold = { target = scope:recipient gold = { value = scope:recipient.gold multiply = 0.3 } } }
+		}
+		else_if = {
+			limit = { scope:bribe_large = yes }
+			scope:actor = { pay_short_term_gold = { target = scope:recipient gold = scope:recipient.gold } }
+		}
+		else_if = {
+			limit = { scope:force_switch = yes }
+			scope:actor = { add_prestige = { value = scope:recipient.prestige multiply = -0.6 } }
+		}
+		else_if = {
+			limit = { scope:use_hook = yes }
+			scope:actor = { use_hook = scope:recipient }
+		}
+	}
+
+	on_decline = {
+		scope:recipient = {
+			add_opinion = { target = scope:actor modifier = opinion_refused_demand }
+		}
+	}
+
+	ai_accept = {
+		base = -60
+		modifier = { add = 10 scope:bribe_small = yes }
+		modifier = { add = 30 scope:bribe_medium = yes }
+		modifier = { add = 50 scope:bribe_large = yes }
+		modifier = { add = 40 scope:force_switch = yes }
+		modifier = { add = 80 scope:use_hook = yes }
+		modifier = { add = 30 scope:recipient = { opinion = { target = scope:actor value >= 50 } } }
+		modifier = { add = -30 scope:recipient = { has_trait = content } }
+	}
+
+	ai_will_do = { base = 25 }
+}

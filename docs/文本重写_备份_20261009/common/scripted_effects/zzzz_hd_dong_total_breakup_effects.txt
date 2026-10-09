@@ -1,0 +1,168 @@
+﻿# Direct county cleanup for protected actors (Han emperor / Lu Bu).
+# This intentionally follows the vanilla post-migration minor-warlord pattern:
+# create a local character, usurp the county with baronies, then make that count independent.
+hd_dong_localize_non_jingzhao_direct_counties_effect = {
+	# Collect first; do not mutate a character's held-title iterator while scanning it.
+	title:h_china.holder = {
+		every_held_title = {
+			limit = {
+				tier = tier_county
+				is_landless_type_title = no
+				NOT = { de_jure_liege = title:d_jingzhao }
+			}
+			add_to_temporary_list = hd_dong_direct_counties_to_localize
+		}
+	}
+	if = {
+		limit = {
+			exists = character:lv_bu
+			character:lv_bu = { is_alive = yes }
+		}
+		character:lv_bu = {
+			every_held_title = {
+				limit = {
+					tier = tier_county
+					is_landless_type_title = no
+					NOT = { de_jure_liege = title:d_jingzhao }
+					NOT = { is_in_list = hd_dong_direct_counties_to_localize }
+				}
+				add_to_temporary_list = hd_dong_direct_counties_to_localize
+			}
+		}
+	}
+
+	every_in_list = {
+		list = hd_dong_direct_counties_to_localize
+		# Keep this vanilla scope name: post_migration_minor_warlord_template reads
+		# local culture and faith from scope:seceding_county.
+		save_temporary_scope_as = seceding_county
+		create_character = {
+			location = scope:seceding_county.title_province
+			template = post_migration_minor_warlord_template
+			save_scope_as = hd_dong_direct_county_holder
+		}
+
+		create_title_and_vassal_change = {
+			type = usurped
+			save_scope_as = hd_dong_direct_county_grant_change
+			add_claim_on_loss = no
+		}
+		scope:seceding_county = {
+			change_title_holder = {
+				holder = scope:hd_dong_direct_county_holder
+				change = scope:hd_dong_direct_county_grant_change
+				take_baronies = yes
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_dong_direct_county_grant_change
+
+		create_title_and_vassal_change = {
+			type = independency
+			save_scope_as = hd_dong_direct_county_independence_change
+			add_claim_on_loss = no
+		}
+		scope:hd_dong_direct_county_holder = {
+			becomes_independent = { change = scope:hd_dong_direct_county_independence_change }
+		}
+		resolve_title_and_vassal_change = scope:hd_dong_direct_county_independence_change
+
+		if = {
+			limit = { scope:hd_dong_direct_county_holder = { is_independent_ruler = yes } }
+			debug_log = "HD_DONG DIRECT_COUNTY_LOCAL_RULER_INDEPENDENCE_CONFIRMED"
+		}
+		else = {
+			set_global_variable = hd_dong_settlement_partial
+			debug_log = "HD_DONG DIRECT_COUNTY_LOCAL_RULER_INDEPENDENCE_FAILED"
+		}
+	}
+}
+
+# Dong Zhuo death: keep only Jingzhao inside the Han hegemony.
+# This runs synchronously from hd_dong_aftermath.0002 immediately before
+# the legacy hd_dong_settle_death_effect, so Lu Bu's Jingzhao grant,
+# the realm breakup, and Wang Yun's regency all resolve in the same event tick.
+
+hd_dong_total_breakup_before_settlement_effect = {
+	if = {
+		limit = {
+			exists = title:h_china.holder
+			exists = global_var:hd_dong_settlement_pending
+			NOT = { exists = global_var:hd_dong_settlement_processed }
+		}
+
+		# Put Jingzhao in Lu Bu's hands first. Because the old pre-death snapshot stores
+		# titles rather than characters, the Jingzhao county entries now resolve to Lu Bu
+		# and are excluded together with the duchy holder below.
+		if = {
+			limit = {
+				exists = character:lv_bu
+				character:lv_bu = { is_alive = yes }
+			}
+			hd_dong_grant_duchy_effect = { DUCHY = d_jingzhao RECIPIENT = character:lv_bu }
+		}
+
+		# The protected Han ruler and Lu Bu are deliberately excluded from the normal
+		# ruler-release list. Convert any county they still hold personally outside
+		# de jure Jingzhao into an independent vanilla-generated local count first.
+		hd_dong_localize_non_jingzhao_direct_counties_effect = yes
+
+		# Resolve every territorial ruler from the pre-death snapshot. Keep only the Han
+		# ruler and the current holder of Jingzhao. Landless empire-tier offices are not
+		# territorial realms and therefore remain attached to the Han court.
+		every_in_global_list = {
+			variable = hd_dong_breakaway_titles
+			holder ?= {
+				if = {
+					limit = {
+						is_alive = yes
+						is_landed = yes
+						NOT = { this = title:h_china.holder }
+						NOT = { this = title:d_jingzhao.holder }
+						NOT = { any_held_title = { tier = tier_empire is_landless_type_title = yes } }
+						NOT = { is_in_list = hd_dong_total_breakaway_rulers }
+					}
+					add_to_list = hd_dong_total_breakaway_rulers
+				}
+			}
+		}
+
+		# Lowest tier first. This is deliberate: counts must leave their dukes before
+		# the dukes themselves leave higher lieges, otherwise those counties would remain
+		# nested inside an already-independent duchy.
+		every_in_list = {
+			list = hd_dong_total_breakaway_rulers
+			limit = {
+				is_alive = yes
+				is_landed = yes
+				is_independent_ruler = no
+				highest_held_title_tier = tier_county
+				NOT = { this = title:d_jingzhao.holder }
+			}
+			hd_dong_release_ruler_effect = yes
+		}
+		every_in_list = {
+			list = hd_dong_total_breakaway_rulers
+			limit = {
+				is_alive = yes
+				is_landed = yes
+				is_independent_ruler = no
+				highest_held_title_tier = tier_duchy
+				NOT = { this = title:d_jingzhao.holder }
+			}
+			hd_dong_release_ruler_effect = yes
+		}
+		every_in_list = {
+			list = hd_dong_total_breakaway_rulers
+			limit = {
+				is_alive = yes
+				is_landed = yes
+				is_independent_ruler = no
+				highest_held_title_tier >= tier_kingdom
+				NOT = { this = title:d_jingzhao.holder }
+			}
+			hd_dong_release_ruler_effect = yes
+		}
+
+		debug_log = "HD_DONG TOTAL_HAN_BREAKUP_EXCEPT_JINGZHAO_PROCESSED"
+	}
+}

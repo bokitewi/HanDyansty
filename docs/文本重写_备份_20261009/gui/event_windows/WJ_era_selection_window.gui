@@ -1,0 +1,479 @@
+﻿# ====================== 全局常量定义 ======================
+# 角色姓名牌最大宽度
+@nameplate = 140
+# 姓名牌+纹章组合组件宽度
+@nameplate_coa = 265
+# 底部小肖像高度
+@lower_portrait = 180
+# 通用边距
+@margin = 30
+
+# ====================== 主窗口定义：三公事件窗口 ======================
+window = {
+	# 窗口唯一名称
+	name = "WJ_era_selection_window"
+
+	# 父锚点/自身锚点：屏幕居中
+	parentanchor = center
+	widgetanchor = center
+	# 窗口尺寸
+	size = { 1200 800 }
+	# 渲染层级：事件层
+	layer = events
+	# 透明度
+	alpha = 1
+	# 允许超出屏幕显示
+	allow_outside = yes
+
+	# 数据绑定：事件窗口数据上下文
+	datacontext = "[EventWindow.AccessEventWindowData]"
+
+	# 引用调试工具组件
+	using = Event_Window_Debug_EventTools
+	# 覆盖：事件窗口是否置顶
+	blockoverride "is_event_on_top" {
+		enabled = "[EventWindow.IsOnTop]"
+	}
+	# 覆盖：关闭按钮（非置顶时触发）
+	blockoverride "is_event_on_top_close" {
+		trigger_when = "[Not(EventWindow.IsOnTop)]"
+	}
+
+	# ====================== 窗口动画状态 ======================
+	state = {
+		name = show               # 状态名：显示
+		trigger_on_create = yes   # 创建时自动触发
+		using = Animation_FadeIn_Standard # 使用标准淡入动画
+		duration = 0.7            # 动画时长0.7秒
+
+		# 动画开始时：清除鼠标离开标记
+		on_start = "[GetVariableSystem.Clear( 'event_window_mouse_leave')]"
+
+		# 开始音效
+		start_sound = {
+			soundeffect = "event:/SFX/Events/Panels/sfx_event_panel_large"
+
+			# 音效参数：状态切换
+			soundparam = {
+				name = StateChange
+				value = 1
+			}
+		}
+	}
+
+	state = {
+		name = _hide               # 状态名：隐藏
+		using = Animation_FadeOut_Standard # 使用标准淡出动画
+
+		# 隐藏音效：停止音乐
+		start_sound = {
+			soundeffect = "event:/MUSIC/Cues/Events/kill_mx_cue"
+		}
+	}
+
+	state = {
+		name = _mouse_hierarchy_leave  # 状态名：鼠标离开窗口
+		# 开始时设置鼠标离开标记为true
+		on_start = "[GetVariableSystem.Set( 'event_window_mouse_leave', 'true' )]"
+	}
+
+	# 窗口背景遮罩（变暗效果）
+	event_window_dimmer_widget = {}
+
+	# ====================== 窗口基础背景 ======================
+	widget = {
+		size = { 100% 100% }    # 铺满窗口
+		using = Window_Background        # 窗口背景样式
+		using = Window_Decoration_Frontend_Flat # 扁平装饰样式
+	}
+
+	# 事件窗口主背景
+	event_window_background_widget = {
+		margin = { 40 20 }      # 内边距
+
+		state = {
+			name = _show
+			using = Animation_FadeIn_Standard
+			duration = 0.7
+		}
+
+		# 背景循环抖动动画（震动效果）
+		state = {
+			name = background_shake_loop
+			next = background_shake_loop_1
+			duration = 0.0
+			alpha = 1.0
+		}
+		state = {
+			name = background_shake_loop_1
+			next = background_shake_loop_2
+			position = { -6 0 }  # 左移6像素
+			duration = 0.2
+		}
+		state = {
+			name = background_shake_loop_2
+			next = background_shake_loop_3
+			position = { 5 0 }   # 右移5像素
+			duration = 0.12
+		}
+		state = {
+			name = background_shake_loop_3
+			next = background_shake_loop_1
+			position = { 7 1 }   # 右下偏移
+			duration = 0.12
+		}
+
+		# 覆盖事件图片属性
+		blockoverride "event_picture_properties"
+		{}
+	}
+
+	# 背景视觉特效容器
+	margin_widget = {
+		name = "background_shader_vfx_container"
+		position = { 40 20 }
+		size = { 100% 100% }
+		margin = { 40 20 }
+	}
+
+
+	# 事件特效视频播放器
+	# Event Effect Video
+	event_window_effect_2d_widget = {
+		margin = { 40 20 }
+	}
+
+	# 前景视觉特效容器
+	#Foreground VFX
+	margin_widget = {
+		name = "foreground_shader_vfx_container"
+		position = { 40 20 }
+		size = { 100% 100% }
+		margin = { 40 20 }
+	}
+
+	# ====================== 窗口内容布局：文本+选项区域 ======================
+	vbox = {
+		name = "event_window"
+
+		widget = {
+			name = "event_window_content"
+			layoutpolicy_horizontal = expanding
+			layoutpolicy_vertical = expanding
+
+			hbox = {
+				margin = { 35 0 }
+				margin_bottom = 15
+
+				widget = {
+					name = "text_spacer"
+					layoutpolicy_horizontal = expanding
+					layoutpolicy_vertical = expanding
+					layoutstretchfactor_horizontal = 45
+				}
+			}
+
+			hbox = {
+				margin_left = 35
+				margin_right = 35
+				margin_bottom = 15
+
+				widget = {
+					name = "text"
+					layoutpolicy_horizontal = expanding
+					layoutpolicy_vertical = expanding
+					layoutstretchfactor_horizontal = 300
+
+					widget = {
+						size = { 170% 100%}
+						position = { 5 18 }
+
+						# 文本区域背景（半透明+遮罩+叠加效果）
+						background = {
+							texture = "gfx/interface/component_tiles/tile_window_background_no_edge.dds"
+							spriteType = Corneredtiled
+							spriteborder = { 18 0 }
+							texture_density = 2
+							alpha = 0.5
+
+							modify_texture = {
+								texture = "gfx/interface/component_overlay/overlay_effect.dds"
+								blend_mode = overlay
+							}
+
+							modify_texture = {
+								texture = "gfx/interface/component_masks/mask_event_text.dds"
+								blend_mode = alphamultiply
+								alpha = 1
+							}
+						}
+					}
+
+					# 描述文本+选项容器
+					vbox = {
+						name = "description_and_options"
+
+						# 淡入动画
+						state = {
+							name = appear
+							trigger_on_create = yes
+							delay = 0.2
+							using = Animation_Curve_Default
+							alpha = 1
+							duration = 1.5
+						}
+
+						hbox = {
+							layoutpolicy_horizontal = expanding
+							layoutpolicy_vertical = expanding
+							margin_bottom = 10
+							margin_top = 85
+							# 事件描述滚动区域
+							scrollarea = {
+								name = "description_scrollarea"
+								layoutpolicy_horizontal = expanding
+								layoutpolicy_vertical = expanding
+								minimumsize = { 1600 -1 }
+								maximumsize = { 1600 -1 }
+
+								scrollbarpolicy_horizontal = always_off # 禁用横向滚动条
+
+								# 纵向滚动条样式
+								scrollbar_vertical = {
+									using = Scrollbar_Vertical
+
+									blockoverride "alpha"{
+										alpha = 0
+									}
+								}
+
+								# 滚动内容：多行文本（事件描述）
+								scrollwidget = {
+									text_multi = {
+										name = "description"
+										minimumsize = { 1800 -1 }
+										maximumsize = { 1800 -1 }
+										autoresize = yes
+										margin = { 20 4 }
+										text = "[EventWindowData.GetDescription]" # 绑定事件描述文本
+										default_format = "#v #bold"
+										fontsize = 24
+									}
+								}
+							}
+
+							expand = {}
+						}
+
+						hbox = {
+							layoutpolicy_horizontal = expanding
+							margin_left = 10
+							minimumsize = { 0 50 }  
+							alwaystransparent = yes
+							fixedgridbox = {
+								alwaystransparent = yes
+								name = "option_grid"
+								addcolumn = 150    # 列宽
+								addrow = 50        # 行高
+								minimumsize = { 0 50 }   
+								datamodel = "[EventWindowData.GetOptions]" # 绑定事件选项数据
+								datamodel_wrap = 8
+								item = {
+									SanGong_button_eventoption = {}
+								}
+							}
+							expand = {}
+						}
+					}
+				}
+
+				widget = {
+					name = "characters_spacer"
+					layoutpolicy_horizontal = expanding
+					layoutpolicy_vertical = expanding
+					layoutstretchfactor_horizontal = 55
+				}
+			}
+		}
+	}
+
+
+
+	# ====================== 窗口顶部：标题+主题图标 ======================
+	vbox = {
+		widget = {
+			layoutpolicy_horizontal = expanding
+			size = { 0 70 }
+
+			# 主题标题背景（带流光动画）
+			icon = {
+				name = "theme_header"
+				position = { 24 20 }
+				size = { 1072 57 }
+				texture = "[EventWindowData.GetThemeHeader]"
+
+				# 蓝色流光叠加效果
+				modify_texture = {
+					name = overlay
+					texture = "gfx/interface/component_effects/effect_header_blue_shine.dds"
+					blend_mode = colordodge
+					translate_uv = { 0.6 0 }
+				}
+
+				# 流光右移动画
+				state = {
+					name = right
+					next = left
+					duration = 8
+					bezier = { 0.8 0.18 0.96 .05 }
+					modify_texture = {
+						name = overlay
+						translate_uv = { -0.6 0 }
+					}
+				}
+				# 流光左移动画
+				state = {
+					name = left
+					next = right
+					duration = 0.0
+					delay = 5
+					modify_texture = {
+						name = overlay
+						translate_uv = { 0.6 0 }
+					}
+				}
+				# 初始状态
+				state = {
+					trigger_on_create = yes
+					name = start
+					next = right
+					duration = 0.0
+					modify_texture = {
+						name = overlay
+						translate_uv = { 0.6 0 }
+					}
+				}
+			}
+
+			# 事件标题文本
+			text_single = {
+				name = "title"
+				parentanchor = vcenter
+				position = { 128 7 }
+				fontsize = 29
+				fontsize_min = 16
+				text = "[EventWindowData.GetTitle]" # 绑定事件标题
+				default_format = "#high;glow_color:{0.1,0.1,0.1,1.0}"
+				using = Font_Type_Flavor
+				max_width = 950
+
+				alpha = 0
+
+				background = {
+					using = Background_Area_Dark
+					margin_left = 50
+					margin_right = 130
+					margin_top = 5
+					margin_bottom = 20
+					alpha = 0.3
+
+					modify_texture = {
+						texture = "gfx/interface/component_masks/mask_holding_illustration.dds"
+						blend_mode = alphamultiply
+					}
+				}
+				# 标题淡入动画
+				state = {
+					name = start
+					trigger_on_create = yes
+					delay = 0.2
+					using = Animation_Curve_Default
+					alpha = 1
+					duration = 0.5
+				}
+			}
+
+			# 事件主题图标
+			icon = {
+				name = "theme_icon"
+				parentanchor = vcenter
+				position = { 28 10 }
+				size = { 90 90 }
+				texture = "[EventWindowData.GetThemeIcon]"
+
+				modify_texture = {
+					name = overlay
+					texture = "gfx/interface/component_effects/effect_blue_shine.dds"
+					blend_mode = colordodge
+					translate_uv = { 0.6 0 }
+				}
+				# 图标流光动画
+				state = {
+					name = right
+					next = left
+					duration = 2
+					bezier = { .8 .18 .96 .05 }
+					modify_texture = {
+						name = overlay
+						translate_uv = { -0.6 0 }
+					}
+				}
+				state = {
+					name = left
+					next = right
+					duration = 0.0
+					delay = 5
+					modify_texture = {
+						name = overlay
+						translate_uv = { 0.6 0 }
+					}
+				}
+				state = {
+					trigger_on_create = yes
+					name = start
+					next = right
+					duration = 0.0
+					modify_texture = {
+						name = overlay
+						translate_uv = {0.6 0}
+					}
+				}
+			}
+		}
+
+		expand = {}
+	}
+
+	# DLC来源图标（右上角）
+	icon = {
+		visible = "[And( EventWindowData.ShouldShowContentSource, EventWindowData.GetContentSourceDlc.HasEventDecoration )]"
+		name = "source_icon"
+		position = { -22 20 }
+		size = { 263 64 }
+		parentanchor = top|right
+		texture = "[EventWindowData.GetContentSourceDlc.GetEventDecoration]"
+		tooltip = "EVENT_CONTENT_SOURCE_TT"
+		alpha = 1
+	}
+
+	# 调试组件（仅调试模式显示）
+	flowcontainer = {
+		name = "debug_stuff"
+		visible = "[InDebugMode]"
+		visible_at_creation = no
+		parentanchor = top|right
+		position = { -100 25 }
+		ignoreinvisible = yes
+
+		using = Event_Window_Debug_Info
+	}
+	
+	widget = {
+		size = { 0 100% }
+		position = { 20 0 }
+		allow_outside = yes
+		alwaystransparent = yes
+		using = Event_Window_Debug_OptionTooltips
+	}
+}
+

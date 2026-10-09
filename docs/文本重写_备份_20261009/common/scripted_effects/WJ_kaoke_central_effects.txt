@@ -1,0 +1,273 @@
+﻿# 所有按钮的effect端均重验，不能以GUI是否灰色作为事务保护。
+WJ_kaoke_draft_clear_effect = {
+ every_in_list = { variable = wj_kaoke_drafts end_story = yes }
+ clear_variable_list = wj_kaoke_drafts
+ clear_variable_list = wj_kaoke_confirmation_drafts
+ remove_variable ?= wj_kaoke_confirm_version
+ remove_variable ?= wj_kaoke_confirm_m
+ remove_variable ?= wj_kaoke_confirm_risk
+ remove_variable ?= wj_kaoke_confirm_date
+}
+# 查询在按钮执行时发生，不放进每一行的逐帧可见性计算。
+# 保留全体匹配者；显示名单每页至多20人，不像KPI榜单截断前80名。
+WJ_kaoke_table_page_effect = {
+ clear_variable_list = wj_kaoke_page_roster
+ save_scope_as = wj_kaoke_page_viewer
+ set_variable = { name = wj_kaoke_page_index value = 0 }
+ save_scope_value_as = { name = wj_kaoke_page_start value = { value = var:wj_kaoke_page multiply = 20 } }
+ save_scope_value_as = { name = wj_kaoke_page_end value = { value = scope:wj_kaoke_page_start add = 20 } }
+ every_in_list = {
+  variable = wj_kaoke_filtered_roster
+  save_scope_as = wj_kaoke_page_candidate
+  scope:wj_kaoke_page_viewer = {
+   if = {
+    limit = { var:wj_kaoke_page_index >= scope:wj_kaoke_page_start var:wj_kaoke_page_index < scope:wj_kaoke_page_end }
+    add_to_variable_list = { name = wj_kaoke_page_roster target = scope:wj_kaoke_page_candidate }
+   }
+   change_variable = { name = wj_kaoke_page_index add = 1 }
+  }
+ }
+ set_variable = { name = wj_kaoke_filtered_count value = var:wj_kaoke_page_index }
+ remove_variable = wj_kaoke_page_index
+}
+WJ_kaoke_table_filter_effect = {
+ if = {
+  limit = { WJ_kaoke_table_viewer_trigger = yes has_variable = wj_kaoke_table_visible }
+  clear_variable_list = wj_kaoke_filtered_roster
+  save_scope_as = wj_kaoke_filter_viewer
+  every_in_list = {
+   variable = wj_kaoke_roster
+   limit = {
+    WJ_kaoke_eligible_trigger = yes
+    top_liege = scope:wj_kaoke_filter_viewer.top_liege
+    OR = {
+     NOT = { scope:wj_kaoke_filter_viewer = { has_variable = wj_kaoke_filter_relations } }
+     WJ_kaoke_close_relation_trigger = yes
+    }
+    OR = { scope:wj_kaoke_filter_viewer.var:wj_kaoke_filter_tier = 0 highest_held_title_tier = scope:wj_kaoke_filter_viewer.var:wj_kaoke_filter_tier }
+    OR = { scope:wj_kaoke_filter_viewer.var:wj_kaoke_filter_grade = 0 WJ_kaoke_grade_value = scope:wj_kaoke_filter_viewer.var:wj_kaoke_filter_grade }
+   }
+   scope:wj_kaoke_filter_viewer = { add_to_variable_list = { name = wj_kaoke_filtered_roster target = prev } }
+  }
+  set_variable = { name = wj_kaoke_page value = 0 }
+  WJ_kaoke_table_page_effect = yes
+ }
+}
+WJ_kaoke_table_refresh_effect = {
+ if = {
+  limit = { WJ_kaoke_table_viewer_trigger = yes }
+  clear_variable_list = wj_kaoke_roster
+  save_scope_as = wj_kaoke_viewer
+  top_liege = {
+   every_vassal_or_below = {
+    limit = { WJ_kaoke_eligible_trigger = yes }
+    # 借现行身份/旧存档入口初始化；不改其资格算法或奖惩。
+    WJ_kaoke_reconcile_effect = yes
+    scope:wj_kaoke_viewer = { add_to_variable_list = { name = wj_kaoke_roster target = prev } }
+   }
+  }
+  WJ_kaoke_table_filter_effect = yes
+ }
+}
+WJ_kaoke_table_open_effect = {
+ if = {
+  limit = { WJ_kaoke_table_viewer_trigger = yes }
+  WJ_kaoke_draft_clear_effect = yes
+  set_variable = { name = wj_kaoke_draft_emperor value = top_liege }
+  set_variable = { name = wj_kaoke_draft_realm value = top_liege.primary_title }
+  set_variable = { name = wj_kaoke_table_visible value = 1 }
+  if = { limit = { has_variable = wj_kaoke_draft_version } change_variable = { name = wj_kaoke_draft_version add = 1 } }
+  else = { set_variable = { name = wj_kaoke_draft_version value = 1 } }
+  set_variable = { name = wj_kaoke_filter_tier value = 0 }
+  set_variable = { name = wj_kaoke_filter_grade value = 0 }
+  remove_variable ?= wj_kaoke_filter_relations
+  WJ_kaoke_table_refresh_effect = yes
+ }
+}
+WJ_kaoke_table_close_effect = {
+ WJ_kaoke_draft_clear_effect = yes
+ clear_variable_list = wj_kaoke_roster
+ clear_variable_list = wj_kaoke_filtered_roster
+ clear_variable_list = wj_kaoke_page_roster
+ remove_variable ?= wj_kaoke_page
+ remove_variable ?= wj_kaoke_filtered_count
+ remove_variable ?= wj_kaoke_table_visible
+ remove_variable ?= wj_kaoke_draft_emperor
+ remove_variable ?= wj_kaoke_draft_realm
+ remove_variable ?= wj_kaoke_filter_tier
+ remove_variable ?= wj_kaoke_filter_grade
+ remove_variable ?= wj_kaoke_filter_relations
+}
+WJ_kaoke_preview_effect = {
+ if = {
+  limit = {
+   WJ_kaoke_preview_target_trigger = yes
+   OR = {
+    AND = { $STEP$ = 10 WJ_kaoke_next_plus_m_value <= 100 }
+    AND = { $STEP$ = -10 WJ_kaoke_next_minus_m_value <= 100 }
+   }
+  }
+  save_scope_as = wj_kaoke_operator
+  if = {
+   limit = { NOT = { any_in_list = { variable = wj_kaoke_drafts var:wj_kaoke_target = scope:target } } }
+   create_story = { type = WJ_kaoke_preview_story save_scope_as = wj_kaoke_new_draft }
+   scope:wj_kaoke_new_draft = {
+    set_variable = { name = wj_kaoke_target value = scope:target }
+    set_variable = { name = wj_kaoke_epoch value = scope:target.var:wj_kaoke_window_epoch }
+    set_variable = { name = wj_kaoke_start value = scope:target.var:wj_kaoke_start }
+    set_variable = { name = wj_kaoke_realm value = scope:target.var:wj_kaoke_realm }
+    set_variable = { name = wj_kaoke_delta value = 0 }
+   }
+   add_to_variable_list = { name = wj_kaoke_drafts target = scope:wj_kaoke_new_draft }
+  }
+  every_in_list = {
+   variable = wj_kaoke_drafts
+   limit = { var:wj_kaoke_target = scope:target }
+   change_variable = { name = wj_kaoke_delta add = $STEP$ }
+   if = { limit = { var:wj_kaoke_delta = 0 } end_story = yes }
+  }
+  change_variable = { name = wj_kaoke_draft_version add = 1 }
+  # 保留旧弹窗版本，旧概率只在版本仍一致时显示和提交。
+ }
+}
+WJ_kaoke_confirm_open_effect = {
+ if = {
+  limit = { WJ_kaoke_batch_ready_trigger = yes }
+  # At most ten nonzero drafts; build once per confirmation, never per GUI frame.
+  # The unfiltered roster defines display order, not the current page/click order.
+  clear_variable_list = wj_kaoke_confirmation_drafts
+  save_scope_as = wj_kaoke_confirm_operator
+  every_in_list = {
+   variable = wj_kaoke_roster
+   save_scope_as = wj_kaoke_confirm_target
+   scope:wj_kaoke_confirm_operator = {
+    every_in_list = {
+     variable = wj_kaoke_drafts
+     limit = { var:wj_kaoke_target = scope:wj_kaoke_confirm_target }
+     save_scope_as = wj_kaoke_confirm_story
+     scope:wj_kaoke_confirm_operator = {
+      add_to_variable_list = { name = wj_kaoke_confirmation_drafts target = scope:wj_kaoke_confirm_story }
+     }
+    }
+   }
+  }
+  set_variable = { name = wj_kaoke_confirm_version value = var:wj_kaoke_draft_version }
+  set_variable = { name = wj_kaoke_confirm_m value = WJ_kaoke_batch_m_value }
+  set_variable = { name = wj_kaoke_confirm_risk value = WJ_kaoke_batch_risk_value }
+  set_variable = { name = wj_kaoke_confirm_date value = current_date }
+ }
+}
+WJ_kaoke_confirm_commit_effect = {
+ if = {
+  limit = { WJ_kaoke_confirm_valid_trigger = yes }
+  save_scope_as = wj_kaoke_operator
+  top_liege = { save_scope_as = wj_kaoke_batch_emperor }
+  save_scope_value_as = { name = wj_kaoke_committed_m value = WJ_kaoke_batch_m_value }
+  save_scope_value_as = { name = wj_kaoke_committed_risk value = WJ_kaoke_batch_risk_value }
+  # 全批前置检查已经完成。先消费确认版本、设置本人唯一五年键，再落账。
+  remove_variable = wj_kaoke_confirm_version
+  set_variable = { name = wj_kaoke_central_cooldown value = current_date years = 5 }
+  every_in_list = {
+   variable = wj_kaoke_drafts
+   save_scope_value_as = { name = wj_kaoke_apply_delta value = var:wj_kaoke_delta }
+   var:wj_kaoke_target = {
+    save_scope_value_as = { name = wj_kaoke_grade_before value = WJ_kaoke_grade_value }
+    if = { limit = { NOT = { has_variable = wj_kaoke_central_points } } set_variable = { name = wj_kaoke_central_points value = 0 } }
+    change_variable = { name = wj_kaoke_central_points add = scope:wj_kaoke_apply_delta }
+    WJ_kaoke_commit_opinion_effect = yes
+   }
+  }
+  if = {
+   limit = { NOT = { this = scope:wj_kaoke_batch_emperor } }
+   random = {
+    chance = scope:wj_kaoke_committed_risk
+    WJ_kaoke_generate_malpractice_effect = { TARGET = scope:wj_kaoke_batch_emperor IMPACT = scope:wj_kaoke_committed_m }
+   }
+  }
+  WJ_kaoke_draft_clear_effect = yes
+  WJ_kaoke_table_filter_effect = yes
+  trigger_event = { id = wj_kaoke_central.1000 }
+ }
+ else = { custom_tooltip = WJ_kaoke_batch_invalid }
+}
+# 未来请求接口：owner人物域，TARGET=当时皇帝，IMPACT=本次实际影响。
+# 返回scope:wj_kaoke_generated_secret，供调用方原生reveal_to使用；这里不公开/告知。
+WJ_kaoke_generate_malpractice_effect = {
+ if = {
+  limit = { is_alive = yes exists = $TARGET$ $TARGET$ = { is_alive = yes } $IMPACT$ > 0 }
+  if = {
+   limit = { NOT = { any_secret = { type = WJ_kaoke_malpractice_secret secret_target = $TARGET$ } } }
+   add_secret = { type = WJ_kaoke_malpractice_secret target = $TARGET$ }
+  }
+  random_secret = {
+   type = WJ_kaoke_malpractice_secret
+   limit = { secret_target = $TARGET$ }
+   if = { limit = { NOT = { has_variable = wj_kaoke_influence } } set_variable = { name = wj_kaoke_influence value = 0 } }
+   change_variable = { name = wj_kaoke_influence add = $IMPACT$ }
+   save_scope_as = wj_kaoke_generated_secret
+  }
+ }
+}
+# Target scope, only called after a validated active batch actually writes points.
+WJ_kaoke_commit_opinion_effect = {
+ save_scope_value_as = { name = wj_kaoke_active_opinion value = WJ_kaoke_commit_opinion_value }
+ if = {
+  limit = { scope:wj_kaoke_active_opinion > 0 }
+  remove_opinion = { target = scope:wj_kaoke_operator modifier = WJ_kaoke_active_favor_opinion }
+  add_opinion = { target = scope:wj_kaoke_operator modifier = WJ_kaoke_active_favor_opinion opinion = scope:wj_kaoke_active_opinion }
+ }
+ else_if = {
+  limit = { scope:wj_kaoke_active_opinion < 0 }
+  remove_opinion = { target = scope:wj_kaoke_operator modifier = WJ_kaoke_active_disfavor_opinion }
+  add_opinion = { target = scope:wj_kaoke_operator modifier = WJ_kaoke_active_disfavor_opinion opinion = scope:wj_kaoke_active_opinion }
+ }
+}
+WJ_kaoke_case_forgive_effect = {
+ if = {
+  limit = { WJ_kaoke_case_valid_trigger = yes }
+  scope:wj_kaoke_offender = {
+   remove_variable = wj_kaoke_case_pending
+   # 原版secrets.0122.c的宽恕反馈值；不移除原版任何其他罪责。
+   add_opinion = { target = scope:wj_kaoke_injured_emperor modifier = grateful_opinion opinion = 20 }
+  }
+  remove_opinion = { target = scope:wj_kaoke_offender modifier = WJ_kaoke_malpractice_opinion }
+ }
+}
+WJ_kaoke_case_arrest_effect = {
+ if = {
+  limit = { WJ_kaoke_case_arrest_valid_trigger = yes }
+  scope:wj_kaoke_offender = { remove_variable = wj_kaoke_case_pending }
+  run_interaction = {
+   interaction = imprison_interaction
+   actor = scope:wj_kaoke_injured_emperor
+   recipient = scope:wj_kaoke_offender
+   send_threshold = decline
+  }
+ }
+}
+WJ_kaoke_case_dismiss_effect = {
+ if = {
+  limit = { WJ_kaoke_case_valid_trigger = yes }
+  scope:wj_kaoke_offender = { remove_variable = wj_kaoke_case_pending }
+ }
+}
+
+# on_send只捕获考期，on_accept调用本效果复核并唯一结算；show_as_tooltip不执行支付。
+WJ_kaoke_request_success_effect = {
+ if = {
+  limit = { WJ_kaoke_request_success_valid_trigger = yes }
+  save_scope_value_as = { name = wj_kaoke_request_points value = WJ_kaoke_request_points_value }
+  WJ_settle_recommendation_movement_options_effect = yes
+  scope:actor = {
+   WJ_kaoke_add_request_points = { POINTS = scope:wj_kaoke_request_points }
+   set_variable = { name = wj_kaoke_central_request_used value = 1 }
+  }
+  scope:recipient = {
+   WJ_kaoke_generate_malpractice_effect = {
+    TARGET = scope:wj_kaoke_request_emperor
+    IMPACT = scope:wj_kaoke_request_points
+   }
+  }
+  scope:wj_kaoke_generated_secret = { reveal_to = scope:actor }
+ }
+}

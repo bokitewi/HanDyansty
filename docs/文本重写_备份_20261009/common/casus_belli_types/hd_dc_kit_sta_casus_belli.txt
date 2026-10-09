@@ -1,0 +1,233 @@
+﻿# 天朝循环·时代特色：对峙期套件宣战理由（见 docs/天朝循环_时代特色重制计划.md §3.6）
+# hd_dc_sta_border_clash_cb：边境郡小型冲突（A 方案）
+#   目标：防守方一个与自己接壤的郡（公爵领）；花费：威望 150 + 金 100；
+#   胜利：夺取该郡内战争结束时由进攻方占领的县；停战 5 年。
+
+hd_dc_sta_border_clash_cb = {
+	group = celestial
+	icon = duchy_conquest_cb
+
+	combine_into_one = yes
+	should_show_war_goal_subview = yes
+	mutually_exclusive_titles = { always = yes }
+	interface_priority = 100
+
+	attacker_score_from_occupation_scale = 150
+	attacker_score_from_battles_scale = 150
+	defender_score_from_battles_scale = 150
+
+	allowed_for_character = {
+		hd_dc_kit_sta_tools_trigger = yes
+		is_independent_ruler = yes
+		is_landed = yes
+		NOT = { government_has_flag = government_is_landless_adventurer }
+	}
+
+	allowed_against_character = {
+		scope:defender = {
+			hd_dc_in_china_trigger = yes
+			character_is_land_realm_neighbor = scope:attacker
+		}
+		NOT = { scope:attacker.top_liege = scope:defender.top_liege }
+	}
+
+	target_titles = neighbor_land
+	target_title_tier = duchy
+	target_de_jure_regions_above = yes
+	ignore_effect = change_title_holder
+
+	ai_only_against_neighbors = yes
+	ai_score_mult = { value = 1 }
+
+	valid_to_start = {
+		scope:target = {
+			is_landless_type_title = no
+			# 防守方在该郡内有县
+			any_de_jure_county = {
+				holder = {
+					OR = {
+						this = scope:defender
+						is_vassal_or_below_of = scope:defender
+					}
+				}
+			}
+			# 该郡与进攻方领土接壤
+			any_de_jure_county = {
+				any_neighboring_county = { holder.top_liege ?= scope:attacker }
+			}
+		}
+	}
+
+	should_invalidate = {
+		NOT = {
+			any_in_list = {
+				list = target_titles
+				any_de_jure_county = {
+					holder = {
+						OR = {
+							this = scope:defender
+							is_vassal_or_below_of = scope:defender
+						}
+					}
+				}
+			}
+		}
+	}
+
+	on_invalidated_desc = msg_county_conquest_war_invalidated_message
+	on_invalidated = {}
+
+	cost = {
+		prestige = {
+			value = hd_dc_sta_border_clash_prestige_cost
+			desc = CB_BASE_COST
+		}
+		gold = {
+			value = hd_dc_sta_border_clash_gold_cost
+			desc = CB_BASE_COST
+		}
+	}
+
+	on_declaration = {
+		on_declared_war = yes
+	}
+
+	on_victory_desc = hd_dc_sta_border_clash_cb_victory_desc
+	on_victory = {
+		scope:attacker = { show_pow_release_message_effect = yes }
+		add_legitimacy_attacker_victory_effect = yes
+		scope:attacker = { accolade_attacker_war_end_glory_gain_low_effect = yes }
+
+		create_title_and_vassal_change = {
+			type = conquest
+			save_scope_as = change
+			add_claim_on_loss = yes
+		}
+		every_in_list = {
+			list = target_titles
+			custom_tooltip = hd_dc_sta_border_clash_cb_victory_tt
+			# 只取战争结束时由进攻方占领的县
+			every_de_jure_county = {
+				limit = {
+					county_controller = scope:attacker
+					holder = {
+						OR = {
+							this = scope:defender
+							is_vassal_or_below_of = scope:defender
+						}
+					}
+				}
+				change_title_holder = {
+					holder = scope:attacker
+					change = scope:change
+					take_baronies = yes
+				}
+			}
+		}
+		resolve_title_and_vassal_change = scope:change
+
+		scope:attacker = { add_prestige_experience = minor_prestige_value }
+		add_from_contribution_attackers = {
+			prestige = minor_prestige_value
+			opinion = { modifier = contributed_in_war }
+		}
+		add_from_contribution_defenders = {
+			prestige = minor_prestige_value
+			opinion = { modifier = contributed_in_war }
+		}
+
+		# 停战 5 年
+		scope:attacker = {
+			hidden_effect = {
+				add_truce_one_way = {
+					character = scope:defender
+					days = hd_dc_sta_border_clash_truce_days
+					war = root.war
+					result = victory
+				}
+			}
+		}
+		custom_tooltip = hd_dc_sta_border_clash_truce_tt
+	}
+
+	on_white_peace_desc = hd_dc_sta_border_clash_cb_white_peace_desc
+	on_white_peace = {
+		scope:attacker = {
+			add_prestige = {
+				value = minor_prestige_value
+				multiply = -1.0
+			}
+		}
+		add_from_contribution_attackers = {
+			prestige = minor_prestige_value
+			opinion = { modifier = contributed_in_war }
+		}
+		add_from_contribution_defenders = {
+			prestige = minor_prestige_value
+			opinion = { modifier = contributed_in_war }
+		}
+		scope:attacker = {
+			hidden_effect = {
+				add_truce_both_ways = {
+					character = scope:defender
+					days = hd_dc_sta_border_clash_truce_days
+					war = root.war
+					result = white_peace
+				}
+			}
+		}
+		custom_tooltip = hd_dc_sta_border_clash_truce_tt
+	}
+
+	on_defeat_desc = hd_dc_sta_border_clash_cb_defeat_desc
+	on_defeat = {
+		add_legitimacy_attacker_defeat_effect = yes
+		scope:defender = {
+			add_prestige_war_defender_effect = {
+				PRESTIGE_VALUE = medium_prestige_value
+			}
+		}
+		scope:attacker = {
+			pay_short_term_gold_reparations_effect = {
+				GOLD_VALUE = 2
+			}
+			add_prestige = {
+				value = medium_prestige_value
+				multiply = -1.0
+			}
+		}
+		add_from_contribution_attackers = {
+			prestige = minor_prestige_value
+			opinion = { modifier = contributed_in_war }
+		}
+		add_from_contribution_defenders = {
+			prestige = minor_prestige_value
+			opinion = { modifier = contributed_in_war }
+		}
+		scope:attacker = {
+			hidden_effect = {
+				add_truce_both_ways = {
+					character = scope:defender
+					days = hd_dc_sta_border_clash_truce_days
+					war = root.war
+					result = defeat
+				}
+			}
+		}
+		custom_tooltip = hd_dc_sta_border_clash_truce_tt
+	}
+
+	transfer_behavior = transfer
+
+	on_primary_attacker_death = inherit
+	on_primary_defender_death = inherit
+
+	attacker_allies_inherit = yes
+	defender_allies_inherit = yes
+
+	war_name = "HD_DC_STA_BORDER_CLASH_WAR_NAME"
+	war_name_base = "HD_DC_STA_BORDER_CLASH_WAR_NAME_BASE"
+	cb_name = "HD_DC_STA_BORDER_CLASH_CB_NAME"
+
+	attacker_wargoal_percentage = 0.5
+}

@@ -1,0 +1,101 @@
+﻿# on_death is BEFORE loss of life/titles/variables; .009 consumes these traits three days later.
+on_game_start_after_lobby = { on_actions = { WJ_miaoshi_living_start } }
+on_title_gain = { on_actions = { WJ_miaoshi_accession } }
+WJ_miaoshi_living_start = {
+ effect = { every_ruler = { limit = { OR = { WJ_inner_emperor_trigger = yes WJ_rf_has_fief = yes } } WJ_miaoshi_initialize_effect = yes } }
+}
+WJ_miaoshi_accession = {
+ trigger = { OR = { WJ_inner_emperor_trigger = yes WJ_rf_has_fief = yes } NOT = { has_variable = Dengji_sub_realm_var } }
+ effect = {
+  WJ_miaoshi_initialize_effect = yes
+  if = {
+   limit = { scope:title = root.primary_title exists = scope:previous_holder scope:previous_holder = { NOT = { dynasty = root.dynasty } } }
+   add_trait = SanGong_KaiGuo
+  }
+ }
+}
+on_death = { on_actions = { WJ_miaoshi_death } }
+WJ_miaoshi_death = { #皇帝死亡。盖棺定论
+    trigger = {
+        has_game_rule = MiaoShi_on
+        OR = {
+            AND = { WJ_inner_emperor_trigger = yes primary_heir = { dynasty = root.dynasty } }
+            AND = { WJ_inner_emperor_trigger = no any_held_title = { has_variable = wj_rf_rank current_heir = { dynasty = root.dynasty } } }
+        }
+	}
+    effect = {
+        if = {
+            limit = { WJ_rf_has_fief = yes WJ_inner_emperor_trigger = no }
+            WJ_rf_refresh_holder = yes
+            set_variable = { name = wj_rf_miaoshi_rank value = var:wj_rf_owned_title.var:wj_rf_rank }
+            store_localized_text_in_death = WJ_rf_miaoshi_realm_name
+            var:wj_rf_owned_title.current_heir = { save_scope_as = wj_rf_shihao_heir }
+        }
+        else = { primary_heir = { save_scope_as = wj_rf_shihao_heir } }
+        WJ_miaoshi_initialize_effect = yes
+        save_scope_as = XianDi
+        if = {#开国君主
+            limit = {
+                OR = {
+                    has_trait = SanGong_KaiGuo 
+                    has_trait = SanGong_ZhongXing
+                } 
+            }
+            scope:wj_rf_shihao_heir = { WJ_miaoshi_queue_effect = yes }
+        }
+        else_if = {#中兴之主
+            limit = {
+                prestige_level >= 4
+                any_character_situation = { this = situation:dynastic_cycle }
+                has_variable = SanGong_Zhongxing_var
+                situation:dynastic_cycle ?= {
+                    OR = { 
+                        situation_current_phase = situation_dynastic_cycle_phase_stability_expansion
+                        OR = { situation_current_phase = situation_dynastic_cycle_phase_stability_advancement situation_current_phase = situation_dynastic_cycle_phase_hd_recovery }
+                    }
+                }      
+            }
+            add_trait = SanGong_ZhongXing
+            scope:wj_rf_shihao_heir = { WJ_miaoshi_queue_effect = yes }
+        }
+        else_if = {#明君
+            limit = {
+                prestige_level >= 4
+                sub_realm_size >= var:SanGong_XiongZhu_var
+            }
+            add_trait = SanGong_XiongZhu
+            scope:wj_rf_shihao_heir = { WJ_miaoshi_queue_effect = yes }
+        }
+        else_if = {#幼主
+            limit = {
+                age < 16
+            }
+            add_trait = SanGong_YouZhu
+            scope:wj_rf_shihao_heir = { WJ_miaoshi_queue_effect = yes }
+        }
+        else_if = {#昏君
+            limit = {
+                OR = {
+                    sub_realm_size < var:SanGong_HunJun_var
+                    AND = {
+                        has_variable = SanGong_HunJun_var2
+                        any_character_situation = { this = situation:dynastic_cycle }
+                        situation:dynastic_cycle ?= {
+                            OR = { 
+                                OR = { situation_current_phase = situation_dynastic_cycle_phase_chaos situation_current_phase = situation_dynastic_cycle_phase_hd_standoff }            
+                                situation_current_phase = situation_dynastic_cycle_phase_instability_conquest 
+                                OR = { situation_current_phase = situation_dynastic_cycle_phase_instability situation_current_phase = situation_dynastic_cycle_phase_hd_collapse }       
+                            }
+                        }
+                    }
+                }
+            }
+            add_trait = SanGong_HunJun
+            scope:wj_rf_shihao_heir = { WJ_miaoshi_queue_effect = yes }
+        }
+        else = {#兜底：守成
+            add_trait = SanGong_ShouCheng
+            scope:wj_rf_shihao_heir = { WJ_miaoshi_queue_effect = yes }
+        }
+    }
+}

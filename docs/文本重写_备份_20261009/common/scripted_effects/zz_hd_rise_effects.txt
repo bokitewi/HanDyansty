@@ -1,0 +1,130 @@
+﻿# 历史人物崛起（隐藏）。角色作用域。
+hd_rise_ensure_story_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			hd_rise_roster_trigger = yes
+			NOT = { any_owned_story = { story_type = hd_story_rise } }
+		}
+		create_story = { type = hd_story_rise }
+	}
+}
+
+hd_rise_setup_all_effect = {
+	character:cao_cao ?= { hd_rise_ensure_story_effect = yes }
+	character:liu_bei ?= { hd_rise_ensure_story_effect = yes }
+	character:yuan_shu ?= { hd_rise_ensure_story_effect = yes }
+	character:yuan_shao ?= { hd_rise_ensure_story_effect = yes }
+	character:liu_biao ?= { hd_rise_ensure_story_effect = yes }
+	character:lv_bu ?= { hd_rise_ensure_story_effect = yes }
+	character:sun_jian ?= { hd_rise_ensure_story_effect = yes }
+	if = { limit = { has_global_variable = wj_hchar_sun_ce } global_var:wj_hchar_sun_ce ?= { hd_rise_ensure_story_effect = yes } }
+	character:ma_teng ?= { hd_rise_ensure_story_effect = yes }
+	character:han_sui ?= { hd_rise_ensure_story_effect = yes }
+	character:tao_qian ?= { hd_rise_ensure_story_effect = yes }
+	character:liu_zhang_4 ?= { hd_rise_ensure_story_effect = yes }
+}
+
+# 每月脉冲：维护加成、判定终止、AI 每月 50% 概率尝试开战。
+hd_rise_pulse_effect = {
+	if = {
+		limit = { is_alive = yes hd_rise_roster_trigger = yes }
+		# 旧的“守境安民”和平锁对刘表永久解除。
+		if = {
+			limit = { has_character_modifier = hd_liu_biao_stable_ai }
+			remove_character_modifier = hd_liu_biao_stable_ai
+		}
+		if = {
+			limit = { NOT = { has_character_flag = hd_rise_retired } hd_rise_retired_trigger = yes }
+			add_character_flag = hd_rise_retired
+		}
+		if = {
+			limit = { hd_rise_eligible_trigger = yes }
+			if = {
+				limit = { NOT = { has_character_modifier = hd_rise_boost } }
+				add_character_modifier = { modifier = hd_rise_boost }
+			}
+			# 讨董联盟解散后独立的 AI 袁绍/孙策获得原版征服者特质（只给一次）。
+			if = {
+				limit = {
+					OR = { this = character:yuan_shao AND = { trigger_if = { limit = { has_global_variable = wj_hchar_sun_ce } this = global_var:wj_hchar_sun_ce } trigger_else = { always = no } } }
+					exists = global_var:hds_coalition_ended
+					is_independent_ruler = yes
+					NOT = { has_character_flag = hd_rise_conqueror_given }
+				}
+				add_character_flag = hd_rise_conqueror_given
+				if = {
+					limit = { NOT = { has_trait = conqueror } }
+					add_trait = conqueror
+				}
+			}
+			if = {
+				limit = { hd_rise_war_ready_trigger = yes }
+				random = {
+					chance = 50
+					trigger_event = hd_rise.0001
+				}
+			}
+		}
+		else_if = {
+			limit = { has_character_modifier = hd_rise_boost }
+			remove_character_modifier = hd_rise_boost
+		}
+	}
+}
+
+# 在 hd_rise.0001 内调用，root 即进攻者。临时解除 sworn_peace（hds 剧本的和平锁），宣战后恢复。
+hd_rise_try_war_effect = {
+	if = {
+		limit = { hd_rise_war_ready_trigger = yes }
+		if = {
+			limit = { has_character_flag = sworn_peace }
+			add_character_flag = hd_rise_peace_restore
+			remove_character_flag = sworn_peace
+		}
+		# 优先级：相邻且 <=50% 兵力 -> 相邻且 <=100% -> 不限相邻且 <=100%。
+		# 开战前先招降：本次发出招降（或仍在等回复）则跳过宣战。
+		hd_submission_offer_before_war_effect = yes
+		if = {
+			limit = { NOT = { has_character_flag = hd_submission_request_issued } }
+		ai_start_best_war = {
+			cb = { claim_cb duchy_conquest_cb vassalization_cb individual_duchy_de_jure_cb county_conquest_cb individual_county_de_jure_cb }
+			is_valid = {
+				scope:target_character = {
+					hd_rise_target_valid_trigger = yes
+					current_military_strength <= root.fifty_percent_of_current_military_strength
+					any_neighboring_top_liege_realm_owner = { this = root }
+				}
+			}
+			on_failure = {
+				ai_start_best_war = {
+					cb = { claim_cb duchy_conquest_cb vassalization_cb individual_duchy_de_jure_cb county_conquest_cb individual_county_de_jure_cb }
+					is_valid = {
+						scope:target_character = {
+							hd_rise_target_valid_trigger = yes
+							current_military_strength <= root.current_military_strength
+							any_neighboring_top_liege_realm_owner = { this = root }
+						}
+					}
+					on_failure = {
+						ai_start_best_war = {
+							cb = { claim_cb duchy_conquest_cb vassalization_cb individual_duchy_de_jure_cb county_conquest_cb individual_county_de_jure_cb }
+							is_valid = {
+								scope:target_character = {
+									hd_rise_target_valid_trigger = yes
+									current_military_strength <= root.current_military_strength
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		}
+		if = {
+			limit = { has_character_flag = hd_rise_peace_restore }
+			remove_character_flag = hd_rise_peace_restore
+			add_character_flag = sworn_peace
+		}
+	}
+}

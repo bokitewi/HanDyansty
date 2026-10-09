@@ -1,0 +1,1046 @@
+﻿# 五胡内附效果（见 docs/五胡内附_僚人入蜀_设计草案.md 第 4 节）。
+# 第二层边疆收留链、第三层胡帅求地、内附起兵、史实大单于。
+
+############################
+# 年度脉冲（Global scope）
+############################
+
+# 各子系统由 common/on_action/zz_hd_wuhu_liao_on_actions.txt 中各自独立的子 on_action 调用，
+# 避免同一次脉冲里不同子系统的 saved scope / list 互相串用。
+
+hd_wuhu_yearly_frontier_effect = {
+	# 第二层：边疆收留链（被动事件，"仅玩家"规则下仍保留；439 年起不再发生）
+	if = {
+		limit = {
+			hd_wuhu_enabled_trigger = yes
+			hd_wuhu_before_cutoff_trigger = yes
+		}
+		every_ruler = {
+			limit = { hd_wuhu_frontier_receiver_trigger = yes }
+			random = {
+				chance = hd_wuhu_frontier_yearly_chance
+				trigger_event = hd_wuhu.2000
+			}
+		}
+	}
+}
+
+hd_wuhu_yearly_conversion_all_effect = {
+	# 渐进胡化（被动，"仅玩家"规则下仍保留；439 年起不再发生）
+	if = {
+		limit = {
+			hd_wuhu_enabled_trigger = yes
+			hd_wuhu_before_cutoff_trigger = yes
+		}
+		every_ruler = {
+			limit = {
+				hd_wuhu_is_settled_trigger = yes
+				is_landed = yes
+			}
+			hd_wuhu_yearly_conversion_effect = yes
+		}
+	}
+}
+
+############################
+# 第二层：边疆收留链
+############################
+
+### Character（收留者，事件 hd_wuhu.2000 的 ROOT）：选纠纷伯爵领、族群、胡首
+hd_wuhu_frontier_setup_effect = {
+	save_scope_as = hd_wuhu_host
+	# 本国（含封臣）与胡族伯爵领接壤的伯爵领，优先位于安置区内
+	random_realm_county = {
+		limit = {
+			hd_wuhu_frontier_border_county_trigger = { OWNER = scope:hd_wuhu_host }
+			title_province = { geographical_region = hd_wuhu_all_settle_region }
+		}
+		alternative_limit = {
+			hd_wuhu_frontier_border_county_trigger = { OWNER = scope:hd_wuhu_host }
+		}
+		save_scope_as = hd_wuhu_nomads_county
+	}
+	scope:hd_wuhu_nomads_county ?= {
+		random_neighboring_county = {
+			limit = { hd_wuhu_six_culture_trigger = yes }
+			save_scope_as = hd_wuhu_tribe_county
+		}
+		if = {
+			limit = {
+				exists = holder
+				NOT = { holder = scope:hd_wuhu_host }
+			}
+			holder = { save_scope_as = hd_wuhu_upset_vassal }
+		}
+	}
+	scope:hd_wuhu_tribe_county ?= {
+		hd_wuhu_save_tribe_from_culture_effect = yes
+	}
+	if = {
+		limit = { exists = scope:hd_wuhu_tribe }
+		hd_wuhu_save_tribe_culture_rite_effect = { COUNTY = scope:hd_wuhu_tribe_county }
+		hd_wuhu_create_chief_effect = { LOCATION = scope:hd_wuhu_nomads_county.title_province }
+		scope:hd_wuhu_chief = { save_scope_as = turkic_leader }
+	}
+}
+
+### Character（收留者）：收留胡首，创建故事
+hd_wuhu_frontier_accept_effect = {
+	add_courtier = scope:turkic_leader
+	spawn_army = {
+		name = hd_wuhu_frontier_army_name
+		men_at_arms = {
+			type = horse_archers
+			stacks = 5
+		}
+		location = capital_province
+		inheritable = yes
+		uses_supply = yes
+	}
+	set_variable = { name = turkic_leader value = scope:turkic_leader }
+	if = {
+		limit = { exists = scope:hd_wuhu_upset_vassal }
+		set_variable = { name = upset_vassal value = scope:hd_wuhu_upset_vassal }
+	}
+	set_variable = { name = nomads_county value = scope:hd_wuhu_nomads_county }
+	set_variable = { name = nomads_new_county value = scope:hd_wuhu_nomads_county }
+	set_variable = { name = hd_wuhu_frontier_tribe value = scope:hd_wuhu_tribe }
+	create_story = story_hd_wuhu_frontier
+}
+
+### Event hd_wuhu.2099：把 $COUNTY$ 授予胡首；文化信仰都改为该胡族，胡首成为封臣并写入内附标记
+hd_wuhu_frontier_grant_effect = {
+	$COUNTY$ = { save_scope_as = hd_wuhu_grant_target }
+	hd_wuhu_save_tribe_culture_rite_effect = { COUNTY = scope:hd_wuhu_grant_target }
+	create_title_and_vassal_change = {
+		type = granted
+		save_scope_as = hd_wuhu_grant_change
+		add_claim_on_loss = no
+	}
+	scope:hd_wuhu_grant_target = {
+		change_title_holder = {
+			holder = scope:turkic_leader
+			change = scope:hd_wuhu_grant_change
+			take_baronies = yes
+		}
+	}
+	resolve_title_and_vassal_change = scope:hd_wuhu_grant_change
+	scope:hd_wuhu_grant_target = {
+		hd_wuhu_flip_county_culture_rite_effect = yes
+	}
+	scope:turkic_leader = {
+		hd_wuhu_apply_chief_government_effect = yes
+		hd_wuhu_mark_settled_effect = yes
+		add_opinion = {
+			target = root
+			modifier = grateful_opinion
+			opinion = 30
+		}
+	}
+}
+
+### Event hd_wuhu.2099：拒绝索封，胡首叛乱——成为冒险者，用求地宣战理由攻打纠纷伯爵领；事件军战后不解散
+hd_wuhu_frontier_revolt_effect = {
+	scope:turkic_leader = {
+		save_scope_as = hd_revolt_leader
+		add_opinion = {
+			target = root
+			modifier = hate_opinion
+			opinion = -40
+		}
+		hd_historical_revolt_ensure_adventurer_effect = { LOCATION = scope:hd_wuhu_nomads_county.title_province }
+		start_war = {
+			cb = hd_wuhu_petition_cb
+			target = scope:hd_wuhu_nomads_county.holder.top_liege
+			target_title = scope:hd_wuhu_nomads_county
+		}
+		spawn_army = {
+			name = hd_wuhu_frontier_revolt_army_name
+			levies = 500
+			men_at_arms = {
+				type = horse_archers
+				stacks = 5
+			}
+			location = scope:hd_wuhu_nomads_county.title_province
+			inheritable = yes
+			uses_supply = no
+			save_scope_as = hd_wuhu_frontier_revolt_army
+		}
+		scope:hd_wuhu_frontier_revolt_army ?= { assign_commander = scope:turkic_leader }
+	}
+}
+
+### Event hd_wuhu.2099：拒绝索封，胡首离去
+hd_wuhu_frontier_leave_effect = {
+	scope:turkic_leader = {
+		add_opinion = {
+			target = root
+			modifier = disappointed_opinion
+			opinion = -40
+		}
+		if = {
+			limit = { is_ai = yes }
+			move_to_pool = yes
+		}
+	}
+}
+
+############################
+# 第三层：胡帅求地
+############################
+
+### $A$ / $B$ 两个公爵领中取"受地者兵力较弱"的有效目标，存为 scope:hd_wuhu_petition_target / scope:hd_wuhu_receiver
+hd_wuhu_pick_weaker_duchy_effect = {
+	$A$.title_capital_county.holder.top_liege ?= { save_scope_as = hd_wuhu_rcv_a }
+	$B$.title_capital_county.holder.top_liege ?= { save_scope_as = hd_wuhu_rcv_b }
+	if = {
+		limit = {
+			exists = scope:hd_wuhu_rcv_a
+			scope:hd_wuhu_rcv_a = { hd_wuhu_petition_receiver_trigger = yes }
+			$A$ = { hd_wuhu_petition_duchy_valid_trigger = { RECEIVER = scope:hd_wuhu_rcv_a } }
+		}
+		$A$ = { save_scope_as = hd_wuhu_cand_a }
+	}
+	if = {
+		limit = {
+			exists = scope:hd_wuhu_rcv_b
+			scope:hd_wuhu_rcv_b = { hd_wuhu_petition_receiver_trigger = yes }
+			$B$ = { hd_wuhu_petition_duchy_valid_trigger = { RECEIVER = scope:hd_wuhu_rcv_b } }
+		}
+		$B$ = { save_scope_as = hd_wuhu_cand_b }
+	}
+	if = {
+		limit = {
+			exists = scope:hd_wuhu_cand_a
+			OR = {
+				NOT = { exists = scope:hd_wuhu_cand_b }
+				scope:hd_wuhu_rcv_a.current_military_strength <= scope:hd_wuhu_rcv_b.current_military_strength
+			}
+		}
+		scope:hd_wuhu_cand_a = { save_scope_as = hd_wuhu_petition_target }
+		scope:hd_wuhu_rcv_a = { save_scope_as = hd_wuhu_receiver }
+	}
+	else_if = {
+		limit = { exists = scope:hd_wuhu_cand_b }
+		scope:hd_wuhu_cand_b = { save_scope_as = hd_wuhu_petition_target }
+		scope:hd_wuhu_rcv_b = { save_scope_as = hd_wuhu_receiver }
+	}
+}
+
+### 单个公爵领 $A$ 作为目标
+hd_wuhu_pick_single_duchy_effect = {
+	$A$.title_capital_county.holder.top_liege ?= { save_scope_as = hd_wuhu_rcv_a }
+	if = {
+		limit = {
+			exists = scope:hd_wuhu_rcv_a
+			scope:hd_wuhu_rcv_a = { hd_wuhu_petition_receiver_trigger = yes }
+			$A$ = { hd_wuhu_petition_duchy_valid_trigger = { RECEIVER = scope:hd_wuhu_rcv_a } }
+		}
+		$A$ = { save_scope_as = hd_wuhu_petition_target }
+		scope:hd_wuhu_rcv_a = { save_scope_as = hd_wuhu_receiver }
+	}
+}
+
+### 从 hd_wuhu_duchy_candidates 列表中取受地者兵力最弱的有效公爵领
+hd_wuhu_pick_weakest_from_list_effect = {
+	# 先剔除无效候选（受地者 = 该公爵领首府持有者的最高宗主）
+	every_in_list = {
+		list = hd_wuhu_duchy_candidates
+		if = {
+			limit = { exists = title_capital_county.holder.top_liege }
+			title_capital_county.holder.top_liege = { save_temporary_scope_as = hd_wuhu_tmp_receiver }
+			if = {
+				limit = {
+					scope:hd_wuhu_tmp_receiver = { hd_wuhu_petition_receiver_trigger = yes }
+					hd_wuhu_petition_duchy_valid_trigger = { RECEIVER = scope:hd_wuhu_tmp_receiver }
+				}
+				add_to_list = hd_wuhu_valid_duchies
+			}
+		}
+	}
+	ordered_in_list = {
+		list = hd_wuhu_valid_duchies
+		order_by = hd_wuhu_duchy_receiver_weakness
+		save_scope_as = hd_wuhu_petition_target
+	}
+	scope:hd_wuhu_petition_target ?= {
+		title_capital_county.holder.top_liege = { save_scope_as = hd_wuhu_receiver }
+	}
+}
+
+### 同上，但候选列表为 hd_wuhu_region_duchies（通用兜底优先安置区）
+hd_wuhu_pick_weakest_from_region_list_effect = {
+	every_in_list = {
+		list = hd_wuhu_region_duchies
+		add_to_list = hd_wuhu_duchy_candidates_2
+	}
+	every_in_list = {
+		list = hd_wuhu_duchy_candidates_2
+		if = {
+			limit = { exists = title_capital_county.holder.top_liege }
+			title_capital_county.holder.top_liege = { save_temporary_scope_as = hd_wuhu_tmp_receiver }
+			if = {
+				limit = {
+					scope:hd_wuhu_tmp_receiver = { hd_wuhu_petition_receiver_trigger = yes }
+					hd_wuhu_petition_duchy_valid_trigger = { RECEIVER = scope:hd_wuhu_tmp_receiver }
+				}
+				add_to_list = hd_wuhu_valid_duchies
+			}
+		}
+	}
+	ordered_in_list = {
+		list = hd_wuhu_valid_duchies
+		order_by = hd_wuhu_duchy_receiver_weakness
+		save_scope_as = hd_wuhu_petition_target
+	}
+	scope:hd_wuhu_petition_target ?= {
+		title_capital_county.holder.top_liege = { save_scope_as = hd_wuhu_receiver }
+	}
+}
+
+### 史实胡帅：依次取在世的 AI 角色（跳过玩家），否则生成替身（需事先保存 scope:hd_wuhu_tribe 与 scope:hd_wuhu_petition_target）
+hd_wuhu_pick_hist_chief_effect = {
+	if = {
+		limit = { $C1$ ?= { is_alive = yes is_ai = yes } }
+		$C1$ = { save_scope_as = hd_wuhu_chief }
+	}
+	else_if = {
+		limit = { $C2$ ?= { is_alive = yes is_ai = yes } }
+		$C2$ = { save_scope_as = hd_wuhu_chief }
+	}
+	else_if = {
+		limit = { $C3$ ?= { is_alive = yes is_ai = yes } }
+		$C3$ = { save_scope_as = hd_wuhu_chief }
+	}
+	else = {
+		hd_wuhu_save_tribe_culture_rite_effect = { COUNTY = scope:hd_wuhu_petition_target.title_capital_county }
+		hd_wuhu_create_chief_effect = { LOCATION = scope:hd_wuhu_petition_target.title_capital_county.title_province }
+	}
+}
+
+### 发出求地事件
+hd_wuhu_fire_petition_effect = {
+	scope:hd_wuhu_receiver = { trigger_event = hd_wuhu.3001 }
+}
+
+### 南匈奴入居并州（188–216，最后一年必触发；与 REV-07 并州休屠各叛乱联动）
+hd_wuhu_hist_petition_xiongnu_effect = {
+	if = {
+		limit = {
+			hd_wuhu_enabled_trigger = yes
+			hd_wuhu_ai_enabled_trigger = yes
+			NOT = { exists = global_var:hd_wuhu_hist_xiongnu_done }
+			hd_wuhu_window_trigger = { START = 188 END = 226 }
+			# REV-07 已结算，或其窗口已过且未发生；叛乱进行中则等待
+			OR = {
+				exists = global_var:hd_wuhu_xiutu_resolved
+				AND = {
+					current_date > 190.12.31
+					NOT = { exists = global_var:hd_revolt_bingzhou_hu_fired }
+				}
+				has_game_rule = hd_wuhu_rule_random
+			}
+		}
+		random = {
+			chance = hd_wuhu_hist_petition_yearly_chance
+			modifier = {
+				add = 100
+				current_year >= 216
+			}
+			save_scope_value_as = { name = hd_wuhu_tribe value = flag:xiongnu }
+			if = {
+				limit = { exists = global_var:hd_wuhu_xiutu_won }
+				hd_wuhu_pick_weaker_duchy_effect = { A = title:d_pingyang B = title:d_taiyuan }
+			}
+			else = {
+				hd_wuhu_pick_single_duchy_effect = { A = title:d_xihe }
+			}
+			if = {
+				limit = { exists = scope:hd_wuhu_petition_target }
+				hd_wuhu_pick_hist_chief_effect = {
+					C1 = character:luan_ti_yu_fu_luo
+					C2 = character:luan_ti_hu_chu_quan
+					C3 = global_var:hd_hb_p_xiongnu_liu_010
+				}
+				set_global_variable = { name = hd_wuhu_hist_xiongnu_done value = yes }
+				hd_wuhu_fire_petition_effect = yes
+			}
+		}
+	}
+}
+
+### 徙武都氐入关中（200–240）
+hd_wuhu_hist_petition_diren_effect = {
+	if = {
+		limit = {
+			hd_wuhu_enabled_trigger = yes
+			hd_wuhu_ai_enabled_trigger = yes
+			NOT = { exists = global_var:hd_wuhu_hist_diren_done }
+			hd_wuhu_window_trigger = { START = 200 END = 250 }
+		}
+		random = {
+			chance = hd_wuhu_hist_petition_yearly_chance
+			modifier = {
+				add = 100
+				current_year >= 240
+			}
+			save_scope_value_as = { name = hd_wuhu_tribe value = flag:diren }
+			hd_wuhu_pick_weaker_duchy_effect = { A = title:d_fufeng B = title:d_tianshui }
+			if = {
+				limit = { exists = scope:hd_wuhu_petition_target }
+				hd_wuhu_pick_hist_chief_effect = {
+					C1 = character:ju_a_gui
+					C2 = global_var:hd_hb_p_chouchi_yang_005
+					C3 = character:ju_a_gui
+				}
+				set_global_variable = { name = hd_wuhu_hist_diren_done value = yes }
+				hd_wuhu_fire_petition_effect = yes
+			}
+		}
+	}
+}
+
+### 乌桓内徙（200–230）：幽州公爵领中与胡帅（无地则与乌桓伯爵领）接壤且受地者最弱者
+hd_wuhu_hist_petition_wuhuan_effect = {
+	if = {
+		limit = {
+			hd_wuhu_enabled_trigger = yes
+			hd_wuhu_ai_enabled_trigger = yes
+			NOT = { exists = global_var:hd_wuhu_hist_wuhuan_done }
+			hd_wuhu_window_trigger = { START = 200 END = 240 }
+		}
+		random = {
+			chance = hd_wuhu_hist_petition_yearly_chance
+			modifier = {
+				add = 100
+				current_year >= 230
+			}
+			save_scope_value_as = { name = hd_wuhu_tribe value = flag:wuhuan }
+			# 胡帅先定（决定"接壤"的参照）
+			if = {
+				limit = { character:qiu_lou_ban ?= { is_alive = yes is_ai = yes } }
+				character:qiu_lou_ban = { save_scope_as = hd_wuhu_chief }
+			}
+			else_if = {
+				limit = { character:ta_dun ?= { is_alive = yes is_ai = yes } }
+				character:ta_dun = { save_scope_as = hd_wuhu_chief }
+			}
+			title:k_uuii_youzhou = {
+				every_in_de_jure_hierarchy = {
+					limit = {
+						tier = tier_duchy
+						trigger_if = {
+							limit = { scope:hd_wuhu_chief ?= { is_landed = yes } }
+							any_de_jure_county = {
+								any_neighboring_county = {
+									holder ?= { target_is_same_character_or_above = scope:hd_wuhu_chief }
+								}
+							}
+						}
+						trigger_else = {
+							any_de_jure_county = {
+								any_neighboring_county = { culture = culture:wuhuan }
+							}
+						}
+					}
+					add_to_list = hd_wuhu_duchy_candidates
+				}
+			}
+			hd_wuhu_pick_weakest_from_list_effect = yes
+			if = {
+				limit = { exists = scope:hd_wuhu_petition_target }
+				if = {
+					limit = { NOT = { exists = scope:hd_wuhu_chief } }
+					hd_wuhu_save_tribe_culture_rite_effect = { COUNTY = scope:hd_wuhu_petition_target.title_capital_county }
+					hd_wuhu_create_chief_effect = { LOCATION = scope:hd_wuhu_petition_target.title_capital_county.title_province }
+				}
+				set_global_variable = { name = hd_wuhu_hist_wuhuan_done value = yes }
+				hd_wuhu_fire_petition_effect = yes
+			}
+		}
+	}
+}
+
+### 通用兜底：每年 3%，全局冷却 10 年；439 年起不再发生
+hd_wuhu_generic_petition_effect = {
+	if = {
+		limit = {
+			hd_wuhu_enabled_trigger = yes
+			hd_wuhu_ai_enabled_trigger = yes
+			hd_wuhu_before_cutoff_trigger = yes
+			OR = {
+				NOT = { exists = global_var:hd_wuhu_generic_next_year }
+				current_year >= global_var:hd_wuhu_generic_next_year
+			}
+		}
+		random = {
+			chance = hd_wuhu_generic_petition_yearly_chance
+			random_independent_ruler = {
+				limit = {
+					is_ai = yes
+					is_landed = yes
+					highest_held_title_tier >= tier_duchy
+					hd_wuhu_six_culture_trigger = yes
+					any_realm_county = {
+						NOT = { target_is_de_jure_liege_or_above = title:h_china }
+						any_neighboring_county = {
+							target_is_de_jure_liege_or_above = title:h_china
+							holder ?= {
+								top_liege = { hd_wuhu_petition_receiver_trigger = yes }
+							}
+						}
+					}
+				}
+				save_scope_as = hd_wuhu_petitioner
+			}
+			scope:hd_wuhu_petitioner ?= {
+				hd_wuhu_save_tribe_from_culture_effect = yes
+				# 候选公爵领：与求地者接壤的中原伯爵领所属公爵领
+				every_realm_county = {
+					limit = { NOT = { target_is_de_jure_liege_or_above = title:h_china } }
+					every_neighboring_county = {
+						limit = {
+							target_is_de_jure_liege_or_above = title:h_china
+							exists = duchy
+						}
+						duchy = {
+							if = {
+								limit = { NOT = { is_in_list = hd_wuhu_duchy_candidates } }
+								add_to_list = hd_wuhu_duchy_candidates
+							}
+						}
+					}
+				}
+			}
+			if = {
+				limit = { exists = scope:hd_wuhu_tribe }
+				# 优先该族安置区内的
+				if = {
+					limit = {
+						any_in_list = {
+							list = hd_wuhu_duchy_candidates
+							hd_wuhu_title_in_tribe_region_trigger = { TRIBE = scope:hd_wuhu_tribe }
+						}
+					}
+					# 只保留安置区内的候选
+					every_in_list = {
+						list = hd_wuhu_duchy_candidates
+						limit = {
+							hd_wuhu_title_in_tribe_region_trigger = { TRIBE = scope:hd_wuhu_tribe }
+						}
+						add_to_list = hd_wuhu_region_duchies
+					}
+					hd_wuhu_pick_weakest_from_region_list_effect = yes
+				}
+				# 安置区内没有有效目标时，退回任意接壤的中原公爵领
+				if = {
+					limit = { NOT = { exists = scope:hd_wuhu_petition_target } }
+					hd_wuhu_pick_weakest_from_list_effect = yes
+				}
+			}
+			if = {
+				limit = { exists = scope:hd_wuhu_petition_target }
+				# 胡帅：求地者宫廷或家族中的成年男性（非继承人、非配偶），没有则生成
+				scope:hd_wuhu_petitioner = {
+					random_courtier = {
+						limit = {
+							is_ai = yes
+							is_adult = yes
+							is_male = yes
+							is_imprisoned = no
+							NOT = { scope:hd_wuhu_petitioner.primary_heir ?= this }
+							NOT = { is_spouse_of = scope:hd_wuhu_petitioner }
+							hd_wuhu_six_culture_trigger = yes
+						}
+						save_scope_as = hd_wuhu_chief
+					}
+				}
+				if = {
+					limit = { NOT = { exists = scope:hd_wuhu_chief } }
+					hd_wuhu_save_tribe_culture_rite_effect = { COUNTY = scope:hd_wuhu_petition_target.title_capital_county }
+					hd_wuhu_create_chief_effect = { LOCATION = scope:hd_wuhu_petitioner.capital_province }
+				}
+				set_global_variable = {
+					name = hd_wuhu_generic_next_year
+					value = {
+						value = current_year
+						add = hd_wuhu_generic_petition_cooldown_years
+					}
+				}
+				hd_wuhu_fire_petition_effect = yes
+			}
+		}
+	}
+}
+
+### 求地被接受（事件 hd_wuhu.3001 或白和）。$RECEIVER$ = 受地者
+hd_wuhu_petition_accept_effect = {
+	scope:hd_wuhu_chief = { hd_wuhu_chief_abandon_lands_effect = yes }
+	create_title_and_vassal_change = {
+		type = granted
+		save_scope_as = hd_wuhu_petition_change
+		add_claim_on_loss = no
+	}
+	scope:hd_wuhu_petition_target = {
+		if = {
+			limit = {
+				OR = {
+					NOT = { exists = holder }
+					holder = { target_is_same_character_or_above = $RECEIVER$ }
+				}
+			}
+			change_title_holder = {
+				holder = scope:hd_wuhu_chief
+				change = scope:hd_wuhu_petition_change
+			}
+		}
+		every_de_jure_county = {
+			limit = {
+				holder ?= { target_is_same_character_or_above = $RECEIVER$ }
+			}
+			change_title_holder = {
+				holder = scope:hd_wuhu_chief
+				change = scope:hd_wuhu_petition_change
+				take_baronies = yes
+			}
+		}
+	}
+	resolve_title_and_vassal_change = scope:hd_wuhu_petition_change
+	# 胡帅总是成为受地者的封臣
+	if = {
+		limit = {
+			scope:hd_wuhu_chief = {
+				is_landed = yes
+				NOT = { liege ?= $RECEIVER$ }
+			}
+		}
+		create_title_and_vassal_change = {
+			type = granted
+			save_scope_as = hd_wuhu_petition_liege_change
+			add_claim_on_loss = no
+		}
+		scope:hd_wuhu_chief = {
+			change_liege = {
+				liege = $RECEIVER$
+				change = scope:hd_wuhu_petition_liege_change
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_wuhu_petition_liege_change
+	}
+	hd_wuhu_petition_settle_chief_effect = { TARGET = scope:hd_wuhu_petition_target }
+	# 永久事件军（照塞尔柱 create_seljuk_army_at_peace_effect）
+	scope:hd_wuhu_chief = {
+		if = {
+			limit = { exists = capital_province }
+			spawn_army = {
+				name = hd_wuhu_petition_army_name
+				levies = hd_wuhu_petition_peace_levy
+				men_at_arms = {
+					type = horse_archers
+					stacks = hd_wuhu_petition_peace_stacks
+				}
+				location = capital_province
+				inheritable = yes
+				uses_supply = yes
+			}
+		}
+		culture = {
+			change_cultural_acceptance = {
+				target = $RECEIVER$.culture
+				value = 30
+				desc = STEWARD_PROMOTE_CULTURE_ALLOWED_NOMAD_SETTLEMENT
+			}
+		}
+	}
+}
+
+### 安置胡帅：首府（公爵领）或该伯爵领本身改文化信仰；设政体；写内附标记。需 scope:hd_wuhu_chief
+hd_wuhu_petition_settle_chief_effect = {
+	scope:hd_wuhu_chief = { hd_wuhu_save_tribe_from_culture_effect = yes }
+	if = {
+		limit = { exists = scope:hd_wuhu_tribe }
+		if = {
+			limit = { $TARGET$ = { tier = tier_county } }
+			$TARGET$ = { save_scope_as = hd_wuhu_flip_county }
+		}
+		else = {
+			$TARGET$.title_capital_county = { save_scope_as = hd_wuhu_flip_county }
+		}
+		hd_wuhu_save_tribe_culture_rite_effect = { COUNTY = scope:hd_wuhu_flip_county }
+		scope:hd_wuhu_flip_county = {
+			if = {
+				limit = { holder ?= scope:hd_wuhu_chief }
+				hd_wuhu_flip_county_culture_rite_effect = yes
+			}
+		}
+		scope:hd_wuhu_chief = {
+			if = {
+				limit = { is_landed = yes }
+				hd_wuhu_apply_chief_government_effect = yes
+				hd_wuhu_mark_settled_effect = yes
+			}
+		}
+	}
+}
+
+### 求地事件 hd_wuhu.3001（ROOT = 受地者）：拒绝——胡帅以冒险者开战，事件军按受害者兵力缩放
+hd_wuhu_petition_refuse_effect = {
+	scope:hd_wuhu_chief = {
+		hd_wuhu_chief_abandon_lands_effect = yes
+		save_scope_as = hd_revolt_leader
+		hd_historical_revolt_ensure_adventurer_effect = { LOCATION = scope:hd_wuhu_spawn_location }
+		start_war = {
+			cb = hd_wuhu_petition_cb
+			target = root
+			target_title = scope:hd_wuhu_petition_target
+		}
+		random_character_war = {
+			limit = {
+				primary_attacker = scope:hd_wuhu_chief
+				using_cb = hd_wuhu_petition_cb
+			}
+			save_scope_as = war
+		}
+	}
+	if = {
+		limit = { exists = scope:war }
+		scope:hd_wuhu_chief = {
+			spawn_army = {
+				name = hd_wuhu_petition_army_name
+				levies = hd_wuhu_petition_levy
+				men_at_arms = {
+					type = horse_archers
+					stacks = hd_wuhu_petition_cavalry_stacks
+				}
+				men_at_arms = {
+					type = light_horsemen
+					stacks = hd_wuhu_petition_cavalry_stacks
+				}
+				location = scope:hd_wuhu_spawn_location
+				war = scope:war
+				war_keep_on_attacker_victory = yes
+				uses_supply = no
+				save_scope_as = hd_wuhu_petition_horde
+			}
+		}
+		scope:hd_wuhu_petition_horde ?= { assign_commander = scope:hd_wuhu_chief }
+	}
+}
+
+############################
+# 内附起兵
+############################
+
+hd_wuhu_uprising_yearly_effect = {
+	if = {
+		limit = {
+			hd_wuhu_enabled_trigger = yes
+			hd_wuhu_ai_enabled_trigger = yes
+			hd_wuhu_year_from_trigger = { START = 280 }
+			hd_wuhu_dongluan_phase_trigger = yes
+		}
+		every_ruler = {
+			limit = { hd_wuhu_uprising_candidate_trigger = yes }
+			seljuk_request_independence_from_liege_effect = yes
+			# 每 1–2 年一次
+			random_list = {
+				50 = { add_character_flag = { flag = hd_wuhu_independence_cd days = 360 } }
+				50 = { add_character_flag = { flag = hd_wuhu_independence_cd days = 720 } }
+			}
+		}
+	}
+}
+
+### 内附标记终点：持有标记者一旦是独立统治者（起兵独立、求地战争胜利或其他途径），就删除标记，
+# 此后既不再推动独立，也不再带动渐进胡化；标记也就不再传给继承人。不受截止年份与规则影响。
+hd_wuhu_marker_cleanup_yearly_effect = {
+	every_ruler = {
+		limit = {
+			hd_wuhu_is_settled_trigger = yes
+			is_independent_ruler = yes
+		}
+		remove_variable = hd_wuhu_settled
+	}
+}
+
+############################
+# 史实大单于
+############################
+
+# AI：每个大单于由各自的子 on_action（zz_hd_wuhu_liao_on_actions.txt）每年检查一次
+hd_wuhu_chanyu_ai_check_effect = {
+	if = {
+		limit = {
+			hd_wuhu_enabled_trigger = yes
+			hd_wuhu_ai_enabled_trigger = yes
+			hd_wuhu_dongluan_phase_trigger = yes
+			NOT = { exists = global_var:hd_wuhu_chanyu_$KEY$_done }
+			hd_wuhu_year_from_trigger = { START = $FROM$ }
+			$CHAR$ ?= {
+				is_alive = yes
+				is_ai = yes
+				is_adult = yes
+				is_imprisoned = no
+				is_at_war = no
+			}
+		}
+		random = {
+			chance = hd_wuhu_chanyu_yearly_chance
+			$CHAR$ = { hd_wuhu_chanyu_launch_by_key_effect = { KEY = $KEY$ } }
+		}
+	}
+}
+
+### Character（大单于）：按 KEY 取目标王国、故地与国号
+hd_wuhu_chanyu_launch_by_key_effect = {
+	hd_wuhu_chanyu_launch_$KEY$_effect = yes
+}
+
+hd_wuhu_chanyu_launch_liuyuan_effect = {
+	hd_wuhu_chanyu_launch_effect = {
+		KEY = liuyuan
+		KINGDOM = title:k_uuii_bingzhou
+		HOME = title:c_uuii_p_1385.title_province
+		NAME = dynn_title_han
+	}
+}
+
+hd_wuhu_chanyu_launch_shile_effect = {
+	hd_wuhu_chanyu_launch_effect = {
+		KEY = shile
+		KINGDOM = title:k_uuii_jizhou
+		HOME = title:d_shangdang.title_capital_county.title_province
+		NAME = dynn_title_zhao
+	}
+}
+
+hd_wuhu_chanyu_launch_lite_effect = {
+	hd_wuhu_chanyu_launch_effect = {
+		KEY = lite
+		KINGDOM = title:k_uuii_yizhou
+		HOME = title:d_guanghan.title_capital_county.title_province
+		NAME = dynn_title_cheng
+	}
+}
+
+hd_wuhu_chanyu_launch_fuhong_effect = {
+	hd_wuhu_chanyu_launch_effect = {
+		KEY = fuhong
+		KINGDOM = title:k_uuii_sili
+		HOME = title:d_tianshui.title_capital_county.title_province
+		NAME = dynn_title_qin
+	}
+}
+
+hd_wuhu_chanyu_launch_yaoyizhong_effect = {
+	hd_wuhu_chanyu_launch_effect = {
+		KEY = yaoyizhong
+		KINGDOM = title:k_uuii_sili
+		HOME = title:d_nanan.title_capital_county.title_province
+		NAME = dynn_title_qin
+	}
+}
+
+### Character（大单于）：选守方、必要时以冒险者起兵、宣战、生成事件军
+hd_wuhu_chanyu_launch_effect = {
+	save_scope_as = hd_wuhu_chanyu
+	$KINGDOM$ = { save_scope_as = hd_wuhu_chanyu_kingdom }
+	# 守方：目标王国内伯爵领最多的独立统治者
+	$KINGDOM$ = {
+		every_de_jure_county = {
+			limit = { exists = holder }
+			holder.top_liege = {
+				if = {
+					limit = { NOT = { is_in_list = hd_wuhu_chanyu_defenders } }
+					add_to_temporary_list = hd_wuhu_chanyu_defenders
+				}
+			}
+		}
+	}
+	ordered_in_list = {
+		list = hd_wuhu_chanyu_defenders
+		limit = { NOT = { this = scope:hd_wuhu_chanyu } }
+		order_by = hd_wuhu_count_in_chanyu_kingdom
+		save_scope_as = hd_wuhu_chanyu_defender
+	}
+	if = {
+		limit = { exists = scope:hd_wuhu_chanyu_defender }
+		if = {
+			limit = { is_landed = no }
+			save_scope_as = hd_revolt_leader
+			hd_historical_revolt_ensure_adventurer_effect = { LOCATION = $HOME$ }
+		}
+		set_variable = { name = hd_wuhu_chanyu_name value = flag:$NAME$ }
+		set_variable = { name = hd_wuhu_chanyu_kingdom value = $KINGDOM$ }
+		start_war = {
+			cb = hd_wuhu_chanyu_cb
+			target = scope:hd_wuhu_chanyu_defender
+			target_title = $KINGDOM$
+		}
+		random_character_war = {
+			limit = {
+				primary_attacker = scope:hd_wuhu_chanyu
+				using_cb = hd_wuhu_chanyu_cb
+			}
+			save_scope_as = war
+		}
+		# 兜底：AI 大单于是守方领国内的封臣、宣战失败时，领地交给继承人，本人以冒险者身份重新起兵
+		if = {
+			limit = {
+				NOT = { exists = scope:war }
+				is_ai = yes
+				is_landed = yes
+				top_liege = scope:hd_wuhu_chanyu_defender
+			}
+			hd_wuhu_chief_abandon_lands_effect = yes
+			save_scope_as = hd_revolt_leader
+			hd_historical_revolt_ensure_adventurer_effect = { LOCATION = $HOME$ }
+			start_war = {
+				cb = hd_wuhu_chanyu_cb
+				target = scope:hd_wuhu_chanyu_defender
+				target_title = $KINGDOM$
+			}
+			random_character_war = {
+				limit = {
+					primary_attacker = scope:hd_wuhu_chanyu
+					using_cb = hd_wuhu_chanyu_cb
+				}
+				save_scope_as = war
+			}
+		}
+		if = {
+			limit = { exists = scope:war }
+			set_global_variable = { name = hd_wuhu_chanyu_$KEY$_done value = yes }
+			if = {
+				limit = { exists = capital_province }
+				capital_province = { save_scope_as = hd_wuhu_chanyu_army_location }
+			}
+			else = {
+				location = { save_scope_as = hd_wuhu_chanyu_army_location }
+			}
+			spawn_army = {
+				name = hd_wuhu_chanyu_conquer_army_name
+				levies = 5000
+				men_at_arms = {
+					type = horse_archers
+					stacks = 15
+				}
+				men_at_arms = {
+					type = light_horsemen
+					stacks = 10
+				}
+				location = scope:hd_wuhu_chanyu_army_location
+				uses_supply = no
+				war = scope:war
+				inheritable = no
+				save_scope_as = hd_wuhu_chanyu_army
+			}
+			spawn_army = {
+				name = hd_wuhu_chanyu_hold_army_name
+				levies = 2500
+				men_at_arms = {
+					type = horse_archers
+					stacks = 10
+				}
+				location = scope:hd_wuhu_chanyu_army_location
+				uses_supply = no
+				inheritable = no
+			}
+			scope:hd_wuhu_chanyu_army ?= { assign_commander = scope:hd_wuhu_chanyu }
+		}
+		else = {
+			remove_variable = hd_wuhu_chanyu_name
+			remove_variable = hd_wuhu_chanyu_kingdom
+			# 玩家走决定但宣战失败：退还决定花费
+			if = {
+				limit = { is_ai = no }
+				add_prestige = 1000
+			}
+		}
+	}
+	else_if = {
+		limit = { is_ai = no }
+		add_prestige = 1000
+	}
+}
+
+### CB 胜利：取得/创建目标王国、改国号（ROOT = 大单于，在隐藏事件 hd_wuhu.4001 中执行）
+hd_wuhu_chanyu_crown_effect = {
+	var:hd_wuhu_chanyu_kingdom = { save_scope_as = hd_wuhu_chanyu_kingdom }
+	if = {
+		limit = { scope:hd_wuhu_chanyu_kingdom = { is_title_created = no } }
+		create_title_and_vassal_change = {
+			type = created
+			save_scope_as = hd_wuhu_crown_change
+			add_claim_on_loss = no
+		}
+		scope:hd_wuhu_chanyu_kingdom = {
+			change_title_holder = {
+				holder = root
+				change = scope:hd_wuhu_crown_change
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_wuhu_crown_change
+	}
+	else_if = {
+		limit = {
+			NOT = { scope:hd_wuhu_chanyu_kingdom.holder ?= root }
+			scope:hd_wuhu_chanyu_kingdom.holder ?= { is_ai = yes }
+		}
+		create_title_and_vassal_change = {
+			type = usurped
+			save_scope_as = hd_wuhu_crown_change
+			add_claim_on_loss = yes
+		}
+		scope:hd_wuhu_chanyu_kingdom = {
+			change_title_holder = {
+				holder = root
+				change = scope:hd_wuhu_crown_change
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_wuhu_crown_change
+	}
+	if = {
+		limit = { has_title = scope:hd_wuhu_chanyu_kingdom }
+		if = {
+			limit = { highest_held_title_tier <= tier_kingdom }
+			set_primary_title_to = scope:hd_wuhu_chanyu_kingdom
+		}
+		# 国号：直接改名，并写入王朝固定国号（天朝循环 hd_fixed_realm_name 体系）
+		set_variable = {
+			name = new_realm_title_name
+			value = var:hd_wuhu_chanyu_name
+		}
+		scope:hd_wuhu_chanyu_kingdom = {
+			set_title_name_dynamic = new_realm_title_name_from_var
+		}
+		dynasty ?= {
+			remove_variable = hd_fixed_realm_title
+			set_variable = {
+				name = hd_fixed_realm_name
+				value = root.var:hd_wuhu_chanyu_name
+			}
+		}
+		remove_variable = new_realm_title_name
+	}
+	remove_variable = hd_wuhu_chanyu_name
+	remove_variable = hd_wuhu_chanyu_kingdom
+}
+
+############################
+# REV-07 并州休屠各叛乱结算记录（供南匈奴求地判断；在 hd_historical_revolt_cb 中调用）
+############################
+hd_wuhu_xiutu_war_ended_effect = {
+	if = {
+		limit = {
+			scope:attacker ?= { has_character_flag = hd_revolt_leader_bingzhou_hu }
+		}
+		hidden_effect = {
+			set_global_variable = { name = hd_wuhu_xiutu_resolved value = yes }
+			if = {
+				limit = { always = $WON$ }
+				set_global_variable = { name = hd_wuhu_xiutu_won value = yes }
+			}
+		}
+	}
+}

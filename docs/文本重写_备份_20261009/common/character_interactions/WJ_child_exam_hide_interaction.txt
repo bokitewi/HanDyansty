@@ -1,0 +1,258 @@
+﻿# ============================================================================
+# WJ 送子应试交互 —— 汉/晋官制下隐藏不可用(重定义原版交互, 同键后加载覆盖)
+# xinsanguo-MOD 2026-08-19
+#
+# 原版键: send_child_to_examination_interaction
+# (主mod 10_tgp_interactions.txt L2563, 家长送童应试 = 童子试第二入口,
+#  决议口已由 WJ_child_exam_hide.txt 封死, 本文件封交互口)。
+# 改动: is_shown 顶部加 scope:actor NOR = { 汉/晋法律 }, 其余全部原样照抄。
+# ============================================================================
+
+send_child_to_examination_interaction = {
+	category = interaction_category_friendly
+	icon = tgp_send_to_childrens_examination_interaction
+	interface_priority = 8
+
+	desc = send_child_to_examination_interaction_desc
+
+	common_interaction = yes
+
+	override_background = { reference = tgp_examination_room }
+
+	is_shown = {
+		# WJ: 汉/晋官制下停用(送考)
+		scope:actor = {
+			NOT = { government_has_flag = government_is_celestial }
+		}
+		has_tgp_dlc_trigger = yes
+		scope:actor = { government_allows = merit }
+		scope:recipient.dynasty = scope:actor.dynasty
+		scope:actor != scope:recipient
+		scope:recipient = {
+			OR = {
+				is_ai = yes
+				is_child_of = scope:actor
+				is_grandchild_of = scope:actor
+				is_great_grandchild_of = scope:actor
+			}
+			trigger_if = {
+				limit = {
+					scope:actor = {
+						rite = { rite_has_doctrine = doctrine_gender_female_dominated }
+					}
+				}
+				is_female = yes
+			}
+			trigger_else_if = {
+				limit = {
+					scope:actor = {
+						rite = { rite_has_doctrine = doctrine_gender_male_dominated }
+					}
+				}
+				is_female = no
+			}
+			trigger_else = { always = yes }
+			age < 16
+			is_landed = no
+			NOT = {
+				has_character_flag = passed_child_exam
+			}
+		}
+	}
+
+	is_valid_showing_failures_only = {
+		scope:recipient = {
+			age >= child_exam_min_age
+			custom_tooltip = {
+				text = cant_be_another_player_tt
+				is_ai = yes
+			}
+			custom_tooltip = {
+				text = favorite_child_must_be_in_good_health_tt
+				NOR = {
+					has_trait = incapable
+					health <= 2.5
+				}
+			}
+			custom_tooltip = {
+				text = cant_be_hostage_tt
+				is_hostage = no
+			}
+			custom_tooltip = {
+				text = recently_sent_to_exam_tt
+				NOT = { has_character_flag = sent_to_exam }
+			}
+		}
+	}
+
+	cost = {
+		influence = {
+			value = minor_influence_value
+		}
+	}
+
+	cooldown_against_recipient = { years = 3 }
+
+	on_auto_accept = {
+
+	}
+
+	on_accept = {
+		scope:recipient = {
+			add_character_flag = {
+				flag = sent_to_exam
+				years = 3
+			}
+			duel = {
+				skill = learning
+				value = medium_skill_rating
+				40 = { # They complete the exam!
+					compare_modifier = {
+						value = scope:duel_value
+						multiplier = 3.5
+						min = -49
+					}
+					modifier = {
+						scope:actor = { employs_court_position = court_tutor_court_position }
+						add = 20
+					}
+					modifier = {
+						house ?= { has_house_aspiration_parameter = examination_success_bonus }
+						add = 10
+					}
+					modifier = {
+						scope:recipient = {
+							learning >= 10
+						}
+						add = scope:recipient.learning
+					}
+					min = 5
+					desc = send_child_to_examination_success
+					scope:actor = {
+						send_interface_toast = {
+							type = event_toast_effect_good
+							title = tgp_china_send_child_to_examination_interaction_effects_good
+							left_icon = scope:actor
+							right_icon = scope:recipient
+							scope:recipient = {
+								change_merit = {
+									value = {
+										add = minor_merit_value
+										add = learning
+									}
+								}
+								dynasty = {
+									add_dynasty_prestige = 10
+								}
+							}
+						}
+					}
+					custom_tooltip = increased_exam_chances_tt
+					if = {
+						limit = {
+							scope:actor = {
+								employs_court_position = court_tutor_court_position
+							}
+						}
+						custom_description_no_bullet = {
+							text = tutor_improved_exam_chances_tt
+							object = scope:recipient
+						}
+					}
+					else = {
+						custom_description_no_bullet = {
+							text = tutor_needed_for_exam_chances_tt
+							object = scope:recipient
+						}
+					}
+					if = {
+						limit = { scope:actor = { NOT = { government_has_flag = government_is_celestial } } }
+						add_character_flag = passed_child_exam
+					}
+					create_character_memory = {
+						type = passed_child_exam_memory
+						participants = {
+							parent_actor = scope:actor
+						}
+					}
+				}
+				60 = { # They fail
+					desc = send_child_to_examination_failure
+					compare_modifier = {
+						value = scope:duel_value
+						multiplier = -0.5
+					}
+					scope:actor = {
+						send_interface_toast = {
+							type = event_toast_effect_bad
+							title = tgp_china_send_child_to_examination_interaction_effects_bad
+							left_icon = scope:actor
+							right_icon = scope:recipient
+							scope:recipient = {
+								add_stress = medium_stress_impact_gain
+								add_character_modifier = {
+									modifier = tgp_child_exam_cooldown_modifier
+									years = 3
+								}
+								create_character_memory = {
+									type = failed_child_exam_memory
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	auto_accept = yes
+
+	ai_frequency_by_tier = {
+		barony = 0
+		county = 12
+		duchy = 12
+		kingdom = 6
+		empire = 6
+		hegemony = 6
+	}
+
+	ai_targets = {
+		ai_recipients = children
+	}
+
+	ai_potential = { is_adult = yes }
+
+	ai_will_do = {
+		base = 100
+		modifier = {
+			is_governor = yes
+			add = 25
+		}
+		modifier = {
+			has_trait = ambitious
+			add = 25
+		}
+		modifier = {
+			has_trait = content
+			add = -25
+		}
+		modifier = {
+			has_religion = religion:confucianism_religion
+			add = 25
+		}
+		modifier = {
+			NOT = {
+				employs_court_position = court_tutor_court_position
+			}
+			add = -25
+		}
+		modifier = {
+			scope:recipient = {
+				OR = {
+					has_trait = curious
+				}
+			}
+			add = 10
+		}
+	}
+}

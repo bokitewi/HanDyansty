@@ -1,0 +1,217 @@
+﻿# 天朝循环大修·朋党：玩家操作的分派 effect（手写）
+# 界面按钮传入参与者组 scope，这里换算为组代号再调用核心 effect。
+
+# 变量 $NAME$ 加上 $VALUE$；变量不存在时直接设为 $VALUE$（change_variable 不能用于不存在的变量）
+hd_party_add_var_effect = {
+	if = {
+		limit = { has_variable = $NAME$ }
+		change_variable = { name = $NAME$ add = $VALUE$ }
+	}
+	else = {
+		set_variable = { name = $NAME$ value = $VALUE$ }
+	}
+}
+
+# 把参与者组 $GROUP$ 换算为 scope:hd_party_g（flag:<组代号>）
+hd_party_save_group_code_effect = {
+	if = { limit = { $GROUP$ = { participant_group_type = undecided_movement } } save_scope_value_as = { name = hd_party_g value = flag:huanguan } }
+	if = { limit = { $GROUP$ = { participant_group_type = pro_hegemon_movement } } save_scope_value_as = { name = hd_party_g value = flag:waiqi } }
+	if = { limit = { $GROUP$ = { participant_group_type = expansion_movement } } save_scope_value_as = { name = hd_party_g value = flag:wuxun } }
+	if = { limit = { $GROUP$ = { participant_group_type = conservative_movement } } save_scope_value_as = { name = hd_party_g value = flag:shizu } }
+	if = { limit = { $GROUP$ = { participant_group_type = advancement_movement } } save_scope_value_as = { name = hd_party_g value = flag:hanmen } }
+}
+
+# Scope：君主。按 scope:hd_party_g 设置政策 $POLICY$
+hd_party_set_policy_by_code_effect = {
+	if = { limit = { scope:hd_party_g ?= flag:huanguan } hd_party_set_policy_effect = { G = huanguan POLICY = $POLICY$ } }
+	if = { limit = { scope:hd_party_g ?= flag:waiqi } hd_party_set_policy_effect = { G = waiqi POLICY = $POLICY$ } }
+	if = { limit = { scope:hd_party_g ?= flag:wuxun } hd_party_set_policy_effect = { G = wuxun POLICY = $POLICY$ } }
+	if = { limit = { scope:hd_party_g ?= flag:shizu } hd_party_set_policy_effect = { G = shizu POLICY = $POLICY$ } }
+	if = { limit = { scope:hd_party_g ?= flag:hanmen } hd_party_set_policy_effect = { G = hanmen POLICY = $POLICY$ } }
+}
+
+# Scope：君主（scope:hd_party_court）。按 scope:hd_party_g 结算要求效忠
+hd_party_loyalty_by_code_effect = {
+	if = { limit = { scope:hd_party_g ?= flag:huanguan } hd_party_loyalty_resolve_effect = { G = huanguan } }
+	if = { limit = { scope:hd_party_g ?= flag:waiqi } hd_party_loyalty_resolve_effect = { G = waiqi } }
+	if = { limit = { scope:hd_party_g ?= flag:wuxun } hd_party_loyalty_resolve_effect = { G = wuxun } }
+	if = { limit = { scope:hd_party_g ?= flag:shizu } hd_party_loyalty_resolve_effect = { G = shizu } }
+	if = { limit = { scope:hd_party_g ?= flag:hanmen } hd_party_loyalty_resolve_effect = { G = hanmen } }
+}
+
+# Scope：角色（玩家领袖）。把所属朋党的态度设为 $ATTITUDE$
+hd_party_leader_set_attitude_effect = {
+	var:hd_party_my_court ?= {
+		save_scope_as = hd_party_court
+		if = {
+			limit = { prev.var:hd_party_my_group ?= flag:huanguan }
+			hd_party_set_attitude_effect = { G = huanguan ATTITUDE = $ATTITUDE$ }
+		}
+		if = {
+			limit = { prev.var:hd_party_my_group ?= flag:waiqi }
+			hd_party_set_attitude_effect = { G = waiqi ATTITUDE = $ATTITUDE$ }
+		}
+		if = {
+			limit = { prev.var:hd_party_my_group ?= flag:wuxun }
+			hd_party_set_attitude_effect = { G = wuxun ATTITUDE = $ATTITUDE$ }
+		}
+		if = {
+			limit = { prev.var:hd_party_my_group ?= flag:shizu }
+			hd_party_set_attitude_effect = { G = shizu ATTITUDE = $ATTITUDE$ }
+		}
+		if = {
+			limit = { prev.var:hd_party_my_group ?= flag:hanmen }
+			hd_party_set_attitude_effect = { G = hanmen ATTITUDE = $ATTITUDE$ }
+		}
+	}
+	set_variable = { name = hd_party_attitude_cd days = hd_party_attitude_player_cd_days }
+}
+
+# Scope：角色。转换身份为 $G$（设置粘性身份旗标并重新归组）
+hd_party_convert_identity_effect = {
+	set_variable = { name = movement_member value = flag:$FLAG$ }
+	set_variable = { name = hd_party_convert_cd days = hd_party_convert_cd_days }
+	recalculate_participant_group = situation:dynastic_cycle
+}
+
+############################################################
+# 开局（on_game_start_after_lobby）
+############################################################
+hd_party_game_start_effect = {
+	if = {
+		limit = { hd_party_is_184_start_trigger = yes }
+		hd_party_184_setup_identities_effect = yes
+	}
+	situation:dynastic_cycle ?= { hd_party_yearly_effect = yes }
+	if = {
+		limit = { hd_party_is_184_start_trigger = yes }
+		title:h_china.holder = { hd_party_184_setup_court_effect = yes }
+	}
+	# 开局立即结算一次（年度流程本身还会在 60 天内再结算一次）
+	every_in_list = {
+		list = hd_party_courts
+		hd_party_court_refresh_effect = yes
+	}
+}
+
+# 184 年：十常侍补阉人特质并入宫；各党领袖归入对应身份
+hd_party_184_setup_identities_effect = {
+	character:zhang_rang ?= { hd_party_184_eunuch_effect = yes }
+	character:zhao_zhong ?= { hd_party_184_eunuch_effect = yes }
+	character:duan_gui ?= { hd_party_184_eunuch_effect = yes }
+	character:guo_sheng ?= { hd_party_184_eunuch_effect = yes }
+	character:sun_zhang ?= { hd_party_184_eunuch_effect = yes }
+	character:gao_wang ?= { hd_party_184_eunuch_effect = yes }
+	character:han_kui ?= { hd_party_184_eunuch_effect = yes }
+	character:xia_yun ?= { hd_party_184_eunuch_effect = yes }
+	character:feng_xu ?= { hd_party_184_eunuch_effect = yes }
+	character:bi_lan ?= { hd_party_184_eunuch_effect = yes }
+	character:li_song_4 ?= { hd_party_184_eunuch_effect = yes }
+	character:hd_jian_shuo ?= { hd_party_184_eunuch_effect = yes }
+	character:song_dian ?= { hd_party_184_eunuch_effect = yes }
+	character:he_jin ?= { hd_party_184_identity_effect = { FLAG = pro_hegemon } }
+	character:yuan_kui ?= { hd_party_184_identity_effect = { FLAG = conservative } }
+	character:lu_zhi ?= { hd_party_184_identity_effect = { FLAG = advancement } }
+	character:huang_fu_song ?= { hd_party_184_identity_effect = { FLAG = expansion } }
+}
+
+hd_party_184_eunuch_effect = {
+	if = {
+		limit = { is_alive = yes }
+		if = {
+			limit = { is_eunuch_trigger = no }
+			add_trait = eunuch_1
+		}
+		if = {
+			limit = {
+				is_landed = no
+				NOT = { is_courtier_of = title:h_china.holder }
+			}
+			title:h_china.holder = { add_courtier = prev }
+		}
+		hd_party_184_identity_effect = { FLAG = undecided }
+	}
+}
+
+hd_party_184_identity_effect = {
+	if = {
+		limit = { is_alive = yes }
+		set_variable = { name = movement_member value = flag:$FLAG$ }
+		if = {
+			limit = {
+				NOT = { any_character_situation = { situation_type = dynastic_cycle } }
+			}
+			set_variable = hd_party_manual
+			situation:dynastic_cycle ?= { add_manual_participant = prev }
+		}
+		recalculate_participant_group = situation:dynastic_cycle
+	}
+}
+
+# Scope：天子（汉灵帝）。领袖、立场、青睐、态度、政策
+hd_party_184_setup_court_effect = {
+	save_scope_as = hd_party_court
+	if = {
+		limit = { NOT = { has_variable = hd_party_court } }
+		hd_party_init_court_effect = yes
+	}
+	hd_party_184_force_leader_effect = { G = huanguan KEY = undecided_movement CHAR = character:zhang_rang }
+	hd_party_184_force_leader_effect = { G = waiqi KEY = pro_hegemon_movement CHAR = character:he_jin }
+	hd_party_184_force_leader_effect = { G = shizu KEY = conservative_movement CHAR = character:yuan_kui }
+	hd_party_184_force_leader_effect = { G = hanmen KEY = advancement_movement CHAR = character:lu_zhi }
+	hd_party_184_force_leader_effect = { G = wuxun KEY = expansion_movement CHAR = character:huang_fu_song }
+	hd_party_set_stance_effect = { G = waiqi STANCE = kaituo }
+	hd_party_set_stance_effect = { G = shizu STANCE = shoujiu }
+	hd_party_pick_stance_effect = { G = huanguan }
+	hd_party_pick_stance_effect = { G = hanmen }
+	hd_party_pick_stance_effect = { G = wuxun }
+	hd_party_set_favored_effect = { G = huanguan }
+	hd_party_set_attitude_effect = { G = waiqi ATTITUDE = oppose }
+	set_variable = { name = hd_party_waiqi_oppose_lock days = 365 }
+	hd_party_set_policy_effect = { G = hanmen POLICY = restrict }
+	trigger_event = { id = hd_party.0101 days = 75 }
+}
+
+hd_party_184_force_leader_effect = {
+	$CHAR$ ?= {
+		if = {
+			limit = { is_alive = yes }
+			scope:hd_party_court = {
+				set_variable = { name = hd_party_$G$_leader value = prev }
+			}
+			situation:dynastic_cycle.situation_participant_group:$KEY$ ?= {
+				set_variable = { name = movement_leader value = prev }
+			}
+		}
+	}
+}
+
+# Scope：将死的君主。成员的"所在朝廷"改指向继承人 $NEW$
+hd_party_repoint_members_effect = {
+	every_in_list = {
+		variable = hd_party_huanguan_members
+		limit = { is_alive = yes }
+		set_variable = { name = hd_party_my_court value = $NEW$ days = 400 }
+	}
+	every_in_list = {
+		variable = hd_party_waiqi_members
+		limit = { is_alive = yes }
+		set_variable = { name = hd_party_my_court value = $NEW$ days = 400 }
+	}
+	every_in_list = {
+		variable = hd_party_wuxun_members
+		limit = { is_alive = yes }
+		set_variable = { name = hd_party_my_court value = $NEW$ days = 400 }
+	}
+	every_in_list = {
+		variable = hd_party_shizu_members
+		limit = { is_alive = yes }
+		set_variable = { name = hd_party_my_court value = $NEW$ days = 400 }
+	}
+	every_in_list = {
+		variable = hd_party_hanmen_members
+		limit = { is_alive = yes }
+		set_variable = { name = hd_party_my_court value = $NEW$ days = 400 }
+	}
+	$NEW$ = { set_variable = { name = hd_party_my_court value = this days = 400 } }
+}

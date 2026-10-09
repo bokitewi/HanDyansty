@@ -1,0 +1,169 @@
+﻿# Issuer-only grant gate. Never impose the issuer's tier/independence on the recipient.
+WJ_peer_realm_head = { is_alive = yes this = top_liege government_has_flag = government_is_celestial }
+WJ_peer_authority = { WJ_peer_realm_head = yes is_independent_ruler = yes highest_held_title_tier >= tier_empire }
+WJ_peer_royal_kin = { OR = { house = $EMPEROR$.house AND = { dynasty = $EMPEROR$.dynasty house = { has_house_modifier = SanGong_SeparatedCloseKin_modifier } } } }
+WJ_peer_family_possible = {
+ exists = house exists = dynasty
+ OR = { any_held_title = { is_noble_family_title = yes } NOT = { has_game_rule = never_noble_family_title } }
+ top_liege = { government_allows = noble_families }
+ NOT = { any_held_title = { is_noble_family_title = yes has_variable = wj_peer_rank } }
+}
+WJ_peer_base_candidate = {
+ is_alive = yes top_liege = $EMPEROR$ NOT = { this = $EMPEROR$ }
+ NOT = { WJ_rf_has_fief = yes }
+ custom_description = { text = WJ_failure_36
+NOR = { has_variable = wj_peer_rank has_trait = WJ_peerage_trait has_trait = SanGong_Taizi }
+}
+ custom_description = { text = WJ_failure_37
+OR = { dynasty = $EMPEROR$.dynasty WJ_peer_family_possible = yes }
+}
+ custom_description = { text = WJ_failure_38
+OR = {
+  AND = { is_female = yes dynasty = $EMPEROR$.dynasty }
+  AND = { is_male = yes WJ_peer_royal_kin = { EMPEROR = $EMPEROR$ } }
+  AND = { is_male = yes NOT = { dynasty = $EMPEROR$.dynasty } has_trait = WJ_mingshi_trait OR = { has_trait_xp = { trait = WJ_mingshi_trait track = jungong value >= 25 } has_trait_xp = { trait = WJ_mingshi_trait track = zhengji value >= 25 } } }
+ }
+}
+}
+WJ_peer_flow_valid = {
+ trigger_if = { limit = { exists = var:wj_peer_target has_variable = wj_peer_ticket exists = scope:wj_peer_ticket }
+  WJ_peer_authority = yes var:wj_peer_flow_version = 2 var:wj_peer_ticket = scope:wj_peer_ticket
+  var:wj_peer_target = { WJ_peer_base_candidate = { EMPEROR = root } }
+ }
+ trigger_else = { always = no }
+}
+WJ_peer_rank_allowed = {
+ trigger_if = { limit = { WJ_peer_flow_valid = yes has_variable = wj_peer_pending_rank }
+  var:wj_peer_pending_rank >= 1 var:wj_peer_pending_rank <= 4
+  OR = {
+   AND = { var:wj_peer_pending_rank >= 2 var:wj_peer_pending_rank <= 3 var:wj_peer_target = { is_female = yes dynasty = root.dynasty } }
+   AND = { var:wj_peer_pending_rank = 4 var:wj_peer_target = { is_male = yes WJ_peer_royal_kin = { EMPEROR = root } } gold >= 50 piety >= 50 influence >= 50 prestige >= 50 }
+   AND = { var:wj_peer_pending_rank <= 2 var:wj_peer_target = {
+    is_male = yes NOT = { dynasty = root.dynasty }
+    trigger_if = { limit = { root = { var:wj_peer_pending_rank = 1 } } OR = { has_trait_xp = { trait = WJ_mingshi_trait track = jungong value >= 25 } has_trait_xp = { trait = WJ_mingshi_trait track = zhengji value >= 25 } } }
+    trigger_if = { limit = { root = { var:wj_peer_pending_rank = 2 } } OR = { has_trait_xp = { trait = WJ_mingshi_trait track = jungong value >= 50 } has_trait_xp = { trait = WJ_mingshi_trait track = zhengji value >= 50 } } }
+    trigger_if = { limit = { root = { var:wj_peer_pending_rank = 3 } } OR = { has_trait_xp = { trait = WJ_mingshi_trait track = jungong value >= 75 } has_trait_xp = { trait = WJ_mingshi_trait track = zhengji value >= 75 } } }
+   } }
+  }
+ }
+ trigger_else = { always = no }
+}
+# Family title scope. Do not apply grant merit thresholds again on succession.
+WJ_peer_family_valid = {
+ trigger_if = { limit = { exists = holder exists = var:wj_peer_realm.holder exists = var:wj_peer_name exists = var:wj_peer_food has_variable = wj_peer_rank }
+  is_noble_family_title = yes var:wj_peer_rank >= 1 var:wj_peer_rank <= 4
+  OR = {
+   AND = { var:wj_peer_rank = 1 var:wj_peer_name = var:wj_peer_food var:wj_peer_food = { tier = tier_barony } }
+   AND = { var:wj_peer_rank = 2 var:wj_peer_name = var:wj_peer_food var:wj_peer_food = { tier = tier_county } }
+   AND = { var:wj_peer_rank >= 3 var:wj_peer_name = { tier = tier_duchy } var:wj_peer_food = { tier = tier_county } }
+  }
+  holder = { is_alive = yes NOT = { has_trait = SanGong_Taizi } top_liege = prev.var:wj_peer_realm.holder NOT = { this = top_liege } }
+  OR = {
+   AND = { has_variable = wj_peer_princess var:wj_peer_rank >= 2 var:wj_peer_rank <= 3 holder = { is_female = yes dynasty = prev.var:wj_peer_princess_dynasty } }
+   AND = { NOT = { has_variable = wj_peer_princess } holder = { is_male = yes } }
+  }
+  var:wj_peer_realm.holder = { WJ_peer_realm_head = yes }
+  var:wj_peer_name = { var:wj_peer_name_family = prev }
+  var:wj_peer_food = { var:wj_peer_food_family = prev }
+ }
+ trigger_else = { always = no }
+}
+WJ_peer_personal_valid = {
+ trigger_if = { limit = { has_variable = wj_peer_personal exists = var:wj_peer_realm.holder exists = var:wj_peer_name exists = var:wj_peer_food }
+  is_alive = yes has_trait = WJ_peerage_trait NOT = { has_trait = SanGong_Taizi }
+  top_liege = var:wj_peer_realm.holder NOT = { this = top_liege }
+  var:wj_peer_realm.holder = { WJ_peer_realm_head = yes }
+  var:wj_peer_name = { var:wj_peer_name_owner = prev }
+  var:wj_peer_food = { var:wj_peer_food_owner = prev }
+  OR = {
+   AND = { is_male = yes var:wj_peer_rank = 4 }
+   AND = { is_female = yes has_variable = wj_peer_princess var:wj_peer_rank >= 2 var:wj_peer_rank <= 3 }
+  }
+ }
+ trigger_else = { always = no }
+}
+WJ_peer_valid = {
+ # A memorial badge is not an active grant; dead characters have no ordinary variables.
+ trigger_if = { limit = { is_alive = no } always = no }
+ trigger_else_if = { limit = { has_variable = wj_peer_personal } WJ_peer_personal_valid = yes }
+ trigger_else_if = { limit = { exists = var:wj_peer_family }
+  has_trait = WJ_peerage_trait var:wj_peer_family = { holder = prev var:wj_peer_bearer = prev WJ_peer_family_valid = yes }
+ }
+ trigger_else = { always = no }
+}
+# Title scope. Source/income flags are on the specific titles, never their landed holders.
+WJ_peer_county_free = { tier = tier_county NOR = { has_variable = wj_peer_food_family has_variable = wj_peer_food_owner } NOT = { any_direct_de_jure_vassal_title = { OR = { has_variable = wj_peer_food_family has_variable = wj_peer_food_owner } } } }
+WJ_peer_barony_free = { tier = tier_barony NOR = { has_variable = wj_peer_food_family has_variable = wj_peer_food_owner } county = { NOR = { has_variable = wj_peer_food_family has_variable = wj_peer_food_owner } } }
+WJ_peer_name_free = { NOR = { has_variable = wj_peer_name_family has_variable = wj_peer_name_owner } }
+# Actual ownership through all vassal levels, not wartime occupation or the issuer's de jure claims.
+WJ_peer_controlled_leaf = { exists = holder holder = { top_liege = root } NOT = { is_noble_family_title = yes } }
+WJ_peer_kingdom_in_domain = {
+ tier = tier_kingdom
+ any_de_jure_county = { WJ_peer_controlled_leaf = yes }
+}
+WJ_peer_place_available = {
+ trigger_if = { limit = { tier = tier_kingdom }
+  WJ_peer_kingdom_in_domain = yes any_direct_de_jure_vassal_title = { WJ_peer_duchy_available = yes }
+ }
+ trigger_else_if = { limit = { tier = tier_duchy } WJ_peer_duchy_available = yes }
+ trigger_else_if = { limit = { tier = tier_county } WJ_peer_county_available = yes }
+ trigger_else_if = { limit = { tier = tier_barony } WJ_peer_controlled_leaf = yes WJ_peer_barony_free = yes WJ_peer_name_free = yes }
+ trigger_else = { always = no }
+}
+WJ_peer_county_available = {
+ WJ_peer_controlled_leaf = yes
+ trigger_if = { limit = { root = { var:wj_peer_pending_rank = 1 } }
+  any_direct_de_jure_vassal_title = { WJ_peer_controlled_leaf = yes WJ_peer_barony_free = yes WJ_peer_name_free = yes }
+ }
+ trigger_else = { WJ_peer_county_free = yes WJ_peer_name_free = yes }
+}
+WJ_peer_duchy_available = {
+ trigger_if = { limit = { root = { var:wj_peer_pending_rank >= 3 } }
+  WJ_peer_name_free = yes exists = title_capital_county title_capital_county = { WJ_peer_controlled_leaf = yes WJ_peer_county_free = yes duchy = prev }
+ }
+ trigger_else = { any_direct_de_jure_vassal_title = { WJ_peer_county_available = yes } }
+}
+# Title scope: exactly one geographic tier below the selected parent, never another kingdom.
+WJ_peer_choice_in_level = {
+ trigger_if = { limit = { exists = root.var:wj_peer_parent }
+  de_jure_liege = root.var:wj_peer_parent
+  OR = {
+   AND = { tier = tier_duchy root.var:wj_peer_parent = { tier = tier_kingdom } }
+   AND = { tier = tier_county root.var:wj_peer_parent = { tier = tier_duchy } }
+   AND = { tier = tier_barony root.var:wj_peer_parent = { tier = tier_county } }
+  }
+ }
+ trigger_else = { tier = tier_kingdom }
+}
+WJ_peer_option_on_page = {
+ trigger_if = { limit = { exists = $CHOICE$ exists = scope:wj_peer_page_count }
+  scope:wj_peer_page_count >= $SLOT$
+  is_target_in_variable_list = { name = wj_peer_choices target = $CHOICE$ }
+  $CHOICE$ = { WJ_peer_choice_in_level = yes }
+ }
+ trigger_else = { always = no }
+}
+WJ_peer_choice_valid = { WJ_peer_option_valid = { CHOICE = scope:wj_peer_choice } }
+WJ_peer_option_valid = {
+ # The final page may have fewer than 30 entries; do not evaluate an absent title scope.
+ trigger_if = { limit = { exists = $CHOICE$ }
+  WJ_peer_rank_allowed = yes
+  is_target_in_variable_list = { name = wj_peer_choices target = $CHOICE$ }
+  $CHOICE$ = { WJ_peer_choice_in_level = yes WJ_peer_place_available = yes }
+  trigger_if = { limit = { exists = var:wj_peer_parent } $CHOICE$ = { de_jure_liege = root.var:wj_peer_parent kingdom = { WJ_peer_kingdom_in_domain = yes } } }
+  trigger_else = { $CHOICE$ = { WJ_peer_kingdom_in_domain = yes } }
+ }
+ trigger_else = { always = no }
+}
+WJ_peer_commit_valid = {
+ trigger_if = { limit = { WJ_peer_rank_allowed = yes exists = var:wj_peer_pending_name exists = var:wj_peer_pending_food }
+  var:wj_peer_pending_name = { WJ_peer_name_free = yes kingdom = { WJ_peer_kingdom_in_domain = yes } }
+  var:wj_peer_pending_food = { WJ_peer_controlled_leaf = yes }
+  OR = {
+   AND = { var:wj_peer_pending_rank = 1 var:wj_peer_pending_name = var:wj_peer_pending_food var:wj_peer_pending_food = { WJ_peer_barony_free = yes } }
+   AND = { var:wj_peer_pending_rank = 2 var:wj_peer_pending_name = var:wj_peer_pending_food var:wj_peer_pending_food = { WJ_peer_county_free = yes } }
+   AND = { var:wj_peer_pending_rank >= 3 var:wj_peer_pending_name = { tier = tier_duchy title_capital_county = root.var:wj_peer_pending_food } var:wj_peer_pending_food = { WJ_peer_county_free = yes duchy = root.var:wj_peer_pending_name } }
+  }
+ }
+ trigger_else = { always = no }
+}

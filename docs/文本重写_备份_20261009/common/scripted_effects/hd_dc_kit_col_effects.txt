@@ -1,0 +1,299 @@
+﻿# 天朝循环·时代特色：崩溃期（天下大乱 + 大厦将倾）套件效果（见 docs/天朝循环_时代特色重制计划.md §3.4）
+# 诱因一律经 hd_dc_kit_fire_effect（common/scripted_effects/hd_dc_kit_effects.txt）发射；ACTOR 只传 root 或已保存的 scope
+
+# ---------------------------------------------------------------------------
+# 招募流民。Scope：天子
+# ---------------------------------------------------------------------------
+hd_dc_col_recruit_refugees_effect = {
+	custom_tooltip = hd_dc_col_recruit_refugees_county_tt
+	hidden_effect = {
+		every_sub_realm_county = {
+			add_county_modifier = {
+				modifier = hd_dc_col_refugees_county_modifier
+				years = 10
+			}
+		}
+	}
+	spawn_army = {
+		name = hd_dc_col_refugee_army_name
+		men_at_arms = {
+			type = light_footmen
+			men = 2000
+		}
+		location = root.capital_province
+		inheritable = yes
+	}
+	hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_refugees_recruited ACTOR = root }
+}
+
+# ---------------------------------------------------------------------------
+# 赈灾（开仓放粮）。Scope：天子
+# 清除天子领内（含封臣）各受灾县的灾害县修正（清单照原版 natural_disaster_remove_realm_effect，外加本 mod 饥荒），
+# 受灾县好感 +15（5 年）。饥荒局势若已无任何饥荒县则就此结束；原版地震 / 洪水局势牵涉他国与重建工程，不结束。
+# ---------------------------------------------------------------------------
+hd_dc_col_disaster_relief_effect = {
+	custom_tooltip = hd_dc_col_disaster_relief_county_tt
+	hidden_effect = {
+		every_sub_realm_county = {
+			limit = { hd_dc_col_county_has_disaster_trigger = yes }
+			remove_county_modifier = tgp_natural_disaster_earthquake_1_county_modifier
+			remove_county_modifier = tgp_natural_disaster_earthquake_2_county_modifier
+			remove_county_modifier = tgp_natural_disaster_earthquake_3_county_modifier
+			remove_county_modifier = tgp_natural_disaster_flood_1_county_modifier
+			remove_county_modifier = tgp_natural_disaster_flood_2_county_modifier
+			remove_county_modifier = tgp_natural_disaster_flood_3_county_modifier
+			remove_county_modifier = tgp_natural_disaster_fortification_county_modifier
+			remove_county_modifier = tgp_natural_disaster_exodus_1_county_modifier
+			remove_county_modifier = tgp_natural_disaster_exodus_2_county_modifier
+			remove_county_modifier = tgp_natural_disaster_exodus_3_county_modifier
+			remove_county_modifier = tgp_natural_disaster_fertility_1_county_modifier
+			remove_county_modifier = tgp_natural_disaster_fertility_2_county_modifier
+			remove_county_modifier = tgp_natural_disaster_fertility_3_county_modifier
+			remove_county_modifier = hd_famine_county_modifier
+			add_county_modifier = {
+				modifier = hd_dc_col_relief_county_modifier
+				years = 5
+			}
+		}
+		# 已无饥荒县的饥荒局势：结束（其 on_end 只清修正与全局列表）
+		every_character_situation = {
+			limit = {
+				situation_type = natural_disaster_hd_famine
+				NOT = { situation_current_phase = warning }
+				NOT = {
+					any_situation_county = { has_county_modifier = hd_famine_county_modifier }
+				}
+			}
+			end_situation = yes
+		}
+	}
+	hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_disaster_relief ACTOR = root }
+}
+
+# ---------------------------------------------------------------------------
+# 勤王诏。Scope：天子（root）
+# 选天子为主防守方、尚未颁诏的防御战中最不利的一场；扣正统半级；向好感 ≥0 的封臣发出勤王邀请。
+# ---------------------------------------------------------------------------
+hd_dc_col_qinwang_effect = {
+	save_scope_as = hd_dc_col_qinwang_emperor
+	ordered_character_war = {
+		limit = {
+			primary_defender = root
+			NOT = { has_variable = hd_dc_col_qinwang }
+		}
+		order_by = {
+			value = 0
+			subtract = defender_war_score
+		}
+		save_scope_as = hd_dc_col_qinwang_war
+	}
+	if = {
+		limit = { is_valid_for_legitimacy_change = yes }
+		add_legitimacy = {
+			value = hd_dc_col_qinwang_legitimacy_cost_value
+			multiply = -1
+		}
+	}
+	scope:hd_dc_col_qinwang_war ?= {
+		set_variable = {
+			name = hd_dc_col_qinwang
+			value = root
+		}
+		save_scope_as = target	# 供 hd_dc_col_qinwang_candidate_trigger 使用
+	}
+	custom_tooltip = hd_dc_col_qinwang_invite_tt
+	hidden_effect = {
+		if = {
+			limit = { exists = scope:target }
+			every_vassal_or_below = {
+				limit = { hd_dc_col_qinwang_candidate_trigger = yes }
+				trigger_event = hd_dc_col.0001
+			}
+		}
+	}
+}
+
+# Scope：响应的封臣（root）。加入战争并登记
+hd_dc_col_qinwang_join_effect = {
+	save_scope_as = hd_dc_col_qinwang_joiner
+	scope:hd_dc_col_qinwang_war = {
+		add_defender = root
+		add_to_variable_list = {
+			name = hd_dc_col_qinwang_responders
+			target = root
+		}
+	}
+	scope:hd_dc_col_qinwang_emperor ?= {
+		send_interface_message = {
+			type = event_generic_good
+			title = hd_dc_col_qinwang_joined_msg
+			left_icon = root
+		}
+	}
+}
+
+# Scope：on_war_won_defender（scope:war / scope:defender）。勤王战争获胜：响应者与天子互相 +30 好感、响应者得威望，计"勤王成功"
+hd_dc_col_qinwang_victory_effect = {
+	if = {
+		limit = {
+			scope:war = {
+				has_variable = hd_dc_col_qinwang
+				has_variable_list = hd_dc_col_qinwang_responders
+			}
+		}
+		scope:defender = { save_scope_as = hd_dc_col_qinwang_victor }
+		scope:war = {
+			every_in_list = {
+				variable = hd_dc_col_qinwang_responders
+				limit = {
+					is_alive = yes
+					NOT = { this = scope:hd_dc_col_qinwang_victor }
+				}
+				save_temporary_scope_as = hd_dc_col_qinwang_responder
+				add_opinion = {
+					target = scope:hd_dc_col_qinwang_victor
+					modifier = hd_dc_col_qinwang_opinion
+				}
+				add_prestige = medium_prestige_gain
+				scope:hd_dc_col_qinwang_victor = {
+					add_opinion = {
+						target = scope:hd_dc_col_qinwang_responder
+						modifier = hd_dc_col_qinwang_opinion
+					}
+				}
+			}
+		}
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_qinwang_success ACTOR = scope:hd_dc_col_qinwang_victor }
+	}
+}
+
+# ---------------------------------------------------------------------------
+# 地方自强（封臣决议）。Scope：封臣（root）
+# ---------------------------------------------------------------------------
+hd_dc_col_selfstrengthen_effect = {
+	add_character_modifier = {
+		modifier = hd_dc_col_selfstrengthen_modifier
+		years = 20
+	}
+	top_liege = {
+		add_opinion = {
+			target = root
+			modifier = hd_dc_col_selfstrengthen_opinion
+		}
+	}
+	hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_local_selfstrengthen ACTOR = root }
+}
+
+# ---------------------------------------------------------------------------
+# 授权募兵：年度税收返还。Scope：任意（由 dynastic_cycle_yearly_pulse 调用）
+# 无法直接削减"某一封臣上缴的税"，改为天子每年把该封臣上缴税额的估计值 ×50% 返还给它（估算见 hd_dc_col_militia_refund_value）
+# ---------------------------------------------------------------------------
+hd_dc_col_militia_yearly_refund_effect = {
+	title:h_china.holder ?= {
+		save_scope_as = hd_dc_col_refund_emperor
+		every_vassal = {
+			limit = { has_character_modifier = hd_dc_col_authorized_militia_modifier }
+			save_temporary_scope_as = hd_dc_col_refund_vassal
+			if = {
+				limit = { hd_dc_col_militia_refund_value > 0 }
+				scope:hd_dc_col_refund_emperor = {
+					pay_treasury_or_gold = {
+						target = scope:hd_dc_col_refund_vassal
+						value = scope:hd_dc_col_refund_vassal.hd_dc_col_militia_refund_value
+					}
+				}
+			}
+		}
+	}
+}
+
+# ---------------------------------------------------------------------------
+# 招安。需 scope:actor（主君）/ scope:recipient（叛首）
+# ---------------------------------------------------------------------------
+# 以白和结束该叛乱战争。找到战争时存 scope:hd_dc_col_amnesty_war_found = yes（战争结束后战争 scope 即失效，故另存标记）
+hd_dc_col_amnesty_end_war_effect = {
+	scope:actor = {
+		random_character_war = {
+			limit = {
+				primary_defender = scope:actor
+				primary_attacker = scope:recipient
+				hd_dc_col_rebel_war_trigger = yes
+			}
+			save_scope_as = hd_dc_col_amnesty_war
+			save_scope_value_as = {
+				name = hd_dc_col_amnesty_war_found
+				value = yes
+			}
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_dc_col_amnesty_war_found }
+		# 民变首领在民变派系解散时会"消失"（原版 faction_demand.1102 / 平民派系 on_destroy）；受招安者须保全
+		scope:recipient = {
+			add_character_flag = peasant_revolt_do_not_kill
+		}
+		scope:hd_dc_col_amnesty_war = {
+			end_war = white_peace
+		}
+	}
+}
+
+# 封官：付叛首年收入 ×2，无地者入朝为臣，授官身
+hd_dc_col_amnesty_office_effect = {
+	scope:actor = {
+		pay_treasury_or_gold = {
+			target = scope:recipient
+			value = hd_dc_col_amnesty_office_cost_value
+		}
+	}
+	scope:recipient = {
+		if = {
+			limit = { is_landed = no }
+			scope:actor = { add_courtier = scope:recipient }
+		}
+		add_character_modifier = {
+			modifier = hd_dc_col_amnesty_office_modifier
+			years = 10
+		}
+	}
+}
+
+# 封地：割主君直辖的一县（不含都城县，取发展度最低者）给叛首，使其成为主君的封臣
+hd_dc_col_amnesty_fief_effect = {
+	scope:actor = {
+		ordered_held_county = {
+			limit = {
+				NOT = { this = scope:actor.capital_county }
+			}
+			order_by = {
+				value = 100
+				subtract = development_level
+			}
+			save_scope_as = hd_dc_col_amnesty_fief
+		}
+	}
+	scope:hd_dc_col_amnesty_fief ?= {
+		create_title_and_vassal_change = {
+			type = granted
+			save_scope_as = hd_dc_col_amnesty_change
+			add_claim_on_loss = no
+		}
+		change_title_holder = {
+			holder = scope:recipient
+			change = scope:hd_dc_col_amnesty_change
+			take_baronies = yes
+		}
+		scope:recipient = {
+			if = {
+				limit = {
+					NOT = { liege ?= scope:actor }
+				}
+				change_liege = {
+					liege = scope:actor
+					change = scope:hd_dc_col_amnesty_change
+				}
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_dc_col_amnesty_change
+	}
+}

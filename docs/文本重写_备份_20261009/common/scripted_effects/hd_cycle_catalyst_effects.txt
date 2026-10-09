@@ -1,0 +1,204 @@
+﻿# 天朝循环大修：诱因发射。
+# 所有发射前都检查 situation_top_has_catalyst，即只在当前阶段列出该诱因时生效。
+
+# 发射单个诱因。Scope：任意；$CATALYST$ 为诱因 key
+hd_cycle_fire_catalyst_effect = {
+	situation:dynastic_cycle ?= {
+		if = {
+			limit = { situation_top_has_catalyst = $CATALYST$ }
+			trigger_situation_catalyst = $CATALYST$
+		}
+	}
+}
+
+# 年度诱因。Scope：dynastic_cycle 局势（由 dynastic_cycle_yearly_pulse 调用）
+hd_cycle_yearly_catalysts_effect = {
+	save_scope_as = hd_cycle_situation
+
+	# ---------- 霸权相关（紧张/新朝征服 -> 恢复；崩溃 -> 恢复） ----------
+	if = {
+		limit = { exists = title:h_china.holder }
+		title:h_china.holder = { save_scope_as = hd_cycle_hegemon }
+
+		# 整年无防御战
+		if = {
+			limit = {
+				situation_top_has_catalyst = catalyst_hd_hegemon_peace_yearly
+				scope:hd_cycle_hegemon = {
+					is_at_war_as_defender = no
+					NOT = { has_variable = hd_cycle_defended_this_year }
+				}
+			}
+			trigger_situation_catalyst = catalyst_hd_hegemon_peace_yearly
+		}
+		# 国库无债
+		if = {
+			limit = {
+				situation_top_has_catalyst = catalyst_hd_treasury_solvent_yearly
+				scope:hd_cycle_hegemon = { treasury >= 0 }
+			}
+			trigger_situation_catalyst = catalyst_hd_treasury_solvent_yearly
+		}
+		# 皇帝直辖伯爵领大众好感均值 >= 0
+		if = {
+			limit = {
+				situation_top_has_catalyst = catalyst_hd_popular_content_yearly
+				scope:hd_cycle_hegemon = { hd_cycle_domain_opinion_avg_value >= 0 }
+			}
+			trigger_situation_catalyst = catalyst_hd_popular_content_yearly
+		}
+		# 崩溃期：控制 >= 70% 法理伯爵领（观察器快照）
+		if = {
+			limit = {
+				situation_top_has_catalyst = catalyst_hd_hegemon_control_70_yearly
+				hd_dc_snapshot_valid_trigger = yes
+				hd_dc_control_numerator_value >= hd_cycle_control_70_denominator_value
+			}
+			trigger_situation_catalyst = catalyst_hd_hegemon_control_70_yearly
+		}
+	}
+
+	# 崩溃 -> 斗争：年度自然增长
+	if = {
+		limit = { situation_top_has_catalyst = catalyst_hd_collapse_drift_yearly }
+		trigger_situation_catalyst = catalyst_hd_collapse_drift_yearly
+	}
+
+	# ---------- 格局统计（斗争 <-> 对峙） ----------
+	if = {
+		limit = {
+			OR = {
+				situation_top_has_catalyst = catalyst_hd_few_major_powers_yearly
+				situation_top_has_catalyst = catalyst_hd_many_major_powers_yearly
+				situation_top_has_catalyst = catalyst_hd_multiple_empires_yearly
+			}
+		}
+		set_variable = { name = hd_cycle_major_powers value = 0 }
+		set_variable = { name = hd_cycle_empire_powers value = 0 }
+		every_independent_ruler = {
+			limit = {
+				highest_held_title_tier >= tier_kingdom
+				hd_cycle_in_china_trigger = yes
+			}
+			scope:hd_cycle_situation = { change_variable = { name = hd_cycle_major_powers add = 1 } }
+			if = {
+				limit = { highest_held_title_tier >= tier_empire }
+				scope:hd_cycle_situation = { change_variable = { name = hd_cycle_empire_powers add = 1 } }
+			}
+		}
+		if = {
+			limit = {
+				situation_top_has_catalyst = catalyst_hd_few_major_powers_yearly
+				var:hd_cycle_major_powers < hd_cycle_divided_power_limit
+			}
+			trigger_situation_catalyst = catalyst_hd_few_major_powers_yearly
+		}
+		if = {
+			limit = {
+				situation_top_has_catalyst = catalyst_hd_many_major_powers_yearly
+				var:hd_cycle_major_powers >= hd_cycle_divided_power_limit
+			}
+			trigger_situation_catalyst = catalyst_hd_many_major_powers_yearly
+		}
+		if = {
+			limit = {
+				situation_top_has_catalyst = catalyst_hd_multiple_empires_yearly
+				var:hd_cycle_empire_powers > 1
+			}
+			trigger_situation_catalyst = catalyst_hd_multiple_empires_yearly
+		}
+	}
+}
+
+# 战争开始。Scope：同 CB on_declaration（scope:attacker / scope:defender / scope:war）
+hd_cycle_war_started_effect = {
+	# 皇帝成为防御方：本年度不计"无防御战"
+	if = {
+		limit = {
+			exists = title:h_china.holder
+			scope:defender = title:h_china.holder
+		}
+		scope:defender = {
+			set_variable = { name = hd_cycle_defended_this_year value = yes years = 1 }
+		}
+	}
+	# 对峙 -> 斗争：汉地派系战争爆发
+	if = {
+		limit = {
+			scope:war = { hd_cycle_faction_war_trigger = yes }
+			scope:defender = { hd_cycle_in_china_trigger = yes }
+		}
+		hd_cycle_fire_catalyst_effect = { CATALYST = catalyst_hd_faction_war_started }
+	}
+}
+
+# 防御方获胜
+hd_cycle_war_won_defender_effect = {
+	# 治世 -> 恢复：皇帝赢得防御战
+	if = {
+		limit = {
+			exists = title:h_china.holder
+			scope:defender = title:h_china.holder
+		}
+		hd_cycle_fire_catalyst_effect = { CATALYST = catalyst_hd_hegemon_won_defensive_war }
+	}
+	# 崩溃 -> 恢复：皇帝镇压危机类战争
+	if = {
+		limit = { scope:war = { hd_collapse_crisis_war_trigger = yes } }
+		hd_cycle_fire_catalyst_effect = { CATALYST = catalyst_hd_collapse_crisis_suppressed }
+	}
+	hd_cycle_consolidation_stalemate_effect = yes
+}
+
+# 白和平
+hd_cycle_war_white_peace_effect = {
+	hd_cycle_consolidation_stalemate_effect = yes
+}
+
+# 斗争 -> 对峙：王国级进攻方用逐鹿中原未能战胜同级（输或白和平）
+hd_cycle_consolidation_stalemate_effect = {
+	if = {
+		limit = {
+			scope:war = { using_cb = chinese_consolidation_cb }
+			scope:attacker = { highest_held_title_tier = tier_kingdom }
+			scope:defender = { highest_held_title_tier = tier_kingdom }
+		}
+		hd_cycle_fire_catalyst_effect = { CATALYST = catalyst_hd_consolidation_lost_to_peer }
+	}
+}
+
+# CB on_victory 中调用（需 target_titles 与 scope:attacker）。
+# 对峙 -> 斗争：一次战争夺取 >= 5 个伯爵领
+hd_cycle_count_conquest_effect = {
+	scope:attacker = { set_variable = { name = hd_cycle_conquest_count value = 0 } }
+	every_in_list = {
+		list = target_titles
+		every_in_de_jure_hierarchy = {
+			limit = {
+				tier = tier_county
+				holder ?= scope:attacker
+			}
+			scope:attacker = { change_variable = { name = hd_cycle_conquest_count add = 1 } }
+		}
+	}
+	if = {
+		limit = { scope:attacker = { has_variable = hd_cycle_conquest_count var:hd_cycle_conquest_count >= 5 } }
+		hd_cycle_fire_catalyst_effect = { CATALYST = catalyst_hd_big_conquest }
+	}
+	scope:attacker = { remove_variable = hd_cycle_conquest_count }
+}
+
+# 君主死亡。Scope：死者（on_death root）
+# 对峙 -> 斗争：帝国/王国级独立君主死亡且继承人未满 16 岁
+hd_cycle_ruler_death_effect = {
+	if = {
+		limit = {
+			is_independent_ruler = yes
+			highest_held_title_tier >= tier_kingdom
+			exists = primary_heir
+			primary_heir = { age < 16 }
+			hd_cycle_in_china_trigger = yes
+		}
+		hd_cycle_fire_catalyst_effect = { CATALYST = catalyst_hd_major_ruler_child_heir }
+	}
+}

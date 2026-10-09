@@ -1,0 +1,134 @@
+# 文本重写后续 · 脚本 bug 修复清单（2026-10-09，用户决定：全部修复）
+
+各条详情见对应单元报告 `docs/文本重写_报告/Uxx_*.md`。修复者把结果写回本文件对应条目下（改了哪个文件、怎么改、为何）。
+
+## 组 A（结义 / zgrc / quix 诱惑）
+- A1（U25）结义 on_action 钩子名写错：`on_relation_blood_brother_removed`，原版应为 `on_remove_relation_*` 系列 → 背誓事件 0003 大概率从不触发。
+  - **已修（2026-10-09）**。核实：原版 `common/on_action/relations/relation_on_actions.txt` 文件头列出自动钩子 `on_remove_relation_[relation]`，并已定义 `on_remove_relation_blood_brother`（含 `effect` 块），mod 用的名字不存在，0003 从不触发。另有两处问题：① 该钩子中 `root` 是执行 `remove_relation_blood_brother` 的一方，在主要的背誓路径（拒绝应召参战，原版 `00_alliance.txt` 与本 mod `zzzz_WJ_district_acceptance_00_alliance.txt:411`）里是**背誓者**，`scope:target` 才是被背弃者，直接挂 `events` 会让背誓者收到"兄弟背誓"；② 结盟解除/破裂（`on_alliance_removed/broken` → `end_blood_brotherhood_effect`）、PAM、MPO 事件等非背誓情形也会走这个钩子；且事件里的 `scope:actor` 在此钩子下不存在。
+  - `common/on_action/zz_sworn_brotherhood_on_actions.txt` 第 1–25 行：删掉 `on_relation_blood_brother_removed`，改为 `on_remove_relation_blood_brother = { on_actions = { hd_sworn_brotherhood_oath_broken } }`。原版该钩子已有 effect 块，所以按 `_on_actions.info` 的写法挂子 on_action。新增 `hd_sworn_brotherhood_oath_broken`：trigger 要求 root 有原版 `broke_blood_brotherhood_modifier`，且 `scope:target` 存在并在世；effect 为 `save_scope_as = betrayer` 后执行 `scope:target = { trigger_event = sworn_brotherhood_events.0003 }`。原版和本 mod 都是在拒绝应召时先给背誓者加该修正，再执行解除。所以这道门槛既能只放行真正的背誓，也能凭数据确定谁背弃了谁。
+  - `events/zz_sworn_brotherhood_events.txt` 0003（第 292–299 行）：`right_portrait` 改为 `scope:betrayer`；删去 `immediate` 中的 `scope:actor = { save_scope_as = betrayer }`；加 `trigger = { exists = scope:betrayer }`。
+  - `localization/simp_chinese/zz_sworn_brotherhood_l_simp_chinese.yml` 第 76、79、81 行：`[actor.GetName]`、`[actor.GetSheHe]` 改为 `[betrayer.GetName]`、`[betrayer.GetSheHe]`（校验器报 3 条 NEWSCOPE WARN，属预期）。
+  - 已知局限：背誓修正持续 25 年。若此人此前因背誓已带该修正，期间另一段金兰因结盟解除等原因结束时，也会触发 0003。这种情况罕见，可以接受。另外，0003 现在只在"拒绝应召参战"这一种背誓时触发。若金兰一方主动解除同盟或向对方宣战，原版不会加 `broke_blood_brotherhood_modifier`，0003 也不触发。这是自拟取舍，如需覆盖这些情形，须另找能判定主动方的依据。
+- A2（U25）背誓事件 0003 三个选项都要求特定性格，无兜底选项 → 加一个无条件兜底选项（文本按规范：文言短句）。
+  - **已修**。`events/zz_sworn_brotherhood_events.txt` 第 367–375 行新增无 trigger 的选项 `sworn_brotherhood_events.0003.d`：`add_stress = minor_stress_impact_gain`（原版脚本值），并对背誓者加 `opinion_betrayed_me` 5 年。力度在 a（压力 50、10 年怨恨、得愤世嫉俗、背誓者受罚）与 c（压力 15、-10 好感、+威望）之间，偏向 a 的减半版。中文本地化 `zz_sworn_brotherhood_l_simp_chinese.yml` 第 85 行新增 `sworn_brotherhood_events.0003.d:0 "恩断义绝，从此陌路。"`。英文未加，英文缺此键。
+- A3（U25）结义交互中 25% 获"正直"特质的判定条件自相矛盾、永不成立 → 修正条件。
+  - **已修**。核实：原代码在 `scope:actor` 作用域内同时要求 `NOT = { has_trait = just }` 与 `scope:actor = { has_trait = just }`，永不成立。`common/character_interactions/zz_sworn_brotherhood_interaction.txt` 第 80–99 行：按原注释"if actor has it"的意图，改为在 `scope:recipient` 内判定：发起者有正直、受邀者性格特质未满（`number_of_personality_traits < personality_trait_standard`）、且 `NOR = { has_trait = just has_trait = arbitrary }`，然后 25% 得正直。守卫写法照原版 `fp1_yearly_events.txt` 0571。方向（受邀者受发起者感染）是按注释推定的自拟项。
+- A4（U04）quix 诱惑 3003.b/3004.b 在传闻主角已死时仍对其加好感修正 → 加存活判断。
+  - **已修**。`events/zgrc_common_events.txt` 3003.b（现第 740–748 行）、3004.b（现第 837–845 行）：把 `add_opinion` 移进存活判断的 `if` 内，判断用空安全写法 `?= { is_alive = yes }`（原版 `involved_activity.var:officiator ?= {` 同式）。A6 之后该判断与目标已统一改为 `scope:zgrc_wen_hero`。
+  - 附带发现：3001–3004 第 3 次听闻时主角变量先被删除。已按主控要求作为 A6 修复，见下。
+- A5（U04）quix 诱惑 1010 正文显示直属上级之名，而脚本里"君父"指最高领主 → 让正文与脚本指向同一人（改正文的 scope 引用或改脚本，取其更合理者）。
+  - **已修（改正文）**。核实：1010 由 `zgrc_luanshi_ask_effect` 对 `scope:war.primary_defender` 的 `every_vassal_or_below` 发出，含次级封臣。大事判定要求防御方是独立君主，所以收件人的 `top_liege` 就是被犯之主，脚本各处 `root.top_liege` 也指此人；正文却用了直属上级。改脚本的风险更大，所以只改本地化：`localization/simp_chinese/zgrc_common_event_l_simp_chinese.yml` 第 14、15 行 `[ROOT.Char.GetTopLiege.GetName]`（原 `GetLiege`）。原版本地化中 `GetTopLiege.GetName` 共 14 处，写法有效。校验器报 2 条 NEWSCOPE WARN，属预期。
+- A6（U04，A4 附带发现，主控追加）zgrc 传闻 3001–3004：`immediate` 在计数归 0 时 `remove_variable = zgrc_wen_hero_*`。计数初值为 `zgrc_wen_rumor_count = 3`，所以第 3 次听闻时，正文人名取不到，`desc_late` 判断取空，选项中对主角的效果全部落空。
+  - **已修（2026-10-09）**。`events/zgrc_common_events.txt`（3001 第 474 行起、3002 第 569 行起、3003 第 663 行起、3004 第 760 行起），四个事件改法相同：
+    - `immediate` 首行（扣计数、删变量之前）加 `root.var:zgrc_wen_county.var:zgrc_wen_hero_<类型> ?= { save_scope_as = zgrc_wen_hero }`。
+    - 新增事件 `trigger = { exists = root.var:zgrc_wen_county.var:zgrc_wen_hero_<类型> }`，主角取不到时不发事件，免得显示空名。
+    - `desc_late` 判断改为 `scope:zgrc_wen_hero ?= { is_alive = no }`。
+    - 各选项的存活判断改为 `scope:zgrc_wen_hero ?= { is_alive = yes }`，作用对象与 `add_opinion` 的 target 都改为 `scope:zgrc_wen_hero`。
+    - 计数与删变量逻辑不变，效果数值不变。
+  - `common/scripted_effects/zgrc_effects.txt` `zgrc_wenyan_try_hear_effect`（第 962、973、984、995 行）：四个分支各加 `exists = var:zgrc_wen_hero_<类型>`。若主角人物已被清除（变量仍在、值为空），这一步会跳过该类传闻，改选下一类。否则分发链会反复选中这个已发不出的事件，挡住同县其他传闻。
+  - `localization/simp_chinese/zgrc_common_event_l_simp_chinese.yml` 第 34、35、42、43、50、51、58、59 行：`[ROOT.Var('zgrc_wen_county').Var('zgrc_wen_hero_<类型>').Char.GetName]` 改为 `[zgrc_wen_hero.GetName]`，其余文字未动。英文本地化仍用旧的变量引用，未改，所以英文第 3 次听闻时人名仍会为空。
+- 组 A 校验（A6 后重跑）：
+  - `text_rewrite_check.py --unit U04_quix诱惑与zgrc`：ERROR 0，WARN 10，均为 NEWSCOPE（1010 两条 `GetTopLiege`，3001–3004 八条 `zgrc_wen_hero`），属预期。
+  - `--unit U25_杂项`：ERROR 0，WARN 16（原有 13 条 + A1 新增 3 条 NEWSCOPE）。
+  - `text_rewrite_global_check.py`：第 2 部分本地化错误 0，第 3 部分脚本引用错误 0。
+  - 改动脚本花括号平衡。
+
+## 组 B（隐士 / 清议 / 实封 / 年号 / DM 传统）
+- B1（U09）WJ_yinshi.5001–5003 故事路径：若应邀那一刻发邀者已不合格，选项 a 不产生任何效果（文案写出山，隐士身份却保留）→ 修复使出山必然生效或给出合理退路。
+  - **已修（出山必然生效）**。
+  - 核实：三事件选项 a 的故事分支只有一个 `if`（发邀者仍合格时才结算），没有兜底。应邀时若府主身故、幕位已满、举主去职等，后面两个 `else_if`（interaction / ai_route）都不命中，选项就毫无效果。正常出山路径是：入幕经 `WJ_mufu_attach` → `WJ_mufu_enter` → `WJ_yangwang_exit_effect`，孝廉、茂才经 `WJ_grant_road_xiaolian/maocai_effect` 内的 `WJ_yangwang_exit_effect`。
+  - 修改 `events/WJ_yinshi_invitation_events.txt`：5001 第 38、40–46 行，5002 第 104、106–112 行，5003 第 167、169–175 行。
+    - 故事分支的成功效果之后加 `hidden_effect = { WJ_yangwang_exit_effect = yes }`。这一行兜住入幕内部校验（`chain_safe`、`WJ_mufu_request_valid`）不过、或授予效果走了非天朝分支时的静默失败。该效果自带 `has_trait` 守卫，已出山时不起作用。
+    - 新增 `else_if = { limit = { scope:wj_yinshi_via = flag:story } … }`，内容为：`custom_tooltip = WJ_yinshi_invite_lapsed_tt`、`show_as_tooltip = { remove_trait = WJ_yangwang_trait }`、`hidden_effect = { WJ_yangwang_exit_effect = yes }`（照出山决议 `WJ_yinshi_exit_decision` 的写法）。邀约失效时仍按所选出山，只是不入幕，也不得孝廉或茂才。
+    - 没有采用"给 a 加 trigger、失效时隐藏"的做法：那样隐士只能选 b，反而白得拒绝奖励（贤望 200、威望 100）。
+  - 新增中文键：`localization/simp_chinese/event/WJ_yinshi_events_l_simp_chinese.yml` 第 215 行 `WJ_yinshi_invite_lapsed_tt:0 "来书所许已成空言，你仍就此出山。"`，三个事件共用。英文缺此键。
+  - 只记录、未改：interaction 与 ai_route 两个分支在条件失效时同样不产生效果。它们由交互流程结算，不在本条范围内。
+- B2（U10）清议 2011 号事件在"月旦评进行中、抽不到候选人、主人又无附庸"时仍可能触发，无评议对象 → 按 U10 报告 §6.7 建议修。
+  - **已修**。
+  - 核实：原 trigger 只要求"月旦评进行中"（`WJ_qingyi_yuedan_running_trigger`）或"主人有附庸"。而 immediate 里的 `WJ_qingyi_yuedan_pick_subject_effect` 只从本轮有效候选人中取人，且排除 root。所以候选人都已出局或只剩本人、主人又无附庸时，`scope:wj_qingyi_subject` 不存在，三个选项的效果和正文中的人名都会落空。
+  - 修改 `events/activities/WJ_qingyi_activity/WJ_qingyi_guest_events.txt` 第 1349–1364 行：OR 的第一支由 `WJ_qingyi_yuedan_running_trigger = yes` 改为在 `scope:activity` 下逐一检查 `var:wj_yd_c1`…`c8 ?= { WJ_qingyi_yuedan_live_candidate_trigger = yes NOT = { this = root } }`。
+    - 这与取人效果的筛选条件一一对应：`live_candidate` 已包含"进行中"、在轮、投票轮次三项判断；本事件不设 `wj_qingyi_partner`，无须排除。
+    - 第二支（主人有附庸）未改。`?=` 写法同 `WJ_qingyi_yuedan_list_round_effect`。文件保持 CRLF。
+- B3（U08）`WJ_rf_duke_qualification`（WJ_real_fief_triggers.txt）要求"身负宗室王爵"又要求"不与天子同宗"，互斥 → 按 U08 建议改为 `WJ_peer_valid = yes var:wj_peer_rank >= 1`（先核实语义），并同步改 `WJ_rf_request_valid_tt`。
+  - **已修**。
+  - 语义核实：
+    - `WJ_peer_commit` 只给与天子同宗者授个人爵（`wj_peer_personal`）。男性个人爵只有 rank 4（王），且须满足 `WJ_peer_royal_kin`。
+    - `WJ_rf_candidate` 要求 `NOT = { dynasty = top_liege.dynasty }`，与上条确实互斥。只有改朝换代后前朝宗王仍仕新朝这类极端情形才可能同时满足，所以"申请封公"实际不可达。
+    - 非同宗男性只能受家族爵。`WJ_peer_rank_allowed` 把他们限在 rank ≤2（1 亭侯、2 县侯，见 `WJ_peer_bind_family` 注释），`WJ_peer_sync_holder` 会把爵级镜像到持有人的 `var:wj_peer_rank`。
+    - HEAD 中原 desc 写的是"须为在任六职之一且已有侯爵"。另外 `WJ_real_fief_effects.txt` 第 295 行在受封时用 `WJ_peer_clear` 清除原爵，可见设计上申请人本就带着爵位。
+  - 修改 `common/scripted_triggers/WJ_real_fief_triggers.txt` 第 36–37 行：`WJ_peer_personal_valid = yes var:wj_peer_rank = 4` → `WJ_peer_valid = yes has_variable = wj_peer_rank var:wj_peer_rank >= 1`。加 `has_variable` 是为了防止变量不存在时比较报错。注释用英文，保持该文件为纯 ASCII。
+  - 不会放进不该满足的人：
+    - `WJ_peer_valid` 会排除已死者、非现任承袭者和失效的家族爵。
+    - 其余条件一概未动，仍然很严：六职之一、天子为其傀儡、录尚书事、门生或幕僚掌握 ≥2 席。
+    - 新增的可满足者只是"持有效侯爵（亭侯或县侯）的非宗室权臣"，正是原 desc 所指的人。
+  - 同步修改 `localization/simp_chinese/events/WJ_real_fief_l_simp_chinese.yml` 第 79 行 `WJ_rf_request_valid_tt`："身负王爵"→"已受侯爵"，其余文字不变。
+- B4（U07）年号事件 013 自定义年号确认时不检查空输入 → 加检查（空则不可确认或回退）。
+  - **未修：脚本层无法判断输入是否为空**。
+  - 核实：自拟年号由事件 widget 的 `type = text` 控制器存到角色身上（key 为 `SanGong_nianhao_ZiDingYi`），显示时用 `[Character.GetLocalizedText(...)]`。
+    - 原版对这段文字只有 `copy_localized_text`、`remove_localized_text`、`store_localized_text_in_death` 三个效果，没有任何能读取它的触发器。
+    - `StringIsEmpty` 只是界面和本地化用的数据函数，不能写进选项 `trigger`。
+    - 原版同类的文字输入事件（`accolade.0100`、`tgp_dynastic_cycle.9001`、宠物起名）也都不检查空值。
+    - 因此"空则不可确认"和在脚本中回退都做不到。
+  - 可选的替代做法（未做，请用户定）：
+    - ① 在显示键 `SanGong_nianhao_ZiDingYi(_tt)` 中用 `Select_CString( StringIsEmpty(...), …)` 给空年号一个显示用的备用字样。这需要自拟名称，而且这些键在 U07 / `WJ_names` 中。
+    - ② 让 013.a 先转到一个预览事件，显示所拟年号；为空时在正文中提示，并提供"重拟"返回 013。这只能提醒，不能强制，还需进游戏验证。
+- B5（U14）`culture_not_male_only_tt`（replace/.../DM_cultural_traditions）文字与 mod `00_succession_laws.txt` 的实际条件不符（疑似复制错误）→ 按实际条件重写文字。
+  - **已修**。
+  - 核实：mod `common/laws/00_succession_laws.txt` 第 1673–1681 行（`male_only_law` 的 `can_keep`）的条件是 `OR = { rite = { rite_has_doctrine = doctrine_gender_male_dominated } NOT = { culture = { has_cultural_parameter = female_only_inheritance } } }`。
+    - DM 原文写的是"文化须有启用男性专属继承的传统，且信仰不能有女性主导教义"，两项都不对。
+    - 原版中文同键所指的两项是对的，但把"或"写成了"而"。
+  - 修改 `localization/replace/simp_chinese/culture/traditions/DM_cultural_traditions_l_simp_chinese.yml` 第 1053 行为：`你的[faith|E]须有[GetDoctrineType('doctrine_gender_male_dominated').GetBaseName][doctrine|E]，或你的[culture|E]没有启用[GetLaw('female_only_law').GetName][succession|E]的[tradition|E]`。
+    - 两个数据函数与原版同键的写法一致，键格式（无版本号）、BOM 和 LF 都保持不变。
+    - 校验器对此键报 1 条 NEWSCOPE WARN（教义名与旧文不同），属预期。U14 的 WARN 总数仍为 12，与改前相同。
+  - 组 B 校验：
+    - `text_rewrite_check.py --unit`：U09_隐士名士、U10_清议月旦、U08_庙号封爵实封、U07_天家年号宗室 均为 ERROR 0、WARN 0；U14_童年与DM 为 ERROR 0、WARN 12（全是 NEWSCOPE，改前已有）。
+    - `text_rewrite_global_check.py`：第 2 部分本地化错误 0，第 3 部分脚本引用错误 0。第 1 部分有 1 条 RISK（`WJ_mufu_recruit_desc`），与本组无关。
+    - 改动的 3 个脚本文件花括号均配平，BOM 与换行符保持原样。
+
+## 组 C（朋党 / 联军 / 五胡 / 孙氏 CB / quix 刺杀）
+- C1（U11）要求效忠事件：无影响力政体下 c（300 威望）与 d（1000 威望）成功率相同 → 给 d 加 `government_has_influence` 一类条件（或按 U11 建议）。
+  - **已修**。核实：c、d 都调用 `hd_party_loyalty_by_code_effect`，成功率 `hd_party_loyalty_chance_*_value` 与所付代价无关，所以无影响力政体下 d 严格劣于 c。修改：`events/hd_party_events.txt` 第 84–87 行，d 的 trigger 加 `government_has_flag = government_has_influence`，注释改为"仅限有影响力的政体"。生成器 `docs/tools/gen_party_events.py` 第 93–96 行同步修改。改后有影响力政体可选 a/b/d，无影响力政体可选 b/c，两类政体都不会只剩"作罢"。打开事件的 `hd_party_demand_loyalty_gui` 不检查付费选项，不受影响。AI 走 `hd_party_ai_ruler_effect` 内另一套代价逻辑，不经过本事件，未动。
+- C2（U11）朋党辩论 0010.a（50 金）、事件链 51.a（100 金）无金钱条件，可能扣成负数 → 加 gold 条件（仿同 mod 其他花钱选项写法）。
+  - **已修**。写法仿 0022.a、0040.a，在选项内 `remove_short_term_gold` 前加 `trigger = { gold >= N }`：
+    - `events/hd_party_debate_events.txt` 第 24 行：0010.a 加 `gold >= 50`。此文件不是生成器产物，`gen_party*.py` 都不写它。
+    - `events/hd_party_events.txt` 第 838 行（追加修改后的行号）：hd_party_chain.51.a 加 `gold >= 100`。
+    - 生成器 `docs/tools/gen_party_events.py` 第 290 行 `SPEC[('hanmen', 1)]` 同步加同一行。
+  - 同步核对：生成器复制到临时目录，改写输出路径后运行，未写入 MOD。改前、改后的产物都与 `events/hd_party_events.txt` 逐字节相同。
+  - **追加（主控要求同类一并修）**：
+    - 11.b、21.b、31.b、32.b 用 `pay_short_term_gold` 付 100 金。各选项开头加 `trigger = { gold >= 100 }`，位置在 `events/hd_party_events.txt` 第 185、379、536、591 行。
+    - 21.a 在无县可赐（`domain_size >= 3` 且有非治所之县，二者不同时成立）时改付 200 金，在第 326 行起加 `trigger = { trigger_if = { limit = { NOT = { AND = { domain_size >= 3 any_held_title = { tier = tier_county NOT = { this = root.capital_county } } } } } gold >= 200 } }`。条件与选项内 `random_held_title` 加 `if` 的赐县判定一致，有县可赐时不要求金钱。用 `trigger_if` 写，提示只在无县可赐时显示"金钱 ≥ 200"。
+    - 生成器同步：`docs/tools/gen_party_events.py` 的 `GIVE_COUNTY`（第 188 行）与 `COMP_GOLD`（第 261 行）两个片段开头各加同一 trigger。`COMP_GOLD` 只用于上述 4 个 b 项，`GIVE_COUNTY` 只用于 21.a。
+    - 复核：生成器复制到临时目录运行，产物与 MOD 文件逐字节相同；花括号配平。`text_rewrite_check.py --unit U11_朋党` ERROR 0、WARN 0。
+- C3（U16）退出防御联盟决议既有 cost 又有 `add_prestige = -250`，实际扣 500 威望 → 去掉重复扣除（保留 cost 显示）。
+  - **已修**。`common/decisions/zz_hd_confederation_decisions.txt` 第 18 行，删去 effect 里的 `add_prestige = -250`，换成一行说明注释。`cost = { prestige = 250 }` 保留：引擎会自动扣除，也会在威望不足时禁用该决议。原版 `mpo_decisions.txt` 的退出部族联盟决议同样只在 cost 里计价，effect 不再扣。
+- C4（U23）`hd_wuhu.2004` c 用虔诚值给威望（照搬原版的错）→ 改为对应的威望值。
+  - **已修**。`events/zz_hd_wuhu_frontier_events.txt` 第 751 行，`add_prestige = medium_piety_gain` 改为 `medium_prestige_gain`（原版 `00_basic_values.txt` 有定义）。档位按同一事件 a 项的对应关系取：a 给中等虔诚，否则给小额威望；c 给大量虔诚，所以退路给中等威望。原版 `fp3_frontier_story_cycle.txt` 第 745 行有同样的错误，原版文件未动。
+- C5（U23）`hd_wuhu.2007` b 引用不存在的图标 scope `possibly_capable_marshal` → 修正为存在的写法或删去。
+  - **已修**。`events/zz_hd_wuhu_frontier_events.txt` 第 1572 行，惨败 toast 的 `left_icon` 改为 `scope:warmonger_councillor`。本事件 immediate 存的就是这个 scope，右侧肖像和成功 toast 也都用它。原版那个 scope 只在 `fp3_yearly_frontier_chains.txt` 里保存，本事件链里不存在。
+- C6（U18）`hds_wu_invasion_cb` 在两个脚本里重复定义（吴郡/丹阳）→ 核实哪一份生效；若非预期，删除或改名旧定义，使生效版本为丹阳版。
+  - **未改（核实后生效的已是丹阳版）**。依据：今日 09:47 那次运行的 `logs/database_conflicts.log` 第 93 行记有 `Overriding entry 'hds_wu_invasion_cb' for database 'common/casus_belli_types' in 'file: common/casus_belli_types/zzzzzzzz_hds_sun_danyang_war_override.txt line: 2'`，即后加载的丹阳版覆盖了 `zzzzzz_hds_wars.txt` 中的吴郡版。两个 CB 文件在 git 中无改动，修改时间为 08:46，早于这次运行，所以日志反映的就是现状。
+  - 配套脚本也已核对：最终生效的 `hds_try_wu_war_effect` 在 `zzzzzzzzzz_hds_20260919_campaigns.txt` 第 75 行（同一份日志第 68 行记录了覆盖），请求的是 `title:d_danyang`。孙坚的 `zzzzzzzzzzz_hds_sj_effects.txt` 同样请求丹阳。
+  - 旧定义已被覆盖，不再起作用，每次加载只在日志里多一条覆盖记录，不会造成错误，所以按要求不动。
+- C7（U03）quix 刺杀：成败在布置事件之前已定，玩家在注定失败时于布置事件选 b"另作打算"即可躲开失败后果并重来 → 修复（例如 b 在已定失败时也走失败后果，或改为在布置之后才判定）。
+  - **已修（最小改动，只改一个 effect）**。
+  - 核实：1.19 的 `generic_scheme_process_ending_effect` 在布置事件之前已经掷定成败与 `scope:scheme_discovered`，失败包装事件 0301–0320 再经 `murder_setup` 弹出布置事件。原来 b 只调用 `restart_murder_scheme_effect`，失败事件 4001–4020 不会触发，其 `after` 中的 `murder_outcome_reworked.0004` 也就不会触发，`murder_failure_effect`（目标警觉、被识破时的威慑与好感惩罚、氏族团结度损失等）全部跳过。"改为在布置之后才判定"需要在阴谋结算后重掷，任务契约、傀儡通知等结算已在此前完成，风险大，所以不采用。
+  - 修改：`common/scripted_effects/hd_quix_murder_compat_effects.txt` 第 17–42 行，`hd_quix_defer_murder_setup_effect` 拆成两支：
+    - 已定成功：照旧重启，玩家放弃这次得手。
+    - 已定失败：比照原版 `murder_outcome_reworked.0003`。原版 0003 的 a、b 不论选哪个，`after` 都会触发 0004，重启也只在未被识破时可选。因此这一支在 `hidden_effect` 内处理：已被识破则 `end_scheme`，否则 `restart_murder_scheme_effect`，两种情况都对 `scope:target` 触发 `murder_outcome_reworked.0004`。
+  - 20 个布置事件都调用这个 effect，事件文件本身未动。
+  - ~~已知取舍：两支对外显示的都是同一行"重新开始阴谋"提示……~~ 已被下方"追加"取代：提示不再写重启。
+  - ★ 待用户拍板：凡是预先掷定为失败的情形，选项 b 的失败后果都在暗中照样生效：目标收到 0004 事件并获得警觉修正；若已被识破，你还要承受威慑、好感与氏族团结度的惩罚。界面上只有下述那句含糊的叙事提示，不会明言惩罚。这是为了不泄露结果而有意做的取舍。若希望事后告知玩家，可以另加一条 toast。
+  - AI 的 b 项 `ai_chance` 为 0，不受影响。
+  - **追加（主控要求改 b 项提示）**：
+    - `hd_quix_defer_murder_setup_effect`（`common/scripted_effects/hd_quix_murder_compat_effects.txt` 第 17–42 行）改为三支全部放进 `hidden_effect`，对外只显示 `custom_tooltip = hd_quix_defer_murder_setup_tt`（第 26 行）。三支为：已定成功则重启；已定失败且被识破则结束阴谋并触发 0004；已定失败未被识破则重启并触发 0004。
+    - 原先显示的"重新开始阴谋"不再出现，提示既不透露结果，也不承诺重启。各布置事件 b 项原有的原版键 `do_not_execute_murder_tooltip`（"不尝试进行谋杀"）保留。
+    - 新增中文键：`localization/simp_chinese/hd_quix_murder_outcome_events_l_simp_chinese.yml` 第 482 行（U03 的本地化文件，追加在末尾），`hd_quix_defer_murder_setup_tt:0 "暂且收手，另俟时机。只是先前的布置是否已露形迹，尚难逆料。"`。
+    - 全仓 grep 确认无同名键，与 U03 现有键不冲突。英文未加，英文缺此键。
+    - 复核：`text_rewrite_check.py --unit U03_quix刺杀` ERROR 0、WARN 0（新增 1）。`text_rewrite_global_check.py` 第 2 部分本地化错误 0、第 3 部分脚本引用错误 0。
+  - 组 C 校验：`text_rewrite_check.py --unit` 对 U11_朋党、U16_后宫宫变联军、U18_群雄战役宝物、U03_quix刺杀 均为 ERROR 0、WARN 0；U23_地域决议边疆 为 ERROR 0、WARN 1，是 `hd_miasma_county_modifier_desc` 的 DIGIT 警告，与本组无关。`text_rewrite_global_check.py` 第 2 部分本地化错误 0、第 3 部分脚本引用错误 0。第 1 部分有 1 条 RISK（`WJ_mufu_recruit_desc`），与本组无关。改动的 5 个脚本文件花括号均配平，BOM 与换行符保持原样。
+
+## 用户最终决定（2026-10-09）
+- B4 空年号：保持原样（与原版一致，不检测）。
+- C7 刺杀布置 b 项暗中承受失败惩罚：接受。
+- A1 背誓事件只在"拒绝应召参战"时触发：接受。
+- A2 兜底选项 d 力度、A3 正直由发起者感染受邀者：均保留。

@@ -1,0 +1,277 @@
+﻿# 天朝循环大修：乱世战争。
+# hd_strategic_annex_cb：兼并（斗争期，战略 AI 专用），夺取目标在发动者战略区内的直辖伯爵领。
+# hd_siyi_raid_cb：四夷入寇（斗争期，非汉统治者），夺取汉地一个公国。
+
+hd_strategic_annex_cb = {
+	icon = celestial
+	group = celestial
+	should_show_war_goal_subview = no
+	ai_only_against_neighbors = no
+
+	allowed_for_character = {
+		# 2026-10-08 性能：战略 AI 派发器已改用吞并 hd_dc_tunbing_cb，本 CB 无任何脚本引用且 ai_score_mult = 0，
+		# 停用以免引擎 AI 逐对评估 allowed_against_character
+		always = no
+		hd_cycle_phase_is_struggle_trigger = yes
+		exists = var:hd_strat_region
+		is_independent_ruler = yes
+	}
+	allowed_against_character = {
+		scope:defender = {
+			is_independent_ruler = yes
+			hd_cycle_in_china_trigger = yes
+		}
+		scope:attacker = { top_liege != scope:defender.top_liege }
+	}
+	valid_to_start = {
+		scope:attacker.var:hd_strat_region = { save_temporary_scope_as = hd_annex_region }
+		scope:defender = {
+			any_held_title = {
+				tier = tier_county
+				title_province = { geographical_region = scope:hd_annex_region }
+			}
+		}
+	}
+	should_invalidate = {
+		OR = {
+			hd_cycle_phase_is_struggle_trigger = no
+			scope:defender = { is_independent_ruler = no }
+		}
+	}
+	on_invalidated_desc = msg_invalidate_war_title
+	on_invalidated = { }
+
+	ai_score_mult = { value = 0 }	# 只由战略 AI 派发器宣战
+
+	cost = {
+		prestige = {
+			value = hd_strategic_annex_prestige_cost_value
+			multiply = common_cb_prestige_cost_multiplier
+		}
+	}
+
+	on_declaration = {
+		on_declared_war = yes
+	}
+
+	on_victory_desc = hd_strategic_annex_cb_victory_desc
+	on_victory = {
+		scope:attacker = { show_pow_release_message_effect = yes }
+		add_legitimacy_attacker_victory_effect = yes
+		scope:attacker.var:hd_strat_region ?= { save_scope_as = hd_annex_region }
+		scope:attacker = { set_variable = { name = hd_cycle_conquest_count value = 0 } }
+		if = {
+			limit = { exists = scope:hd_annex_region }
+			scope:defender = {
+				every_held_title = {
+					limit = {
+						tier = tier_county
+						title_province = { geographical_region = scope:hd_annex_region }
+					}
+					add_to_temporary_list = hd_annex_counties
+				}
+			}
+			create_title_and_vassal_change = {
+				type = conquest
+				save_scope_as = change
+				add_claim_on_loss = yes
+			}
+			every_in_list = {
+				list = hd_annex_counties
+				change_title_holder = {
+					holder = scope:attacker
+					change = scope:change
+					take_baronies = yes
+				}
+				scope:attacker = { change_variable = { name = hd_cycle_conquest_count add = 1 } }
+			}
+			resolve_title_and_vassal_change = scope:change
+		}
+		# 夺取 >= 5 个伯爵领：对峙 -> 斗争诱因（斗争期本 CB 只在斗争期，此处为对称保留）
+		if = {
+			limit = { scope:attacker = { has_variable = hd_cycle_conquest_count var:hd_cycle_conquest_count >= 5 } }
+			hd_cycle_fire_catalyst_effect = { CATALYST = catalyst_hd_big_conquest }
+		}
+		scope:attacker = { remove_variable = hd_cycle_conquest_count }
+		scope:attacker = { add_prestige_experience = medium_prestige_value }
+		# 停战 5 年
+		scope:attacker = {
+			add_truce_both_ways = {
+				character = scope:defender
+				years = 5
+				war = root.war
+				result = victory
+			}
+		}
+	}
+
+	on_white_peace_desc = hd_strategic_annex_cb_white_peace_desc
+	on_white_peace = {
+		scope:attacker = { show_pow_release_message_effect = yes }
+		add_truce_white_peace_effect = yes
+	}
+	on_defeat_desc = hd_strategic_annex_cb_defeat_desc
+	on_defeat = {
+		scope:attacker = { show_pow_release_message_effect = yes }
+		scope:attacker = { pay_short_term_gold_reparations_effect = { GOLD_VALUE = 3 } }
+		add_truce_attacker_defeat_effect = yes
+	}
+
+	transfer_behavior = transfer
+	on_primary_attacker_death = inherit
+	on_primary_defender_death = inherit
+	attacker_allies_inherit = yes
+	defender_allies_inherit = yes
+	war_name = hd_strategic_annex_cb_war_name
+	cb_name = hd_strategic_annex_cb_name
+	interface_priority = 110
+	use_de_jure_wargoal_only = no
+	ticking_war_score_targets_entire_realm = no
+	attacker_wargoal_percentage = 0.8
+	attacker_score_from_occupation_scale = 100
+	attacker_score_from_battles_scale = 100
+	defender_score_from_battles_scale = 100
+	max_defender_score_from_battles = 100
+	max_attacker_score_from_battles = 100
+	max_defender_score_from_occupation = 100
+	max_attacker_score_from_occupation = 100
+}
+
+hd_siyi_raid_cb = {
+	icon = invasion
+	group = conquest
+	combine_into_one = yes
+	should_show_war_goal_subview = yes
+	ai_only_against_neighbors = yes
+
+	allowed_for_character = {
+		hd_cycle_phase_is_struggle_trigger = yes
+		is_independent_ruler = yes
+		hd_cycle_non_han_trigger = yes
+	}
+	allowed_against_character = {
+		scope:defender = { hd_cycle_in_china_trigger = yes }
+	}
+
+	target_titles = all
+	target_title_tier = duchy
+	target_de_jure_regions_above = yes
+	ignore_effect = change_title_holder
+
+	valid_to_start = {
+		scope:target = {
+			is_landless_type_title = no
+			target_is_de_jure_liege_or_above = title:h_china
+			any_in_de_jure_hierarchy = {
+				tier = tier_county
+				holder.top_liege ?= scope:defender
+			}
+		}
+	}
+
+	ai_score_mult = { value = 1 }
+
+	cost = {
+		prestige = {
+			value = hd_siyi_raid_prestige_cost
+			multiply = common_cb_prestige_cost_multiplier
+		}
+	}
+
+	on_declaration = {
+		on_declared_war = yes
+	}
+
+	on_victory_desc = hd_siyi_raid_cb_victory_desc
+	on_victory = {
+		scope:attacker = { show_pow_release_message_effect = yes }
+		add_legitimacy_attacker_victory_effect = yes
+		create_title_and_vassal_change = {
+			type = conquest
+			save_scope_as = change
+			add_claim_on_loss = yes
+		}
+		every_in_list = {
+			list = target_titles
+			custom_tooltip = CONQUEST_CB_TITLE
+			conquest_cb_title_transfer = {
+				RELIGIOUS_WAR = no
+			}
+		}
+		every_in_list = {
+			list = vassals_taken
+			change_liege = {
+				liege = scope:attacker
+				change = scope:change
+			}
+		}
+		every_in_list = {
+			list = titles_taken
+			change_title_holder = {
+				holder = scope:attacker
+				change = scope:change
+				take_baronies = yes
+			}
+		}
+		resolve_title_and_vassal_change = scope:change
+		# 战时占领结算（历史入侵式）
+		hd_occupation_settle_effect = yes
+		# 奖励：牧群 = 发展度 x30（游牧），威望 = 发展度 x20
+		every_in_list = {
+			list = target_titles
+			every_in_de_jure_hierarchy = {
+				limit = { tier = tier_county }
+				save_temporary_scope_as = hd_raid_county
+				scope:attacker = {
+					add_prestige = { value = scope:hd_raid_county.development_level multiply = 20 }
+					if = {
+						limit = { government_has_flag = government_is_nomadic }
+						domicile ?= { change_herd = { value = scope:hd_raid_county.development_level multiply = 30 } }
+					}
+				}
+			}
+		}
+		# 天朝循环·时代特色：siyi_raid_won 改由通用战争结束钩子发射（hd_dc_kit_war_ended_effect），避免重复计分
+		hd_cycle_count_conquest_effect = yes
+		# 只生成一年和平
+		scope:attacker = {
+			add_truce_both_ways = {
+				character = scope:defender
+				years = 1
+				war = root.war
+				result = victory
+			}
+		}
+	}
+
+	on_white_peace_desc = hd_siyi_raid_cb_white_peace_desc
+	on_white_peace = {
+		scope:attacker = { show_pow_release_message_effect = yes }
+		hd_occupation_clear_effect = yes
+		add_truce_white_peace_effect = yes
+	}
+	on_defeat_desc = hd_siyi_raid_cb_defeat_desc
+	on_defeat = {
+		scope:attacker = { show_pow_release_message_effect = yes }
+		hd_occupation_clear_effect = yes
+		add_truce_attacker_defeat_effect = yes
+	}
+
+	transfer_behavior = transfer
+	on_primary_attacker_death = inherit
+	on_primary_defender_death = inherit
+	attacker_allies_inherit = yes
+	defender_allies_inherit = yes
+	war_name = hd_siyi_raid_cb_war_name
+	cb_name = hd_siyi_raid_cb_name
+	interface_priority = 100
+	use_de_jure_wargoal_only = yes
+	attacker_wargoal_percentage = 0.8
+	attacker_score_from_occupation_scale = 150
+	attacker_score_from_battles_scale = 100
+	defender_score_from_battles_scale = 100
+	max_defender_score_from_battles = 100
+	max_attacker_score_from_battles = 100
+	max_defender_score_from_occupation = 100
+	max_attacker_score_from_occupation = 150
+}

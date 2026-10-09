@@ -1,0 +1,77 @@
+﻿# Additive native hooks; post-transition maintenance does not race marriage/court transfers.
+on_game_start_after_lobby = { on_actions = { WJ_harem_start } }
+on_title_gain = { on_actions = { WJ_harem_accession } }
+yearly_playable_pulse = { on_actions = { WJ_harem_yearly } }
+on_marriage = { on_actions = { WJ_harem_marriage } }
+on_concubinage = { on_actions = { WJ_harem_concubinage } }
+on_divorce = { on_actions = { WJ_harem_divorce } }
+on_concubinage_end = { on_actions = { WJ_harem_concubinage_end } }
+on_vassal_change = { on_actions = { WJ_harem_changed } }
+on_join_court = { on_actions = { WJ_harem_changed } }
+on_leave_court = { on_actions = { WJ_harem_changed } }
+on_government_change = { on_actions = { WJ_harem_changed } }
+on_liege_government_change = { on_actions = { WJ_harem_changed } }
+on_death = { on_actions = { WJ_harem_death } }
+WJ_harem_start = {
+ effect = {
+  every_ruler = {
+   limit = { WJ_inner_emperor_trigger = yes }
+   WJ_harem_succession_effect = yes
+   WJ_harem_update_dowager_posts = yes
+   # Source initialization/AI uses the real primary consort. No retroactive deceased-person rewriting.
+   if = { limit = { exists = primary_spouse primary_spouse = { is_adult = yes NOT = { has_trait = SanGong_GongWei_1 } } }
+    primary_spouse = { save_scope_as = huanghou }
+    WJ_harem_crown_effect = yes
+   }
+  }
+ }
+}
+WJ_harem_accession = {
+ trigger = { WJ_inner_emperor_trigger = yes scope:title = root.primary_title }
+ effect = { WJ_harem_succession_effect = yes WJ_harem_update_dowager_posts = yes }
+}
+WJ_harem_yearly = {
+ trigger = { WJ_inner_emperor_trigger = yes }
+ effect = {
+  WJ_harem_succession_effect = yes
+  WJ_harem_update_dowager_posts = yes
+  primary_title = {
+   every_in_list = { variable = wj_harem_members limit = { is_alive = yes } trigger_event = { id = WJ_harem.900 days = 1 } }
+  }
+ }
+}
+WJ_harem_marriage = {
+ trigger = { WJ_inner_emperor_trigger = yes }
+ effect = {
+  save_scope_as = HuangDi
+  scope:spouse = { if = { limit = { is_alive = yes is_female = yes WJ_harem_has_role = no } add_trait = WJ_harem_guiren WJ_harem_register_effect = { EMPEROR = scope:HuangDi } } }
+ }
+}
+WJ_harem_concubinage = {
+ trigger = { WJ_inner_emperor_trigger = yes }
+ effect = {
+  save_scope_as = HuangDi
+  scope:concubine = { if = { limit = { is_alive = yes is_female = yes WJ_harem_has_role = no } add_trait = WJ_harem_guiren WJ_harem_register_effect = { EMPEROR = scope:HuangDi } } }
+ }
+}
+WJ_harem_divorce = {
+ effect = { scope:spouse ?= { if = { limit = { WJ_harem_has_role = yes } trigger_event = { id = WJ_harem.900 days = 1 } } } }
+}
+WJ_harem_concubinage_end = {
+ effect = { scope:concubine ?= { if = { limit = { WJ_harem_has_role = yes } trigger_event = { id = WJ_harem.900 days = 1 } } } }
+}
+WJ_harem_changed = {
+ trigger = { WJ_harem_has_role = yes }
+ effect = { trigger_event = { id = WJ_harem.900 days = 1 } }
+}
+WJ_harem_death = {
+ trigger = { WJ_harem_member = yes }
+ effect = {
+  save_scope_as = HuangHou
+  if = { limit = { OR = { has_trait = SanGong_GongWei_1 has_trait = SanGong_Taihou has_trait = SanGong_TaiHuangTaihou } }
+   top_liege = { save_scope_as = HuangDi trigger_event = { id = HouGong_ShiHao.001 days = 1 } }
+  }
+  # Keep deceased rank/epitaph data, but release the live roster membership.
+  var:wj_harem_realm = { remove_list_variable = { name = wj_harem_members target = scope:HuangHou } }
+ }
+}

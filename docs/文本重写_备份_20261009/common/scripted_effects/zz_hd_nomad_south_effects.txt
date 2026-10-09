@@ -1,0 +1,88 @@
+﻿# Effects for the nomad southern-invasion boost (see common/on_action/zz_hd_nomad_south_invasion.txt).
+
+# Global scope. Once per decade, only while the dynastic cycle is in chaos / standoff, one eligible AI nomad
+# ruler may become a conqueror (vanilla conqueror.0001 event: AI always accepts).
+# Chance is 20%; if a roll succeeds the next decade's roll is only 1%.
+hd_nomad_conqueror_decade_roll_effect = {
+	if = {
+		limit = {
+			hd_dynastic_cycle_is_luanshi_trigger = yes
+			OR = {
+				NOT = { exists = global_var:hd_nomad_conq_next_roll }
+				current_year >= global_var:hd_nomad_conq_next_roll
+			}
+		}
+		set_global_variable = {
+			name = hd_nomad_conq_next_roll
+			value = {
+				value = current_year
+				add = 10
+			}
+		}
+		# Read the chance first, then consume the 1% flag so it only affects this one decade roll.
+		set_global_variable = {
+			name = hd_nomad_conq_roll_chance
+			value = hd_nomad_conqueror_roll_chance
+		}
+		remove_global_variable = hd_nomad_conq_low_roll
+		random = {
+			chance = global_var:hd_nomad_conq_roll_chance
+			random_independent_ruler = {
+				limit = {
+					hd_nomad_south_attacker_trigger = yes
+					NOT = { has_trait = conqueror }
+				}
+				trigger_event = conqueror.0001
+			}
+			set_global_variable = { name = hd_nomad_conq_low_roll value = yes }
+		}
+	}
+}
+
+# Character scope (the nomad). The target is a title of the nomad's own tier (duchy or kingdom+, never higher)
+# that borders the nomad's realm by land; on a successful roll an invasion war is declared on its top liege.
+hd_nomad_south_try_invasion_effect = {
+	save_scope_as = hd_nomad
+	random_realm_county = {
+		limit = {
+			any_neighboring_county = {
+				hd_nomad_south_border_county_trigger = { NOMAD = scope:hd_nomad }
+			}
+		}
+		random_neighboring_county = {
+			limit = {
+				hd_nomad_south_border_county_trigger = { NOMAD = scope:hd_nomad }
+			}
+			save_scope_as = hd_border_county
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_border_county }
+		scope:hd_border_county.holder.top_liege = { save_scope_as = hd_defender }
+		if = {
+			limit = { highest_held_title_tier >= tier_kingdom }
+			scope:hd_border_county.kingdom = { save_scope_as = hd_target_title }
+		}
+		else = {
+			scope:hd_border_county.duchy = { save_scope_as = hd_target_title }
+		}
+		random = {
+			chance = hd_nomad_south_war_chance
+			if = {
+				limit = { highest_held_title_tier >= tier_kingdom }
+				start_war = {
+					casus_belli = mpo_nomad_invasion_cb
+					target = scope:hd_defender
+					target_title = scope:hd_target_title
+				}
+			}
+			else = {
+				start_war = {
+					casus_belli = mpo_nomad_duchy_invasion_cb
+					target = scope:hd_defender
+					target_title = scope:hd_target_title
+				}
+			}
+		}
+	}
+}

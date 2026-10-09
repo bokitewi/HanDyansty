@@ -1,0 +1,196 @@
+﻿# Kingdom titles own district membership; character flags never grant authority.
+# UI candidates include kingdoms without a district; never dereference them first.
+WJ_dd_king_official_trigger = {
+ WJ_contract_local_official_trigger = yes
+ primary_title = { tier = tier_kingdom is_noble_family_title = no }
+}
+WJ_dd_head_candidate_trigger = {
+ WJ_dd_king_official_trigger = yes
+ WJ_contract_sanjie_visible_trigger = yes
+}
+# Core title scope. Realm identity is a title, so normal emperor inheritance survives.
+WJ_dd_core_valid_trigger = {
+ tier = tier_kingdom
+ trigger_if = {
+  limit = { exists = var:wj_dd_core exists = var:wj_dd_realm exists = holder }
+  var:wj_dd_core = this
+  exists = var:wj_dd_realm.holder
+  holder = { WJ_dd_head_candidate_trigger = yes }
+  holder.primary_title = this
+  holder.top_liege.primary_title = var:wj_dd_realm
+ }
+ trigger_else = { always = no }
+}
+WJ_dd_head_trigger = {
+ WJ_dd_head_candidate_trigger = yes
+ primary_title = { WJ_dd_core_valid_trigger = yes }
+}
+# Kingdom offices own membership; lower offices follow actual lieges, not de jure land.
+WJ_dd_direct_member_trigger = {
+ WJ_dd_king_official_trigger = yes
+ trigger_if = {
+  limit = { exists = primary_title.var:wj_dd_core }
+  primary_title.var:wj_dd_core = { WJ_dd_core_valid_trigger = yes }
+  top_liege = primary_title.var:wj_dd_core.holder.top_liege
+ }
+ trigger_else = { always = no }
+}
+WJ_dd_member_trigger = {
+ WJ_contract_local_official_trigger = yes
+ custom_description = { text = WJ_failure_18
+OR = {
+  WJ_dd_direct_member_trigger = yes
+  AND = {
+   primary_title = { tier < tier_kingdom }
+   any_liege_or_above = { WJ_dd_direct_member_trigger = yes }
+  }
+ }
+}
+}
+# Character scope. CORE is the real district's core kingdom, never a character flag.
+WJ_dd_member_of_core_trigger = {
+ WJ_contract_local_official_trigger = yes
+ custom_description = { text = WJ_failure_11
+OR = {
+  AND = {
+   trigger_if = {
+    limit = { WJ_dd_direct_member_trigger = yes }
+    primary_title.var:wj_dd_core = $CORE$
+   }
+   trigger_else = { always = no }
+  }
+  AND = {
+   primary_title = { tier < tier_kingdom }
+   any_liege_or_above = {
+    trigger_if = {
+     limit = { WJ_dd_direct_member_trigger = yes }
+     primary_title.var:wj_dd_core = $CORE$
+    }
+    trigger_else = { always = no }
+   }
+  }
+ }
+}
+}
+WJ_dd_create_visible_trigger = {
+ exists = scope:actor
+ exists = scope:recipient
+ scope:actor = { WJ_zw_central_viewer = yes }
+ scope:recipient = {
+  top_liege = scope:actor.top_liege
+  WJ_dd_head_candidate_trigger = yes
+  NOT = { primary_title = { has_variable = wj_dd_core } }
+ }
+}
+WJ_dd_create_trigger = { WJ_dd_create_visible_trigger = yes scope:actor = { WJ_zw_central_authority = yes } }
+WJ_dd_manage_visible_trigger = {
+ exists = scope:actor
+ exists = scope:recipient
+ scope:actor = { WJ_zw_central_viewer = yes }
+ scope:recipient = { top_liege = scope:actor.top_liege WJ_dd_head_trigger = yes }
+}
+WJ_dd_manage_trigger = { WJ_dd_manage_visible_trigger = yes scope:actor = { WJ_zw_central_authority = yes } }
+# Kingdom scope, explicit CORE parameter. Native county adjacency only; no new sea rule.
+WJ_dd_touches_core_trigger = {
+ # Do not expand the entire de-jure county/neighbor tree in a menu tooltip.
+ custom_tooltip = {
+  text = WJ_dd_adjacent_kingdom_tt
+  any_in_de_jure_hierarchy = {
+   tier = tier_county
+   any_neighboring_county = {
+    trigger_if = {
+     limit = { exists = kingdom.var:wj_dd_core }
+     kingdom.var:wj_dd_core = $CORE$
+    }
+    trigger_else = { always = no }
+   }
+  }
+ }
+}
+WJ_dd_add_trigger = {
+ WJ_dd_manage_trigger = yes
+ exists = scope:secondary_recipient
+ scope:secondary_recipient = {
+  top_liege = scope:actor.top_liege
+  WJ_dd_king_official_trigger = yes
+  primary_title = {
+   NOT = { has_variable = wj_dd_core }
+   WJ_dd_touches_core_trigger = { CORE = scope:recipient.primary_title }
+  }
+ }
+}
+WJ_dd_remove_candidate_trigger = {
+ WJ_dd_manage_trigger = yes
+ exists = scope:secondary_recipient
+ scope:secondary_recipient = {
+  WJ_dd_king_official_trigger = yes
+  top_liege = scope:actor.top_liege
+  this != scope:recipient
+  trigger_if = {
+   limit = { exists = primary_title.var:wj_dd_core }
+   primary_title.var:wj_dd_core = scope:recipient.primary_title
+  }
+  trigger_else = { always = no }
+ }
+}
+WJ_dd_replace_trigger = {
+ WJ_dd_remove_candidate_trigger = yes
+ scope:secondary_recipient = { WJ_dd_head_candidate_trigger = yes }
+}
+# Province-detail interaction targets the prospective governor directly.
+WJ_dd_withdraw_candidate_trigger = {
+ scope:actor = { WJ_zw_central_authority = yes }
+ scope:recipient = {
+  top_liege = scope:actor.top_liege
+  WJ_dd_king_official_trigger = yes
+  WJ_dd_member_trigger = yes
+  NOT = { WJ_dd_head_trigger = yes }
+ }
+}
+WJ_dd_promote_trigger = {
+ WJ_dd_withdraw_candidate_trigger = yes
+ scope:recipient = {
+  WJ_dd_head_candidate_trigger = yes
+ }
+}
+# Passed scopes identify the issuing head and the subject of a military command.
+# This shared gate does NOT require the target to be a direct vassal of the head.
+WJ_dd_command_range_trigger = {
+ exists = scope:wj_dd_commander
+ exists = scope:wj_dd_target
+ scope:wj_dd_commander = {
+  WJ_dd_head_trigger = yes
+  vassal_contract_obligation_level:WJ_sanjie > 0
+  NOT = { primary_title = { has_variable = wj_dd_grant_pending } }
+ }
+ scope:wj_dd_target = {
+  WJ_contract_sanjie_visible_trigger = yes
+  WJ_dd_member_of_core_trigger = { CORE = scope:wj_dd_commander.primary_title }
+  this != scope:wj_dd_commander
+  top_liege = scope:wj_dd_commander.top_liege
+ }
+ # Reject only a rebellious commander ordering a loyal official.
+ NAND = {
+  scope:wj_dd_commander = { is_at_war_with = top_liege }
+  scope:wj_dd_target = { NOT = { is_at_war_with = top_liege } }
+ }
+}
+# Ordinary jie authority, not forced conviction. Rank is the real local primary title.
+WJ_dd_jie_range_trigger = {
+ WJ_dd_command_range_trigger = yes
+ OR = {
+  AND = {
+   scope:wj_dd_commander = { vassal_contract_has_flag = WJ_shichijie }
+   scope:wj_dd_target.primary_title = { tier <= tier_kingdom }
+  }
+  AND = {
+   scope:wj_dd_target.primary_title = { tier <= tier_duchy }
+   scope:wj_dd_commander = {
+    OR = {
+     vassal_contract_has_flag = WJ_chijie
+     AND = { vassal_contract_has_flag = WJ_jiajie is_at_war = yes }
+    }
+   }
+  }
+ }
+}

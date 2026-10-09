@@ -1,0 +1,215 @@
+﻿# HanDyansty southern-story patch. Base: 9230e81ef7ee657daab8b85b2b61633da76c7814
+# Additive late-loaded override; no GitHub writes.
+
+hds_sc_tick_effect = {
+    if = {
+        limit = { has_global_variable = wj_hchar_sun_ce AND = { trigger_if = { limit = { has_global_variable = wj_hchar_sun_ce } this = global_var:wj_hchar_sun_ce } trigger_else = { always = no } } is_alive = yes }
+        hds_retire_legacy_controller_effect = yes
+        hds_finish_title_transfer_effect = yes
+        if = {
+            limit = { has_character_flag = hds_sc_inherited NOT = { has_character_flag = hds_sc_inheritance_notice } }
+            hds_queue_event_effect = { EVENT = hds.4000 LEASE = hds_lease_4000 }
+        }
+        if = {
+            limit = { hds_sc_depart_ready_trigger = yes }
+            if = {
+                # Sun Jian already left Yuan Shu himself (hds.5000): skip the Yuan Shu departure story.
+                limit = { character:sun_jian ?= { has_character_flag = hds_sj_departed } }
+                hds_sc_depart_effect = yes
+            }
+            else = { hds_queue_event_effect = { EVENT = hds.4001 LEASE = hds_lease_4001 } }
+        }
+        if = {
+            limit = { has_character_flag = hds_sc_departed }
+            # Repairs an old completed-Wu save once; later lost land is not reset forever.
+            if = {
+                limit = { NOT = { has_character_flag = hds_nr_danyang_control_migrated } }
+                add_character_flag = hds_nr_danyang_control_migrated
+                add_character_flag = hds_sc_danyang_target_version
+                if = {
+                    limit = { has_character_flag = hds_sc_wu_complete NOT = { hds_sc_wu_control_trigger = yes } }
+                    remove_character_flag = hds_sc_wu_complete
+                    remove_character_flag = hds_sc_wu_notice
+                }
+            }
+            # A previously departed actor may have been re-vassalized by another integration pulse.
+            # The story already committed to independence, so restore it while the living adult is free.
+            if = {
+                limit = { is_adult = yes is_imprisoned = no exists = liege NOT = { is_independent_ruler = yes } }
+                hds_release_effect = yes
+            }
+            if = { limit = { NOT = { has_character_flag = hds_sc_wu_complete } } add_character_flag = sworn_peace }
+            hds_sc_seal_trade_effect = yes
+            hds_sc_reward_effect = yes
+            if = {
+                limit = { hds_sc_zhou_ready_trigger = yes }
+                hds_queue_event_effect = { EVENT = hds.4002 LEASE = hds_lease_4002 }
+            }
+            if = {
+                limit = { has_global_variable = wj_hchar_zhou_yu AND = { trigger_if = { limit = { has_global_variable = wj_hchar_zhou_yu } global_var:wj_hchar_zhou_yu = { is_alive = no } } trigger_else = { always = no } } }
+                add_character_flag = hds_sc_zhou_unavailable
+            }
+            # Title repair only for counties already controlled; never hands over enemy territory for free.
+            if = {
+                limit = { is_landed = yes NOT = { has_variable_list = hds_pending_titles } }
+                hds_claim_owned_duchies_effect = { KINGDOM = title:k_uuii_yangzhou }
+            }
+            if = {
+                limit = { hds_sc_wu_control_trigger = yes NOT = { has_variable_list = hds_pending_titles } }
+                add_character_flag = hds_sc_wu_complete
+                remove_character_flag = sworn_peace
+            }
+            hds_sc_war_diag_gate_effect = yes
+            if = {
+                limit = { NOT = { has_character_flag = hds_sc_wu_complete } hds_can_campaign_trigger = yes }
+                if = {
+                    limit = { has_character_flag = hds_sc_wu_authorized }
+                    hds_try_wu_war_effect = yes
+                }
+                else = { hds_queue_event_effect = { EVENT = hds.4003 LEASE = hds_lease_4003 } }
+            }
+            if = {
+                limit = { has_character_flag = hds_sc_wu_complete }
+                if = {
+                    limit = { NOT = { has_character_flag = hds_sc_wu_notice } }
+                    hds_queue_event_effect = { EVENT = hds.4004 LEASE = hds_lease_4004 }
+                }
+                hds_sc_yangzhou_historical_pulse_effect = yes
+            }
+        }
+    }
+}
+hds_sc_depart_effect = {
+    if = {
+        limit = { hds_sc_depart_ready_trigger = yes }
+        hds_release_effect = yes
+        if = {
+            limit = { is_alive = yes is_independent_ruler = yes }
+            hds_sc_estate_to_camp_effect = yes
+        }
+        if = {
+            limit = { is_alive = yes is_independent_ruler = yes hds_sun_estate_inherited_trigger = yes }
+            if = { limit = { NOT = { has_title = title:k_uuii_yangzhou } } add_pressed_claim = title:k_uuii_yangzhou }
+            add_character_flag = hds_sc_departed
+            add_character_flag = hds_sc_danyang_target_version
+            add_character_flag = sworn_peace
+            add_character_flag = hd_sun_ce_story_active
+            hds_qxzl_protect_effect = yes
+            hds_sc_seal_trade_effect = yes
+            hds_sc_reward_effect = yes
+            if = {
+                limit = { hds_can_campaign_trigger = yes }
+                hds_queue_event_effect = { EVENT = hds.4003 LEASE = hds_lease_4003 }
+            }
+        }
+    }
+}
+# Shared by Sun Jian and Sun Ce: right after leaving Yuan Shu and before the Danyang invasion,
+# 销毁家族庄园（家族头衔），改为冒险者营地；原廷臣随营。
+# (Vanilla yearly_playable_pulse destroys the estate of an independent noble-family-only ruler anyway.)
+# A landed character only loses the estate (a landed ruler cannot hold a camp).
+hds_estate_to_camp_effect = {
+    if = {
+        limit = {
+            is_alive = yes
+            NOT = { has_character_flag = $DONE_FLAG$ }
+            any_held_title = { is_noble_family_title = yes }
+        }
+        save_scope_as = hds_camp_leader
+        every_courtier = {
+            limit = { is_alive = yes }
+            add_to_temporary_list = hds_camp_followers
+        }
+        every_held_title = {
+            limit = { is_noble_family_title = yes }
+            save_temporary_scope_as = hds_camp_family_title
+            prev = { destroy_title = scope:hds_camp_family_title }
+        }
+        if = {
+            limit = { is_landed = no is_ruler = no }
+            create_landless_adventurer_title_effect = {
+                REASON = flag:voluntary
+                FLAVOR_CHAR = this
+            }
+        }
+        if = {
+            limit = { is_ruler = yes is_independent_ruler = no }
+            create_title_and_vassal_change = { type = independency save_scope_as = hds_camp_independence_change add_claim_on_loss = no }
+            becomes_independent = { change = scope:hds_camp_independence_change }
+            resolve_title_and_vassal_change = scope:hds_camp_independence_change
+        }
+        if = {
+            limit = { is_ruler = yes }
+            every_in_list = {
+                list = hds_camp_followers
+                limit = {
+                    is_alive = yes
+                    is_ruler = no
+                    is_imprisoned = no
+                    NOT = { is_courtier_of = scope:hds_camp_leader }
+                }
+                set_employer = scope:hds_camp_leader
+            }
+        }
+        add_character_flag = $DONE_FLAG$
+    }
+}
+# Sun Ce scope. hds_sc_inherited keeps hds_sun_estate_inherited_trigger true afterwards.
+# On the camp line (Sun Jian already converted) Sun Ce inherits the camp and holds no estate: no-op.
+hds_sc_estate_to_camp_effect = {
+    if = {
+        limit = { AND = { trigger_if = { limit = { has_global_variable = wj_hchar_sun_ce } this = global_var:wj_hchar_sun_ce } trigger_else = { always = no } } has_character_flag = hds_sc_inherited }
+        hds_estate_to_camp_effect = { DONE_FLAG = hds_sc_camp_converted }
+    }
+}
+# Sun Jian scope (hds_sj_independence_effect). The estate cache is cleared so the old
+# estate-transfer path stays off; hds_sun_snapshot_death_effect still lists the camp title
+# (duchy tier) in hds_sun_death_titles and hds_sun_force_inherit_effect hands it to Sun Ce.
+hds_sj_estate_to_camp_effect = {
+    if = {
+        limit = { this = character:sun_jian }
+        hds_estate_to_camp_effect = { DONE_FLAG = hds_sj_camp_converted }
+        if = {
+            limit = { has_character_flag = hds_sj_camp_converted }
+            set_global_variable = hds_sun_camp_line
+            title:h_china = {
+                remove_variable = hds_sun_family_title
+                remove_variable = hds_sun_original_estate
+            }
+        }
+    }
+}
+hds_sc_seal_trade_effect = {
+    if = {
+        limit = {
+            is_alive = yes AND = { trigger_if = { limit = { has_global_variable = wj_hchar_sun_ce } this = global_var:wj_hchar_sun_ce } trigger_else = { always = no } }
+            has_character_flag = hds_sc_departed
+            NOT = { has_character_flag = hds_sc_seal_delivered }
+            exists = character:yuan_shu
+            character:yuan_shu ?= { is_alive = yes }
+            any_character_artifact = { has_variable = han_artifact_imperial_seal }
+        }
+        random_character_artifact = {
+            limit = { has_variable = han_artifact_imperial_seal }
+            save_scope_as = hds_nr_traded_seal
+            set_owner = character:yuan_shu
+        }
+        if = {
+            limit = { scope:hds_nr_traded_seal = { owner = character:yuan_shu } }
+            add_character_flag = hds_sc_seal_delivered
+            set_variable = { name = hds_sc_traded_seal value = scope:hds_nr_traded_seal }
+        }
+    }
+}
+# Once the player/AI accepted the departure/invasion story, both continue the same historical sequence.
+# No bypass of native can_declare_war, no artificial victory, no mandatory date-of-death.
+hds_sc_yangzhou_historical_pulse_effect = {
+    if = {
+        limit = { AND = { trigger_if = { limit = { has_global_variable = wj_hchar_sun_ce } this = global_var:wj_hchar_sun_ce } trigger_else = { always = no } } is_alive = yes has_character_flag = hds_sc_wu_complete }
+        hds_claim_owned_duchies_effect = { KINGDOM = title:k_uuii_yangzhou }
+        if = {
+            limit = { hds_can_campaign_trigger = yes }
+            hds_try_regional_war_effect = { KINGDOM = title:k_uuii_yangzhou }
+        }
+    }
+}
