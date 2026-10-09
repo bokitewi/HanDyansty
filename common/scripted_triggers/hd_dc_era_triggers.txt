@@ -1,4 +1,4 @@
-# Scope: dynastic_cycle situation. The fixed county set excludes tributaries.
+﻿# Scope: dynastic_cycle situation. The fixed county set excludes tributaries.
 hd_dc_snapshot_valid_trigger = {
 	exists = title:h_china
 	has_variable = hd_dc_schema_version
@@ -13,9 +13,10 @@ hd_dc_has_hegemon_trigger = {
 	title:h_china.holder ?= { is_alive = yes }
 }
 
+# 天朝循环大修：只在崩溃期使用，阈值 hd_dc_collapse_percent（40%）
 hd_dc_low_control_trigger = {
 	hd_dc_has_hegemon_trigger = yes
-	hd_dc_control_numerator_value < hd_dc_enter_denominator_value
+	hd_dc_control_numerator_value < hd_dc_collapse_denominator_value
 }
 
 # War targets are inspected on the real war scope, not inferred from a flag.
@@ -29,19 +30,32 @@ hd_dc_is_mandate_war_trigger = {
 	}
 }
 
+# 进入群雄割据（斗争期 chaos）的唯一途径：脚本检测（2026-10-08 用户指定）
+# 1. 紧张期：天子领地（天子+封臣链持有的天下法理县）< 20%，立即
+# 2. 崩溃期：天下头衔无人持有；或天子领地 < 40%；或天子君权为 celestial_bureaucracy_0/1/2，立即
+#   （非天朝政体的天子没有这组法律，君权一条对其不触发）
+# 已删除：治世无天子满 12 个月、崩溃期 < 40% 持续 24 个月
 hd_dc_can_enter_chaos_trigger = {
 	hd_dc_snapshot_valid_trigger = yes
-	NOT = { situation_current_phase = situation_dynastic_cycle_phase_chaos }
 	OR = {
 		AND = {
-			hd_dc_has_hegemon_trigger = no
-			has_variable = hd_dc_absent_since
-			NOT = { has_variable = hd_dc_absent_wait }
+			situation_current_phase = situation_dynastic_cycle_phase_instability
+			hd_dc_has_hegemon_trigger = yes
+			hd_dc_control_numerator_value < hd_dc_force_struggle_denominator_value
 		}
 		AND = {
-			hd_dc_low_control_trigger = yes
-			has_variable = hd_dc_low_control_since
-			NOT = { has_variable = hd_dc_low_control_wait }
+			situation_current_phase = situation_dynastic_cycle_phase_hd_collapse
+			OR = {
+				hd_dc_has_hegemon_trigger = no
+				hd_dc_low_control_trigger = yes
+				title:h_china.holder ?= {
+					OR = {
+						has_realm_law = celestial_bureaucracy_0
+						has_realm_law = celestial_bureaucracy_1
+						has_realm_law = celestial_bureaucracy_2
+					}
+				}
+			}
 		}
 	}
 }

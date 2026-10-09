@@ -1,0 +1,336 @@
+﻿# Phase 2 world-opportunity setup and actual-war terminal routing.
+
+# Force a historical companion out of landed or landless-title status before
+# employing them in Liu Bei's court.
+hd_peach_garden_force_liu_courtier_effect = {
+	if = {
+		limit = { is_landed = yes }
+		if = {
+			limit = { liege ?= { is_alive = yes } }
+			liege = { save_temporary_scope_as = hd_peach_garden_title_recipient }
+		}
+		else_if = {
+			limit = { title:h_china.holder ?= { is_alive = yes } }
+			title:h_china.holder = { save_temporary_scope_as = hd_peach_garden_title_recipient }
+		}
+		else_if = {
+			limit = { title:e_han.holder ?= { is_alive = yes } }
+			title:e_han.holder = { save_temporary_scope_as = hd_peach_garden_title_recipient }
+		}
+		else = {
+			character:liu_bei = { save_temporary_scope_as = hd_peach_garden_title_recipient }
+		}
+		if = {
+			limit = {
+				exists = scope:hd_peach_garden_title_recipient
+				any_held_title = { tier >= tier_county is_landless_type_title = no }
+			}
+			create_title_and_vassal_change = {
+				type = granted
+				save_scope_as = hd_peach_garden_unland_change
+				add_claim_on_loss = no
+			}
+			every_held_title = {
+				limit = { tier >= tier_county is_landless_type_title = no }
+				change_title_holder_include_vassals = {
+					holder = scope:hd_peach_garden_title_recipient
+					change = scope:hd_peach_garden_unland_change
+				}
+			}
+			resolve_title_and_vassal_change = scope:hd_peach_garden_unland_change
+		}
+	}
+	every_held_title = {
+		limit = { is_landless_type_title = yes }
+		save_temporary_scope_as = hd_peach_garden_landless_title
+		prev = { destroy_title = scope:hd_peach_garden_landless_title }
+	}
+	if = {
+		limit = { is_alive = yes is_landed = no }
+		set_employer = character:liu_bei
+	}
+}
+
+hd_fengying_try_resolve_responses_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_fengying_world_claimed }
+			NOT = { exists = global_var:hd_fengying_world_resolved }
+			OR = { character:cao_cao = { is_alive = no } character:cao_cao = { has_character_flag = hd_cao_fengying_responded } }
+			character:cao_cao = { NOT = { has_character_flag = hd_cao_fengying_authorized } }
+		}
+		set_global_variable = hd_fengying_world_resolved
+		set_global_variable = hd_chain_terminal_alternate_failure
+		remove_global_variable = hd_fengying_world_open
+	}
+}
+
+# Only shared world chains remain here.  Legacy Liu Bei LB-24/LB-25 cleanup
+# branches were removed together with those personal chains.
+hd_resolve_invalid_historical_world_chains_effect = {
+	hd4_bootstrap_effect = yes
+	if = {
+		limit = {
+			exists = global_var:hd_anti_regent_chain_resolved
+			NOT = { exists = global_var:hd_fengying_world_resolved }
+			OR = {
+				character:cao_cao = { is_alive = no }
+				character:liu_xie = { is_alive = no }
+				NOT = { title:h_china.holder = character:liu_xie }
+			}
+		}
+		set_global_variable = hd_fengying_world_resolved
+		set_global_variable = hd_chain_terminal_alternate_failure
+		remove_global_variable = hd_fengying_world_open
+		character:cao_cao = {
+			remove_character_flag = hd_cao_fengying_authorized
+			remove_character_flag = hd_cao_fengying_takeover_pending
+		}
+		debug_log = "HD_FENGYING ABORTED_CAO_OR_HAN_INVALID"
+	}
+	if = {
+		limit = {
+			exists = global_var:hd_fengying_world_resolved
+			NOT = { exists = global_var:hd_guandu_world_resolved }
+			OR = { character:cao_cao = { is_alive = no } character:yuan_shao = { is_alive = no } }
+		}
+		set_global_variable = hd_guandu_world_resolved
+		set_global_variable = hd_chain_terminal_alternate_failure
+		remove_global_variable = hd_guandu_world_open
+	}
+	if = {
+		limit = {
+			exists = global_var:hd_guandu_world_resolved
+			NOT = { exists = global_var:hd_chibi_world_resolved }
+			OR = { character:cao_cao = { is_alive = no } character:sun_quan = { is_alive = no } character:liu_bei = { is_alive = no } }
+		}
+		set_global_variable = hd_chibi_world_resolved
+		set_global_variable = hd_chain_terminal_alternate_failure
+		remove_global_variable = hd_chibi_world_open
+	}
+}
+
+# One Liu Bei updater: unchanged Peach Garden dispatch before the Yellow
+# Turban outcome, then the continuing rise. Shared war chains are unchanged.
+hd_update_liu_bei_life_story_effect = {
+	if = {
+		limit = {
+			game_start_date = 184.1.1
+			character:liu_bei = { is_alive = yes }
+		}
+		character:liu_bei = {
+			hd_lb_ensure_story_effect = yes
+			if = {
+				limit = { NOT = { exists = global_var:hd_yellow_turban_outcome_resolved } }
+				if = {
+					limit = {
+						NOT = { any_owned_story = { type = hd_story_liu_bei_life } }
+					}
+					create_story = { type = hd_story_liu_bei_life }
+				}
+
+				random_owned_story = {
+					type = hd_story_liu_bei_life
+					if = {
+						limit = { NOT = { exists = var:hd_liu_bei_life_phase } }
+						set_variable = {
+							name = hd_liu_bei_life_phase
+							value = flag:hd_liu_bei_phase_rising
+						}
+					}
+				}
+
+				# Convert saves made with the intermediate permanent-pending build.
+				if = {
+					limit = { NOT = { has_character_flag = hd_liu_bei_dispatch_state_v2_migrated } }
+					remove_character_flag = hd_peach_garden_event_pending
+					add_character_flag = hd_liu_bei_dispatch_state_v2_migrated
+				}
+
+				# Mark dispatch before opening the event so concurrent entry points
+				# cannot create two Peach Garden windows.
+				if = {
+					limit = {
+						NOT = { has_character_flag = hd_peach_garden_oath_completed }
+						NOT = { has_character_flag = hd_peach_garden_oath_unavailable }
+						NOT = { has_character_flag = hd_peach_garden_event_pending }
+						NOT = { has_character_flag = hd_peach_garden_event_opened }
+					}
+					if = {
+						limit = {
+							character:guan_yu ?= { is_alive = yes }
+							character:zhang_fei ?= { is_alive = yes }
+						}
+						add_character_flag = {
+							flag = hd_peach_garden_event_pending
+							days = 60
+						}
+						trigger_event = hd_peach_garden.0001
+					}
+					else = { add_character_flag = hd_peach_garden_oath_unavailable }
+				}
+			}
+			hd_lb_tick_effect = yes
+		}
+	}
+}
+
+# Shared by the player's decision and Cao's existing AI story heartbeat.
+hd_cao_fengying_start_war_effect = {
+	if = {
+		limit = { hd_cao_fengying_can_declare_trigger = yes }
+		start_war = { cb = hd_cao_fengying_cb target = title:d_jingzhao.holder }
+		if = {
+			limit = { any_character_war = { using_cb = hd_cao_fengying_cb primary_attacker = character:cao_cao } }
+			debug_log = "HD_FENGYING WAR_CONFIRMED"
+		}
+		else = { debug_log = "HD_FENGYING WAR_START_FAILED_AUTHORIZATION_RETAINED" }
+	}
+}
+
+hd_open_fengying_world_opportunity_effect = {
+	if = {
+		limit = { hd_fengying_world_ready_trigger = yes }
+		set_global_variable = hd_fengying_world_open
+		character:liu_xie = { save_scope_as = hd_fengying_emperor }
+		if = {
+			limit = { character:cao_cao = { is_alive = yes } }
+			character:cao_cao = {
+				random_owned_story = {
+					type = hd_story_cao_life
+					set_variable = { name = hd_cao_life_phase value = flag:hd_cao_life_fengying }
+				}
+				trigger_event = hd_fengying.0001
+			}
+		}
+	}
+}
+
+hd_open_guandu_world_opportunity_effect = { hd4_guandu_tick_effect = yes }
+
+hd_open_chibi_world_opportunity_effect = {
+	set_global_variable = hd_chibi_world_open
+	# Observable, war-bound risk inputs; events may remove individual risks through preparation.
+	set_global_variable = hd_chibi_risk_disease
+	set_global_variable = hd_chibi_risk_expedition
+	set_global_variable = hd_chibi_risk_naval
+	set_global_variable = hd_chibi_risk_jingzhou_loyalty
+	set_global_variable = hd_chibi_risk_tied_ships
+	set_global_variable = hd_chibi_risk_logistics
+	if = {
+		limit = { character:huang_gai = { is_alive = yes } }
+		set_global_variable = hd_chibi_risk_huang_gai
+	}
+	if = {
+		limit = { title:k_uuii_jingzhou.holder.top_liege = character:cao_cao }
+		set_global_variable = hd_chibi_jingzhou_surrendered
+		remove_global_variable = hd_chibi_risk_jingzhou_loyalty
+		character:cao_cao = { trigger_event = hd_historical_world.0200 }
+	}
+	else = {
+		if = {
+			limit = { title:k_uuii_jingzhou.holder ?= { is_alive = yes } }
+			title:k_uuii_jingzhou.holder = { trigger_event = hd_historical_world.0210 }
+		}
+		else = { character:cao_cao = { trigger_event = hd_historical_world.0200 } }
+	}
+}
+
+# Shared historical war terminal routing now covers only Guandu and Chibi.
+hd_historical_world_war_victory_effect = {
+	if = {
+		limit = { var:hd_world_war_kind ?= flag:guandu }
+		hd_clear_guandu_wuchao_effect = yes
+		set_global_variable = hd_guandu_world_resolved
+		set_global_variable = hd_chain_terminal_nonhistorical
+		remove_global_variable = hd_guandu_world_active
+		scope:attacker = { trigger_event = hd_historical_world.0191 }
+	}
+	else_if = {
+		limit = { var:hd_world_war_kind ?= flag:chibi }
+		hd_clear_chibi_risks_effect = yes
+		set_global_variable = hd_chibi_world_resolved
+		set_global_variable = hd_chain_terminal_nonhistorical
+		remove_global_variable = hd_chibi_world_active
+		scope:attacker = { trigger_event = hd_historical_world.0291 }
+	}
+}
+
+hd_historical_world_war_defeat_effect = {
+	if = {
+		limit = { var:hd_world_war_kind ?= flag:guandu }
+		hd_clear_guandu_wuchao_effect = yes
+		set_global_variable = hd_guandu_world_resolved
+		set_global_variable = hd_chain_terminal_historical
+		remove_global_variable = hd_guandu_world_active
+		scope:defender = { trigger_event = hd_historical_world.0190 }
+	}
+	else_if = {
+		limit = { var:hd_world_war_kind ?= flag:chibi }
+		hd_clear_chibi_risks_effect = yes
+		set_global_variable = hd_chibi_world_resolved
+		set_global_variable = hd_chain_terminal_historical
+		remove_global_variable = hd_chibi_world_active
+		scope:defender = { trigger_event = hd_historical_world.0290 }
+	}
+}
+
+hd_historical_world_war_white_peace_effect = {
+	if = {
+		limit = { var:hd_world_war_kind ?= flag:guandu }
+		set_global_variable = hd_chain_terminal_alternate_success
+		hd_clear_guandu_wuchao_effect = yes
+		set_global_variable = hd_guandu_world_resolved
+		remove_global_variable = hd_guandu_world_active
+	}
+	else_if = {
+		limit = { var:hd_world_war_kind ?= flag:chibi }
+		set_global_variable = hd_chain_terminal_alternate_success
+		hd_clear_chibi_risks_effect = yes
+		set_global_variable = hd_chibi_world_resolved
+		remove_global_variable = hd_chibi_world_active
+	}
+}
+
+hd_historical_world_war_invalidated_effect = {
+	if = {
+		limit = { var:hd_world_war_kind ?= flag:guandu }
+		set_global_variable = hd_chain_terminal_alternate_failure
+		hd_clear_guandu_wuchao_effect = yes
+		set_global_variable = hd_guandu_world_resolved
+		remove_global_variable = hd_guandu_world_active
+	}
+	else_if = {
+		limit = { var:hd_world_war_kind ?= flag:chibi }
+		set_global_variable = hd_chain_terminal_alternate_failure
+		hd_clear_chibi_risks_effect = yes
+		set_global_variable = hd_chibi_world_resolved
+		remove_global_variable = hd_chibi_world_active
+	}
+}
+
+hd_clear_guandu_wuchao_effect = {
+	character:yuan_shao = {
+		remove_character_modifier = hd_guandu_xu_you_wuchao_modifier
+		remove_character_modifier = hd_guandu_scout_wuchao_modifier
+	}
+}
+
+hd_clear_chibi_risks_effect = {
+	character:cao_cao = {
+		remove_character_modifier = hd_chibi_risk_disease_modifier
+		remove_character_modifier = hd_chibi_risk_expedition_modifier
+		remove_character_modifier = hd_chibi_risk_naval_modifier
+		remove_character_modifier = hd_chibi_risk_jingzhou_loyalty_modifier
+		remove_character_modifier = hd_chibi_risk_tied_ships_modifier
+		remove_character_modifier = hd_chibi_risk_logistics_modifier
+		remove_character_modifier = hd_chibi_risk_huang_gai_modifier
+	}
+	remove_global_variable = hd_chibi_risk_disease
+	remove_global_variable = hd_chibi_risk_expedition
+	remove_global_variable = hd_chibi_risk_naval
+	remove_global_variable = hd_chibi_risk_jingzhou_loyalty
+	remove_global_variable = hd_chibi_risk_tied_ships
+	remove_global_variable = hd_chibi_risk_logistics
+	remove_global_variable = hd_chibi_risk_huang_gai
+}

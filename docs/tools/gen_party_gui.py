@@ -345,7 +345,9 @@ t = t.replace('''				hbox = {
 					visible = "[Not( SituationDynasticCycleWindow.IsInChaosEra )]"''', '''				hbox = {
 					name = "dynastic_cycle_tabs"
 					# 天朝循环大修·朋党：乱世也显示标签页''')
-t = t.replace('''					button_tab = {
+# 只插一次：此前每运行一次都会再插一行 visible，导致 GUI 出现三行重复（Malformed token）
+if "只对王国级以上朝廷显示（文档 1.01）" not in t:
+  t = t.replace('''					button_tab = {
 						name = "open_movements_tab"
 						shortcut = "tab_2"
 ''', '''					button_tab = {

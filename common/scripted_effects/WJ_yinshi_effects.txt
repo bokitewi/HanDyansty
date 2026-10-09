@@ -1,0 +1,484 @@
+﻿# ============================================================================
+# 隐士（养望重制）效果。设计见 docs/隐士故事循环_重制计划.md
+# 入口 WJ_yinshi_enter_effect；出口沿用 WJ_yangwang_exit_effect（WJ_yangwang_effects.txt）。
+# ============================================================================
+
+# ---------------------------------------------------------------------------
+# 进入隐居：辞官 → 特质 → 拒任期 → 禁止任骑士 → 开启故事
+# ---------------------------------------------------------------------------
+WJ_yinshi_enter_effect = {
+ if = {
+  limit = { NOT = { has_trait = WJ_yangwang_trait } }
+  WJ_yinshi_resign_effect = yes
+  add_trait = WJ_yangwang_trait
+  if = {
+   limit = { appointment_timeout_days = 0 }
+   set_appointment_timeout = { years = 150 desc = appointment_timeout_desc_refusing }
+   add_character_flag = wj_yangwang_timeout_owned
+  }
+  else = {
+   # 已有外部拒任期时不覆盖，到期后由 WJ_yangwang_timeout.0001 接管。
+   trigger_event = { id = WJ_yangwang_timeout.0001 days = WJ_yangwang_timeout_handoff_days }
+  }
+  set_knight_status = forbid
+  if = {
+   limit = { NOT = { any_owned_story = { story_type = story_WJ_yinshi } } }
+   create_story = story_WJ_yinshi
+  }
+ }
+}
+
+# 辞官：离开幕府（作为幕僚离开、作为府主解散），离开议会/部长，卸下统兵，
+# 男爵级以上非家族头衔连同附庸交还直属上级。
+# 宫廷职位由 base_court_position_validity_trigger 等的隐士条件自动失效。
+WJ_yinshi_resign_effect = {
+ save_scope_as = wj_yinshi_resigner
+ WJ_clear_han_jin_mufu_state_effect = yes
+ every_liege_or_above = {
+  limit = { scope:wj_yinshi_resigner = { is_councillor_of = prev } }
+  fire_councillor = scope:wj_yinshi_resigner
+ }
+ commanding_army ?= { remove_commander = yes }
+ if = {
+  limit = {
+   exists = liege
+   WJ_yinshi_holds_office_title_trigger = yes
+  }
+  liege = { save_scope_as = wj_yinshi_title_receiver }
+  create_title_and_vassal_change = {
+   type = returned
+   save_scope_as = wj_yinshi_change
+   add_claim_on_loss = no
+  }
+  every_held_title = {
+   limit = { is_noble_family_title = no }
+   change_title_holder = {
+    holder = scope:wj_yinshi_title_receiver
+    change = scope:wj_yinshi_change
+    take_baronies = yes
+   }
+  }
+  every_vassal = {
+   change_liege = {
+    liege = scope:wj_yinshi_title_receiver
+    change = scope:wj_yinshi_change
+   }
+  }
+  resolve_title_and_vassal_change = scope:wj_yinshi_change
+ }
+}
+
+# ---------------------------------------------------------------------------
+# 故事抽事件（故事 effect_group 每 120–240 天调用一次，隐士作用域）
+# ---------------------------------------------------------------------------
+WJ_yinshi_pick_event_effect = {
+ save_scope_as = wj_yinshi_subject
+ WJ_yinshi_find_friend_effect = yes
+ if = {
+  limit = { WJ_yinshi_invitation_open_trigger = yes }
+  random = {
+   chance = 10
+   WJ_yinshi_try_invitation_effect = yes
+  }
+ }
+ if = {
+  limit = {
+   NOT = { exists = scope:wj_yinshi_fired }
+   OR = {
+    WJ_yinshi_learning_open_trigger = yes
+    WJ_yinshi_inquiry_open_trigger = yes
+    WJ_yinshi_local_open_trigger = yes
+    AND = { exists = scope:wj_yinshi_friend WJ_yinshi_friend_open_trigger = yes }
+   }
+  }
+  random_list = {
+   25 = {
+    trigger = { WJ_yinshi_learning_open_trigger = yes }
+    WJ_yinshi_pick_learning_effect = yes
+   }
+   25 = {
+    trigger = { WJ_yinshi_inquiry_open_trigger = yes }
+    WJ_yinshi_pick_inquiry_effect = yes
+   }
+   25 = {
+    trigger = { WJ_yinshi_local_open_trigger = yes }
+    WJ_yinshi_pick_local_effect = yes
+   }
+   25 = {
+    trigger = { exists = scope:wj_yinshi_friend WJ_yinshi_friend_open_trigger = yes }
+    WJ_yinshi_pick_friend_effect = yes
+   }
+  }
+ }
+}
+
+# 朋友人选：朋友关系 → 近亲 → 直属上级宫廷中好感 ≥20 者。不做全图搜索。
+WJ_yinshi_find_friend_effect = {
+ random_relation = {
+  type = friend
+  limit = { WJ_yinshi_companion_ok_trigger = yes }
+  save_scope_as = wj_yinshi_friend
+ }
+ if = {
+  limit = { NOT = { exists = scope:wj_yinshi_friend } }
+  random_close_family_member = {
+   limit = { WJ_yinshi_companion_ok_trigger = yes }
+   save_scope_as = wj_yinshi_friend
+  }
+ }
+ if = {
+  limit = { NOT = { exists = scope:wj_yinshi_friend } exists = liege }
+  liege = {
+   random_courtier = {
+    limit = {
+     WJ_yinshi_companion_ok_trigger = yes
+     opinion = { target = scope:wj_yinshi_subject value >= 20 }
+    }
+    save_scope_as = wj_yinshi_friend
+   }
+  }
+ }
+}
+
+# 邀请类：入幕 / 孝廉 / 茂才 等权；找不到发邀者则本次落回普通四类。
+WJ_yinshi_try_invitation_effect = {
+ random_list = {
+  1 = {
+   trigger = { NOT = { has_character_flag = wj_yinshi_ev_5001 } }
+   WJ_yinshi_try_mufu_effect = yes
+  }
+  1 = {
+   trigger = { NOT = { has_character_flag = wj_yinshi_ev_5002 } }
+   WJ_yinshi_try_xiaolian_effect = yes
+  }
+  1 = {
+   trigger = { NOT = { has_character_flag = wj_yinshi_ev_5003 } }
+   WJ_yinshi_try_maocai_effect = yes
+  }
+ }
+}
+WJ_yinshi_try_mufu_effect = {
+ random_player = {
+  limit = { WJ_yinshi_mufu_host_trigger = yes }
+  save_scope_as = wj_yinshi_inviter
+ }
+ if = {
+  limit = { exists = scope:wj_yinshi_inviter }
+  scope:wj_yinshi_inviter = { save_scope_as = actor }
+  save_scope_as = recipient
+  WJ_yangwang_select_mufu_slot_effect = yes
+  save_scope_value_as = { name = wj_yinshi_via value = flag:story }
+  save_scope_value_as = { name = wj_yinshi_fired value = yes }
+  trigger_event = WJ_yinshi.5001
+ }
+}
+WJ_yinshi_try_xiaolian_effect = {
+ random_liege_or_above = {
+  limit = { WJ_yinshi_xiaolian_actor_trigger = yes }
+  save_scope_as = wj_yinshi_inviter
+ }
+ if = {
+  limit = { exists = scope:wj_yinshi_inviter }
+  scope:wj_yinshi_inviter = { save_scope_as = actor }
+  save_scope_as = recipient
+  save_scope_value_as = { name = wj_yinshi_via value = flag:story }
+  save_scope_value_as = { name = wj_yinshi_fired value = yes }
+  trigger_event = WJ_yinshi.5002
+ }
+}
+WJ_yinshi_try_maocai_effect = {
+ random_liege_or_above = {
+  limit = { WJ_yinshi_maocai_actor_trigger = yes }
+  save_scope_as = wj_yinshi_inviter
+ }
+ if = {
+  limit = { exists = scope:wj_yinshi_inviter }
+  scope:wj_yinshi_inviter = { save_scope_as = actor }
+  save_scope_as = recipient
+  save_scope_value_as = { name = wj_yinshi_via value = flag:story }
+  save_scope_value_as = { name = wj_yinshi_fired value = yes }
+  trigger_event = WJ_yinshi.5003
+ }
+}
+
+WJ_yinshi_pick_learning_effect = {
+ random_list = {
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_1001 } } trigger_event = WJ_yinshi.1001 }
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_1002 } } trigger_event = WJ_yinshi.1002 }
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_1003 } } trigger_event = WJ_yinshi.1003 }
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_1004 } } trigger_event = WJ_yinshi.1004 }
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_1005 } } trigger_event = WJ_yinshi.1005 }
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_1006 } } trigger_event = WJ_yinshi.1006 }
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_1007 } } trigger_event = WJ_yinshi.1007 }
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_1008 } } trigger_event = WJ_yinshi.1008 }
+ }
+}
+WJ_yinshi_pick_inquiry_effect = {
+ random_list = {
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_2001 } } trigger_event = WJ_yinshi.2001 }
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_2002 } } trigger_event = WJ_yinshi.2002 }
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_2003 } } trigger_event = WJ_yinshi.2003 }
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_2004 } } trigger_event = WJ_yinshi.2004 }
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_2005 } } trigger_event = WJ_yinshi.2005 }
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_2006 } } trigger_event = WJ_yinshi.2006 }
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_2007 } } trigger_event = WJ_yinshi.2007 }
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_2008 } } trigger_event = WJ_yinshi.2008 }
+ }
+}
+WJ_yinshi_pick_local_effect = {
+ location ?= {
+  county ?= {
+   holder ?= {
+    if = {
+     limit = { WJ_yinshi_local_lord_ok_trigger = yes }
+     save_scope_as = wj_yinshi_local_lord
+    }
+   }
+  }
+ }
+ random_list = {
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_3001 } } trigger_event = WJ_yinshi.3001 }
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_3002 } } trigger_event = WJ_yinshi.3002 }
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_3003 } } trigger_event = WJ_yinshi.3003 }
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_3004 } } trigger_event = WJ_yinshi.3004 }
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_3005 } } trigger_event = WJ_yinshi.3005 }
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_3006 } } trigger_event = WJ_yinshi.3006 }
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_3007 } } trigger_event = WJ_yinshi.3007 }
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_3008 } } trigger_event = WJ_yinshi.3008 }
+ }
+}
+WJ_yinshi_pick_friend_effect = {
+ random_list = {
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_4001 } } trigger_event = WJ_yinshi.4001 }
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_4002 } } trigger_event = WJ_yinshi.4002 }
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_4003 } } trigger_event = WJ_yinshi.4003 }
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_4004 } } trigger_event = WJ_yinshi.4004 }
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_4005 } } trigger_event = WJ_yinshi.4005 }
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_4006 } } trigger_event = WJ_yinshi.4006 }
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_4007 } } trigger_event = WJ_yinshi.4007 }
+  1 = { trigger = { NOT = { has_character_flag = wj_yinshi_ev_4008 } } trigger_event = WJ_yinshi.4008 }
+ }
+}
+
+# ---------------------------------------------------------------------------
+# 奖励（隐士作用域）。数值：稳妥 75 贤望；冒险成功 150 贤望；性格选项 100 贤望。
+# ---------------------------------------------------------------------------
+# 学习/探究稳妥：贤望 75 + 生活方式经验 150。SKILL = learning / stewardship / diplomacy
+WJ_yinshi_safe_xp_effect = {
+ change_merit = 75
+ add_$SKILL$_lifestyle_xp = 150
+}
+# 当地人稳妥：贤望 75 + 威望 50。
+WJ_yinshi_safe_local_effect = {
+ change_merit = 75
+ add_prestige = 50
+}
+# 朋友稳妥：贤望 75 + 双方好感 +15 + 压力 -10。
+WJ_yinshi_safe_friend_effect = {
+ change_merit = 75
+ add_stress = -10
+ WJ_yinshi_friend_mutual_opinion_effect = yes
+}
+# 性格选项：无风险，贤望 100 + 经验 200 + 压力 -10。
+WJ_yinshi_trait_option_effect = {
+ change_merit = 100
+ add_$SKILL$_lifestyle_xp = 200
+ add_stress = -10
+}
+
+# 学习类冒险：成功 贤望 150 + 经验 300；失败 压力 +15。
+WJ_yinshi_learning_risk_effect = {
+ random_list = {
+  0 = {
+   modifier = { add = WJ_yinshi_chance_$SKILL$_value always = yes }
+   desc = WJ_yinshi_risk_success
+   change_merit = 150
+   add_$SKILL$_lifestyle_xp = 300
+  }
+  0 = {
+   modifier = { add = WJ_yinshi_fail_$SKILL$_value always = yes }
+   desc = WJ_yinshi_risk_fail
+   add_stress = 15
+  }
+ }
+}
+
+# 探究类冒险：成功 贤望 150，并各半得属性 +1 或指定特质（已有则改给属性），
+# 另 10% 得名士；失败 压力 +15。
+WJ_yinshi_inquiry_risk_effect = {
+ random_list = {
+  0 = {
+   modifier = { add = WJ_yinshi_chance_$SKILL$_value always = yes }
+   desc = WJ_yinshi_risk_success
+   change_merit = 150
+   if = {
+    limit = { NOT = { has_trait = $TRAIT$ } }
+    random_list = {
+     50 = { add_trait = $TRAIT$ }
+     50 = { add_$SKILL$_skill = 1 }
+    }
+   }
+   else = { add_$SKILL$_skill = 1 }
+   WJ_yinshi_mingshi_roll_effect = yes
+  }
+  0 = {
+   modifier = { add = WJ_yinshi_fail_$SKILL$_value always = yes }
+   desc = WJ_yinshi_risk_fail
+   add_stress = 15
+  }
+ }
+}
+WJ_yinshi_mingshi_roll_effect = {
+ if = {
+  limit = { NOT = { has_trait = WJ_mingshi_trait } }
+  random = {
+   chance = 10
+   add_trait = WJ_mingshi_trait
+  }
+ }
+}
+# 自省（2008）专用：随机一个可得的性格特质（性格特质 <3 且无相反特质）。
+WJ_yinshi_add_personality_effect = {
+ random_list = {
+  1 = { trigger = { NOR = { has_trait = patient has_trait = impatient } } add_trait = patient }
+  1 = { trigger = { NOR = { has_trait = diligent has_trait = lazy } } add_trait = diligent }
+  1 = { trigger = { NOR = { has_trait = content has_trait = ambitious } } add_trait = content }
+  1 = { trigger = { NOR = { has_trait = humble has_trait = arrogant } } add_trait = humble }
+  1 = { trigger = { NOR = { has_trait = calm has_trait = wrathful } } add_trait = calm }
+  1 = { trigger = { NOR = { has_trait = temperate has_trait = gluttonous } } add_trait = temperate }
+ }
+}
+
+# 当地人冒险：成功 贤望 150 + 经验 300 + 所在县"隐士教化"；失败 威望 -30。
+WJ_yinshi_local_risk_effect = {
+ random_list = {
+  0 = {
+   modifier = { add = WJ_yinshi_chance_$SKILL$_value always = yes }
+   desc = WJ_yinshi_risk_success
+   change_merit = 150
+   add_$SKILL$_lifestyle_xp = 300
+   WJ_yinshi_local_modifier_effect = yes
+  }
+  0 = {
+   modifier = { add = WJ_yinshi_fail_$SKILL$_value always = yes }
+   desc = WJ_yinshi_risk_fail
+   add_prestige = -30
+  }
+ }
+}
+WJ_yinshi_local_modifier_effect = {
+ location ?= {
+  county ?= {
+   if = {
+    limit = { has_county_modifier = WJ_yinshi_local_modifier }
+    remove_county_modifier = WJ_yinshi_local_modifier
+   }
+   add_county_modifier = { modifier = WJ_yinshi_local_modifier years = 5 }
+  }
+ }
+}
+
+# 朋友冒险：成功 贤望 150 + 外交经验 300 + 双方好感 +15 + 25% 结为朋友；失败 对方好感 -15。
+WJ_yinshi_friend_risk_effect = {
+ random_list = {
+  0 = {
+   modifier = { add = WJ_yinshi_chance_diplomacy_value always = yes }
+   desc = WJ_yinshi_risk_success
+   change_merit = 150
+   add_diplomacy_lifestyle_xp = 300
+   WJ_yinshi_friend_mutual_opinion_effect = yes
+   if = {
+    limit = { can_set_relation_friend_trigger = { CHARACTER = scope:wj_yinshi_friend } }
+    random = {
+     chance = 25
+     set_relation_friend = { reason = WJ_yinshi_friend_reason target = scope:wj_yinshi_friend }
+    }
+   }
+  }
+  0 = {
+   modifier = { add = WJ_yinshi_fail_diplomacy_value always = yes }
+   desc = WJ_yinshi_risk_fail
+   scope:wj_yinshi_friend = {
+    add_opinion = { target = scope:wj_yinshi_subject modifier = WJ_yinshi_friend_bad_opinion }
+   }
+  }
+ }
+}
+WJ_yinshi_friend_mutual_opinion_effect = {
+ scope:wj_yinshi_friend = {
+  add_opinion = { target = scope:wj_yinshi_subject modifier = WJ_yinshi_friend_good_opinion }
+ }
+ add_opinion = { target = scope:wj_yinshi_friend modifier = WJ_yinshi_friend_good_opinion }
+}
+
+# 邀请拒绝：贤望 200 + 威望 100。
+WJ_yinshi_refusal_reward_effect = {
+ change_merit = 200
+ add_prestige = 100
+}
+
+# ---------------------------------------------------------------------------
+# 入幕邀请（WJ_yinshi.5001）。scope:actor = 府主，scope:recipient = 隐士。
+# ---------------------------------------------------------------------------
+# 故事发起：基础影响力在接受时一次结清，无额外许诺。
+WJ_yinshi_mufu_story_accept_effect = {
+ WJ_mufu_check_chain = yes
+ if = {
+  limit = { scope:wj_chain_safe = 1 WJ_mufu_request_valid = yes WJ_mufu_selected_empty = yes }
+  WJ_mufu_attach = yes
+  if = {
+   limit = { has_variable = wj_mufu_owner var:wj_mufu_owner = scope:actor }
+   scope:actor = { change_influence = { value = WJ_mufu_base_influence_cost multiply = -1 } }
+  }
+ }
+}
+# 玩家府主通过"辟召"交互发起：沿用交互原有的接受结算（含许诺条件）。
+WJ_yinshi_mufu_interaction_accept_effect = {
+ if = {
+  limit = { WJ_mufu_request_valid = yes WJ_mufu_selected_empty = yes WJ_mufu_terms_valid = yes }
+  WJ_mufu_check_chain = yes
+  if = {
+   limit = { scope:wj_chain_safe = 1 }
+   scope:actor = { change_influence = { value = WJ_mufu_base_influence_cost multiply = -1 } }
+   WJ_mufu_settle_terms = yes
+   WJ_mufu_attach = yes
+   if = {
+    limit = { scope:actor = { is_ai = no } scope:recipient = { has_variable = wj_mufu_owner var:wj_mufu_owner ?= scope:actor } }
+    scope:actor = { trigger_event = WJ_bizhao_reply.0001 }
+   }
+  }
+ }
+}
+# AI 府主通过 WJ_ai_bizhao_01 发起：隐士接受后直接入幕，不结算许诺。
+WJ_yinshi_mufu_ai_accept_effect = {
+ if = {
+  limit = { WJ_mufu_request_valid = yes WJ_mufu_selected_empty = yes }
+  WJ_mufu_check_chain = yes
+  if = {
+   limit = { scope:wj_chain_safe = 1 }
+   WJ_mufu_attach = yes
+   if = {
+    limit = { scope:recipient = { exists = var:wj_mufu_owner var:wj_mufu_owner = scope:actor } }
+    scope:actor = { set_variable = { name = wj_ai_bizhao_month value = 1 months = 1 } }
+   }
+  }
+ }
+}
+WJ_yinshi_mufu_refuse_effect = {
+ add_to_variable_list = { name = wj_mufu_rejected_owners target = scope:actor years = 3 }
+}
+# 隐士收到入幕邀请时锁定府主，防止重复发出；事件结束时解除。
+WJ_yinshi_mufu_lock_effect = {
+ scope:actor = {
+  set_variable = { name = wj_yangwang_mufu_pending value = scope:recipient }
+  WJ_mufu_register_annual_pending = yes
+ }
+}
+WJ_yinshi_mufu_unlock_effect = {
+ scope:actor ?= {
+  if = {
+   limit = { var:wj_yangwang_mufu_pending ?= scope:recipient }
+   WJ_mufu_clear_annual_pending = yes
+  }
+ }
+}

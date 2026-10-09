@@ -1,0 +1,110 @@
+﻿# Sun Jian independence + Danyang invasion (hard event around 200).
+# Loaded after every zzzzzzzzzz_hds_20260919_* file; redefinitions below are the final
+# versions of hds_managed_war_actor_trigger, hds_can_campaign_trigger and
+# hds_candidate_enemy_trigger. Each copies the previous effective definition and only adds Sun Jian.
+
+# ROOT = Sun Jian. The 200 AD land-hunger event is ready.
+hds_sj_land_hunger_ready_trigger = {
+	this = character:sun_jian
+	is_alive = yes
+	is_imprisoned = no
+	is_adult = yes
+	is_ruler = yes
+	current_year >= 200
+	NOT = { has_character_flag = hds_sj_departed }
+	NOT = { has_character_flag = hds_sj_land_deferred }
+}
+
+# Any scope. Both plotters and the victim must be alive; Yuan Shu and Liu Biao free.
+hds_sj_plot_actors_ready_trigger = {
+	exists = character:yuan_shu
+	exists = character:liu_biao
+	exists = character:sun_jian
+	character:yuan_shu ?= { is_alive = yes is_imprisoned = no }
+	character:liu_biao ?= { is_alive = yes is_imprisoned = no }
+	character:sun_jian ?= { is_alive = yes }
+}
+
+# ROOT = Sun Jian. He holds the Imperial Seal and the plotters are available.
+hds_sj_seal_plot_ready_trigger = {
+	this = character:sun_jian
+	any_character_artifact = { has_variable = han_artifact_imperial_seal }
+	hds_sj_plot_actors_ready_trigger = yes
+}
+
+# ROOT = Sun Jian. Same completion rule as Sun Ce: every county of Danyang is his realm's.
+hds_sj_wu_control_trigger = {
+	exists = character:sun_jian
+	this = character:sun_jian
+	is_alive = yes
+	is_landed = yes
+	has_title = title:d_danyang
+	title:d_danyang = {
+		any_de_jure_county = { always = yes }
+		NOT = {
+			any_de_jure_county = {
+				NOT = {
+					AND = {
+						exists = holder
+						holder ?= {
+							is_alive = yes
+							OR = { this = character:sun_jian is_vassal_or_below_of = character:sun_jian }
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+# Sun Jian is a managed war actor from independence until Danyang is secured,
+# so the strategic AI and unification pulses leave him alone.
+hds_managed_war_actor_trigger = {
+	OR = {
+		AND = { this = character:liu_biao has_character_flag = hds_liu_established }
+		AND = { this = character:yuan_shu has_character_flag = hds_yuan_independent }
+		AND = { this = character:sun_ce has_character_flag = hds_sc_departed }
+		AND = {
+			this = character:sun_jian
+			has_character_flag = hds_sj_departed
+			NOT = { has_character_flag = hds_sj_wu_complete }
+		}
+	}
+}
+
+hds_can_campaign_trigger = {
+	hds_living_actor_trigger = yes
+	is_adult = yes
+	is_ruler = yes
+	is_independent_ruler = yes
+	NOT = { has_character_flag = hds_war_cooldown }
+	NOT = { has_variable_list = hds_pending_titles }
+	NOT = { any_character_war = { count >= 3 always = yes } }
+	NOT = { any_character_war = { OR = { using_cb = hds_regional_cb using_cb = hds_wu_invasion_cb } primary_attacker = prev } }
+	OR = {
+		is_landed = yes
+		AND = { this = character:sun_ce hds_sun_estate_inherited_trigger = yes }
+		AND = { this = character:sun_jian OR = { hds_estate_ruler_trigger = yes has_character_flag = hds_sj_camp_converted } }
+	}
+}
+
+# Sun Ce's and Sun Jian's historical invasion is not blocked by the peacetime strength heuristic.
+hds_candidate_enemy_trigger = {
+	is_alive = yes is_landed = yes is_independent_ruler = yes
+	exists = scope:hds_campaign_actor
+	scope:hds_campaign_actor ?= { is_alive = yes }
+	NOT = { this = scope:hds_campaign_actor }
+	OR = {
+		scope:hds_campaign_actor ?= {
+			OR = { this = character:sun_ce this = character:sun_jian }
+			is_alive = yes
+		}
+		current_military_strength <= hds_strength_ceiling
+	}
+	NOT = { is_allied_to = scope:hds_campaign_actor }
+	NOT = { is_at_war_with = scope:hds_campaign_actor }
+	scope:hds_campaign_actor ?= {
+		NOT = { has_truce = prev }
+		NOT = { is_allied_in_war = prev }
+	}
+}

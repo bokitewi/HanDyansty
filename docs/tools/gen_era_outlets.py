@@ -68,9 +68,9 @@ def transform(key, val, ls):
     if key in S.RENAME:
         nk, t = S.RENAME[key]
         return nk, tv(t, ls, 'neg' if is_neg_value(val) else 'pos')
-    if val.startswith('@') or val == 'hd_dc_era_threshold':
+    if val.startswith('@') or val == 'hd_dc_era_threshold':  # 门槛用文件内常量 @hd_dc_era_threshold（引擎不认 script value）
         if key in S.INSTANT_FLIP:
-            return key, 'hd_dc_era_threshold'
+            return key, '@hd_dc_era_threshold'
     neg = is_neg_value(val)
     if key in S.EXPLICIT_TIER:
         return key, tv(S.EXPLICIT_TIER[key], ls, 'neg' if neg else 'pos')
@@ -88,7 +88,7 @@ def transform(key, val, ls):
     if re.match(r'^-?\d+(\.\d+)?$', val):
         return key, tv(tier_from_literal(float(val)), ls, 'neg' if neg else 'pos')
     if val.startswith('@'):
-        return key, 'hd_dc_era_threshold'
+        return key, '@hd_dc_era_threshold'
     raise ValueError('无法换算 %s = %s' % (key, val))
 
 
@@ -136,7 +136,7 @@ def iter_children(text, start, end, indent):
 def rewrite_outlet(src, dst, body, ls):
     """body: 出口块内文本（不含外层花括号）。返回新内文本"""
     body = re.sub(r'takeover_type = \w+', 'takeover_type = points', body)
-    body = re.sub(r'takeover_points = [@\w]+', 'takeover_points = hd_dc_era_threshold', body)
+    body = re.sub(r'takeover_points = [@\w]+', 'takeover_points = @hd_dc_era_threshold', body)
     cm = re.search(r'catalysts = \{', body)
     if not cm:
         raise ValueError('出口无 catalysts: %s -> %s' % (src, dst))
@@ -294,6 +294,9 @@ def main():
             text = text[:oopen + 1] + body + text[oclose:]
             report.append('%s -> %s：追加 %d 项' % (key.replace(S.P, ''), dst.replace(S.P, ''), len(extra)))
 
+    # 门槛常量（takeover_points 不认 script value 名，必须用文件内 @ 常量）
+    if not re.search(r'^@hd_dc_era_threshold\s*=', text, re.M):
+        text = '@hd_dc_era_threshold = 5000\t# 时代特色：所有出口门槛（与 hd_dc_era_values.txt 同步）\n' + text
     with open(SIT, 'w', encoding='utf-8-sig', newline='\n') as f:
         f.write(text)
 

@@ -1,65 +1,36 @@
-# Name confirmation can enter once; renaming never changes identity or clocks.
+﻿# ============================================================================
+# 养望/隐士入口与出口。键名保留供雅号、幕府、仕途模块调用。
+# 2026-10-09 隐士重制：确认雅号即进入隐居；出口统一处理特质、拒任期、骑士资格、
+# 故事与 15 年再入冷却。
+# ============================================================================
+
+# 雅号确认后进入隐居；改雅号时（已是隐士）不重复进入。
 WJ_yangwang_confirm_name_effect = {
  if = {
-  limit = { NOT = { has_trait = WJ_yangwang_trait } WJ_yangwang_eligible_trigger = yes }
-  add_trait = WJ_yangwang_trait
-  if = {
-   limit = { appointment_timeout_days = 0 }
-   set_appointment_timeout = { years = 150 desc = appointment_timeout_desc_refusing }
-   add_character_flag = wj_yangwang_timeout_owned
+  limit = {
+   NOT = { has_trait = WJ_yangwang_trait }
+   WJ_yinshi_can_enter_shown_trigger = yes
+   WJ_yinshi_can_enter_valid_trigger = yes
   }
-  else = {
-   # Preserve the existing source; the callback follows any extended expiry.
-   trigger_event = { id = WJ_yangwang_timeout.0001 days = WJ_yangwang_timeout_handoff_days }
-  }
+  WJ_yinshi_enter_effect = yes
  }
 }
+
+# 唯一出山出口：出山决议、接受邀请、接受授官、入幕（WJ_mufu_enter）都走这里。
 WJ_yangwang_exit_effect = {
- remove_trait = WJ_yangwang_trait
- if = {
-  limit = { has_character_flag = wj_yangwang_timeout_owned }
-  if = { limit = { appointment_timeout_days > 0 } clear_appointment_timeout = yes }
-  remove_character_flag = wj_yangwang_timeout_owned
- }
-}
-# Parent: replace maocai's unconditional timeout-clear with a NOT has_trait guard.
-# This hook is for the end of grant-maocai, and repairs this module's own ban only.
-WJ_yangwang_after_maocai_effect = {
- if = {
-  limit = { has_trait = WJ_yangwang_trait appointment_timeout_days = 0 }
-  set_appointment_timeout = { years = 150 desc = appointment_timeout_desc_refusing }
-  add_character_flag = wj_yangwang_timeout_owned
- }
-}
-# Call exactly once for a VALID declined invitation, in invitee scope.
-WJ_yangwang_refusal_reward_effect = {
  if = {
   limit = { has_trait = WJ_yangwang_trait }
-  change_merit = 550
-  add_character_modifier = { modifier = WJ_yangwang_refusal_modifier years = 10 }
- }
-}
-# Periodic invitations doubled in frequency; independently initiated invitations did not.
-WJ_yangwang_periodic_refusal_reward_effect = {
- if = {
-  limit = { has_trait = WJ_yangwang_trait }
-  change_merit = 275
-  add_character_modifier = { modifier = WJ_yangwang_periodic_refusal_modifier years = 10 }
- }
-}
-# Periodic invitation carries no optional bribes. Base cost settles once on valid acceptance.
-WJ_yangwang_mufu_accept_effect = {
- # Same real parent-chain check as public attach, before any charge.
- WJ_mufu_check_chain = yes
- if = {
-  limit = { scope:wj_chain_safe = 1 WJ_mufu_request_valid = yes WJ_mufu_selected_empty = yes }
-  WJ_mufu_attach = yes
+  remove_trait = WJ_yangwang_trait
   if = {
-   limit = { has_variable = wj_mufu_owner var:wj_mufu_owner = scope:actor }
-   scope:actor = { change_influence = { value = WJ_mufu_base_influence_cost multiply = -1 } }
+   limit = { has_character_flag = wj_yangwang_timeout_owned }
+   if = { limit = { appointment_timeout_days > 0 } clear_appointment_timeout = yes }
+   remove_character_flag = wj_yangwang_timeout_owned
+  }
+  set_knight_status = default
+  set_variable = { name = wj_yinshi_cooldown_end value = WJ_yinshi_cooldown_end_value years = 15 }
+  every_owned_story = {
+   limit = { story_type = story_WJ_yinshi }
+   end_story = yes
   }
  }
-}
-WJ_yangwang_mufu_refuse_effect = {
- add_to_variable_list = { name = wj_mufu_rejected_owners target = scope:actor years = 3 }
 }

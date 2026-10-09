@@ -14,3 +14,14 @@
 **改了局势文件里的组效果后，必须重跑 `gen_party_effects.py`**，否则"青睐朋党"复制给君主的效果会与组效果不一致。
 
 手写文件（不由脚本生成）：`hd_party_identity_triggers.txt`、`hd_party_action_effects.txt`、`hd_party_debate_effects.txt`、`hd_party_decisions.txt`、`hd_party_guis.txt`、`hd_party_on_actions.txt`、`hd_party_debate.txt`（活动）、`hd_party_debate_intents.txt`、`hd_party_debate_events.txt`、`hd_party_debate_widget.gui`、`zz_hd_party_value_overrides.txt`。
+
+## 外戚扫描（2026-10-08）
+- **外戚的定义**：朝廷君主的配偶、母亲、侧室、子女配偶所属宗族（dynasty）的全部成员。
+- **扫描效果**：`hd_party_waiqi_sweep_effect`，在手工维护的 `common/scripted_effects/hd_party_waiqi_sweep_effects.txt` 中。生成的 `hd_party_refresh_waiqi_list_effect` 会在末尾调用它，模板在 `gen_party_effects.py`。
+- **入组**：后族宗族成员只要满足以下全部条件，就加为参与者（不论有无官职），并强制改为外戚（覆盖原有的组别锁定）：
+  - 成年；
+  - 最高领主是本朝廷君主；
+  - 不是天子、不是独立统治者、不是宦官；
+  - 不是他党现任领袖。
+- **失势**：宗族已不在后族列表的外戚，清除组别锁定，由引擎重新归组。外戚党现任领袖不动。
+- **保留条件**：`gen_party.py` 的 `hd_party_manual_participant_valid_trigger` 已加入 `hd_party_is_waiqi_trigger`，因此无官职的外戚不会在年度结算时被移出。

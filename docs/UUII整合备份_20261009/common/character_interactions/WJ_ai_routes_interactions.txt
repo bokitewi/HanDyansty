@@ -1,0 +1,170 @@
+﻿# Separate IDs, no same-name overrides. Native AI scheduling; no global pulse.
+WJ_ai_bizhao_01 = {
+ category = interaction_category_friendly icon = mentor
+ name = WJ_mufu_recruit desc = WJ_bizhao_recruit_desc
+ auto_accept = yes use_diplomatic_range = no
+ is_available = { WJ_ai_bizhao_available = yes }
+ is_shown = { WJ_ai_bizhao_valid = yes }
+ is_valid_showing_failures_only = { WJ_ai_bizhao_valid = yes }
+ on_accept = {
+  if = {
+   limit = { WJ_ai_bizhao_valid = yes scope:actor = { WJ_ai_bizhao_available = yes } }
+   WJ_yangwang_select_mufu_slot_effect = yes
+   if = {
+    # 隐士：转为"辟书叩衡门"事件，由其决定是否出山入幕。
+    limit = { WJ_yinshi_recipient_is_hermit_trigger = yes }
+    # 隐士被囚或无行为能力时不受理，也不锁府主。
+    if = {
+     limit = { scope:recipient = { WJ_yinshi_able_trigger = yes } }
+     save_scope_value_as = { name = wj_yinshi_via value = flag:ai_route }
+     scope:recipient = { save_scope_as = wj_yinshi_subject }
+     WJ_yinshi_mufu_lock_effect = yes
+     scope:recipient = { trigger_event = WJ_yinshi.5001 }
+    }
+   }
+   else_if = { limit = { scope:recipient = { is_ai = yes } } WJ_ai_bizhao_complete = yes }
+   else = {
+    WJ_ai_choose_offer = yes
+    scope:actor = {
+     if = { limit = { NOT = { has_variable = wj_ai_bizhao_serial } } set_variable = { name = wj_ai_bizhao_serial value = 0 } }
+     change_variable = { name = wj_ai_bizhao_serial add = 1 }
+     save_scope_value_as = { name = wj_ai_serial value = var:wj_ai_bizhao_serial }
+     set_variable = { name = wj_ai_bizhao_pending value = scope:recipient days = 61 }
+    }
+    scope:recipient = { trigger_event = WJ_ai_routes.0001 }
+   }
+  }
+ }
+ ai_targets = { ai_recipients = courtiers ai_recipients = vassals max = 12 }
+ ai_frequency_by_tier = { barony = 0 county = 0 duchy = 0 kingdom = 1 empire = 1 hegemony = 1 }
+ ai_will_do = {
+  base = 100
+  modifier = { factor = 0.1 WJ_yinshi_recipient_is_hermit_trigger = yes }
+ }
+}
+WJ_ai_kaoke_request_01 = {
+ category = interaction_category_friendly icon = scroll_scales
+ name = wj_kaoke_request_interaction desc = wj_kaoke_request_interaction_desc
+ auto_accept = yes use_diplomatic_range = no
+ is_available = {
+  is_ai = yes WJ_kaoke_eligible_trigger = yes gold >= 350
+  NOR = { has_variable = wj_ai_kaoke_attempted has_variable = wj_ai_kaoke_pending has_variable = wj_kaoke_central_request_used }
+ }
+ redirect = { WJ_kaoke_find_reviewer = yes }
+ is_shown = { WJ_ai_kaoke_request_valid = yes }
+ is_valid_showing_failures_only = { WJ_ai_kaoke_request_valid = yes scope:actor.gold >= 350 }
+ on_accept = {
+  if = {
+   limit = { WJ_ai_kaoke_request_valid = yes scope:actor.gold >= 350 scope:actor = { NOT = { has_variable = wj_ai_kaoke_attempted } } }
+   WJ_ai_kaoke_begin_request = yes
+   if = {
+    limit = { scope:recipient = { is_ai = yes } }
+    if = { limit = { scope:recipient = { has_trait = just } } WJ_ai_kaoke_decline = yes }
+    else = { WJ_ai_kaoke_accept = yes }
+   }
+   else = {
+    scope:recipient = { trigger_event = WJ_ai_routes.0004 }
+    scope:actor = { trigger_event = { id = WJ_ai_routes.0099 days = 61 } }
+   }
+  }
+ }
+ ai_targets = { ai_recipients = self }
+ ai_frequency = 12
+ ai_will_do = { base = 20 }
+}
+WJ_ai_kaoke_award_01 = {
+ category = interaction_category_friendly icon = scroll_scales
+ name = WJ_ai_kaoke_award desc = WJ_ai_kaoke_award_desc
+ auto_accept = yes use_diplomatic_range = no
+ cooldown = { years = 1 }
+ is_available = {
+  is_ai = yes WJ_kaoke_table_viewer_trigger = yes
+  NOT = { has_variable = wj_ai_kaoke_award_year }
+  OR = { this = top_liege AND = { has_council_position = minister_personnel is_councillor_of = top_liege } }
+ }
+ is_shown = { WJ_ai_kaoke_award_valid = yes }
+ is_valid_showing_failures_only = { WJ_ai_kaoke_award_valid = yes }
+ on_accept = {
+  if = {
+   limit = { WJ_ai_kaoke_award_valid = yes }
+   scope:actor = { set_variable = { name = wj_ai_kaoke_award_year value = 1 years = 1 } }
+   scope:recipient = {
+    if = { limit = { NOT = { has_variable = wj_kaoke_central_points } } set_variable = { name = wj_kaoke_central_points value = 0 } }
+    change_variable = { name = wj_kaoke_central_points add = 30 }
+    set_variable = { name = wj_kaoke_central_request_used value = 1 }
+    if = { limit = { is_ai = no } send_interface_toast = { title = WJ_ai_kaoke_awarded left_icon = scope:actor } }
+   }
+  }
+ }
+ ai_targets = { ai_recipients = realm_characters max = 20 }
+ ai_frequency = 12
+ ai_will_do = { base = 40 modifier = { add = 30 scope:actor = { this = top_liege } } }
+}
+
+WJ_ai_request_xiaolian_01 = {
+ category = interaction_category_friendly icon = scroll_scales
+ name = wj_request_xiaolian_interaction desc = wj_request_xiaolian_interaction_desc
+ auto_accept = yes use_diplomatic_range = no cooldown = { years = 1 }
+ is_available = { is_ai = yes is_alive = yes is_adult = yes is_male = yes WJ_han_jin_law_trigger = yes NOT = { has_character_modifier = WJ_xiaolian_modifier } NOT = { has_trait = WJ_yangwang_trait } }
+ redirect = { WJ_ai_find_recommender = { ROAD = xiaolian } }
+ is_shown = { WJ_ai_nomination_valid = { ROAD = xiaolian } }
+ is_valid_showing_failures_only = {
+  WJ_ai_nomination_valid = { ROAD = xiaolian }
+  scope:recipient = { NOT = { has_character_flag = wj_xiaolian_nomination_pending } }
+ }
+ cost = { influence = { value = major_influence_value add = { value = 10 multiply = scope:recipient.number_of_disciples } } }
+ on_accept = {
+  if = {
+   limit = { WJ_ai_nomination_valid = { ROAD = xiaolian } }
+   if = { limit = { scope:recipient = { is_ai = yes } } WJ_ai_nomination_grant = { ROAD = xiaolian } }
+   else = {
+    WJ_ai_choose_offer = yes
+    scope:recipient = {
+     if = { limit = { NOT = { has_variable = wj_ai_xiaolian_serial } } set_variable = { name = wj_ai_xiaolian_serial value = 0 } }
+     change_variable = { name = wj_ai_xiaolian_serial add = 1 }
+     save_scope_value_as = { name = wj_ai_nomination_serial value = var:wj_ai_xiaolian_serial }
+     set_variable = { name = wj_ai_xiaolian_requester value = scope:actor days = 61 }
+     add_character_flag = { flag = wj_xiaolian_nomination_pending days = 61 }
+     trigger_event = WJ_ai_routes.0002
+    }
+   }
+  }
+ }
+ ai_targets = { ai_recipients = self }
+ ai_frequency = 12
+ ai_will_do = { base = 70 }
+}
+
+WJ_ai_request_maocai_01 = {
+ category = interaction_category_friendly icon = scroll_scales
+ name = wj_request_maocai_interaction desc = wj_request_maocai_interaction_desc
+ auto_accept = yes use_diplomatic_range = no cooldown = { years = 1 }
+ is_available = { is_ai = yes is_alive = yes is_adult = yes is_male = yes WJ_han_jin_law_trigger = yes NOT = { has_character_modifier = WJ_maocai_modifier } NOT = { has_trait = WJ_yangwang_trait } }
+ redirect = { WJ_ai_find_recommender = { ROAD = maocai } }
+ is_shown = { WJ_ai_nomination_valid = { ROAD = maocai } }
+ is_valid_showing_failures_only = {
+  WJ_ai_nomination_valid = { ROAD = maocai }
+  scope:recipient = { NOT = { has_character_flag = wj_maocai_nomination_pending } }
+ }
+ cost = { influence = { value = major_influence_value add = { value = 10 multiply = scope:recipient.number_of_disciples } } }
+ on_accept = {
+  if = {
+   limit = { WJ_ai_nomination_valid = { ROAD = maocai } }
+   if = { limit = { scope:recipient = { is_ai = yes } } WJ_ai_nomination_grant = { ROAD = maocai } }
+   else = {
+    WJ_ai_choose_offer = yes
+    scope:recipient = {
+     if = { limit = { NOT = { has_variable = wj_ai_maocai_serial } } set_variable = { name = wj_ai_maocai_serial value = 0 } }
+     change_variable = { name = wj_ai_maocai_serial add = 1 }
+     save_scope_value_as = { name = wj_ai_nomination_serial value = var:wj_ai_maocai_serial }
+     set_variable = { name = wj_ai_maocai_requester value = scope:actor days = 61 }
+     add_character_flag = { flag = wj_maocai_nomination_pending days = 61 }
+     trigger_event = WJ_ai_routes.0003
+    }
+   }
+  }
+ }
+ ai_targets = { ai_recipients = self }
+ ai_frequency = 12
+ ai_will_do = { base = 70 }
+}

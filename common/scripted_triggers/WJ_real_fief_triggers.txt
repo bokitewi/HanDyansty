@@ -1,0 +1,160 @@
+# Cheap event-display guard. Actual clicks retain WJ_rf_flow_valid and land validation.
+WJ_rf_view_current = {
+ has_variable = wj_rf_ticket exists = scope:wj_rf_ticket
+ var:wj_rf_ticket = scope:wj_rf_ticket
+ exists = var:wj_rf_target exists = var:wj_rf_emperor
+}
+# Ordinary real fiefs only. No official-system law or fixed realm ID.
+WJ_rf_emperor = { is_alive = yes this = top_liege government_has_flag = government_is_celestial highest_held_title_tier >= tier_empire }
+WJ_rf_has_fief = { any_held_title = { has_variable = wj_rf_rank } }
+WJ_rf_local = { any_held_title = { tier = tier_kingdom is_landless_type_title = no is_noble_family_title = no tgp_is_minister_title = no } }
+WJ_rf_candidate = {
+ is_alive = yes is_adult = yes is_male = yes
+ exists = dynasty NOT = { dynasty = top_liege.dynasty }
+ government_has_flag = government_is_celestial
+ NOT = { this = top_liege }
+ top_liege = { WJ_rf_emperor = yes }
+ NOT = { WJ_rf_has_fief = yes }
+ OR = { WJ_rf_local = yes any_held_title = { tgp_is_minister_title = yes } }
+}
+WJ_rf_supporter = {
+ is_alive = yes NOT = { this = scope:wj_rf_applicant }
+ OR = {
+  scope:wj_rf_applicant = { has_relation_disciple = prev }
+  AND = { WJ_mufu_member_valid = yes exists = var:wj_mufu_owner var:wj_mufu_owner = scope:wj_rf_applicant }
+ }
+}
+WJ_rf_secretariat_support = {
+ save_temporary_scope_as = wj_rf_applicant
+ exists = top_liege.diarch
+ top_liege.diarch = {
+  OR = { this = scope:wj_rf_applicant WJ_rf_supporter = yes }
+ }
+}
+WJ_rf_duke_qualification = {
+ WJ_rf_candidate = yes
+ WJ_peer_personal_valid = yes var:wj_peer_rank = 4
+ OR = {
+  has_title = title:e_WJ_minister_tai_fu has_title = title:e_WJ_minister_cheng_xiang
+  has_title = title:e_minister_grand_marshal has_title = title:e_minister_of_war
+  has_title = title:e_minister_chancellor has_title = title:e_minister_censor
+ }
+ exists = top_liege.puppeteer top_liege.puppeteer = this
+ WJ_rf_secretariat_support = yes
+ WJ_rf_support_seats >= 2
+}
+# Picker ROOT owns the transient selection. Holder identity is rechecked on each click.
+WJ_rf_flow_valid = {
+ exists = var:wj_rf_target exists = var:wj_rf_emperor
+ has_variable = wj_rf_ticket exists = scope:wj_rf_ticket
+ var:wj_rf_ticket = scope:wj_rf_ticket
+ var:wj_rf_emperor = { WJ_rf_emperor = yes }
+ var:wj_rf_target = { is_alive = yes top_liege = root.var:wj_rf_emperor }
+ trigger_if = { limit = { var:wj_rf_mode = 1 }
+  var:wj_rf_target = { WJ_rf_candidate = yes }
+ }
+ trigger_else = {
+  var:wj_rf_target = { WJ_rf_has_fief = yes NOT = { has_variable = wj_rf_cooldown } }
+  exists = var:wj_rf_fief.holder var:wj_rf_fief.holder = var:wj_rf_target
+ }
+}
+# Title scope: counties really inside this court, not military occupation.
+WJ_rf_in_realm = { tier = tier_county exists = holder holder.top_liege = root.var:wj_rf_emperor }
+WJ_rf_in_fief = {
+ tier = tier_county exists = holder
+ root.var:wj_rf_fief = { is_de_facto_liege_or_above_target = prev }
+ OR = { holder = root.var:wj_rf_target holder = { is_vassal_or_below_of = root.var:wj_rf_target } }
+}
+WJ_rf_duchy_available = {
+ tier = tier_duchy
+ NOT = { this = root.var:wj_rf_emperor.capital_county.duchy }
+ any_de_jure_county = { WJ_rf_in_realm = yes }
+ # A real fief belonging to somebody else is protected, even with partial loss.
+ NOT = { any_de_jure_county = {
+  exists = holder
+  holder = { top_liege = root.var:wj_rf_emperor
+   OR = {
+    AND = { WJ_rf_has_fief = yes NOT = { this = root.var:wj_rf_target } }
+    any_liege_or_above = { WJ_rf_has_fief = yes NOT = { this = root.var:wj_rf_target } }
+   }
+  }
+ } }
+}
+WJ_rf_capital_available = {
+ WJ_rf_duchy_available = yes exists = empire
+ title_capital_county = { WJ_rf_in_realm = yes }
+ trigger_if = { limit = { root.var:wj_rf_target = { WJ_rf_local = yes } }
+  this = root.var:wj_rf_target.capital_county.duchy
+ }
+}
+# Native province neighbors; supplemental sea/river crossings are explicitly excluded.
+WJ_rf_adjacent = {
+ save_temporary_scope_as = wj_rf_neighbor_duchy
+ any_de_jure_county = {
+  trigger_if = { limit = { root.var:wj_rf_mode = 2 } WJ_rf_in_realm = yes }
+  any_county_province = {
+   any_neighboring_province = {
+    exists = county NOT = { county.duchy = scope:wj_rf_neighbor_duchy }
+    county = {
+     trigger_if = { limit = { root.var:wj_rf_mode = 2 } WJ_rf_in_fief = yes }
+     trigger_else = { OR = { duchy = root.var:wj_rf_capital duchy = root.var:wj_rf_second } }
+    }
+    WJ_rf_physical_neighbor = { OTHER = prev }
+   }
+  }
+ }
+}
+WJ_rf_choice_valid = {
+ WJ_rf_flow_valid = yes exists = scope:wj_rf_choice
+ is_target_in_variable_list = { name = wj_rf_choices target = scope:wj_rf_choice }
+ scope:wj_rf_choice = {
+  trigger_if = { limit = { root.var:wj_rf_stage = 0 }
+   tier = tier_kingdom any_direct_de_jure_vassal_title = { WJ_rf_capital_available = yes }
+  }
+  trigger_else_if = { limit = { root.var:wj_rf_stage = 1 } WJ_rf_capital_available = yes }
+  trigger_else = {
+   WJ_rf_duchy_available = yes
+   NOR = { this = root.var:wj_rf_capital this = root.var:wj_rf_second de_jure_liege = root.var:wj_rf_fief }
+   WJ_rf_adjacent = yes
+  }
+ }
+}
+WJ_rf_three_valid = {
+ WJ_rf_flow_valid = yes var:wj_rf_mode = 1
+ exists = var:wj_rf_capital exists = var:wj_rf_second exists = var:wj_rf_third
+ var:wj_rf_capital = { WJ_rf_capital_available = yes }
+ var:wj_rf_second = { WJ_rf_duchy_available = yes NOT = { this = root.var:wj_rf_capital } }
+ var:wj_rf_third = { WJ_rf_duchy_available = yes NOR = { this = root.var:wj_rf_capital this = root.var:wj_rf_second } }
+ # Recheck both earlier and final edges, without allowing the second to match itself.
+ var:wj_rf_second = { WJ_rf_adjacent = yes }
+ var:wj_rf_third = { WJ_rf_adjacent = yes }
+}
+WJ_rf_option_available = {
+ trigger_if = { limit = { root.var:wj_rf_stage = 0 }
+  tier = tier_kingdom any_direct_de_jure_vassal_title = { WJ_rf_capital_available = yes }
+ }
+ trigger_else_if = { limit = { root.var:wj_rf_stage = 1 }
+  WJ_rf_capital_available = yes de_jure_liege = root.var:wj_rf_parent
+ }
+ trigger_else = {
+  WJ_rf_duchy_available = yes
+  NOR = { this = root.var:wj_rf_capital this = root.var:wj_rf_second de_jure_liege = root.var:wj_rf_fief }
+  WJ_rf_adjacent = yes
+ }
+}
+WJ_rf_can_promote = {
+ is_ai = no is_alive = yes government_has_flag = government_is_celestial
+ NOT = { dynasty = top_liege.dynasty }
+ top_liege = { WJ_rf_emperor = yes highest_held_title_tier = tier_hegemony }
+ exists = top_liege.puppeteer top_liege.puppeteer = this
+ WJ_rf_secretariat_support = yes
+ NOT = { any_held_title = { has_variable = wj_rf_rank var:wj_rf_rank = 2 } }
+ any_held_title = {
+  tier = tier_kingdom has_variable = wj_rf_rank var:wj_rf_rank = 1
+  save_temporary_scope_as = wj_rf_promote_fief
+  any_in_de_facto_hierarchy = {
+   count >= 100 tier = tier_county exists = holder
+   OR = { holder = root holder = { is_vassal_or_below_of = root } }
+  }
+ }
+}

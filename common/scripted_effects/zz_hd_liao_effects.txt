@@ -73,7 +73,7 @@ hd_liao_ai_try_launch_effect = {
 						multiply = hd_liao_weak_shu_multiplier
 					}
 				}
-				hd_liao_spawn_chief_effect = yes
+				hd_liao_get_or_spawn_chief_effect = yes
 				scope:hd_liao_chief = {
 					save_scope_as = hd_liao_initiator
 					hd_liao_declare_effect = yes
@@ -89,12 +89,29 @@ hd_liao_ai_try_launch_effect = {
 						multiply = hd_liao_weak_shu_multiplier
 					}
 				}
-				hd_liao_spawn_chief_effect = yes
+				hd_liao_get_or_spawn_chief_effect = yes
 				scope:hd_liao_chief = {
 					save_scope_as = hd_liao_initiator
 					hd_liao_declare_effect = yes
 				}
 			}
+		}
+	}
+}
+
+### 取得僚帅：已生成过且仍在世就重复使用，否则生成新的并记住（避免宣战失败时逐年堆积僚帅）
+hd_liao_get_or_spawn_chief_effect = {
+	if = {
+		limit = {
+			global_var:hd_liao_spawned_chief_ref ?= { is_alive = yes }
+		}
+		global_var:hd_liao_spawned_chief_ref = { save_scope_as = hd_liao_chief }
+	}
+	else = {
+		hd_liao_spawn_chief_effect = yes
+		set_global_variable = {
+			name = hd_liao_spawned_chief_ref
+			value = scope:hd_liao_chief
 		}
 	}
 }
@@ -327,7 +344,7 @@ hd_liao_migration_effect = {
 				}
 				every_held_title = {
 					limit = {
-						title_tier >= kingdom
+						tier >= tier_kingdom
 						NOT = { this = $INVADER$.primary_title }
 					}
 					save_temporary_scope_as = hd_liao_excess_kingdom
@@ -336,12 +353,15 @@ hd_liao_migration_effect = {
 			}
 		}
 
-		# 抛弃故地
+		# 抛弃故地：只有在蜀地选出了新首都时才执行，否则只拿地、保留原有领地，避免把全部领地送光
 		custom_tooltip = hd_liao_migration_effect.tt.non_liao_vassals
 		custom_tooltip = hd_liao_migration_effect.tt.liao_vassals
 		custom_tooltip = hd_liao_migration_effect.tt.former_territories
 		hidden_effect = {
-			hd_liao_abandon_homeland_effect = { INVADER = $INVADER$ }
+			if = {
+				limit = { exists = scope:hd_liao_new_capital }
+				hd_liao_abandon_homeland_effect = { INVADER = $INVADER$ }
+			}
 		}
 
 		# 渐进僚化
@@ -648,6 +668,8 @@ hd_liao_abandon_homeland_effect = {
 					title_capital_county.title_province = { geographical_region = hd_liao_target_region }
 				}
 				tier = tier_duchy
+				# 跳过无地头衔（例如生成僚帅的"僚部"）
+				is_landless_type_title = no
 			}
 			save_temporary_scope_as = seceding_duchy
 			scope:seceding_duchy = {
@@ -765,6 +787,7 @@ hd_liao_abandon_homeland_effect = {
 					title_capital_county.title_province = { geographical_region = hd_liao_target_region }
 				}
 				tier = tier_county
+				is_landless_type_title = no
 			}
 			save_temporary_scope_as = seceding_county
 			create_character = {

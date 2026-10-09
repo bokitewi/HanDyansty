@@ -1,0 +1,951 @@
+﻿# 天朝循环·时代特色：紧张期套件（docs/天朝循环_时代特色重制计划.md §3.3）效果
+# 诱因一律经 hd_dc_kit_fire_effect / hd_dc_kit_fire_global_effect 发射；ACTOR 只传已保存的 scope（包装体内部 this 是局势）
+
+############################################################
+# 通用
+############################################################
+# Scope：角色。罢官：终止其对天子的辅政、免去议事会席位、销毁所持天朝大臣头衔（含 WJ 内阁）
+hd_dc_kit_ten_strip_office_effect = {
+	save_scope_as = hd_dc_ten_stripped
+	title:h_china.holder ?= {
+		if = {
+			limit = {
+				has_active_diarchy = yes
+				diarch ?= scope:hd_dc_ten_stripped
+			}
+			end_diarchy = yes
+		}
+		if = {
+			limit = { scope:hd_dc_ten_stripped = { is_councillor_of = prev } }
+			always_fire_councillor = scope:hd_dc_ten_stripped
+		}
+	}
+	every_held_title = {
+		limit = { tgp_is_minister_title = yes }
+		scope:hd_dc_ten_stripped = { destroy_title = prev }
+	}
+	if = {
+		limit = { tgp_has_minister_title = no }
+		remove_character_modifier = minister_scheme_slots_modifier
+	}
+}
+
+# 天子将 $TARGET$ 下狱（弹劾 / 清君侧 / 天子夺权）。
+# 这类下狱属"铲除权臣"，不应同时计为天子"诛戮大臣"/"打压朋党"（核心 on_imprison 钩子会按天子发射这两项）：
+# 下狱前若天子身上没有这两项的诱因冷却旗标，临时加 2 天旗标使核心钩子跳过（旗标名沿用 hd_dc_kit_fire_effect 的约定）
+hd_dc_kit_ten_emperor_imprison_effect = {
+	title:h_china.holder ?= {
+		if = {
+			limit = { NOT = { has_character_flag = hd_dc_cd_catalyst_hd_purge_vip } }
+			add_character_flag = { flag = hd_dc_cd_catalyst_hd_purge_vip days = 2 }
+		}
+		if = {
+			limit = { NOT = { has_character_flag = hd_dc_cd_catalyst_hd_suppress_party } }
+			add_character_flag = { flag = hd_dc_cd_catalyst_hd_suppress_party days = 2 }
+		}
+		imprison = {
+			target = $TARGET$
+			type = dungeon
+		}
+	}
+}
+
+# Scope：天子。把议事会成员与天朝大臣（含 WJ 内阁）收入列表 hd_dc_ten_officials
+hd_dc_kit_ten_collect_officials_effect = {
+	every_councillor = {
+		add_to_list = hd_dc_ten_officials
+	}
+	hd_dc_kit_ten_collect_minister_effect = { TITLE = e_minister_chancellor }
+	hd_dc_kit_ten_collect_minister_effect = { TITLE = e_minister_censor }
+	hd_dc_kit_ten_collect_minister_effect = { TITLE = e_minister_grand_marshal }
+	hd_dc_kit_ten_collect_minister_effect = { TITLE = e_minister_of_personnel }
+	hd_dc_kit_ten_collect_minister_effect = { TITLE = e_minister_of_revenue }
+	hd_dc_kit_ten_collect_minister_effect = { TITLE = e_minister_of_rites }
+	hd_dc_kit_ten_collect_minister_effect = { TITLE = e_minister_of_war }
+	hd_dc_kit_ten_collect_minister_effect = { TITLE = e_minister_of_justice }
+	hd_dc_kit_ten_collect_minister_effect = { TITLE = e_minister_of_works }
+	hd_dc_kit_ten_collect_minister_effect = { TITLE = e_WJ_minister_tai_fu }
+	hd_dc_kit_ten_collect_minister_effect = { TITLE = e_WJ_minister_zong_zheng }
+	hd_dc_kit_ten_collect_minister_effect = { TITLE = e_WJ_minister_cheng_xiang }
+	hd_dc_kit_ten_collect_minister_effect = { TITLE = e_WJ_minister_guang_lu_xun }
+}
+hd_dc_kit_ten_collect_minister_effect = {
+	title:$TITLE$.holder ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				NOT = { is_in_list = hd_dc_ten_officials }
+				NOT = { this = title:h_china.holder }
+			}
+			add_to_list = hd_dc_ten_officials
+		}
+	}
+}
+
+# Scope：天子。挑一名"权臣"存为 scope:hd_dc_ten_pm_pick：势力最强的在任朋党党魁 → 丞相 → 辅政
+hd_dc_kit_ten_pick_power_minister_effect = {
+	var:hd_party_huanguan_leader ?= { add_to_list = hd_dc_ten_pm_cands }
+	var:hd_party_waiqi_leader ?= { add_to_list = hd_dc_ten_pm_cands }
+	var:hd_party_wuxun_leader ?= { add_to_list = hd_dc_ten_pm_cands }
+	var:hd_party_shizu_leader ?= { add_to_list = hd_dc_ten_pm_cands }
+	var:hd_party_hanmen_leader ?= { add_to_list = hd_dc_ten_pm_cands }
+	ordered_in_list = {
+		list = hd_dc_ten_pm_cands
+		limit = {
+			is_imprisoned = no
+			hd_dc_kit_ten_is_power_minister_trigger = yes
+		}
+		order_by = hd_party_debate_sort_value
+		save_scope_as = hd_dc_ten_pm_pick
+	}
+	if = {
+		limit = { NOT = { exists = scope:hd_dc_ten_pm_pick } }
+		title:e_minister_chancellor.holder ?= {
+			if = {
+				limit = {
+					is_imprisoned = no
+					hd_dc_kit_ten_is_power_minister_trigger = yes
+				}
+				save_scope_as = hd_dc_ten_pm_pick
+			}
+		}
+	}
+	if = {
+		limit = {
+			NOT = { exists = scope:hd_dc_ten_pm_pick }
+			has_active_diarchy = yes
+		}
+		diarch ?= {
+			if = {
+				limit = { is_imprisoned = no }
+				save_scope_as = hd_dc_ten_pm_pick
+			}
+		}
+	}
+}
+
+############################################################
+# 年度（Scope：dynastic_cycle 局势；各阶段都运行）
+############################################################
+hd_dc_kit_ten_yearly_effect = {
+	title:h_china.holder ?= {
+		save_scope_as = hd_dc_ten_emperor
+		# 乱象：仅紧张期；离开紧张期即清除
+		if = {
+			limit = {
+				hd_dc_phase_is_trigger = { PHASE = instability }
+				hd_party_court_initialized_trigger = yes
+			}
+			hd_dc_kit_ten_chaos_update_effect = yes
+		}
+		else = {
+			hd_dc_kit_ten_clear_chaos_effect = yes
+		}
+		# 中兴改革进度（天子身故则随之中辍）
+		if = {
+			limit = { has_variable = hd_dc_ten_restoration_years }
+			change_variable = { name = hd_dc_ten_restoration_years add = 1 }
+			if = {
+				limit = { var:hd_dc_ten_restoration_years >= hd_dc_ten_restoration_duration_years }
+				trigger_event = hd_dc_ten.0005
+			}
+			else_if = {
+				limit = { var:hd_dc_ten_restoration_years = 8 }
+				trigger_event = hd_dc_ten.0004
+			}
+			else_if = {
+				limit = { var:hd_dc_ten_restoration_years = 5 }
+				trigger_event = hd_dc_ten.0003
+			}
+			else_if = {
+				limit = { var:hd_dc_ten_restoration_years = 2 }
+				trigger_event = hd_dc_ten.0002
+			}
+		}
+		# 清君侧所立终身辅政：被解除则补回
+		hd_dc_kit_ten_regent_repair_check_effect = yes
+	}
+	# 党锢禁锢：十年内不得复任
+	hd_dc_kit_ten_office_ban_enforce_effect = yes
+}
+
+############################################################
+# 乱象（Scope：天子）
+############################################################
+hd_dc_kit_ten_chaos_update_effect = {
+	if = {
+		limit = { hd_dc_kit_ten_dominant_party_trigger = { G = waiqi } }
+		hd_dc_kit_ten_set_chaos_effect = { STATE = consort }
+	}
+	else_if = {
+		limit = { hd_dc_kit_ten_dominant_party_trigger = { G = huanguan } }
+		hd_dc_kit_ten_set_chaos_effect = { STATE = eunuch }
+	}
+	else_if = {
+		limit = { hd_dc_kit_ten_dominant_party_trigger = { G = wuxun } }
+		hd_dc_kit_ten_set_chaos_effect = { STATE = warlord }
+	}
+	else = {
+		hd_dc_kit_ten_set_chaos_effect = { STATE = partisan }
+	}
+	hd_dc_kit_ten_chaos_apply_yearly_effect = yes
+	random = {
+		chance = 40	# = hd_dc_ten_chaos_event_chance
+		hd_dc_kit_ten_chaos_event_effect = yes
+	}
+}
+
+# 切换到 $STATE$（已是则不动）；玩家收到通知
+hd_dc_kit_ten_set_chaos_effect = {
+	if = {
+		limit = { NOT = { has_character_modifier = hd_dc_kit_ten_chaos_$STATE$_modifier } }
+		hd_dc_kit_ten_clear_chaos_effect = yes
+		add_character_modifier = hd_dc_kit_ten_chaos_$STATE$_modifier
+		if = {
+			limit = { is_ai = no }
+			trigger_event = hd_dc_ten.0041
+		}
+	}
+}
+
+hd_dc_kit_ten_clear_chaos_effect = {
+	remove_character_modifier = hd_dc_kit_ten_chaos_consort_modifier
+	remove_character_modifier = hd_dc_kit_ten_chaos_eunuch_modifier
+	remove_character_modifier = hd_dc_kit_ten_chaos_warlord_modifier
+	remove_character_modifier = hd_dc_kit_ten_chaos_partisan_modifier
+	remove_variable = hd_dc_ten_boost_group
+}
+
+# 本年乱象附带效果（"势力 +40%"变量 400 天，跨过朋党年度结算的先后）
+hd_dc_kit_ten_chaos_apply_yearly_effect = {
+	save_scope_as = hd_dc_ten_emperor
+	if = {
+		limit = { hd_dc_kit_ten_chaos_is_trigger = { STATE = consort } }
+		set_variable = { name = hd_dc_ten_boost_group value = flag:waiqi days = 400 }
+		var:hd_party_waiqi_leader ?= {
+			add_character_modifier = {
+				modifier = hd_dc_kit_ten_consort_leader_modifier
+				months = 13
+			}
+		}
+	}
+	else_if = {
+		limit = { hd_dc_kit_ten_chaos_is_trigger = { STATE = eunuch } }
+		set_variable = { name = hd_dc_ten_boost_group value = flag:huanguan days = 400 }
+		# 大臣对天子好感 −10
+		hd_dc_kit_ten_collect_officials_effect = yes
+		every_in_list = {
+			list = hd_dc_ten_officials
+			limit = {
+				is_alive = yes
+				NOT = { var:hd_party_my_group ?= flag:huanguan }
+			}
+			add_opinion = {
+				target = scope:hd_dc_ten_emperor
+				modifier = hd_dc_kit_ten_eunuch_meddling_opinion
+				months = 13
+			}
+		}
+		# 贪墨：宦官党前三名之一侵吞内帑（原版"侵吞国库"诱因）
+		random = {
+			chance = 30	# = hd_dc_ten_embezzle_chance
+			random_in_list = {
+				variable = hd_party_huanguan_top
+				limit = {
+					is_alive = yes
+					is_imprisoned = no
+					NOT = { this = scope:hd_dc_ten_emperor }
+				}
+				save_scope_as = hd_dc_ten_embezzler
+			}
+			if = {
+				limit = {
+					exists = scope:hd_dc_ten_embezzler
+					gold > 0
+				}
+				save_scope_value_as = {
+					name = hd_dc_ten_embezzled
+					value = hd_dc_kit_ten_embezzle_value
+				}
+				remove_short_term_gold = scope:hd_dc_ten_embezzled
+				scope:hd_dc_ten_embezzler = { add_gold = scope:hd_dc_ten_embezzled }
+				hd_dc_kit_fire_effect = { CATALYST = catalyst_governor_embezzlement ACTOR = scope:hd_dc_ten_embezzler }
+				if = {
+					limit = { is_ai = no }
+					send_interface_toast = {
+						type = event_toast_effect_bad
+						title = hd_dc_ten_embezzle_toast
+						left_icon = scope:hd_dc_ten_embezzler
+						custom_tooltip = hd_dc_ten_embezzle_toast_tt
+					}
+				}
+			}
+		}
+	}
+	else_if = {
+		limit = { hd_dc_kit_ten_chaos_is_trigger = { STATE = warlord } }
+		set_variable = { name = hd_dc_ten_boost_group value = flag:wuxun days = 400 }
+		every_vassal = {
+			limit = { is_landed = yes }
+			add_character_modifier = {
+				modifier = hd_dc_kit_ten_warlord_vassal_modifier
+				months = 13
+			}
+		}
+	}
+	else_if = {
+		limit = { hd_dc_kit_ten_chaos_is_trigger = { STATE = partisan } }
+		hd_dc_kit_ten_collect_officials_effect = yes
+		every_in_list = {
+			list = hd_dc_ten_officials
+			limit = { is_alive = yes }
+			add_character_modifier = {
+				modifier = hd_dc_kit_ten_partisan_official_modifier
+				months = 13
+			}
+		}
+	}
+}
+
+# 乱象专属事件（各 3 个，等权）
+hd_dc_kit_ten_chaos_event_effect = {
+	if = {
+		limit = { hd_dc_kit_ten_chaos_is_trigger = { STATE = consort } }
+		random_list = {
+			1 = { trigger_event = { id = hd_dc_ten.0101 days = { 30 300 } } }
+			1 = { trigger_event = { id = hd_dc_ten.0102 days = { 30 300 } } }
+			1 = { trigger_event = { id = hd_dc_ten.0103 days = { 30 300 } } }
+		}
+	}
+	else_if = {
+		limit = { hd_dc_kit_ten_chaos_is_trigger = { STATE = eunuch } }
+		random_list = {
+			1 = { trigger_event = { id = hd_dc_ten.0111 days = { 30 300 } } }
+			1 = { trigger_event = { id = hd_dc_ten.0112 days = { 30 300 } } }
+			1 = { trigger_event = { id = hd_dc_ten.0113 days = { 30 300 } } }
+		}
+	}
+	else_if = {
+		limit = { hd_dc_kit_ten_chaos_is_trigger = { STATE = warlord } }
+		random_list = {
+			1 = { trigger_event = { id = hd_dc_ten.0121 days = { 30 300 } } }
+			1 = { trigger_event = { id = hd_dc_ten.0122 days = { 30 300 } } }
+			1 = { trigger_event = { id = hd_dc_ten.0123 days = { 30 300 } } }
+		}
+	}
+	else_if = {
+		limit = { hd_dc_kit_ten_chaos_is_trigger = { STATE = partisan } }
+		random_list = {
+			1 = { trigger_event = { id = hd_dc_ten.0131 days = { 30 300 } } }
+			1 = { trigger_event = { id = hd_dc_ten.0132 days = { 30 300 } } }
+			1 = { trigger_event = { id = hd_dc_ten.0133 days = { 30 300 } } }
+		}
+	}
+}
+
+# 天子夺回权力：罢黜并下狱 $TARGET$，计"铲除权臣"（乱象事件用）
+hd_dc_kit_ten_emperor_remove_minister_effect = {
+	$TARGET$ = { hd_dc_kit_ten_strip_office_effect = yes }
+	hd_dc_kit_ten_emperor_imprison_effect = { TARGET = $TARGET$ }
+	hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_power_minister_removed ACTOR = scope:hd_dc_ten_emperor }
+}
+
+############################################################
+# 中兴改革（Scope：天子）
+############################################################
+# 失去一级正统：把正统设到当前等级门槛之下 1 点（legitimacy_level 从 0 起算；等级 N 的门槛是 legitimacy_level_<N+1>）
+hd_dc_kit_ten_drop_legitimacy_level_effect = {
+	if = {
+		limit = { legitimacy_level >= 7 }
+		add_legitimacy = {
+			value = legitimacy_level_8
+			subtract = legitimacy
+			subtract = 1
+		}
+	}
+	else_if = {
+		limit = { legitimacy_level = 6 }
+		add_legitimacy = {
+			value = legitimacy_level_7
+			subtract = legitimacy
+			subtract = 1
+		}
+	}
+	else_if = {
+		limit = { legitimacy_level = 5 }
+		add_legitimacy = {
+			value = legitimacy_level_6
+			subtract = legitimacy
+			subtract = 1
+		}
+	}
+	else_if = {
+		limit = { legitimacy_level = 4 }
+		add_legitimacy = {
+			value = legitimacy_level_5
+			subtract = legitimacy
+			subtract = 1
+		}
+	}
+	else_if = {
+		limit = { legitimacy_level = 3 }
+		add_legitimacy = {
+			value = legitimacy_level_4
+			subtract = legitimacy
+			subtract = 1
+		}
+	}
+	else_if = {
+		limit = { legitimacy_level = 2 }
+		add_legitimacy = {
+			value = legitimacy_level_3
+			subtract = legitimacy
+			subtract = 1
+		}
+	}
+	else_if = {
+		limit = { legitimacy_level = 1 }
+		add_legitimacy = {
+			value = legitimacy_level_2
+			subtract = legitimacy
+			subtract = 1
+		}
+	}
+}
+
+hd_dc_kit_ten_restoration_start_effect = {
+	set_variable = hd_dc_ten_restoration_done
+	set_variable = { name = hd_dc_ten_restoration_years value = 0 }
+	set_variable = { name = hd_dc_ten_restoration_bonus value = 0 }
+	hd_dc_kit_ten_drop_legitimacy_level_effect = yes
+}
+
+hd_dc_kit_ten_restoration_adjust_effect = {
+	change_variable = { name = hd_dc_ten_restoration_bonus add = $VALUE$ }
+}
+
+hd_dc_kit_ten_restoration_success_effect = {
+	save_scope_as = hd_dc_ten_emperor
+	add_prestige = major_prestige_gain
+	add_legitimacy = medium_legitimacy_gain
+	add_character_modifier = {
+		modifier = hd_dc_kit_ten_restoration_success_modifier
+		years = hd_dc_ten_restoration_success_years
+	}
+	hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_restoration_success ACTOR = scope:hd_dc_ten_emperor }
+	hd_dc_kit_ten_restoration_cleanup_effect = yes
+}
+
+hd_dc_kit_ten_restoration_failure_effect = {
+	save_scope_as = hd_dc_ten_emperor
+	add_prestige = medium_prestige_loss
+	add_character_modifier = {
+		modifier = hd_dc_kit_ten_restoration_failed_modifier
+		years = 10
+	}
+	hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_restoration_failed ACTOR = scope:hd_dc_ten_emperor }
+	hd_dc_kit_ten_restoration_cleanup_effect = yes
+}
+
+hd_dc_kit_ten_restoration_cleanup_effect = {
+	remove_variable = hd_dc_ten_restoration_years
+	remove_variable = hd_dc_ten_restoration_bonus
+}
+
+############################################################
+# 党锢（Scope：天子；scope:hd_dc_ten_g = flag:<组>）
+############################################################
+# 按 scope:hd_dc_ten_g 分派：$MODE$ = ban（禁锢）/ purge（一网打尽）
+hd_dc_kit_ten_prohibition_dispatch_effect = {
+	if = { limit = { scope:hd_dc_ten_g ?= flag:huanguan } hd_dc_kit_ten_prohibition_$MODE$_effect = { G = huanguan } }
+	if = { limit = { scope:hd_dc_ten_g ?= flag:waiqi } hd_dc_kit_ten_prohibition_$MODE$_effect = { G = waiqi } }
+	if = { limit = { scope:hd_dc_ten_g ?= flag:wuxun } hd_dc_kit_ten_prohibition_$MODE$_effect = { G = wuxun } }
+	if = { limit = { scope:hd_dc_ten_g ?= flag:shizu } hd_dc_kit_ten_prohibition_$MODE$_effect = { G = shizu } }
+	if = { limit = { scope:hd_dc_ten_g ?= flag:hanmen } hd_dc_kit_ten_prohibition_$MODE$_effect = { G = hanmen } }
+}
+
+# 禁锢：该党成员全部罢官（天朝大臣 / 议事会），十年内不得任职，好感 −30
+hd_dc_kit_ten_prohibition_ban_effect = {
+	save_scope_as = hd_dc_ten_emperor
+	every_in_list = {
+		variable = hd_party_$G$_members
+		limit = {
+			is_alive = yes
+			NOT = { this = scope:hd_dc_ten_emperor }
+		}
+		hd_dc_kit_ten_strip_office_effect = yes
+		add_character_flag = {
+			flag = hd_dc_ten_office_banned
+			years = hd_dc_ten_prohibition_years
+		}
+		add_opinion = {
+			target = scope:hd_dc_ten_emperor
+			modifier = hd_dc_kit_ten_prohibition_opinion
+		}
+	}
+	hd_dc_kit_ten_prohibition_catalysts_effect = yes
+}
+
+# 一网打尽：囚禁党魁与前三名，势力归零并禁用十年，全党好感 −50；按该党原势力占比的概率由该党最强封臣起兵清君侧
+hd_dc_kit_ten_prohibition_purge_effect = {
+	save_scope_as = hd_dc_ten_emperor
+	save_scope_value_as = {
+		name = hd_dc_ten_purged_share
+		value = {
+			value = 0
+			if = {
+				limit = { exists = var:hd_party_$G$_share }
+				add = var:hd_party_$G$_share
+			}
+		}
+	}
+	var:hd_party_$G$_leader ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				NOT = { this = scope:hd_dc_ten_emperor }
+			}
+			add_to_list = hd_dc_ten_purge_list
+		}
+	}
+	every_in_list = {
+		variable = hd_party_$G$_top
+		limit = {
+			is_alive = yes
+			NOT = { this = scope:hd_dc_ten_emperor }
+			NOT = { is_in_list = hd_dc_ten_purge_list }
+		}
+		add_to_list = hd_dc_ten_purge_list
+	}
+	every_in_list = {
+		list = hd_dc_ten_purge_list
+		hd_dc_kit_ten_strip_office_effect = yes
+		scope:hd_dc_ten_emperor = {
+			imprison = {
+				target = prev
+				type = dungeon
+			}
+		}
+	}
+	every_in_list = {
+		variable = hd_party_$G$_members
+		limit = {
+			is_alive = yes
+			NOT = { this = scope:hd_dc_ten_emperor }
+		}
+		add_opinion = {
+			target = scope:hd_dc_ten_emperor
+			modifier = hd_dc_kit_ten_purge_opinion
+		}
+	}
+	# 势力归零并禁用十年（朋党生成器读取 var:hd_dc_ten_purged_<组>，每年结算时把该党势力置零）
+	# 不改朋党"政策"：查禁政策有每月维持费，锁定十年会让天子被迫长期付费
+	set_variable = {
+		name = hd_dc_ten_purged_$G$
+		value = yes
+		years = hd_dc_ten_prohibition_years
+	}
+	set_variable = { name = hd_party_$G$_power value = 0 }
+	set_variable = { name = hd_party_$G$_share value = 0 }
+	hd_dc_kit_ten_prohibition_catalysts_effect = yes
+	random = {
+		chance = scope:hd_dc_ten_purged_share
+		hd_dc_kit_ten_purge_revolt_effect = { G = $G$ }
+	}
+}
+
+hd_dc_kit_ten_prohibition_catalysts_effect = {
+	hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_partisan_prohibition ACTOR = scope:hd_dc_ten_emperor }
+	hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_suppress_party ACTOR = scope:hd_dc_ten_emperor }
+}
+
+# 一网打尽的反弹：该党势力最强的直属有地封臣，指名当朝最强权臣起兵清君侧（玩家可选择隐忍）
+hd_dc_kit_ten_purge_revolt_effect = {
+	ordered_in_list = {
+		variable = hd_party_$G$_members
+		limit = {
+			hd_dc_kit_ten_can_qingjunce_trigger = yes
+		}
+		order_by = max_military_strength
+		save_scope_as = hd_dc_ten_purge_rebel
+	}
+	hd_dc_kit_ten_pick_power_minister_effect = yes
+	if = {
+		limit = {
+			exists = scope:hd_dc_ten_purge_rebel
+			exists = scope:hd_dc_ten_pm_pick
+			NOT = { scope:hd_dc_ten_purge_rebel = scope:hd_dc_ten_pm_pick }
+		}
+		scope:hd_dc_ten_purge_rebel = {
+			if = {
+				limit = { is_ai = no }
+				trigger_event = hd_dc_ten.0013
+			}
+			else = {
+				hd_dc_kit_ten_start_qingjunce_effect = { TARGET = scope:hd_dc_ten_pm_pick }
+			}
+		}
+	}
+}
+
+# 十年内被禁锢者不得复任：每年清查天朝大臣与议事会
+hd_dc_kit_ten_office_ban_enforce_effect = {
+	title:h_china.holder ?= {
+		hd_dc_kit_ten_collect_officials_effect = yes
+		every_in_list = {
+			list = hd_dc_ten_officials
+			limit = { has_character_flag = hd_dc_ten_office_banned }
+			hd_dc_kit_ten_strip_office_effect = yes
+		}
+	}
+}
+
+############################################################
+# 清君侧
+############################################################
+# Scope：起兵的封臣。指名 $TARGET$ 为权臣，对天子宣战
+hd_dc_kit_ten_start_qingjunce_effect = {
+	set_variable = {
+		name = hd_dc_ten_qjc_target
+		value = $TARGET$
+		days = 30
+	}
+	start_war = {
+		casus_belli = hd_dc_ten_qingjunce_cb
+		target = title:h_china.holder
+	}
+}
+
+# CB 胜利（Scope：CB；scope:attacker / scope:defender）：权臣罢官下狱；攻方次日成为终身辅政
+hd_dc_kit_ten_qingjunce_victory_effect = {
+	root.war.var:hd_dc_ten_qjc_target ?= { save_scope_as = hd_dc_ten_qjc_minister }
+	if = {
+		limit = {
+			exists = scope:hd_dc_ten_qjc_minister
+			scope:hd_dc_ten_qjc_minister = {
+				is_alive = yes
+				is_imprisoned = no
+			}
+		}
+		scope:hd_dc_ten_qjc_minister = {
+			hd_dc_kit_ten_strip_office_effect = yes
+			add_opinion = {
+				target = scope:attacker
+				modifier = hd_dc_kit_ten_qjc_removed_opinion
+			}
+		}
+		hd_dc_kit_ten_emperor_imprison_effect = { TARGET = scope:hd_dc_ten_qjc_minister }
+	}
+	hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_power_minister_removed ACTOR = scope:attacker }
+	title:h_china = {
+		set_variable = {
+			name = hd_dc_ten_qjc_regent
+			value = scope:attacker
+		}
+	}
+	# 战争当日攻方仍与天子交战，辅政任命会失效，次日安装
+	scope:defender = {
+		trigger_event = {
+			id = hd_dc_ten.0032
+			days = 1
+		}
+	}
+}
+
+# Scope：天子。安装 / 补回终身辅政（摄政，权衡 100：原版 regency 在 80 以上不可解除；仿 zz_hd_dong_aftermath_effects 的董卓定制）
+hd_dc_kit_ten_install_regent_effect = {
+	if = {
+		limit = {
+			has_title = title:h_china
+			NOT = { exists = var:hd_dong_fixed_regent }
+			title:h_china.var:hd_dc_ten_qjc_regent ?= {
+				is_alive = yes
+				is_imprisoned = no
+				NOT = { this = title:h_china.holder }
+				NOT = { is_at_war_with = title:h_china.holder }
+				OR = {
+					liege = title:h_china.holder
+					is_courtier_of = title:h_china.holder
+				}
+			}
+		}
+		title:h_china.var:hd_dc_ten_qjc_regent = { save_scope_as = hd_dc_ten_new_regent }
+		if = {
+			limit = {
+				has_active_diarchy = yes
+				NOT = { has_diarchy_type = regency }
+			}
+			end_diarchy = yes
+		}
+		designate_diarch = scope:hd_dc_ten_new_regent
+		try_start_diarchy = regency
+		set_diarch = scope:hd_dc_ten_new_regent
+		set_diarchy_swing = 100
+	}
+}
+
+# Scope：天子。终身辅政被解除时排队补回（年度与 on_diarch_change 共用）
+hd_dc_kit_ten_regent_repair_check_effect = {
+	if = {
+		limit = {
+			has_title = title:h_china
+			title:h_china.var:hd_dc_ten_qjc_regent ?= {
+				is_alive = yes
+				NOT = { this = title:h_china.holder }
+			}
+			NOT = { has_character_flag = hd_dc_ten_regent_repair_queued }
+			OR = {
+				has_active_diarchy = no
+				NOT = { diarch ?= title:h_china.var:hd_dc_ten_qjc_regent }
+			}
+		}
+		add_character_flag = {
+			flag = hd_dc_ten_regent_repair_queued
+			days = 30
+		}
+		trigger_event = {
+			id = hd_dc_ten.0032
+			days = 1
+		}
+	}
+}
+
+############################################################
+# 弹劾（阴谋 hd_dc_ten_impeach；scope:hd_dc_ten_scheme = 阴谋）
+############################################################
+# 阴谋阶段完成 / 点击 / AI 半年：玩家弹出罪证事件；AI 自行决断
+hd_dc_kit_ten_impeach_prep_effect = {
+	save_scope_as = hd_dc_ten_scheme
+	scheme_owner = {
+		if = {
+			limit = { is_ai = no }
+			trigger_event = hd_dc_ten.0021
+		}
+		else = {
+			trigger_event = {
+				id = hd_dc_ten.0025
+				days = 1
+			}
+		}
+	}
+}
+
+# Scope：弹劾者。伪造罪证：花钱换 2 点罪证与成功率，但保密下降
+hd_dc_kit_ten_impeach_forge_effect = {
+	remove_short_term_gold = hd_dc_kit_ten_forge_cost_value
+	scope:hd_dc_ten_scheme = {
+		change_opportunities = 2	# = hd_dc_ten_forge_opportunities
+		if = {
+			limit = { has_variable = hd_dc_ten_forged }
+			change_variable = { name = hd_dc_ten_forged add = 1 }
+			add_scheme_modifier = {
+				type = hd_dc_kit_ten_forged_evidence_2_modifier
+				days = 3650
+			}
+		}
+		else = {
+			set_variable = { name = hd_dc_ten_forged value = 1 }
+			add_scheme_modifier = {
+				type = hd_dc_kit_ten_forged_evidence_modifier
+				days = 3650
+			}
+		}
+	}
+}
+
+# Scope：弹劾者。上书弹劾：发现与成败判定后立即结算，并通知双方
+hd_dc_kit_ten_impeach_execute_effect = {
+	save_scope_as = hd_dc_ten_impeach_owner
+	scope:hd_dc_ten_scheme = {
+		scheme_target_character = { save_scope_as = hd_dc_ten_impeach_target }
+		save_scope_value_as = {
+			name = hd_dc_ten_impeach_chance
+			value = {
+				value = scheme_success_chance
+				add = {
+					value = scheme_agent_charges
+					multiply = hd_dc_ten_impeach_charge_bonus
+				}
+				max = 95
+			}
+		}
+		save_scope_value_as = {
+			name = hd_dc_ten_impeach_discovery
+			value = {
+				value = 100
+				subtract = scheme_secrecy
+				min = 0
+			}
+		}
+		if = {
+			limit = { has_variable = hd_dc_ten_forged }
+			save_scope_value_as = {
+				name = hd_dc_ten_impeach_forged
+				value = yes
+			}
+		}
+		if = {
+			limit = { has_variable = hd_dc_ten_crime_fired }
+			save_scope_value_as = {
+				name = hd_dc_ten_impeach_crime_fired
+				value = yes
+			}
+		}
+	}
+	random = {
+		chance = scope:hd_dc_ten_impeach_discovery
+		save_scope_value_as = {
+			name = hd_dc_ten_impeach_discovered
+			value = yes
+		}
+	}
+	# 伪造罪证败露则弹劾必败
+	if = {
+		limit = {
+			exists = scope:hd_dc_ten_impeach_forged
+			exists = scope:hd_dc_ten_impeach_discovered
+		}
+		save_scope_value_as = {
+			name = hd_dc_ten_impeach_forgery_exposed
+			value = yes
+		}
+		if = {
+			limit = { NOT = { exists = scope:hd_dc_ten_impeach_crime_fired } }
+			hd_dc_kit_ten_forgery_crime_effect = yes
+		}
+	}
+	else = {
+		random = {
+			chance = scope:hd_dc_ten_impeach_chance
+			save_scope_value_as = {
+				name = hd_dc_ten_impeach_success
+				value = yes
+			}
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_dc_ten_impeach_success }
+		hd_dc_kit_ten_impeach_success_effect = yes
+	}
+	else = {
+		scope:hd_dc_ten_impeach_target = {
+			if = {
+				limit = { exists = scope:hd_dc_ten_impeach_forgery_exposed }
+				add_opinion = {
+					target = scope:hd_dc_ten_impeach_owner
+					modifier = hd_dc_kit_ten_forged_against_me_opinion
+				}
+			}
+			else = {
+				add_opinion = {
+					target = scope:hd_dc_ten_impeach_owner
+					modifier = hd_dc_kit_ten_impeached_me_opinion
+				}
+			}
+		}
+	}
+	trigger_event = hd_dc_ten.0022
+	scope:hd_dc_ten_impeach_target = { trigger_event = hd_dc_ten.0023 }
+	scope:hd_dc_ten_scheme = { end_scheme = yes }
+}
+
+# Scope：弹劾者。弹劾成功：目标罢官下狱，计"铲除权臣"；非朋党成员另计"党争"（朋党成员下狱由核心钩子计）
+hd_dc_kit_ten_impeach_success_effect = {
+	scope:hd_dc_ten_impeach_target = {
+		hd_dc_kit_ten_strip_office_effect = yes
+		add_opinion = {
+			target = scope:hd_dc_ten_impeach_owner
+			modifier = hd_dc_kit_ten_impeached_me_opinion
+		}
+	}
+	hd_dc_kit_ten_emperor_imprison_effect = { TARGET = scope:hd_dc_ten_impeach_target }
+	add_prestige = medium_prestige_gain
+	hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_power_minister_removed ACTOR = scope:hd_dc_ten_impeach_owner }
+	if = {
+		limit = { scope:hd_dc_ten_impeach_target = { NOT = { exists = var:hd_party_my_group } } }
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_party_strife ACTOR = scope:hd_dc_ten_impeach_owner }
+	}
+}
+
+# Scope：弹劾者。伪造败露：计"罪行昭彰"，天子不悦，威望受损
+hd_dc_kit_ten_forgery_crime_effect = {
+	save_scope_as = hd_dc_ten_forger
+	hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_crime ACTOR = scope:hd_dc_ten_forger }
+	add_prestige = medium_prestige_loss
+	title:h_china.holder ?= {
+		if = {
+			limit = { NOT = { this = scope:hd_dc_ten_forger } }
+			add_opinion = {
+				target = scope:hd_dc_ten_forger
+				modifier = hd_dc_kit_ten_forgery_disgrace_opinion
+			}
+		}
+	}
+}
+
+# Scope：阴谋（on_scheme_discovered）。伪造过罪证的弹劾被识破：立即计"罪行昭彰"（每个阴谋一次）
+hd_dc_kit_ten_forgery_discovered_effect = {
+	if = {
+		limit = { NOT = { has_variable = hd_dc_ten_crime_fired } }
+		set_variable = hd_dc_ten_crime_fired
+		scheme_owner = { hd_dc_kit_ten_forgery_crime_effect = yes }
+	}
+}
+
+# Scope：AI 弹劾者（hd_dc_ten.0025）。罪证足够就上书；否则视性格伪造罪证
+hd_dc_kit_ten_impeach_ai_effect = {
+	if = {
+		limit = { scope:hd_dc_ten_scheme = { scheme_agent_charges >= 3 } }
+		hd_dc_kit_ten_impeach_execute_effect = yes
+	}
+	else_if = {
+		limit = {
+			scope:hd_dc_ten_scheme = {
+				is_scheme_exposed = no
+				OR = {
+					NOT = { has_variable = hd_dc_ten_forged }
+					var:hd_dc_ten_forged < hd_dc_ten_forge_max
+				}
+			}
+			gold >= hd_dc_kit_ten_forge_cost_value
+			OR = {
+				has_trait = deceitful
+				has_trait = arbitrary
+				has_trait = ambitious
+				has_trait = callous
+			}
+		}
+		random = {
+			chance = 30
+			hd_dc_kit_ten_impeach_forge_effect = yes
+		}
+	}
+}
+
+############################################################
+# 罪行类秘密暴露（00_secret_effects.txt 的 secret_exposed_owner_effects_effect 末尾调用）
+# Scope：秘密持有者；scope:local_secret_owner 已由原效果保存
+# 计入"罪行"：谋杀 / 谋杀未遂 / 巫术 / 变态 / 食人 / 乱伦 / 政变密谋 / 请求外敌入侵 / 劫掠庄园
+# 不计：贪污两类（原版"侵吞国库"诱因已覆盖）、科场舞弊（secrets.4001 已补回原版诱因）、私情 / 同性 / 无信仰 / 隐秘信仰 / 私生等私德
+############################################################
+hd_dc_kit_ten_secret_crime_effect = {
+	if = {
+		limit = {
+			exists = scope:local_secret_owner
+			$SECRET$ = {
+				OR = {
+					secret_type = secret_murder
+					secret_type = secret_murder_attempt
+					secret_type = secret_witch
+					secret_type = secret_deviant
+					secret_type = secret_cannibal
+					secret_type = secret_incest
+					secret_type = secret_coup_plotter
+					secret_type = secret_request_incursion
+					secret_type = secret_raid_estate
+				}
+			}
+		}
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_crime ACTOR = scope:local_secret_owner }
+	}
+}

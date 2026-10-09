@@ -22,8 +22,8 @@ HAS_HEGEMON = {EXP, ADV, REC, TEN, CON, COL}  # 有天子 → 年度保底（N10
 BAD_OUTLET = {EXP: TEN, ADV: TEN, REC: TEN, TEN: COL, CON: COL, COL: CHA, STA: CHA}
 GOOD_OUTLETS = {EXP: [ADV], ADV: [EXP], REC: [ADV, EXP], TEN: [REC], CON: [REC], COL: [TEN], CHA: [STA]}
 
-# 删除的出口（新朝→进取/扩张；对峙→恢复）
-REMOVE_OUTLETS = {CON: [ADV, EXP], STA: [REC]}
+# 删除的出口（新朝→进取/扩张；对峙→恢复；崩溃→斗争）
+REMOVE_OUTLETS = {CON: [ADV, EXP], STA: [REC], COL: [CHA]}  # 2026-10-08：崩溃→斗争只走脚本检测
 
 # ---------------------------------------------------------------------------
 # 新诱因：key -> (名称, 描述)

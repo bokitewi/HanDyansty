@@ -1,0 +1,165 @@
+﻿# ============================================================================
+# WJ 辟召 —— 开府者向同一天朝角色发出入幕邀请
+# xinsanguo-MOD 2026-08-19
+#
+# 结构参考原版 attempt_conversion_of_local_ruler_interaction：
+# send_option 负责筹码，ai_accept 负责概率接受，on_accept/on_decline 负责结果。
+# ============================================================================
+
+# A.45/A.46 replacement; costs use request-maocai / native movement bribes.
+wj_request_bizhao_interaction = {
+ icon = mentor
+ category = interaction_category_friendly
+ interface_priority = 30
+ common_interaction = yes
+ ai_maybe = yes
+ ai_min_reply_days = 1
+ ai_max_reply_days = 3
+ popup_on_receive = yes
+ name = WJ_mufu_recruit
+ desc = WJ_bizhao_recruit_desc
+ # Evaluate inside the native interaction context, preserving actual actor/recipient.
+ # actor.MakeScope.ScriptValue in GUI localization loses the recipient event target.
+ localization_values = { WJ_BIZHAO_BASE_COST = WJ_mufu_base_influence_cost }
+ options_heading = WJ_mufu_options
+ is_shown = {
+  scope:actor = { is_ai = no }
+  scope:actor = { WJ_mufu_owner_eligible = yes }
+  scope:recipient = { this != scope:actor is_adult = yes is_female = no WJ_mufu_same_realm = { HOST = scope:actor } }
+ }
+ is_valid_showing_failures_only = { WJ_mufu_request_valid = yes }
+ can_send = {
+  WJ_mufu_request_valid = yes
+  WJ_mufu_selected_empty = yes
+  WJ_mufu_terms_valid = yes
+  scope:actor = { NOT = { has_pending_interaction_of_type = wj_request_bizhao_interaction } }
+  scope:actor = { NOT = { has_variable = wj_yangwang_mufu_pending } }
+ }
+ # Native exclusivity covers bribes too. GUI groups only the five role flags;
+ # can_send/on_accept retain WJ_mufu_selected_empty for single-role validation.
+ send_options_exclusive = no
+ send_option = {
+  flag = mufu_role_1
+  localization = WJ_mufu_role_option_1
+  can_invalidate_interaction = yes
+  starts_enabled = {
+   scope:actor = { NOT = { has_variable = wj_mufu_slot_1 }  }
+  }
+  is_valid = {
+   scope:actor = { NOT = { has_variable = wj_mufu_slot_1 } }
+  }
+ }
+ send_option = {
+  flag = mufu_role_2
+  localization = WJ_mufu_role_option_2
+  can_invalidate_interaction = yes
+  starts_enabled = {
+   scope:actor = { NOT = { has_variable = wj_mufu_slot_2 } has_variable = wj_mufu_slot_1 }
+  }
+  is_valid = {
+   scope:actor = { NOT = { has_variable = wj_mufu_slot_2 } }
+  }
+ }
+ send_option = {
+  flag = mufu_role_3
+  localization = WJ_mufu_role_option_3
+  can_invalidate_interaction = yes
+  starts_enabled = {
+   scope:actor = { NOT = { has_variable = wj_mufu_slot_3 } has_variable = wj_mufu_slot_1 has_variable = wj_mufu_slot_2 }
+  }
+  is_valid = {
+   scope:actor = { NOT = { has_variable = wj_mufu_slot_3 } }
+  }
+ }
+ send_option = {
+  flag = mufu_role_4
+  localization = WJ_mufu_role_option_4
+  can_invalidate_interaction = yes
+  starts_enabled = {
+   scope:actor = { NOT = { has_variable = wj_mufu_slot_4 } has_variable = wj_mufu_slot_1 has_variable = wj_mufu_slot_2 has_variable = wj_mufu_slot_3 }
+  }
+  is_valid = {
+   scope:actor = { NOT = { has_variable = wj_mufu_slot_4 } }
+  }
+ }
+ send_option = {
+  flag = mufu_role_5
+  localization = WJ_mufu_role_option_5
+  can_invalidate_interaction = yes
+  starts_enabled = {
+   scope:actor = { NOT = { has_variable = wj_mufu_slot_5 } has_variable = wj_mufu_slot_1 has_variable = wj_mufu_slot_2 has_variable = wj_mufu_slot_3 has_variable = wj_mufu_slot_4 }
+  }
+  is_valid = {
+   scope:actor = { NOT = { has_variable = wj_mufu_slot_5 } }
+  }
+ }
+ send_option = { flag = prestige localization = SCHEME_AGENT_PRESTIGE is_valid = { scope:actor.prestige >= prestige_bribe_value } }
+ send_option = { flag = gift localization = WJ_REQUEST_RECOMMENDATION_GOLD_OPTION is_valid = { scope:actor.gold > 0 } }
+ send_option = { flag = offer_hook localization = WJ_mufu_promise is_valid = { scope:recipient = { NOT = { has_hook = scope:actor } } } }
+ send_option = {
+  flag = influence localization = SCHEME_AGENT_INFLUENCE
+  # Eligibility always includes the extra bribe, even before the checkbox is selected.
+  is_valid = {
+   scope:actor.influence >= { value = WJ_mufu_base_influence_cost add = influence_bribe_value }
+  }
+ }
+ send_option = { flag = hook localization = SCHEME_HOOK is_valid = { scope:actor = { has_usable_hook = scope:recipient } } }
+ # No costs at send: stale acceptance must be a complete no-op, including payment.
+ on_accept = {
+  if = {
+   limit = { WJ_mufu_request_valid = yes WJ_mufu_selected_empty = yes WJ_mufu_terms_valid = yes }
+   WJ_mufu_check_chain = yes
+   if = {
+    limit = { scope:wj_chain_safe = 1 }
+    scope:actor = { change_influence = { value = WJ_mufu_base_influence_cost multiply = -1 } }
+    WJ_mufu_settle_terms = yes
+    WJ_mufu_attach = yes
+    if = {
+     limit = { scope:actor = { is_ai = no } scope:recipient = { has_variable = wj_mufu_owner var:wj_mufu_owner ?= scope:actor } }
+     scope:actor = { trigger_event = WJ_bizhao_reply.0001 }
+    }
+   }
+  }
+ }
+ on_decline = {
+  if = {
+   limit = { WJ_mufu_request_valid = yes WJ_mufu_selected_empty = yes }
+   scope:recipient = {
+    add_to_variable_list = { name = wj_mufu_rejected_owners target = scope:actor years = 3 }
+    WJ_mufu_refusal_identity_effect = yes
+   }
+   if = {
+    limit = { scope:actor = { is_ai = no } }
+    scope:actor = { trigger_event = WJ_bizhao_reply.0002 }
+   }
+  }
+ }
+ ai_targets = { ai_recipients = realm_characters ai_recipients = guests }
+ ai_frequency_by_tier = { barony = 0 county = 0 duchy = 0 kingdom = 1 empire = 1 hegemony = 1 }
+ ai_potential = { always = no }
+ ai_will_do = {
+  base = 10
+  modifier = { add = scope:recipient.stewardship scope:mufu_role_1 = yes }
+  modifier = { add = scope:recipient.diplomacy scope:mufu_role_2 = yes }
+  modifier = { add = scope:recipient.intrigue scope:mufu_role_3 = yes }
+  modifier = { add = scope:recipient.martial scope:mufu_role_4 = yes }
+  modifier = { add = scope:recipient.learning scope:mufu_role_5 = yes }
+ }
+ ai_accept = {
+  WJ_dd_jie_acceptance_modifier = yes
+  base = 0
+  opinion_modifier = { who = scope:recipient opinion_target = scope:actor multiplier = 0.5 }
+  modifier = { add = 100 scope:hook = yes desc = SCHEME_WEAK_HOOK_USED }
+  modifier = { add = 20 scope:offer_hook = yes desc = WJ_mufu_promise }
+  modifier = { add = wj_request_recommendation_gold_acceptance_value scope:gift = yes desc = WJ_REQUEST_RECOMMENDATION_GOLD_REASON }
+  modifier = { add = 20 scope:prestige = yes desc = SCHEME_WITH_PRESTIGE }
+  modifier = { add = 20 scope:influence = yes desc = SCHEME_WITH_INFLUENCE }
+  modifier = { add = 25 scope:recipient = { has_relation_friend = scope:actor } desc = FRIEND }
+  modifier = { add = -5 scope:recipient.highest_held_title_tier = tier_barony desc = WJ_mufu_rank_reason }
+  modifier = { add = -10 scope:recipient.highest_held_title_tier = tier_county desc = WJ_mufu_rank_reason }
+  modifier = { add = -20 scope:recipient.highest_held_title_tier = tier_duchy desc = WJ_mufu_rank_reason }
+  modifier = { add = -40 scope:recipient.highest_held_title_tier = tier_kingdom desc = WJ_mufu_rank_reason }
+  modifier = { add = -60 scope:recipient.highest_held_title_tier = tier_empire desc = WJ_mufu_rank_reason }
+  modifier = { add = -60 scope:recipient.highest_held_title_tier = tier_hegemony desc = WJ_mufu_rank_reason }
+ }
+}

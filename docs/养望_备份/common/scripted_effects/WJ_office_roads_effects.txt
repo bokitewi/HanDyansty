@@ -1,0 +1,894 @@
+﻿# ============================================================================
+# WJ 三条入仕途径、事件驱动试守与考课共用效果
+# xinsanguo-MOD 2026-08-19
+#
+# 汉晋入仕途径不再伪装成唐制科举，绝不授予原版考试旗标或考试修饰符。
+# ============================================================================
+
+# 清理一轮考课的临时数据。写法沿用原版童子试结算后的旗标/变量清理。
+WJ_official_assessment_cleanup_effect = {
+	remove_variable ?= wj_official_assessment_score
+	set_variable = {
+		name = wj_assessment_safe_answers
+		value = 0
+	}
+	set_variable = {
+		name = wj_assessment_round_bonus
+		value = 0
+	}
+	remove_character_flag ?= wj_assessment_temp_official
+}
+
+# 原版 appointment_timeout 只表达当前不接受任命；WJ 所有权旗标避免误清原版辞谢状态。
+# 已存在非 WJ 任命超时时不窃取所有权。
+WJ_set_owned_appointment_timeout_effect = {
+	if = {
+		limit = {
+			OR = {
+				NOT = { appointment_timeout_days > 0 }
+				has_character_flag = wj_appointment_timeout_owned
+			}
+		}
+		set_appointment_timeout = {
+			years = 150
+			desc = WJ_appointment_timeout_desc_provisional
+		}
+		add_character_flag = wj_appointment_timeout_owned
+	}
+}
+
+# 只有 WJ 自己建立的超时才允许由 WJ 清理。
+WJ_clear_owned_appointment_timeout_effect = {
+	if = {
+		# 养望仍有效时保留原生拒任；真正出山先由养望退出效果移除特质。
+		limit = { has_character_flag = wj_appointment_timeout_owned NOT = { has_trait = WJ_yangwang_trait } }
+		# 失官后WJ标记可能仍在，但原生任命数据已不存在。
+		# 沿用原版examination_clear_timeout_effect的前置判断。
+		if = {
+			limit = { appointment_timeout_days > 0 }
+			clear_appointment_timeout = yes
+		}
+		remove_character_flag ?= wj_appointment_timeout_owned
+	}
+}
+
+# 原版乡试成功使用正常乡试修饰符，不补童试，也不伪造考试记忆。
+WJ_grant_tang_provincial_exam_state_effect = {
+	if = {
+		limit = { has_character_modifier = tgp_bypassed_provincial_exam_modifier }
+		remove_character_modifier = tgp_bypassed_provincial_exam_modifier
+	}
+	if = {
+		limit = { NOT = { has_character_flag = passed_provincial_exam } }
+		add_character_flag = passed_provincial_exam
+	}
+	if = {
+		limit = { NOT = { has_character_modifier = tgp_passed_provincial_exam_modifier } }
+		add_character_modifier = {
+			modifier = tgp_passed_provincial_exam_modifier
+		}
+	}
+}
+
+WJ_grant_tang_metropolitan_exam_state_effect = {
+	if = {
+		limit = { NOT = { has_character_flag = passed_metropolitan_exam } }
+		add_character_flag = passed_metropolitan_exam
+	}
+	if = {
+		limit = { NOT = { has_character_modifier = tgp_passed_metropolitan_exam_modifier } }
+		add_character_modifier = {
+			modifier = tgp_passed_metropolitan_exam_modifier
+		}
+	}
+}
+
+WJ_grant_tang_palace_exam_state_effect = {
+	if = {
+		limit = { NOT = { has_character_flag = passed_palace_exam } }
+		add_character_flag = passed_palace_exam
+	}
+	if = {
+		limit = { NOT = { has_character_modifier = tgp_passed_palace_exam_modifier } }
+		add_character_modifier = {
+			modifier = tgp_passed_palace_exam_modifier
+		}
+	}
+}
+
+# 解除当前五岗幕府双向引用、索引与贡献；实现由幕府模块统一维护。
+WJ_clear_han_jin_mufu_state_effect = {
+	# New five-slot/index implementation owns both sides and their contributions.
+	WJ_mufu_leave = yes
+	WJ_mufu_dissolve = yes
+}
+
+# 清除现任汉晋职权与临时状态；个人正式资格及四轨仅在转唐效果清除。原版官职、领地、头衔兵、科举资格、
+# 人物记忆和恩师／门生关系都保留；未来新系统只向本效果登记自己的状态。
+WJ_clear_han_jin_character_state_effect = {
+	WJ_yangwang_exit_effect = yes
+	WJ_kaoke_clear_effect = yes
+	WJ_clear_owned_appointment_timeout_effect = yes
+	WJ_clear_han_jin_mufu_state_effect = yes
+
+	if = {
+		limit = { has_character_modifier = WJ_refused_bizhao_modifier }
+		remove_character_modifier = WJ_refused_bizhao_modifier
+	}
+	if = {
+		limit = { has_character_modifier = WJ_temp_official_modifier }
+		remove_character_modifier = WJ_temp_official_modifier
+	}
+	remove_character_flag ?= wj_yinju_active
+	remove_character_flag ?= wj_appointment_timeout_owned
+# 	remove_character_flag ?= wj_langguan_kaoxiao_cooldown
+	remove_character_flag ?= wj_temp_official_timer
+	remove_character_flag ?= wj_temp_official_kaoke_ready
+# 	remove_character_flag ?= wj_temp_official_from_langguan
+	remove_character_flag ?= wj_assessment_temp_official
+	remove_character_flag ?= wj_bizhao_request_cooldown
+	remove_character_flag ?= wj_xiaolian_nomination_pending
+	remove_character_flag ?= wj_xiaolian_nomination_yearly_quota
+	remove_character_flag ?= wj_maocai_nomination_pending
+	remove_character_flag ?= wj_maocai_nomination_yearly_quota
+
+	remove_variable ?= wj_official_assessment_score
+	remove_variable ?= wj_assessment_safe_answers
+	remove_variable ?= wj_assessment_round_bonus
+	remove_variable ?= wj_mufu_owner
+	remove_variable ?= wj_mufu_slot
+	remove_variable ?= wj_mufu_slot_1
+	remove_variable ?= wj_mufu_slot_2
+	remove_variable ?= wj_mufu_slot_3
+	remove_variable ?= wj_mufu_slot_4
+	remove_variable ?= wj_mufu_slot_5
+	remove_variable ?= wj_mufu_slot_6
+	remove_variable ?= wj_mufu_members
+	remove_variable ?= wj_qingyi_session_xp_eligible
+	remove_variable ?= wj_qingyi_session_event_xp
+	remove_variable ?= wj_qingyi_qingtan_xp_year_lock
+	remove_variable ?= wj_starting_mingshi_total
+	remove_variable ?= wj_starting_mingshi_qingyi_rank
+	remove_variable ?= wj_starting_mingshi_shili_rank
+	remove_variable ?= wj_starting_mingshi_wuxun_rank
+	remove_variable ?= wj_starting_mingshi_zhiji_rank
+	remove_variable ?= wj_temp_official_start_date
+	WJ_clear_contract_privileges_effect = yes
+}
+
+# 资格只读取一次最高层级，再统一清理；重复执行不会重复叠加修饰符。
+WJ_convert_han_jin_character_to_tang_effect = {
+# 	WJ_migrate_langguan_identity_effect = yes
+	if = {
+		limit = { has_character_modifier = WJ_maocai_modifier }
+		WJ_grant_tang_provincial_exam_state_effect = yes
+		WJ_grant_tang_metropolitan_exam_state_effect = yes
+		WJ_grant_tang_palace_exam_state_effect = yes
+	}
+	else_if = {
+		limit = { has_character_modifier = WJ_bizhao_modifier }
+		WJ_grant_tang_provincial_exam_state_effect = yes
+		WJ_grant_tang_metropolitan_exam_state_effect = yes
+	}
+	else_if = {
+		limit = {
+			OR = {
+				has_character_modifier = WJ_xiaolian_modifier
+# 				has_character_modifier = WJ_langguan_modifier
+			}
+		}
+		WJ_grant_tang_provincial_exam_state_effect = yes
+	}
+	else_if = {
+		limit = { has_character_modifier = WJ_temp_official_modifier }
+		WJ_grant_tang_provincial_exam_state_effect = yes
+	}
+	if = {
+		limit = { has_character_modifier = WJ_bizhao_modifier }
+		remove_character_modifier = WJ_bizhao_modifier
+	}
+	if = {
+		limit = { has_character_modifier = WJ_xiaolian_modifier }
+		remove_character_modifier = WJ_xiaolian_modifier
+	}
+	if = {
+		limit = { has_character_modifier = WJ_maocai_modifier }
+		remove_character_modifier = WJ_maocai_modifier
+	}
+	if = {
+		limit = { has_trait = WJ_mingshi_trait }
+		remove_trait = WJ_mingshi_trait
+	}
+# 	remove_character_modifier = WJ_langguan_modifier
+	WJ_clear_han_jin_character_state_effect = yes
+}
+
+# 进入唐制时转换；离开汉晋但未进入唐制时只清理现任职权，保留个人资格及四轨；仍在汉晋时校正地方任期。
+# on_vassal_change 在死亡交接时可能传入死者；普通人物校正不能对其授资格或移除人物标记。
+# 死亡任期封存仍由专用 on_death 入口处理，不跳过其存活下属／廷臣的逐人校正。
+WJ_reconcile_han_jin_character_state_effect = {
+# 	WJ_migrate_langguan_identity_effect = yes
+	if = {
+		limit = { is_alive = yes }
+		if = {
+			limit = {
+				WJ_has_han_jin_conversion_state_trigger = yes
+				WJ_tang_law_trigger = yes
+			}
+			WJ_convert_han_jin_character_to_tang_effect = yes
+		}
+		else_if = {
+			limit = {
+				WJ_has_han_jin_conversion_state_trigger = yes
+				WJ_han_jin_law_trigger = no
+			}
+			WJ_clear_han_jin_character_state_effect = yes
+		}
+		if = {
+			limit = { WJ_han_jin_law_trigger = yes }
+			WJ_kaoke_reconcile_effect = yes
+		}
+	}
+}
+
+# 法律 on_pass 在新法生效前执行，因此该入口不再检查当前是否已经是唐制。
+WJ_convert_han_jin_realm_to_tang_effect = {
+	save_scope_as = wj_han_jin_conversion_realm_liege
+	if = {
+		limit = { WJ_has_han_jin_conversion_state_trigger = yes }
+		WJ_convert_han_jin_character_to_tang_effect = yes
+	}
+	every_courtier_or_guest = {
+		limit = {
+			top_liege = scope:wj_han_jin_conversion_realm_liege.top_liege
+			WJ_has_han_jin_conversion_state_trigger = yes
+		}
+		WJ_convert_han_jin_character_to_tang_effect = yes
+	}
+	every_vassal_or_below = {
+		if = {
+			limit = { WJ_has_han_jin_conversion_state_trigger = yes }
+			WJ_convert_han_jin_character_to_tang_effect = yes
+		}
+		every_courtier_or_guest = {
+			limit = {
+				top_liege = scope:wj_han_jin_conversion_realm_liege.top_liege
+				WJ_has_han_jin_conversion_state_trigger = yes
+			}
+			WJ_convert_han_jin_character_to_tang_effect = yes
+		}
+	}
+}
+
+# 转封臣时只处理该封臣、其下级封臣及各自宫廷，不扫描新领主整个世界。
+WJ_reconcile_han_jin_subrealm_state_effect = {
+	if = {
+		limit = { WJ_has_han_jin_conversion_state_trigger = yes }
+		WJ_reconcile_han_jin_character_state_effect = yes
+	}
+	every_courtier_or_guest = {
+		limit = { WJ_has_han_jin_conversion_state_trigger = yes }
+		WJ_reconcile_han_jin_character_state_effect = yes
+	}
+	every_vassal_or_below = {
+		if = {
+			limit = { WJ_has_han_jin_conversion_state_trigger = yes }
+			WJ_reconcile_han_jin_character_state_effect = yes
+		}
+		every_courtier_or_guest = {
+			limit = { WJ_has_han_jin_conversion_state_trigger = yes }
+			WJ_reconcile_han_jin_character_state_effect = yes
+		}
+	}
+}
+
+# 退出试守。任一正式入仕途径授予时都必须调用。
+WJ_temp_official_clear_effect = {
+	if = {
+		limit = { has_character_modifier = WJ_temp_official_modifier }
+		remove_character_modifier = WJ_temp_official_modifier
+	}
+	remove_character_flag ?= wj_temp_official_timer
+	remove_character_flag ?= wj_temp_official_kaoke_ready
+# 	remove_character_flag ?= wj_temp_official_from_langguan
+	remove_variable ?= wj_temp_official_start_date
+}
+
+WJ_grant_road_bizhao_effect = {
+	if = {
+		limit = { WJ_han_jin_law_trigger = yes }
+		WJ_temp_official_clear_effect = yes
+		if = {
+			limit = { NOT = { has_trait = WJ_mingshi_trait } }
+			add_trait = WJ_mingshi_trait
+		}
+		add_character_modifier = { modifier = WJ_bizhao_modifier }
+# 		WJ_migrate_langguan_identity_effect = yes
+# 		remove_character_modifier = WJ_langguan_modifier
+		WJ_yangwang_exit_effect = yes
+		remove_character_flag ?= wj_yinju_active
+		WJ_clear_owned_appointment_timeout_effect = yes
+		WJ_kaoke_reconcile_effect = yes
+	}
+	else = {
+		WJ_clear_han_jin_character_state_effect = yes
+	}
+}
+
+WJ_grant_road_xiaolian_effect = {
+	if = {
+		limit = {
+			OR = {
+				WJ_han_jin_law_trigger = yes
+# 				WJ_langguan_assessment_pass_valid_trigger = yes
+			}
+		}
+		WJ_temp_official_clear_effect = yes
+		if = {
+			limit = { NOT = { has_trait = WJ_mingshi_trait } }
+			add_trait = WJ_mingshi_trait
+		}
+		add_character_modifier = { modifier = WJ_xiaolian_modifier }
+# 		WJ_migrate_langguan_identity_effect = yes
+# 		remove_character_modifier = WJ_langguan_modifier
+# 		WJ_yangwang_exit_effect = yes # 暂停：养望接受孝廉不出山。
+		remove_character_flag ?= wj_yinju_active
+		WJ_clear_owned_appointment_timeout_effect = yes
+		WJ_kaoke_reconcile_effect = yes
+		WJ_yangwang_after_maocai_effect = yes # 孝廉与茂才共用养望拒任保留/修复。
+	}
+	else = {
+		WJ_clear_han_jin_character_state_effect = yes
+	}
+}
+
+WJ_grant_road_maocai_effect = {
+	if = {
+		limit = { WJ_han_jin_law_trigger = yes }
+		WJ_temp_official_clear_effect = yes
+		if = {
+			limit = { NOT = { has_trait = WJ_mingshi_trait } }
+			add_trait = WJ_mingshi_trait
+		}
+		add_character_modifier = { modifier = WJ_maocai_modifier }
+# 		WJ_migrate_langguan_identity_effect = yes
+# 		remove_character_modifier = WJ_langguan_modifier
+		remove_character_flag ?= wj_yinju_active
+		if = {
+			limit = { NOT = { has_trait = WJ_yangwang_trait } }
+			WJ_clear_owned_appointment_timeout_effect = yes
+		}
+		WJ_kaoke_reconcile_effect = yes
+		WJ_yangwang_after_maocai_effect = yes
+	}
+	else = {
+		WJ_clear_han_jin_character_state_effect = yes
+	}
+}
+
+# 将一次开局仕履贡献随机投入四条路线之一；已投入两次的路线不再入选。
+WJ_starting_mingshi_allocate_one_effect = {
+	random_list = {
+		1 = {
+			trigger = { var:wj_starting_mingshi_qingyi_rank < 2 }
+			modifier = { factor = 3 OR = { has_council_position = WJ_minister_tai_fu learning >= 15 } }
+			change_variable = { name = wj_starting_mingshi_qingyi_rank add = 1 }
+		}
+		1 = {
+			trigger = { var:wj_starting_mingshi_shili_rank < 2 }
+			modifier = { factor = 3 age >= 45 }
+			change_variable = { name = wj_starting_mingshi_shili_rank add = 1 }
+		}
+		1 = {
+			trigger = { var:wj_starting_mingshi_wuxun_rank < 2 }
+			modifier = { factor = 3 OR = { vassal_contract_has_flag = celestial_military_appointment has_council_position = WJ_minister_guang_lu_xun martial >= 15 } }
+			change_variable = { name = wj_starting_mingshi_wuxun_rank add = 1 }
+		}
+		1 = {
+			trigger = { var:wj_starting_mingshi_zhiji_rank < 2 }
+			modifier = { factor = 3 OR = { vassal_contract_has_flag = celestial_civil_appointment has_council_position = WJ_minister_zong_zheng stewardship >= 15 } }
+			change_variable = { name = wj_starting_mingshi_zhiji_rank add = 1 }
+		}
+	}
+}
+
+# 仅开局实际官员／内阁：按最高非家族官职分档。正常运行中的入仕与成长不走此入口。
+WJ_grant_starting_mingshi_trait_effect = {
+ if = {
+  limit = { WJ_starting_career_eligible = yes NOT = { has_character_flag = WJ_starting_career_initialized } }
+  add_character_flag = WJ_starting_career_initialized
+  remove_trait = WJ_mingshi_trait
+  add_trait = WJ_mingshi_trait
+  random_list = { 1 = { set_variable = { name = wj_starting_mingshi_total value = 0 } } 1 = { set_variable = { name = wj_starting_mingshi_total value = 1 } } }
+  set_variable = { name = wj_starting_merit value = { 1500 3000 } }
+  if = {
+   limit = { any_held_title = { is_noble_family_title = no tier >= tier_empire } }
+   random_list = { 1 = { set_variable = { name = wj_starting_mingshi_total value = 6 } } 1 = { set_variable = { name = wj_starting_mingshi_total value = 7 } } }
+   set_variable = { name = wj_starting_merit value = { 9000 12000 } }
+  }
+  else_if = {
+   limit = { any_held_title = { is_noble_family_title = no tier >= tier_kingdom } }
+   random_list = { 1 = { set_variable = { name = wj_starting_mingshi_total value = 5 } } 1 = { set_variable = { name = wj_starting_mingshi_total value = 6 } } }
+   set_variable = { name = wj_starting_merit value = { 6000 9000 } }
+  }
+  else_if = {
+   limit = { any_held_title = { is_noble_family_title = no tier >= tier_duchy } }
+   random_list = { 1 = { set_variable = { name = wj_starting_mingshi_total value = 3 } } 1 = { set_variable = { name = wj_starting_mingshi_total value = 4 } } }
+   set_variable = { name = wj_starting_merit value = { 3000 6000 } }
+  }
+  else_if = {
+   limit = { any_held_title = { is_noble_family_title = no tier >= tier_county } }
+   random_list = { 1 = { set_variable = { name = wj_starting_mingshi_total value = 2 } } 1 = { set_variable = { name = wj_starting_mingshi_total value = 3 } } }
+   set_variable = { name = wj_starting_merit value = { 1500 3000 } }
+  }
+  set_variable = { name = wj_starting_mingshi_qingyi_rank value = 0 }
+  set_variable = { name = wj_starting_mingshi_shili_rank value = 0 }
+  set_variable = { name = wj_starting_mingshi_wuxun_rank value = 0 }
+  set_variable = { name = wj_starting_mingshi_zhiji_rank value = 0 }
+  # 已有历史人物优先安排对应履历两份；仍受实际任职资格与所处档位约束。
+  if = {
+   limit = { game_start_date = 184.1.1 var:wj_starting_mingshi_total >= 2 }
+   if = { limit = { this = character:yang_ci }
+    set_variable = { name = wj_starting_mingshi_qingyi_rank value = 1 }
+    set_variable = { name = wj_starting_mingshi_shili_rank value = 1 }
+    change_variable = { name = wj_starting_mingshi_total subtract = 2 }
+   }
+   else_if = { limit = { this = character:lu_zhi }
+    set_variable = { name = wj_starting_mingshi_qingyi_rank value = 1 }
+    set_variable = { name = wj_starting_mingshi_wuxun_rank value = 1 }
+    change_variable = { name = wj_starting_mingshi_total subtract = 2 }
+   }
+   else_if = { limit = { this = character:zhu_juan }
+    set_variable = { name = wj_starting_mingshi_wuxun_rank value = 1 }
+    set_variable = { name = wj_starting_mingshi_zhiji_rank value = 1 }
+    change_variable = { name = wj_starting_mingshi_total subtract = 2 }
+   }
+  }
+  if = { limit = { var:wj_starting_mingshi_total >= 1 } WJ_starting_mingshi_allocate_one_effect = yes }
+  if = { limit = { var:wj_starting_mingshi_total >= 2 } WJ_starting_mingshi_allocate_one_effect = yes }
+  if = { limit = { var:wj_starting_mingshi_total >= 3 } WJ_starting_mingshi_allocate_one_effect = yes }
+  if = { limit = { var:wj_starting_mingshi_total >= 4 } WJ_starting_mingshi_allocate_one_effect = yes }
+  if = { limit = { var:wj_starting_mingshi_total >= 5 } WJ_starting_mingshi_allocate_one_effect = yes }
+  if = { limit = { var:wj_starting_mingshi_total >= 6 } WJ_starting_mingshi_allocate_one_effect = yes }
+  if = { limit = { var:wj_starting_mingshi_total >= 7 } WJ_starting_mingshi_allocate_one_effect = yes }
+  if = { limit = { var:wj_starting_mingshi_total >= 8 } WJ_starting_mingshi_allocate_one_effect = yes }
+  if = { limit = { var:wj_starting_mingshi_qingyi_rank >= 2 } add_trait_xp = { trait = WJ_mingshi_trait track = qingtan value = 100 } }
+  else_if = { limit = { var:wj_starting_mingshi_qingyi_rank >= 1 } add_trait_xp = { trait = WJ_mingshi_trait track = qingtan value = 25 } }
+  if = { limit = { var:wj_starting_mingshi_shili_rank >= 2 } add_trait_xp = { trait = WJ_mingshi_trait track = zili value = 100 } }
+  else_if = { limit = { var:wj_starting_mingshi_shili_rank >= 1 } add_trait_xp = { trait = WJ_mingshi_trait track = zili value = 25 } }
+  if = { limit = { var:wj_starting_mingshi_wuxun_rank >= 2 } add_trait_xp = { trait = WJ_mingshi_trait track = jungong value = 100 } }
+  else_if = { limit = { var:wj_starting_mingshi_wuxun_rank >= 1 } add_trait_xp = { trait = WJ_mingshi_trait track = jungong value = 25 } }
+  if = { limit = { var:wj_starting_mingshi_zhiji_rank >= 2 } add_trait_xp = { trait = WJ_mingshi_trait track = zhengji value = 100 } }
+  else_if = { limit = { var:wj_starting_mingshi_zhiji_rank >= 1 } add_trait_xp = { trait = WJ_mingshi_trait track = zhengji value = 25 } }
+  change_merit = { value = var:wj_starting_merit subtract = merit }
+  remove_variable = wj_starting_merit
+  remove_variable = wj_starting_mingshi_total
+  remove_variable = wj_starting_mingshi_qingyi_rank
+  remove_variable = wj_starting_mingshi_shili_rank
+  remove_variable = wj_starting_mingshi_wuxun_rank
+  remove_variable = wj_starting_mingshi_zhiji_rank
+ }
+}
+
+# 开局入仕资格保持原规则；宦海和官员资望由大厅结束后统一分档。
+WJ_grant_random_starting_road_effect = {
+	if = {
+		limit = { WJ_has_entry_road_trigger = no }
+		random_list = {
+			1 = { WJ_grant_road_bizhao_effect = yes }
+			1 = { WJ_grant_road_xiaolian_effect = yes }
+			1 = { WJ_grant_road_maocai_effect = yes }
+		}
+	}
+	change_merit = {
+		value = county_starting_merit_value
+		add = age
+		add = learning
+	}
+}
+
+# 复用原版 TGP set_elder_relation_effect 建立举主—门生关系。
+# RECOMMENDER = 举主；CANDIDATE = 被举荐者。
+WJ_establish_recommender_disciple_effect = {
+	if = {
+		limit = {
+			$RECOMMENDER$ = {
+				NOT = { has_relation_disciple = $CANDIDATE$ }
+			}
+		}
+		set_elder_relation_effect = {
+			ELDER = $RECOMMENDER$
+			DISCIPLE = $CANDIDATE$
+			MERIT = 0
+		}
+	}
+	# 天朝循环大修·朋党：记录"近 10 年有察举"（寒门满意度）
+	$RECOMMENDER$.top_liege ?= {
+		set_variable = { name = hd_party_recent_exam days = 3650 }
+	}
+}
+
+# 察举筹码结算：逐项复用原版 celestial_ask_to_switch_movements_interaction 的 on_accept 写法。
+WJ_settle_recommendation_movement_options_effect = {
+	if = {
+		limit = { always = scope:gift }
+		scope:actor = {
+			pay_short_term_gold = {
+				gold = wj_request_recommendation_gold_value
+				target = scope:recipient
+			}
+			stress_impact = { greedy = minor_stress_impact_gain }
+		}
+	}
+	if = {
+		limit = { always = scope:offer_hook }
+		scope:actor = {
+			stress_impact = {
+				base = minor_stress_impact_gain
+				paranoid = major_stress_impact_gain
+			}
+		}
+		scope:recipient = {
+			add_hook = {
+				type = favor_hook
+				target = scope:actor
+			}
+		}
+	}
+	if = {
+		limit = { always = scope:offer_hook_strong }
+		scope:actor = { stress_impact = { base = major_stress_impact_gain } }
+		scope:recipient = {
+			add_hook = {
+				type = strong_favor_hook
+				target = scope:actor
+			}
+		}
+	}
+	if = {
+		limit = { always = scope:hook }
+		scope:actor = { use_hook = scope:recipient }
+	}
+	if = {
+		limit = { always = scope:prestige }
+		scope:actor = {
+			add_prestige = {
+				value = prestige_bribe_value
+				multiply = -1
+			}
+		}
+		scope:recipient = { add_prestige = prestige_bribe_value }
+	}
+	if = {
+		limit = { always = scope:influence }
+		scope:actor = {
+			change_influence = {
+				value = influence_bribe_value
+				multiply = -1
+			}
+		}
+		scope:recipient = { change_influence = influence_bribe_value }
+	}
+}
+
+# 主动察举索贿结算：筹码仍沿用原版朋党交互，但财货、承诺与影响力由被举者交给举主。
+WJ_settle_active_recommendation_demands_effect = {
+	if = {
+		limit = { always = scope:gift }
+		scope:recipient = {
+			pay_short_term_gold = {
+				gold = wj_active_recommendation_gold_value
+				target = scope:actor
+			}
+			stress_impact = { greedy = minor_stress_impact_gain }
+		}
+	}
+	if = {
+		limit = { always = scope:offer_hook }
+		scope:recipient = {
+			stress_impact = {
+				base = minor_stress_impact_gain
+				paranoid = major_stress_impact_gain
+			}
+		}
+		scope:actor = {
+			add_hook = {
+				type = favor_hook
+				target = scope:recipient
+			}
+		}
+	}
+	if = {
+		limit = { always = scope:offer_hook_strong }
+		scope:recipient = { stress_impact = { base = major_stress_impact_gain } }
+		scope:actor = {
+			add_hook = {
+				type = strong_favor_hook
+				target = scope:recipient
+			}
+		}
+	}
+	if = {
+		limit = { always = scope:hook }
+		scope:actor = { use_hook = scope:recipient }
+	}
+	if = {
+		limit = { always = scope:influence }
+		scope:recipient = {
+			change_influence = {
+				value = influence_bribe_value
+				multiply = -1
+			}
+		}
+		scope:actor = { change_influence = influence_bribe_value }
+	}
+}
+
+# ---- 事件驱动试守生命周期 ----
+WJ_temp_official_apply_effect = {
+# 	WJ_migrate_langguan_identity_effect = yes
+	set_variable = { name = wj_temp_official_start_date value = current_date }
+	remove_character_flag ?= wj_yinju_active
+	# 候考郎官取得真实官职后立即转为试守，不再保留郎官双重身份。
+# 	if = {
+# 		limit = { has_character_modifier = WJ_langguan_modifier }
+# 		add_character_flag = wj_temp_official_from_langguan
+# 		remove_character_modifier = WJ_langguan_modifier
+# 		remove_character_flag ?= wj_langguan_kaoxiao_cooldown
+# 	}
+	if = {
+		limit = { NOT = { has_character_modifier = WJ_temp_official_modifier } }
+		add_character_modifier = { modifier = WJ_temp_official_modifier }
+	}
+	remove_character_flag ?= wj_temp_official_kaoke_ready
+	if = {
+		limit = { WJ_kaoke_eligible_trigger = no }
+		add_character_flag = {
+			flag = wj_temp_official_timer
+			years = 1
+		}
+		trigger_event = {
+			id = wj_temp_official.0100
+			years = 1
+		}
+	}
+	else = {
+		remove_character_flag ?= wj_temp_official_timer
+	}
+	WJ_set_owned_appointment_timeout_effect = yes
+	WJ_kaoke_reconcile_effect = yes
+}
+
+WJ_temp_official_retry_effect = {
+	set_variable = { name = wj_temp_official_start_date value = current_date }
+	remove_character_flag ?= wj_temp_official_kaoke_ready
+	if = {
+		limit = { WJ_kaoke_eligible_trigger = no }
+		add_character_flag = {
+			flag = wj_temp_official_timer
+			years = 1
+		}
+		trigger_event = {
+			id = wj_temp_official.0100
+			years = 1
+		}
+	}
+	else = {
+		remove_character_flag ?= wj_temp_official_timer
+	}
+	WJ_set_owned_appointment_timeout_effect = yes
+	WJ_kaoke_reconcile_effect = yes
+}
+
+# 郎官转试守固定结算为举孝廉；其他假吏按当前最高非家族官职分流。
+WJ_temp_official_kaoke_pass_effect = {
+# 	if = {
+# 		limit = { has_character_flag = wj_temp_official_from_langguan }
+# 		WJ_grant_road_xiaolian_effect = yes
+# 	}
+	if = { # 普通试守良优仍按实际官职授正式资格。
+		limit = {
+			any_held_title = {
+				tier >= tier_duchy
+				is_noble_family_title = no
+			}
+		}
+		WJ_grant_road_maocai_effect = yes
+	}
+	else = {
+		WJ_grant_road_xiaolian_effect = yes
+	}
+	send_interface_toast = {
+		type = event_toast_effect_good
+		title = wj_temp_official_kaoke_pass_toast
+		left_icon = root
+		right_icon = root
+	}
+}
+
+WJ_temp_official_kaoke_fail_effect = {
+	send_interface_toast = {
+		type = event_toast_effect_bad
+		title = wj_temp_official_kaoke_fail_toast
+		left_icon = root
+		right_icon = root
+	}
+}
+
+# AI 试守模拟：沿用 wj_temp_official.1000/1001/1002 的管理对决权重与加分，
+# 原对决 compare_modifier 为 ±3×(管理-1)；失败按稳妥作答计。结算同 1005 immediate + after。
+WJ_temp_official_ai_round_effect = {
+	random_list = {
+		$BASE$ = {
+			modifier = { add = { value = stewardship subtract = 1 multiply = 3 } }
+			change_variable = { name = wj_assessment_round_bonus add = $BONUS$ }
+		}
+		$FAIL$ = {
+			modifier = { add = { value = stewardship subtract = 1 multiply = -3 } }
+			change_variable = { name = wj_assessment_safe_answers add = 1 }
+		}
+	}
+}
+
+WJ_temp_official_ai_simulate_effect = {
+	WJ_official_assessment_cleanup_effect = yes
+	add_character_flag = wj_assessment_temp_official
+	WJ_temp_official_ai_round_effect = { BASE = 50 FAIL = 50 BONUS = 15 }
+	WJ_temp_official_ai_round_effect = { BASE = 40 FAIL = 60 BONUS = 20 }
+	WJ_temp_official_ai_round_effect = { BASE = 30 FAIL = 70 BONUS = 25 }
+	set_variable = {
+		name = wj_official_assessment_score
+		value = WJ_official_assessment_score_value
+	}
+	if = {
+		limit = {
+			var:wj_official_assessment_score >= 40
+			WJ_is_valid_temp_official_trigger = yes
+		}
+		WJ_temp_official_kaoke_pass_effect = yes
+	}
+	else = {
+		WJ_temp_official_kaoke_fail_effect = yes
+	}
+	WJ_official_assessment_cleanup_effect = yes
+	if = {
+		limit = { WJ_has_entry_road_trigger = no }
+		if = {
+			limit = { WJ_is_valid_temp_official_trigger = yes }
+			WJ_temp_official_retry_effect = yes
+		}
+		else = {
+			WJ_temp_official_clear_effect = yes
+		}
+	}
+}
+
+# 原版童子试用 scripted effect 保存考官 scope；这里沿用同一结构。
+WJ_set_up_temp_official_examiner_effect = {
+	top_liege = { save_scope_as = wj_assessment_emperor }
+	if = {
+		limit = {
+			title:e_minister_of_personnel.holder ?= {
+				this != root
+				top_liege = root.top_liege
+				is_alive = yes
+				is_incapable = no
+			}
+		}
+		title:e_minister_of_personnel.holder = { save_scope_as = wj_assessment_examiner }
+	}
+	else = {
+		scope:wj_assessment_emperor = { save_scope_as = wj_assessment_examiner }
+	}
+}
+
+# WJ_set_up_langguan_examiner_effect = {
+# 	if = {
+# 		limit = { is_pool_guest = yes exists = host }
+# 		host.top_liege = { save_scope_as = wj_assessment_emperor }
+# 	}
+# 	else = {
+# 		top_liege = { save_scope_as = wj_assessment_emperor }
+# 	}
+# 	if = {
+# 		limit = {
+# 			exists = title:e_WJ_minister_guang_lu_xun.holder
+# 			title:e_WJ_minister_guang_lu_xun.holder = {
+# 				this != root
+# 				top_liege = scope:wj_assessment_emperor
+# 				has_council_position = WJ_minister_guang_lu_xun
+# 				is_councillor_of = scope:wj_assessment_emperor
+# 				is_alive = yes
+# 				is_adult = yes
+# 				is_imprisoned = no
+# 				is_incapable = no
+# 			}
+# 			scope:wj_assessment_emperor = { WJ_han_jin_law_trigger = yes }
+# 		}
+# 		title:e_WJ_minister_guang_lu_xun.holder = { save_scope_as = wj_assessment_examiner }
+# 	}
+# 	else = {
+# 		scope:wj_assessment_emperor = { save_scope_as = wj_assessment_examiner }
+# 	}
+# }
+
+# ---- 已停用的旧六槽辟召成功入口 ----
+WJ_bizhao_request_success_effect = {
+	# Retired six-slot path. No active caller; retained as an inert legacy ID.
+}
+
+# ---- 已停用的旧六槽辟召失败入口 ----
+WJ_bizhao_request_fail_effect = {
+	# Retired six-slot path. No active caller; retained as an inert legacy ID.
+}
+
+# ---- 郎官授予(举孝廉入口): 仅授予候考身份，留在原宫廷并允许进入任命池 ----
+# WJ_grant_langguan_effect = {
+# 	if = {
+# 		limit = { WJ_han_jin_law_trigger = yes }
+# 		WJ_yangwang_exit_effect = yes
+# 		remove_character_flag ?= wj_yinju_active
+# 		WJ_clear_owned_appointment_timeout_effect = yes
+# 		add_character_modifier = { modifier = WJ_langguan_modifier }
+# 	}
+# 	else = {
+# 		WJ_clear_han_jin_character_state_effect = yes
+# 	}
+# }
+
+# ---- 郎官考校通过: 正式获举孝廉，离开郎官候考身份 ----
+# WJ_langguan_kaoxiao_pass_effect = {
+# 	if = {
+# 		limit = { always = no } # Dedicated Langguan examination paused, including delayed results.
+# 		WJ_grant_road_xiaolian_effect = yes
+# 		remove_character_modifier = WJ_langguan_modifier
+# 		# 大额继承分: 抄 influence_meritorious_career_interaction 的
+# 		#   candidate_succession_score_option 链路(文官职业分变量 +200, 高于原版 major 档 150)
+# 		if = {
+# 			limit = {
+# 				has_variable = merit_civilian_career_score_bonus
+# 			}
+# 			change_variable = {
+# 				name = merit_civilian_career_score_bonus
+# 				add = 200
+# 			}
+# 		}
+# 		else = {
+# 			set_variable = {
+# 				name = merit_civilian_career_score_bonus
+# 				value = 200
+# 			}
+# 		}
+# 		change_merit = {
+# 			value = {
+# 				add = minor_merit_value
+# 				add = learning
+# 			}
+# 		}
+# 		send_interface_toast = {
+# 			type = event_toast_effect_good
+# 			title = wj_langguan_kaoxiao_pass_toast
+# 			left_icon = root
+# 			right_icon = root
+# 		}
+# 	}
+# }
+
+# Existing per-character lifecycle callbacks migrate old saves; no global scan.
+# WJ_migrate_langguan_identity_effect = {
+# 	if = {
+# 		limit = { is_alive = yes has_trait = WJ_langguan_trait }
+# 		remove_trait = WJ_langguan_trait
+# 		add_character_modifier = { modifier = WJ_langguan_modifier }
+# 	}
+# }
+
+# ---- 郎官考校未过: 留署待来年 ----
+# WJ_langguan_kaoxiao_fail_effect = {
+# 	send_interface_toast = {
+# 		type = event_toast_effect_neutral
+# 		title = wj_langguan_kaoxiao_fail_toast
+# 		left_icon = root
+# 		right_icon = root
+# 	}
+# }

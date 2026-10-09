@@ -238,6 +238,8 @@ hd_party_refresh_waiqi_list_effect = {
 			scope:hd_party_wq_ruler = { add_to_variable_list = { name = hd_party_waiqi_dynasties target = prev.dynasty } }
 		}
 	}
+	# 2026-10-08：后族全宗族强制入外戚、失势外戚解除（手工维护：hd_party_waiqi_sweep_effects.txt）
+	hd_party_waiqi_sweep_effect = yes
 }
 
 ############################################################
@@ -379,7 +381,7 @@ hd_party_refresh_leader_and_power_effect = {
 	}
 	# 天朝循环·时代特色：紧张期乱象（该党势力 +40%）、党锢"一网打尽"（势力归零 10 年）
 	if = {
-		limit = { has_variable = hd_dc_ten_boost_$G$ }
+		limit = { var:hd_dc_ten_boost_group ?= flag:$G$ }	# 只有外戚/宦官/武勋会被加成；用单一变量避免对世族/寒门报"读取但从未设置"
 		change_variable = { name = hd_party_$G$_power multiply = 1.4 }
 	}
 	if = {
@@ -415,7 +417,7 @@ hd_party_on_new_leader_effect = {
 hd_party_pick_stance_effect = {
 	if = {
 		limit = { exists = var:hd_party_$G$_leader }
-		save_temporary_scope_as = hd_party_court
+		save_scope_as = hd_party_court # callers already save this as a permanent scope; a same-name temporary one is rejected
 		var:hd_party_$G$_leader = {
 ''')
 for s in STANCES:

@@ -1,11 +1,25 @@
 ﻿namespace = WJ_qingyi
 
-# Entering the passive waiting state. Mirrors vanilla feast.7002.
+# ============================================================================
+# 清议开场事件（2026-10-08 重写）
+#   0001 候客（进入等待状态，主人与宾客共用）
+#   0002 主人开席（第一阶段开始）
+#   0003 宾客入席（第一阶段开始）
+# ============================================================================
+
+# 0001 候客。结构对照原版 feast.7002。
 WJ_qingyi.0001 = {
 	type = activity_event
 	title = WJ_qingyi.0001.t
 	desc = {
 		first_valid = {
+			triggered_desc = {
+				trigger = {
+					this = scope:host
+					has_activity_intent = qingyi_yuedan_intent
+				}
+				desc = WJ_qingyi.0001.desc.host_yuedan
+			}
 			triggered_desc = {
 				trigger = { this = scope:host }
 				desc = WJ_qingyi.0001.desc.host
@@ -16,10 +30,7 @@ WJ_qingyi.0001 = {
 	theme = feast_activity
 	cooldown = { years = 1 }
 
-	left_portrait = {
-		character = root
-		animation = personality_rational
-	}
+	left_portrait = { character = root animation = personality_rational }
 	center_portrait = {
 		trigger = { this != scope:host }
 		character = scope:host
@@ -37,27 +48,15 @@ WJ_qingyi.0001 = {
 
 	immediate = {
 		play_music_cue = mx_cue_banquet
-		if = {
-			limit = {
-				scope:activity = {
-					any_attending_character = {
-						this != root
-						this != scope:host
-						is_adult = yes
-						is_travelling = no
-					}
+		scope:activity = {
+			random_attending_character = {
+				limit = {
+					this != root
+					this != scope:host
+					is_adult = yes
+					is_travelling = no
 				}
-			}
-			scope:activity = {
-				random_attending_character = {
-					limit = {
-						this != root
-						this != scope:host
-						is_adult = yes
-						is_travelling = no
-					}
-					save_scope_as = wj_qingyi_waiting_companion
-				}
+				save_scope_as = wj_qingyi_waiting_companion
 			}
 		}
 	}
@@ -79,7 +78,7 @@ WJ_qingyi.0001 = {
 		else = {
 			scope:activity = {
 				add_activity_log_entry = {
-					key = WJ_qingyi_log_0001_guest
+					key = WJ_qingyi_log_0001_arrival
 					tags = { positive }
 					score = 5
 					character = root
@@ -91,17 +90,26 @@ WJ_qingyi.0001 = {
 	}
 }
 
-# The host formally opens the gathering. Mirrors vanilla feast.2001.
+# 0002 主人开席。结构对照原版 feast.2001。
 WJ_qingyi.0002 = {
 	type = activity_event
 	title = WJ_qingyi.0002.t
-	desc = WJ_qingyi.0002.desc
+	desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { has_activity_intent = qingyi_yuedan_intent }
+				desc = WJ_qingyi.0002.desc.yuedan
+			}
+			triggered_desc = {
+				trigger = { has_activity_intent = qingyi_guest_learning_intent }
+				desc = WJ_qingyi.0002.desc.learning
+			}
+			desc = WJ_qingyi.0002.desc
+		}
+	}
 	theme = feast_activity
 
-	left_portrait = {
-		character = root
-		animation = toast_goblet
-	}
+	left_portrait = { character = root animation = toast_goblet }
 	center_portrait = {
 		trigger = { exists = scope:wj_qingyi_opening_guest }
 		character = scope:wj_qingyi_opening_guest
@@ -127,30 +135,19 @@ WJ_qingyi.0002 = {
 			}
 			scope:activity.special_guest:ming_shi = { save_scope_as = wj_qingyi_opening_guest }
 		}
-		else_if = {
-			limit = {
-				scope:activity = {
-					any_attending_character = {
-						this != root
-						is_alive = yes
-					}
-				}
-			}
+		else = {
 			scope:activity = {
 				random_attending_character = {
-					limit = {
-						this != root
-						is_alive = yes
-					}
+					limit = { this != root is_alive = yes }
 					save_scope_as = wj_qingyi_opening_guest
 				}
 			}
 		}
 	}
 
+	# 开宗明义，亲自出题
 	option = {
 		name = WJ_qingyi.0002.a
-		exclusive = yes
 		scope:activity = {
 			add_activity_log_entry = {
 				key = WJ_qingyi_log_0002
@@ -160,30 +157,44 @@ WJ_qingyi.0002 = {
 				root = { add_prestige = miniscule_prestige_gain }
 			}
 		}
+		ai_chance = { base = 60 }
+	}
+
+	# 先请座上宾开题
+	option = {
+		name = WJ_qingyi.0002.b
+		trigger = { exists = scope:wj_qingyi_opening_guest }
+		scope:activity = {
+			add_activity_log_entry = {
+				key = WJ_qingyi_log_0002_b
+				tags = { positive }
+				score = 10
+				character = root
+				target = scope:wj_qingyi_opening_guest
+				scope:wj_qingyi_opening_guest = {
+					add_prestige = miniscule_prestige_gain
+					add_opinion = { target = root modifier = pleased_opinion opinion = 10 }
+				}
+			}
+		}
+		ai_chance = { base = 40 modifier = { add = 30 has_trait = humble } }
 	}
 }
 
-# Every guest receives a formal arrival view when the active phase begins.
-# Mirrors the participant branch that triggers vanilla feast.7051.
+# 0003 宾客入席。结构对照原版 feast.7051 的参与者分支。
 WJ_qingyi.0003 = {
 	type = activity_event
 	title = WJ_qingyi.0003.t
 	desc = WJ_qingyi.0003.desc
 	theme = feast_activity
 
-	left_portrait = {
-		character = scope:host
-		animation = toast_goblet
-	}
+	left_portrait = { character = scope:host animation = toast_goblet }
 	center_portrait = {
 		trigger = { exists = scope:wj_qingyi_fellow_guest }
 		character = scope:wj_qingyi_fellow_guest
 		animation = personality_rational
 	}
-	right_portrait = {
-		character = root
-		animation = happiness
-	}
+	right_portrait = { character = root animation = happiness }
 
 	trigger = {
 		this != scope:host
@@ -192,32 +203,21 @@ WJ_qingyi.0003 = {
 
 	immediate = {
 		play_music_cue = mx_cue_banquet
-		if = {
-			limit = {
-				scope:activity = {
-					any_attending_character = {
-						this != root
-						this != scope:host
-						is_alive = yes
-					}
+		scope:activity = {
+			random_attending_character = {
+				limit = {
+					this != root
+					this != scope:host
+					is_alive = yes
 				}
-			}
-			scope:activity = {
-				random_attending_character = {
-					limit = {
-						this != root
-						this != scope:host
-						is_alive = yes
-					}
-					save_scope_as = wj_qingyi_fellow_guest
-				}
+				save_scope_as = wj_qingyi_fellow_guest
 			}
 		}
 	}
 
+	# 依礼入座
 	option = {
 		name = WJ_qingyi.0003.a
-		exclusive = yes
 		scope:activity = {
 			add_activity_log_entry = {
 				key = WJ_qingyi_log_0003
@@ -228,5 +228,40 @@ WJ_qingyi.0003 = {
 				root = { add_prestige = miniscule_prestige_gain }
 			}
 		}
+		ai_chance = { base = 50 }
+	}
+
+	# 求学：先向主人执礼请教
+	option = {
+		name = WJ_qingyi.0003.b
+		trigger = { has_activity_intent = qingyi_guest_learning_intent }
+		scope:activity = {
+			add_activity_log_entry = {
+				key = WJ_qingyi_log_0003_b
+				tags = { positive }
+				score = 5
+				character = root
+				target = scope:host
+				root = { add_learning_lifestyle_xp = miniscule_lifestyle_xp }
+				scope:host = { add_opinion = { target = root modifier = pleased_opinion opinion = 5 } }
+			}
+		}
+		ai_chance = { base = 50 }
+	}
+
+	# 解忧：寻一处清静坐下
+	option = {
+		name = WJ_qingyi.0003.c
+		trigger = { has_activity_intent = qingyi_relief_intent }
+		scope:activity = {
+			add_activity_log_entry = {
+				key = WJ_qingyi_log_0003_c
+				tags = { positive }
+				score = 5
+				character = root
+				root = { add_stress = miniscule_stress_loss }
+			}
+		}
+		ai_chance = { base = 50 }
 	}
 }

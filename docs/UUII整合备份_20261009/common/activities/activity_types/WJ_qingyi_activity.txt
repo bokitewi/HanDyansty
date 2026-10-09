@@ -1,0 +1,522 @@
+﻿# ============================================================================
+# WJ 清议活动（清议重制，2026-10-08）
+#
+# 以原版宴会结构为模板；计划见 docs/清议_月旦评_重制计划.md。
+# 阶段：论时事（提名）→ 品人物（8→4）→ 定评（4→1）→ 散席，前三阶段各约 2 周。
+# 主人选“月旦评”意图时，三阶段串起月旦评投票；否则只走通用清议事件。
+# ============================================================================
+
+activity_wj_qingyi = {
+	is_shown = {
+		WJ_han_jin_law_trigger = yes
+		has_tgp_dlc_trigger = yes
+		government_has_flag = government_has_merit
+		is_adult = yes
+	}
+
+	can_start_showing_failures_only = {
+		NOT = { is_activity_type_on_cooldown = activity_wj_qingyi }
+		is_available_adult = yes
+		is_at_war = no
+	}
+
+	can_always_plan = no
+
+	is_valid = {
+		scope:host = {
+			WJ_han_jin_law_trigger = yes
+			is_alive = yes
+			is_capable_adult = yes
+			is_imprisoned = no
+		}
+		trigger_if = {
+			limit = { is_current_phase_active = yes }
+			has_attending_activity_guests = yes
+		}
+	}
+
+	on_invalidated = {
+		scope:activity = { WJ_qingyi_yuedan_cleanup_effect = yes }
+		every_attending_character = {
+			WJ_qingyi_cleanup_participant_effect = yes
+		}
+		if = {
+			limit = { has_attending_activity_guests = no }
+			scope:activity = {
+				activity_type = { save_scope_as = activity_type }
+				activity_location = { save_scope_as = location }
+			}
+			scope:host = { trigger_event = activity_system.0100 }
+		}
+		if = {
+			limit = { scope:host = { is_incapable = yes } }
+			scope:activity = { activity_type = { save_scope_as = activity_type } }
+			scope:host = { trigger_event = activity_system.0330 }
+			every_attending_character = {
+				limit = { this != scope:host }
+				trigger_event = activity_system.0331
+			}
+		}
+	}
+
+	on_host_death = {
+		scope:activity = { WJ_qingyi_yuedan_cleanup_effect = yes }
+		every_attending_character = {
+			limit = { this != scope:host }
+			trigger_event = activity_system.0320
+		}
+	}
+
+	###################
+	# PARAMETERS
+	###################
+
+	is_single_location = yes
+
+	province_filter = domicile_domain
+	ai_province_filter = capital
+	max_province_icons = 5
+
+	is_location_valid = {
+		has_holding = yes
+	}
+
+	province_description = {
+		desc = activity_wj_qingyi_province_desc
+	}
+
+	cooldown = { years = 3 }
+
+	ai_will_do = {
+		value = WJ_qingyi_ai_host_score
+	}
+
+	ai_check_interval_by_tier = {
+		barony = 0
+		county = 60
+		duchy = 60
+		kingdom = 60
+		empire = 60
+		hegemony = 60
+	}
+
+	###################
+	# OPTIONS
+	###################
+
+	options = {
+		# 深论题：月旦评拉票辩论判定 +1；并提高经义类事件权重
+		qingyi_option_topic_depth = {
+			qingyi_topic_plain = {
+				default = yes
+				ai_will_do = {
+					value = 50
+					add = activity_option_likes_cheap_expense_value
+				}
+			}
+			qingyi_topic_deep = {
+				cost = {
+					gold = { value = WJ_yangwang_qingyi_paid_cost }
+				}
+				ai_will_do = {
+					value = 50
+					add = activity_option_likes_ostentatious_food_option_value
+				}
+			}
+		}
+
+		# 精茶：开席时宾客对主人好感 +5
+		qingyi_option_tea = {
+			qingyi_tea_simple = {
+				default = yes
+				ai_will_do = {
+					value = 50
+					add = activity_option_food_prefers_small_volume_value
+				}
+			}
+			qingyi_tea_refined = {
+				cost = {
+					gold = { value = WJ_yangwang_qingyi_paid_cost }
+				}
+				ai_will_do = {
+					value = 50
+					add = activity_option_prefers_large_volume_value
+				}
+			}
+		}
+
+		# 丰酒：解忧意图每周再多减压；宾客加入率提高
+		qingyi_option_wine = {
+			qingyi_wine_none = {
+				default = yes
+				ai_will_do = {
+					value = 50
+					add = activity_option_likes_cheap_expense_value
+				}
+			}
+			qingyi_wine_generous = {
+				cost = {
+					gold = { value = WJ_yangwang_qingyi_paid_cost }
+				}
+				ai_will_do = {
+					value = 50
+					add = activity_option_likes_ostentatious_food_option_value
+				}
+			}
+		}
+	}
+
+	###################
+	# GUEST HANDLING
+	###################
+
+	max_guests = 20
+
+	guest_invite_rules = {
+		defaults = {
+			1 = activity_invite_rule_close_family
+			1 = activity_invite_rule_liege
+			1 = activity_invite_rule_vassals
+			2 = activity_invite_rule_friends
+			2 = activity_invite_rule_courtiers
+			2 = activity_invite_rule_guests
+		}
+	}
+
+	can_be_activity_guest = {
+		is_adult = yes
+		is_healthy = yes
+		in_diplomatic_range = scope:host
+	}
+
+	host_intents = {
+		intents = { qingyi_yuedan_intent qingyi_relief_intent qingyi_guest_learning_intent }
+		default = qingyi_relief_intent
+	}
+
+	guest_intents = {
+		intents = { qingyi_relief_intent qingyi_guest_learning_intent }
+		default = qingyi_relief_intent
+	}
+
+	guest_join_chance = {
+		base = 10
+		base_activity_modifier = yes
+		activity_guest_shared_ai_accept_modifier = yes
+		activity_guest_feast_ai_accept_modifier = yes
+		modifier = {
+			add = 10
+			scope:activity ?= {
+				has_activity_option = { category = qingyi_option_wine option = qingyi_wine_generous }
+			}
+		}
+	}
+
+	special_guests = {
+		ming_shi = {
+			is_required = no
+			can_pick = {
+				this != scope:host
+				is_adult = yes
+				is_healthy = yes
+				OR = {
+					is_vassal_of = scope:host
+					target_is_vassal_or_below = scope:host
+					has_relation_friend = scope:host
+					has_relation_lover = scope:host
+				}
+			}
+			ai_will_do = { value = 10 }
+		}
+	}
+
+	open_invite = yes
+	max_guest_arrival_delay_time = { months = 5 }
+
+	###################
+	# PHASES
+	###################
+
+	phases = {
+		# 第一阶段：论时事。月旦评在此提名 8 人。
+		qingyi_phase_lunshi = {
+			order = 1
+			is_predefined = yes
+			location_source = pickable
+
+			on_phase_active = {
+				WJ_qingyi_prepare_participant_effect = yes
+				if = {
+					limit = { this = scope:host }
+					trigger_event = WJ_qingyi.0002
+				}
+				else = {
+					trigger_event = WJ_qingyi.0003
+					# 精茶：宾客对主人好感 +5
+					if = {
+						limit = {
+							scope:activity = {
+								has_activity_option = { category = qingyi_option_tea option = qingyi_tea_refined }
+							}
+						}
+						add_opinion = { target = scope:host modifier = pleased_opinion opinion = 5 }
+					}
+				}
+			}
+
+			on_phase_active_activity = {
+				progress_activity_phase_after = { weeks = 2 }
+				if = {
+					limit = { scope:host = { has_activity_intent = qingyi_yuedan_intent } }
+					scope:host = { WJ_qingyi_yuedan_nominate_effect = yes }
+					if = {
+						limit = { has_variable = wj_yd_active }
+						every_attending_character = {
+							limit = { is_ai = no }
+							trigger_event = { id = WJ_qingyi.3001 days = 3 }
+						}
+					}
+				}
+			}
+
+			on_weekly_pulse = {
+				WJ_qingyi_weekly_pulse_effect = yes
+			}
+		}
+
+		# 第二阶段：品人物。8 人中投票留 4 人（阶段结束时计票）。
+		qingyi_phase_pinren = {
+			order = 2
+			is_predefined = yes
+
+			on_phase_active_activity = {
+				progress_activity_phase_after = { weeks = 2 }
+				if = {
+					limit = { has_variable = wj_yd_active }
+					set_variable = { name = wj_yd_vote_round value = 1 }
+					every_attending_character = {
+						limit = { is_ai = no }
+						trigger_event = WJ_qingyi.3201
+					}
+				}
+			}
+
+			on_weekly_pulse = {
+				WJ_qingyi_weekly_pulse_effect = yes
+			}
+
+			on_end = {
+				if = {
+					limit = { this = scope:host }
+					WJ_qingyi_yuedan_round_two_end_effect = yes
+				}
+			}
+		}
+
+		# 第三阶段：定评。4 人中投票定 1 人，发奖。
+		qingyi_phase_dingping = {
+			order = 3
+			is_predefined = yes
+
+			on_phase_active_activity = {
+				progress_activity_phase_after = { weeks = 2 }
+				if = {
+					limit = { has_variable = wj_yd_active }
+					set_variable = { name = wj_yd_vote_round value = 2 }
+					every_attending_character = {
+						limit = { is_ai = no }
+						trigger_event = WJ_qingyi.3301
+					}
+				}
+			}
+
+			on_weekly_pulse = {
+				WJ_qingyi_weekly_pulse_effect = yes
+			}
+
+			on_end = {
+				if = {
+					limit = { this = scope:host }
+					WJ_qingyi_yuedan_final_effect = yes
+				}
+			}
+		}
+
+		# 散席：主人 9001，玩家宾客 9002。
+		qingyi_phase_conclusion = {
+			order = 4
+			is_predefined = yes
+
+			on_enter_phase = {
+				if = {
+					limit = { this = scope:host }
+					scope:activity = { progress_activity_phase_after = { days = 1 } }
+				}
+			}
+
+			on_phase_active = {
+				if = {
+					limit = { this = scope:host }
+					trigger_event = WJ_qingyi.9001
+					scope:activity = { progress_activity_phase_after = { weeks = 1 } }
+				}
+				else_if = {
+					limit = {
+						is_ai = no
+						is_alive = yes
+						is_imprisoned = no
+					}
+					trigger_event = WJ_qingyi.9002
+				}
+			}
+		}
+	}
+
+	on_start = {
+		add_activity_log_entry = {
+			key = WJ_qingyi_opening_log
+			character = scope:host
+			score = 10
+		}
+	}
+
+	on_enter_passive_state = {
+		trigger_event = WJ_qingyi.0001
+	}
+
+	on_complete = {
+		if = {
+			limit = {
+				scope:activity = {
+					NOT = { has_variable = wj_qingyi_rewards_disbursed }
+				}
+			}
+			scope:host = { WJ_qingyi_disburse_rewards_effect = yes }
+		}
+		scope:activity = {
+			every_attending_character = {
+				WJ_qingyi_intent_completion_effect = yes
+			}
+			WJ_qingyi_yuedan_cleanup_effect = yes
+		}
+	}
+
+	###################
+	# WINDOW CHARACTERS
+	###################
+
+	# Native activity-window character data, following the vanilla feast and
+	# camp-party pattern. The generic activity GUI consumes this list directly.
+	window_characters = {
+		guest = {
+			camera = camera_body_right
+
+			effect = {
+				if = {
+					limit = { scope:host.location = scope:activity.activity_location }
+					every_attending_character = {
+						limit = {
+							location = scope:activity.activity_location
+							this != scope:host
+							NOT = { scope:activity.special_guest:ming_shi ?= this }
+						}
+						add_to_list = characters
+					}
+				}
+			}
+
+			scripted_animation = {
+				triggered_animation = {
+					trigger = { always = yes }
+					animation = { drink_goblet happiness throne_room_conversation_3 throne_room_conversation_1 }
+				}
+			}
+		}
+
+		host = {
+			camera = camera_body
+
+			effect = {
+				if = {
+					limit = { scope:host.location = scope:activity.activity_location }
+					scope:host = { add_to_list = characters }
+				}
+			}
+
+			scripted_animation = {
+				triggered_animation = {
+					trigger = { always = yes }
+					animation = { toast_goblet pondering personality_bold }
+				}
+			}
+		}
+
+		ming_shi = {
+			camera = camera_body
+
+			effect = {
+				if = {
+					limit = {
+						scope:host.location = scope:activity.activity_location
+						exists = scope:activity.special_guest:ming_shi
+						scope:activity.special_guest:ming_shi.location = scope:activity.activity_location
+					}
+					special_guest:ming_shi = { add_to_list = characters }
+				}
+				else = {
+					every_attending_character = {
+						limit = {
+							location = scope:activity.activity_location
+							this != scope:host
+						}
+						add_to_list = characters
+					}
+				}
+			}
+
+			scripted_animation = {
+				triggered_animation = {
+					trigger = { always = yes }
+					animation = { personality_honorable pondering storyteller }
+				}
+			}
+		}
+
+		guest = {
+			camera = camera_body_left
+
+			effect = {
+				if = {
+					limit = { scope:host.location = scope:activity.activity_location }
+					every_attending_character = {
+						limit = {
+							location = scope:activity.activity_location
+							this != scope:host
+							NOT = { scope:activity.special_guest:ming_shi ?= this }
+						}
+						add_to_list = characters
+					}
+				}
+			}
+
+			scripted_animation = {
+				triggered_animation = {
+					trigger = { always = yes }
+					animation = { drink_goblet laugh throne_room_conversation_2 }
+				}
+			}
+		}
+	}
+
+	###################
+	# GRAPHICS
+	###################
+
+	header_background = "gfx/interface/illustrations/activity_header_backgrounds/activity_debate.dds"
+
+	background = {
+		texture = "gfx/interface/illustrations/event_scenes/tgp_feast_asia.dds"
+		environment = "environment_tgp_feast_asia"
+		ambience = "event:/DLC/EP4/SFX/Events/Event_Backgrounds/tgp_feast_asia"
+	}
+}

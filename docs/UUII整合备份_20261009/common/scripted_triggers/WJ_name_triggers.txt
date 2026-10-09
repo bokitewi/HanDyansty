@@ -1,0 +1,143 @@
+﻿# 姓名专用只读谓词：调用者是都督，STATE为待读取的王国title scope。
+# 不改变都督区准入；读取任意契约的真实王国成员及其兼持王国。
+WJ_name_district_has_state = {
+ WJ_dd_head_trigger = yes
+ save_temporary_scope_as = wj_name_district_head
+ $STATE$ = {
+  tier = tier_kingdom
+  any_de_jure_county = { always = yes }
+  exists = holder
+  holder = {
+   OR = {
+    this = scope:wj_name_district_head
+    AND = {
+     is_alive = yes
+     primary_title = { tier = tier_kingdom is_noble_family_title = no }
+     exists = primary_title.var:wj_dd_core
+     primary_title.var:wj_dd_core = scope:wj_name_district_head.primary_title
+     top_liege = scope:wj_name_district_head.top_liege
+    }
+   }
+  }
+ }
+}
+
+# 仅显示判断；不创设任职。普通亲属复用此处，与本人官名同步失效。
+WJ_name_baron_trigger = {
+ is_alive = yes WJ_han_jin_law_trigger = yes
+ is_independent_ruler = no
+ exists = primary_title
+ primary_title = {
+  tier = tier_barony
+  OR = {
+   title_province = { has_holding_type = castle_holding }
+   title_province = { has_holding_type = city_holding }
+   AND = {
+    title_province = { has_holding_type = church_holding }
+    holder.faith.religion = { OR = { this = religion:buddhism_religion this = religion:taoism_religion } }
+   }
+  }
+ }
+}
+WJ_name_basic_office_trigger = {
+ is_alive = yes WJ_han_jin_law_trigger = yes
+ OR = {
+  WJ_name_office_councillor = yes
+  WJ_name_baron_trigger = yes
+  AND = {
+   WJ_contract_local_official_trigger = yes
+   primary_title = { is_noble_family_title = no tgp_is_minister_title = no tier >= tier_county }
+  }
+ }
+}
+WJ_name_family_head_trigger = {
+ is_alive = yes WJ_han_jin_law_trigger = yes
+ WJ_has_substantive_office_trigger = no
+ exists = primary_title
+ primary_title = { is_noble_family_title = yes }
+}
+WJ_name_ordinary_relative_source_trigger = {
+ OR = { WJ_name_basic_office_trigger = yes WJ_name_family_head_trigger = yes }
+ WJ_name_local_king_trigger = no
+ WJ_inner_emperor_trigger = no
+}
+WJ_name_local_king_trigger = {
+ WJ_contract_privilege_realm_trigger = yes
+ tgp_has_minister_title = no
+ exists = primary_title
+ primary_title = { tier >= tier_empire is_noble_family_title = no tgp_is_minister_title = no NOT = { has_variable = SanGong_DongGong_title } }
+}
+# 只读皇家关系，基础皇子/皇女/配偶显示不依赖后宫事件先运行。
+WJ_name_emperor_family_trigger = {
+ OR = {
+  WJ_inner_emperor_trigger = yes
+  AND = { exists = primary_spouse primary_spouse = { WJ_inner_emperor_trigger = yes } }
+  AND = { exists = father father = { WJ_inner_emperor_trigger = yes } }
+  AND = { exists = mother mother = { WJ_inner_emperor_trigger = yes } }
+ }
+}
+WJ_name_local_royal_relative_trigger = {
+ OR = {
+  AND = { exists = primary_spouse primary_spouse = { WJ_name_local_king_trigger = yes } }
+  AND = { exists = father father = { WJ_name_local_king_trigger = yes } }
+  AND = { exists = mother mother = { WJ_name_local_king_trigger = yes } }
+ }
+}
+WJ_name_ui_enabled_trigger = {
+ is_alive = yes WJ_han_jin_law_trigger = yes
+ OR = {
+  WJ_royal_crown_prince = yes
+  WJ_name_emperor_family_trigger = yes
+  WJ_name_basic_office_trigger = yes
+  WJ_name_family_head_trigger = yes
+  WJ_name_local_king_trigger = yes
+  WJ_name_local_royal_relative_trigger = yes
+  WJ_has_substantive_office_trigger = no
+ }
+}
+
+# Display only; a capital commandery's 尹 takes precedence over 相.
+WJ_name_capital_prefect = {
+ WJ_contract_local_official_trigger = yes primary_title = { tier = tier_duchy }
+ exists = top_liege.capital_county.duchy primary_title = top_liege.capital_county.duchy
+}
+
+# The spouse council seat is a relationship, not an official appointment.
+WJ_name_office_councillor = {
+ is_councillor = yes
+ NOT = { has_council_position = councillor_spouse }
+}
+
+# Ordinary deceased children without a personal title/office/honor use a bare name.
+# A child's saved parent-office is relation data, not their own appointment.
+WJ_name_dead_child_plain = {
+ is_alive = no
+ NOR = {
+  exists = primary_title
+  has_trait = SanGong_Taizi
+  has_trait = WJ_peerage_trait
+  has_trait = WJ_yangwang_trait
+  has_dead_character_variable = wj_peer_rank
+  has_dead_character_variable = wj_yangwang_name
+  has_dead_character_variable = wj_yangwang_custom_slot
+  WJ_harem_has_role = yes
+ }
+ OR = {
+  AND = {
+   has_dead_character_variable = wj_last_relation
+   dead_var:wj_last_relation = flag:son
+  }
+  AND = {
+   has_dead_character_variable = wj_last_relation
+   dead_var:wj_last_relation = flag:daughter
+  }
+  AND = {
+   NOT = { has_dead_character_variable = wj_last_office }
+   OR = {
+    AND = { exists = father father = { WJ_name_ordinary_relative_source_trigger = yes } }
+    AND = { exists = mother mother = { WJ_name_ordinary_relative_source_trigger = yes } }
+    AND = { has_government = celestial_government OR = { exists = father exists = mother } }
+   }
+  }
+ }
+}

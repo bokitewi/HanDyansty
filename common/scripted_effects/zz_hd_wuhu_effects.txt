@@ -9,9 +9,12 @@
 # 避免同一次脉冲里不同子系统的 saved scope / list 互相串用。
 
 hd_wuhu_yearly_frontier_effect = {
-	# 第二层：边疆收留链（被动事件，"仅玩家"规则下仍保留）
+	# 第二层：边疆收留链（被动事件，"仅玩家"规则下仍保留；439 年起不再发生）
 	if = {
-		limit = { hd_wuhu_enabled_trigger = yes }
+		limit = {
+			hd_wuhu_enabled_trigger = yes
+			hd_wuhu_before_cutoff_trigger = yes
+		}
 		every_ruler = {
 			limit = { hd_wuhu_frontier_receiver_trigger = yes }
 			random = {
@@ -23,9 +26,12 @@ hd_wuhu_yearly_frontier_effect = {
 }
 
 hd_wuhu_yearly_conversion_all_effect = {
-	# 渐进胡化（被动，"仅玩家"规则下仍保留）
+	# 渐进胡化（被动，"仅玩家"规则下仍保留；439 年起不再发生）
 	if = {
-		limit = { hd_wuhu_enabled_trigger = yes }
+		limit = {
+			hd_wuhu_enabled_trigger = yes
+			hd_wuhu_before_cutoff_trigger = yes
+		}
 		every_ruler = {
 			limit = {
 				hd_wuhu_is_settled_trigger = yes
@@ -292,18 +298,18 @@ hd_wuhu_pick_weakest_from_region_list_effect = {
 	}
 }
 
-### 史实胡帅：依次取在世者，否则生成替身（需事先保存 scope:hd_wuhu_tribe 与 scope:hd_wuhu_petition_target）
+### 史实胡帅：依次取在世的 AI 角色（跳过玩家），否则生成替身（需事先保存 scope:hd_wuhu_tribe 与 scope:hd_wuhu_petition_target）
 hd_wuhu_pick_hist_chief_effect = {
 	if = {
-		limit = { $C1$ ?= { is_alive = yes } }
+		limit = { $C1$ ?= { is_alive = yes is_ai = yes } }
 		$C1$ = { save_scope_as = hd_wuhu_chief }
 	}
 	else_if = {
-		limit = { $C2$ ?= { is_alive = yes } }
+		limit = { $C2$ ?= { is_alive = yes is_ai = yes } }
 		$C2$ = { save_scope_as = hd_wuhu_chief }
 	}
 	else_if = {
-		limit = { $C3$ ?= { is_alive = yes } }
+		limit = { $C3$ ?= { is_alive = yes is_ai = yes } }
 		$C3$ = { save_scope_as = hd_wuhu_chief }
 	}
 	else = {
@@ -354,7 +360,7 @@ hd_wuhu_hist_petition_xiongnu_effect = {
 				hd_wuhu_pick_hist_chief_effect = {
 					C1 = character:luan_ti_yu_fu_luo
 					C2 = character:luan_ti_hu_chu_quan
-					C3 = character:liu_bao_5
+					C3 = global_var:hd_hb_p_xiongnu_liu_010
 				}
 				set_global_variable = { name = hd_wuhu_hist_xiongnu_done value = yes }
 				hd_wuhu_fire_petition_effect = yes
@@ -384,7 +390,7 @@ hd_wuhu_hist_petition_diren_effect = {
 				limit = { exists = scope:hd_wuhu_petition_target }
 				hd_wuhu_pick_hist_chief_effect = {
 					C1 = character:ju_a_gui
-					C2 = character:yang_qian_wan
+					C2 = global_var:hd_hb_p_chouchi_yang_005
 					C3 = character:ju_a_gui
 				}
 				set_global_variable = { name = hd_wuhu_hist_diren_done value = yes }
@@ -412,11 +418,11 @@ hd_wuhu_hist_petition_wuhuan_effect = {
 			save_scope_value_as = { name = hd_wuhu_tribe value = flag:wuhuan }
 			# 胡帅先定（决定"接壤"的参照）
 			if = {
-				limit = { character:qiu_lou_ban ?= { is_alive = yes } }
+				limit = { character:qiu_lou_ban ?= { is_alive = yes is_ai = yes } }
 				character:qiu_lou_ban = { save_scope_as = hd_wuhu_chief }
 			}
 			else_if = {
-				limit = { character:ta_dun ?= { is_alive = yes } }
+				limit = { character:ta_dun ?= { is_alive = yes is_ai = yes } }
 				character:ta_dun = { save_scope_as = hd_wuhu_chief }
 			}
 			title:k_uuii_youzhou = {
@@ -455,12 +461,13 @@ hd_wuhu_hist_petition_wuhuan_effect = {
 	}
 }
 
-### 通用兜底：每年 3%，全局冷却 10 年
+### 通用兜底：每年 3%，全局冷却 10 年；439 年起不再发生
 hd_wuhu_generic_petition_effect = {
 	if = {
 		limit = {
 			hd_wuhu_enabled_trigger = yes
 			hd_wuhu_ai_enabled_trigger = yes
+			hd_wuhu_before_cutoff_trigger = yes
 			OR = {
 				NOT = { exists = global_var:hd_wuhu_generic_next_year }
 				current_year >= global_var:hd_wuhu_generic_next_year
@@ -537,6 +544,7 @@ hd_wuhu_generic_petition_effect = {
 				scope:hd_wuhu_petitioner = {
 					random_courtier = {
 						limit = {
+							is_ai = yes
 							is_adult = yes
 							is_male = yes
 							is_imprisoned = no
@@ -740,6 +748,18 @@ hd_wuhu_uprising_yearly_effect = {
 				50 = { add_character_flag = { flag = hd_wuhu_independence_cd days = 720 } }
 			}
 		}
+	}
+}
+
+### 内附标记终点：持有标记者一旦是独立统治者（起兵独立、求地战争胜利或其他途径），就删除标记，
+# 此后既不再推动独立，也不再带动渐进胡化；标记也就不再传给继承人。不受截止年份与规则影响。
+hd_wuhu_marker_cleanup_yearly_effect = {
+	every_ruler = {
+		limit = {
+			hd_wuhu_is_settled_trigger = yes
+			is_independent_ruler = yes
+		}
+		remove_variable = hd_wuhu_settled
 	}
 }
 

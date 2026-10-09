@@ -154,6 +154,9 @@ tgp_join_house_bloc_effect = {
 				scope:old_bloc != scope:bloc
 			}
 		}
+		hidden_effect = { # 原版 1.20：先退出旧集团
+			scope:old_bloc ?= { remove_confederation_member_house = scope:joiner }
+		}
 		# ADD MEMBER HOUSE
 		custom_description = {
 			text = join_house_bloc_effect
@@ -395,7 +398,7 @@ tgp_find_new_house_bloc_leader_effect = {
 #
 tgp_set_house_bloc_leading_house_effect = {
 	save_scope_as = bloc
-	leading_house = { save_scope_as = old_leader }
+	leading_house ?= { save_scope_as = old_leader }
 	$LEADER$ ?= {
 		save_scope_as = leader
 		save_scope_as = bloc_creator # for bloc name
@@ -585,7 +588,7 @@ tgp_on_member_left_shared_effect = {
 						NOT = { house = scope:character.house }
 					}
 				}
-				scope:vassal_house_temp = { leave_faction = scope:faction_temp }
+				scope:leaver = { leave_faction = scope:faction_temp } # 原版 1.20；scope:vassal_house_temp 在此未设置
 			}
 		}
 	}
@@ -679,6 +682,7 @@ tgp_on_member_house_joined_shared_effect = {
 					is_house_head = yes
 					any_held_title = { is_noble_family_title = yes }
 					is_independent_ruler = no
+					tgp_uses_house_blocs_trigger = yes # 天朝制接入后：只拉同样使用家族集团的附庸家族，否则引擎会拒绝加入
 					house = {
 						NOR = {
 							this = scope:house
@@ -835,6 +839,11 @@ tgp_on_member_house_left_shared_effect = {
 			TRUCE = flag:yes
 		}
     }
+    if = { # 调试日志放在解散之前，解散后集团作用域已失效
+        limit = { debug_only = yes }
+        debug_log = "house left bloc"
+        debug_log_scopes = yes
+    }
     # Disband if necessary
     if = {
         limit = {
@@ -845,15 +854,54 @@ tgp_on_member_house_left_shared_effect = {
         }
         hidden_effect = { disband_confederation = yes }
     }
-    if = {
-        limit = { debug_only = yes }
-        debug_log = "house left bloc"
-        debug_log_scopes = yes
-    }
 }
 
+# 天朝制家族集团：恢复原版 1.20 定义
 bloc_leader_change_aspiration_cohesion_effect = {
-	# TGP Japan house-bloc aspiration response disabled.
+	if = {
+		limit = { exists = scope:house.house_confederation }
+		if = {
+			limit = { scope:house.house_confederation.leading_house ?= scope:house }
+			scope:house.house_confederation = {
+				tgp_bloc_change_cohesion_effect = {
+					VALUE = bloc_leader_change_aspiration_cohesion_value
+					ICON = scope:house.house_head
+					REASON = leader_aspiration
+				}
+			}
+		}
+		else_if = {
+			limit = {
+				scope:house = { has_same_house_aspiration_as = scope:house.house_confederation.leading_house }
+			}
+			# Message
+			every_player = {
+				limit = { house.house_confederation ?= scope:house.house_confederation }
+				send_interface_message = {
+					type = msg_house_bloc_cohesion_change_good
+					title = msg_bloc_member_aspiration_changed
+					left_icon = scope:house.house_head
+					right_icon = scope:house
+					desc = msg_bloc_member_aspiration_changed_tt
+					custom_tooltip = msg_bloc_member_aspiration_match_tt
+				}
+			}
+		}
+		else = {
+			# Message
+			every_player = {
+				limit = { house.house_confederation ?= scope:house.house_confederation }
+				send_interface_message = {
+					type = msg_house_bloc_cohesion_change_bad
+					title = msg_bloc_member_aspiration_changed
+					left_icon = scope:house.house_head
+					right_icon = scope:house
+					desc = msg_bloc_member_aspiration_changed_tt
+					custom_tooltip = msg_bloc_member_aspiration_diverge_tt
+				}
+			}
+		}
+	}
 }
 
 add_attacker_bloc_members_on_declared_effect = {
@@ -1167,7 +1215,7 @@ tgp_save_bloc_leaving_reason_effect = {
 				}
 				else_if = { # COHESION
 					limit = {
-						house.house_confederation ?= { cohesion <= 25 }
+						house_confederation ?= { cohesion <= 25 } # 此处作用域已是家族
 					}
 					set_variable = {
 						name = bloc_leaving_reason

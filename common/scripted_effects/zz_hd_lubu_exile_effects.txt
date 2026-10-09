@@ -1,4 +1,4 @@
-# HanDynasty / CK3 1.19.0.6: Lu Bu's defeat at Chang'an.
+﻿# HanDynasty / CK3 1.19.0.6: Lu Bu's defeat at Chang'an.
 # All entry points are fixed-character or the exact historical CB; no world scans.
 # Camp creation, troop grants and each recruitment have separate commit markers.
 
@@ -81,6 +81,7 @@ hd_lbx_prepare_camp_effect = {
 			}
 			every_held_title = {
 				limit = {
+					tier >= tier_county # baronies move with their county; a capital barony cannot be transferred alone
 					is_noble_family_title = no
 					is_landless_type_title = no
 					NOT = { has_variable = adventurer_creation_reason }
@@ -166,7 +167,7 @@ hd_lbx_join_camp_effect = {
 			clear_saved_scope = hd_lbx_recruit_recipient
 			liege ?= {
 				if = {
-					limit = { is_alive = yes NOT = { this = character:lv_bu } }
+					limit = { is_alive = yes NOT = { this = character:lv_bu } NOT = { this = scope:hd_lbx_recruit } } # independent rulers are their own liege
 					save_scope_as = hd_lbx_recruit_recipient
 				}
 			}
@@ -195,7 +196,7 @@ hd_lbx_join_camp_effect = {
 					limit = { exists = scope:hd_lbx_recruit_recipient }
 					create_title_and_vassal_change = { type = granted save_scope_as = hd_lbx_recruit_change add_claim_on_loss = no }
 					every_held_title = {
-						limit = { is_noble_family_title = no is_landless_type_title = no }
+						limit = { tier >= tier_county is_noble_family_title = no is_landless_type_title = no } # baronies move with their county
 						change_title_holder_include_vassals = { holder = scope:hd_lbx_recruit_recipient change = scope:hd_lbx_recruit_change }
 					}
 					every_vassal = {
@@ -237,6 +238,24 @@ hd_lbx_attempt_follower_effect = {
 			if = {
 				limit = { $FOLLOWER$ = { has_character_flag = hd_lbx_joined_camp } }
 				add_character_flag = $STATUS$
+			}
+			else = {
+				# Give up after 12 failed attempts (about a year of monthly story ticks).
+				$FOLLOWER$ = {
+					if = {
+						limit = { has_variable = hd_lbx_join_attempts }
+						change_variable = { name = hd_lbx_join_attempts add = 1 }
+					}
+					else = {
+						set_variable = { name = hd_lbx_join_attempts value = 1 }
+					}
+				}
+				if = {
+					limit = { $FOLLOWER$ = { var:hd_lbx_join_attempts >= 12 } }
+					add_character_flag = $UNAVAILABLE$
+					add_character_flag = $STATUS$
+					debug_log = "HD_LBX FOLLOWER_JOIN_GAVE_UP"
+				}
 			}
 		}
 	}

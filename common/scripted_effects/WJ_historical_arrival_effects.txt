@@ -1,0 +1,257 @@
+﻿# 全局日期直接出场，不依赖玩家／人物事件；原父、同house32岁及原生employer/location互斥规则保留。
+wj_hchar_try_one_effect = {
+	if = {
+		limit = {
+			current_year >= $YEAR$
+			exists = $HOUSE$
+			NOT = { has_global_variable = wj_hchar_seen_$ID$ }
+		}
+		if = {
+			limit = { NOT = { exists = scope:wj_hchar_father } }
+			$HOUSE$ = {
+				random_house_member = {
+					limit = { is_alive = yes is_male = yes age >= 32 }
+					save_scope_as = wj_hchar_father
+				}
+			}
+		}
+		scope:wj_hchar_father ?= {
+			primary_spouse ?= {
+				if = { limit = { is_alive = yes } save_scope_as = wj_hchar_mother }
+			}
+			# 廷臣父亲跟随实际雇主，不把政治liege或旅行位置当作宫廷。
+			court_owner ?= {
+				if = {
+					limit = { is_alive = yes is_ruler = yes exists = court_owner court_owner = this }
+					save_scope_as = wj_hchar_employer
+				}
+			}
+		}
+		if = {
+			limit = { NOT = { exists = scope:wj_hchar_employer } }
+			scope:wj_hchar_mother.court_owner ?= {
+				if = {
+					limit = { is_alive = yes is_ruler = yes exists = court_owner court_owner = this }
+					save_scope_as = wj_hchar_employer
+				}
+			}
+		}
+		if = {
+			limit = { NOT = { exists = scope:wj_hchar_employer } }
+			# HOME是郡望所对应郡的法理首都县，不是人物籍贯县或父亲当前位置。
+			$HOME$ ?= {
+				title_province ?= { save_scope_as = wj_hchar_province }
+				holder ?= {
+					if = {
+						limit = { is_alive = yes is_ruler = yes exists = court_owner court_owner = this }
+						save_scope_as = wj_hchar_employer
+					}
+				}
+			}
+			# 未能解析郡望县才用洛阳；郡望县存在但无人可入廷时仍在当地流浪。
+			if = {
+				limit = { NOT = { exists = scope:wj_hchar_province } }
+				title:c_luoyang = {
+					title_province ?= { save_scope_as = wj_hchar_province }
+					holder ?= {
+						if = {
+							limit = { is_alive = yes is_ruler = yes exists = court_owner court_owner = this }
+							save_scope_as = wj_hchar_employer
+						}
+					}
+				}
+			}
+		}
+		if = {
+			limit = { exists = scope:wj_hchar_employer }
+			scope:wj_hchar_employer = {
+				create_character = {
+					template = wj_hchar_$ID$_template
+					dynasty = none
+					employer = this
+					save_scope_as = wj_hchar_person
+				}
+			}
+		}
+		else = {
+			scope:wj_hchar_province ?= {
+				create_character = {
+					template = wj_hchar_$ID$_template
+					dynasty = none
+					location = this
+					save_scope_as = wj_hchar_person
+				}
+			}
+		}
+		scope:wj_hchar_person ?= {
+			scope:wj_hchar_father ?= {
+				scope:wj_hchar_person = { set_father = scope:wj_hchar_father }
+			}
+			scope:wj_hchar_mother ?= {
+				scope:wj_hchar_person = { set_mother = scope:wj_hchar_mother }
+			}
+			set_house = $HOUSE$
+			# 亲属／家族关系设定后固定入廷结果；无宫廷才进入当地流浪池。
+			if = { limit = { exists = scope:wj_hchar_employer } set_employer = scope:wj_hchar_employer }
+			else = { move_to_pool_at = scope:wj_hchar_province }
+			# 成功后才登记；保留死亡指针和完成标记，不因死亡再造一人。
+			set_global_variable = { name = wj_hchar_$ID$ value = this }
+			set_global_variable = { name = wj_hchar_seen_$ID$ value = yes }
+			wj_hchar_after_arrival_effect = yes
+		}
+	}
+	# 无论未到年、创建失败或已完成，都不能把上一人的父母／雇主带给下一人。
+	clear_saved_scope = wj_hchar_father
+	clear_saved_scope = wj_hchar_mother
+	clear_saved_scope = wj_hchar_employer
+	clear_saved_scope = wj_hchar_province
+	clear_saved_scope = wj_hchar_person
+}
+
+# 到期由全局年度检查直接清理；不借人物事件计时，不改变原截止日期。
+wj_hchar_restore_protection_effect = {
+	if = {
+		limit = {
+			current_date < $END$
+			NOT = { has_character_flag = hd_historical_actor_protection_received }
+		}
+		add_character_modifier = { modifier = hd_historical_actor_protection }
+		add_character_flag = hd_historical_actor_protection_received
+	}
+}
+
+wj_hchar_expire_one_protection_effect = {
+	if = {
+		limit = { has_global_variable = wj_hchar_$ID$ current_date >= $END$ }
+		global_var:wj_hchar_$ID$ = { remove_character_modifier = hd_historical_actor_protection }
+	}
+}
+
+wj_hchar_expire_protection_effect = {
+	wj_hchar_expire_one_protection_effect = { ID = sun_ce END = 204.1.1 }
+	wj_hchar_expire_one_protection_effect = { ID = sun_quan END = 224.1.1 }
+	wj_hchar_expire_one_protection_effect = { ID = zhou_yu END = 214.1.1 }
+	wj_hchar_expire_one_protection_effect = { ID = lu_su END = 214.1.1 }
+}
+
+wj_hchar_after_arrival_effect = {
+	if = {
+		limit = {
+			trigger_if = { limit = { has_global_variable = wj_hchar_sun_ce } this = global_var:wj_hchar_sun_ce }
+			trigger_else = { always = no }
+		}
+		wj_hchar_restore_protection_effect = { END = 204.1.1 }
+		hd_rise_ensure_story_effect = yes
+		# 孙坚先去世、原可见故事已结束时，接回原故事而不是另建剧情。
+		if = {
+			limit = {
+				character:sun_jian = { is_alive = no }
+				NOT = { any_owned_story = { type = hd_story_sun_jian_life } }
+			}
+			create_story = { type = hd_story_sun_jian_life }
+			random_owned_story = {
+				type = hd_story_sun_jian_life
+				set_variable = { name = hd_sun_life_phase value = flag:hd_sun_life_sun_ce }
+			}
+		}
+	}
+	else_if = {
+		limit = {
+			trigger_if = { limit = { has_global_variable = wj_hchar_sun_quan } this = global_var:wj_hchar_sun_quan }
+			trigger_else = { always = no }
+		}
+		wj_hchar_restore_protection_effect = { END = 224.1.1 }
+	}
+	else_if = {
+		limit = { OR = {
+			AND = {
+				trigger_if = { limit = { has_global_variable = wj_hchar_zhou_yu } this = global_var:wj_hchar_zhou_yu }
+				trigger_else = { always = no }
+			}
+			AND = {
+				trigger_if = { limit = { has_global_variable = wj_hchar_lu_su } this = global_var:wj_hchar_lu_su }
+				trigger_else = { always = no }
+			}
+		} }
+		wj_hchar_restore_protection_effect = { END = 214.1.1 }
+	}
+	# create_character(age=16)不经过儿童成年生日，显式复用原成年绰号入口。
+	if = {
+		limit = { OR = {
+			AND = {
+				trigger_if = { limit = { has_global_variable = wj_hchar_zhu_ge_liang } this = global_var:wj_hchar_zhu_ge_liang }
+				trigger_else = { always = no }
+			}
+			AND = {
+				trigger_if = { limit = { has_global_variable = wj_hchar_si_ma_yi } this = global_var:wj_hchar_si_ma_yi }
+				trigger_else = { always = no }
+			}
+		} }
+		trigger_event = { on_action = hd_adulthood_nicknames }
+	}
+}
+
+wj_hchar_check20_effect = {
+	character:gu_zhang ?= { if = { limit = { is_alive = yes } save_scope_as = wj_hchar_father } }
+	wj_hchar_try_one_effect = { ID = gu_yong YEAR = 184 HOUSE = house:wujun_gu HOME = title:d_wujun.title_capital_county }
+	character:li_shou_2 ?= { if = { limit = { is_alive = yes } save_scope_as = wj_hchar_father } }
+	wj_hchar_try_one_effect = { ID = li_tong YEAR = 184 HOUSE = house:house_111010004018013 HOME = title:d_jiangxia.title_capital_county }
+	wj_hchar_try_one_effect = { ID = guo_jia YEAR = 186 HOUSE = house:house_111010142006013 HOME = title:d_yinchuan.title_capital_county }
+	wj_hchar_try_one_effect = { ID = man_chong YEAR = 186 HOUSE = house:house_111010349001013 HOME = title:d_shanyang.title_capital_county }
+	character:si_ma_fang ?= { if = { limit = { is_alive = yes } save_scope_as = wj_hchar_father } }
+	wj_hchar_try_one_effect = { ID = si_ma_lang YEAR = 187 HOUSE = house:henei_sima HOME = title:d_henei.title_capital_county }
+	# 主包无临淮郡，按用户裁决以东城现属钟离郡的法理首都县落地。
+	wj_hchar_try_one_effect = { ID = lu_su YEAR = 188 HOUSE = house:house_111010049001013 HOME = title:d_zhongli.title_capital_county }
+	wj_hchar_try_one_effect = { ID = jia_kui YEAR = 190 HOUSE = house:house_111010135001013 HOME = title:d_hedong.title_capital_county }
+	character:zhu_ge_gui ?= { if = { limit = { is_alive = yes } save_scope_as = wj_hchar_father } }
+	wj_hchar_try_one_effect = { ID = zhu_ge_jin YEAR = 190 HOUSE = house:langya_zhuge HOME = title:d_langya.title_capital_county }
+	character:sun_jian ?= { if = { limit = { is_alive = yes } save_scope_as = wj_hchar_father } }
+	wj_hchar_try_one_effect = { ID = sun_ce YEAR = 191 HOUSE = house:wujun_sun HOME = title:d_wujun.title_capital_county }
+	character:yang_biao ?= { if = { limit = { is_alive = yes } save_scope_as = wj_hchar_father } }
+	wj_hchar_try_one_effect = { ID = yang_xiu YEAR = 191 HOUSE = house:hongnong_yang HOME = title:d_hongnong.title_capital_county }
+	character:zhou_yi ?= { if = { limit = { is_alive = yes } save_scope_as = wj_hchar_father } }
+	wj_hchar_try_one_effect = { ID = zhou_yu YEAR = 191 HOUSE = house:lujiang_zhou HOME = title:d_lujiang.title_capital_county }
+	character:zhu_gan ?= { if = { limit = { is_alive = yes } save_scope_as = wj_hchar_father } }
+	wj_hchar_try_one_effect = { ID = zhu_huan YEAR = 193 HOUSE = house:wujun_zhu HOME = title:d_wujun.title_capital_county }
+	character:wang_qian ?= { if = { limit = { is_alive = yes } save_scope_as = wj_hchar_father } }
+	wj_hchar_try_one_effect = { ID = wang_can YEAR = 193 HOUSE = house:house_111010008022013 HOME = title:d_shanyang.title_capital_county }
+	character:lv_fang ?= { if = { limit = { is_alive = yes } save_scope_as = wj_hchar_father } }
+	wj_hchar_try_one_effect = { ID = lv_meng YEAR = 194 HOUSE = house:house_111010022006013 HOME = title:d_runan.title_capital_county }
+	character:si_ma_fang ?= { if = { limit = { is_alive = yes } save_scope_as = wj_hchar_father } }
+	wj_hchar_try_one_effect = { ID = si_ma_yi YEAR = 195 HOUSE = house:house_111010756002013 HOME = title:d_henei.title_capital_county }
+	character:zhu_ge_gui ?= { if = { limit = { is_alive = yes } save_scope_as = wj_hchar_father } }
+	wj_hchar_try_one_effect = { ID = zhu_ge_liang YEAR = 197 HOUSE = house:langya_zhuge HOME = title:d_langya.title_capital_county }
+	character:sun_jian ?= { if = { limit = { is_alive = yes } save_scope_as = wj_hchar_father } }
+	wj_hchar_try_one_effect = { ID = sun_quan YEAR = 198 HOUSE = house:wujun_sun HOME = title:d_wujun.title_capital_county }
+	wj_hchar_try_one_effect = { ID = zhu_ran YEAR = 198 HOUSE = house:uuii_book_house_69dbe6f0a144 HOME = title:d_danyang.title_capital_county }
+	character:lu_jun ?= { if = { limit = { is_alive = yes } save_scope_as = wj_hchar_father } }
+	wj_hchar_try_one_effect = { ID = lu_xun YEAR = 199 HOUSE = house:wujun_lu HOME = title:d_wujun.title_capital_county }
+	# 马良 history 生于 187，改由 zz_hd_hbirth 按年出场统一生成；其子女父亲关系也由该系统设定。
+	# 复用当前主包60日调度、缓存继承和友谊入口；不重置任何旧收据。
+	hds_bootstrap_effect = yes
+	hds_sun_force_inherit_effect = yes
+	if = {
+		limit = {
+			has_global_variable = wj_hchar_seen_gu_yong
+			has_global_variable = wj_hchar_seen_li_tong
+			has_global_variable = wj_hchar_seen_guo_jia
+			has_global_variable = wj_hchar_seen_man_chong
+			has_global_variable = wj_hchar_seen_si_ma_lang
+			has_global_variable = wj_hchar_seen_lu_su
+			has_global_variable = wj_hchar_seen_jia_kui
+			has_global_variable = wj_hchar_seen_zhu_ge_jin
+			has_global_variable = wj_hchar_seen_sun_ce
+			has_global_variable = wj_hchar_seen_yang_xiu
+			has_global_variable = wj_hchar_seen_zhou_yu
+			has_global_variable = wj_hchar_seen_zhu_huan
+			has_global_variable = wj_hchar_seen_wang_can
+			has_global_variable = wj_hchar_seen_lv_meng
+			has_global_variable = wj_hchar_seen_si_ma_yi
+			has_global_variable = wj_hchar_seen_zhu_ge_liang
+			has_global_variable = wj_hchar_seen_sun_quan
+			has_global_variable = wj_hchar_seen_zhu_ran
+			has_global_variable = wj_hchar_seen_lu_xun
+		}
+		set_global_variable = { name = wj_hchar_all20_done value = yes }
+	}
+}

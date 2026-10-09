@@ -1,0 +1,69 @@
+﻿# 孙策丹阳之战诊断日志：写入 logs/debug.log，统一前缀 HDS_SC_WAR。
+# 排查完成后删除本文件，并删掉 hds_sc_tick_effect / hds_try_wu_war_effect / hds_cb_retry_effect 里的调用。
+
+# 孙策作用域。离开袁术后、未拿下丹阳前，逐项列出开战前置条件中不满足的项。
+hds_sc_war_diag_gate_effect = {
+	if = {
+		limit = {
+			this = character:sun_ce
+			has_character_flag = hds_sc_departed
+			NOT = { has_character_flag = hds_sc_wu_complete }
+		}
+		if = { limit = { NOT = { is_independent_ruler = yes } } debug_log = "HDS_SC_WAR gate: not independent" }
+		if = { limit = { is_adult = no } debug_log = "HDS_SC_WAR gate: not adult" }
+		if = { limit = { is_imprisoned = yes } debug_log = "HDS_SC_WAR gate: imprisoned" }
+		if = { limit = { has_character_flag = hds_war_cooldown } debug_log = "HDS_SC_WAR gate: hds_war_cooldown" }
+		if = { limit = { has_variable_list = hds_pending_titles } debug_log = "HDS_SC_WAR gate: pending titles" }
+		if = { limit = { any_character_war = { count >= 3 always = yes } } debug_log = "HDS_SC_WAR gate: 3+ wars" }
+		if = {
+			limit = { any_character_war = { OR = { using_cb = hds_regional_cb using_cb = hds_wu_invasion_cb } primary_attacker = prev } }
+			debug_log = "HDS_SC_WAR gate: campaign war already running"
+		}
+		if = { limit = { NOT = { has_character_flag = hds_sc_wu_authorized } } debug_log = "HDS_SC_WAR gate: not authorized yet (waiting hds.4003)" }
+		if = {
+			limit = { is_landed = no NOT = { hds_sun_estate_inherited_trigger = yes } }
+			debug_log = "HDS_SC_WAR gate: landless without family title"
+		}
+		if = { limit = { hds_can_campaign_trigger = yes } debug_log = "HDS_SC_WAR gate: can_campaign OK" }
+	}
+}
+
+# 孙策作用域，在 hds_try_wu_war_effect 选目标之后调用（scope:hds_campaign_actor 已保存）。
+# 找不到目标时，逐个丹阳郡县列出其最高领主被哪一项挡住。
+hds_sc_war_diag_target_effect = {
+	if = {
+		limit = { NOT = { exists = scope:hds_target_enemy } }
+		debug_log = "HDS_SC_WAR target: none found in d_danyang"
+		title:d_danyang = {
+			every_de_jure_county = {
+				limit = { exists = holder holder ?= { is_alive = yes exists = top_liege } }
+				holder.top_liege = { save_scope_as = hds_diag_enemy }
+				debug_log = "HDS_SC_WAR county:"
+				debug_log_scopes = yes
+				if = { limit = { scope:hds_diag_enemy = scope:hds_campaign_actor } debug_log = "HDS_SC_WAR   held by Sun Ce realm" }
+				if = { limit = { scope:hds_diag_enemy = { is_independent_ruler = no } } debug_log = "HDS_SC_WAR   top liege not independent" }
+				if = { limit = { scope:hds_campaign_actor = { is_allied_to = scope:hds_diag_enemy } } debug_log = "HDS_SC_WAR   allied" }
+				if = { limit = { scope:hds_campaign_actor = { has_truce = scope:hds_diag_enemy } } debug_log = "HDS_SC_WAR   truce" }
+				if = { limit = { scope:hds_campaign_actor = { is_at_war_with = scope:hds_diag_enemy } } debug_log = "HDS_SC_WAR   already at war" }
+				if = {
+					limit = {
+						NOT = {
+							scope:hds_campaign_actor = {
+								can_declare_war = {
+									defender = scope:hds_diag_enemy
+									casus_belli = hds_wu_invasion_cb
+									target_titles = { title:d_danyang }
+								}
+							}
+						}
+					}
+					debug_log = "HDS_SC_WAR   can_declare_war FALSE"
+				}
+			}
+		}
+	}
+	else = {
+		debug_log = "HDS_SC_WAR target found:"
+		debug_log_scopes = yes
+	}
+}

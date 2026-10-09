@@ -1,0 +1,661 @@
+﻿# ============================================================================
+# WJ 开府(内阁授职效果覆盖) —— per-key 覆盖主mod空壳, 恢复原版授职授衔链+开府
+# xinsanguo-MOD 2026-08-20
+#
+# 背景: 主mod 将 got_minister_position_effect 替换为空壳
+#   ("legacy ministry-title transaction was removed", always = no),
+#   导致授内阁职位不再授朝臣头衔(自动授予/移除链断裂)。
+# 本文件 per-key 覆盖恢复原版正文(程序化提取自
+#   game\common\scripted_effects\10_dlc_tgp_scripted_effects.txt), 并追加:
+#     got/fired 末尾 -> 按实际资格维护原生开府自动档，保留独立手动授予。
+#     辟召只读真实开府合同；旧开府修饰符及其生命周期已移除。
+# 依赖: 原版 TGP DLC 的 e_minister_* 头衔 + $MINISTER_TITLE$/$MINISTER_POSITION$ 参数;
+#       权限维护位于 common/scripted_effects/WJ_contract_privilege_effects.txt。
+# ============================================================================
+
+got_minister_position_effect = {
+	save_scope_as = new_minister
+
+	if = { # If your liege has a ministry, set up titles if needed
+		limit = {
+			scope:councillor_liege = {
+				this != scope:new_minister
+				tgp_has_access_to_ministry_trigger = yes
+			}
+			not = { exists = scope:swapped_position }
+			# 只隔离 WJ 扩展三职，原版九职继续使用同一授职链。
+			trigger_if = {
+				limit = {
+					OR = {
+						title:$MINISTER_TITLE$ = title:e_WJ_minister_tai_fu
+						title:$MINISTER_TITLE$ = title:e_WJ_minister_zong_zheng
+						title:$MINISTER_TITLE$ = title:e_WJ_minister_cheng_xiang
+						title:$MINISTER_TITLE$ = title:e_WJ_minister_guang_lu_xun
+					}
+				}
+				scope:councillor_liege = { WJ_han_jin_law_trigger = yes }
+			}
+		}
+		# Grant the ministry title if councillor doesn't have it
+		if = {
+			limit = {
+				NOT = { has_title = title:$MINISTER_TITLE$ }
+			}
+
+			if = {
+				limit = {
+					title:$MINISTER_TITLE$ = { is_title_created = no }
+				}
+				create_title_and_vassal_change = {
+					type = created
+					save_scope_as = minister_title_creation_change
+					add_claim_on_loss = no
+				}
+				title:$MINISTER_TITLE$ = {
+					change_title_holder = {
+						holder = scope:councillor_liege
+						change = scope:minister_title_creation_change
+					}
+				}
+				resolve_title_and_vassal_change = scope:minister_title_creation_change
+			}
+			create_title_and_vassal_change = {
+				type = appointment
+				save_scope_as = minister_title_change
+				add_claim_on_loss = no
+			}
+
+			if = {
+				limit = {
+					scope:councillor_liege = {
+						tgp_has_access_to_ministry_trigger = yes
+					}
+				}
+				# retire from other ministry primary titles
+				scope:new_minister = {
+					every_held_title = {
+						limit = {
+							this != title:$MINISTER_TITLE$
+							tgp_is_minister_title = yes
+						}
+						change_title_holder = {
+							holder = current_heir
+							change = scope:minister_title_change
+						}
+					}
+				}
+			}
+
+			title:$MINISTER_TITLE$ = {
+				change_title_holder = {
+					holder = scope:new_minister
+					change = scope:minister_title_change
+				}
+			}
+			resolve_title_and_vassal_change = scope:minister_title_change
+		}
+		# Add the correct title law if it doesn't have it already
+		if = {
+			limit = {
+				exists = title:$MINISTER_TITLE$.holder
+				title:$MINISTER_TITLE$ = title:e_minister_grand_marshal
+				NOT = {
+					title:$MINISTER_TITLE$ = {
+						has_title_law = celestial_grand_marshal_appointment_succession_law
+					}
+				}
+			}
+			title:$MINISTER_TITLE$ = {
+				add_title_law = celestial_grand_marshal_appointment_succession_law
+			}
+		}
+		else_if = {
+			limit = {
+				exists = title:$MINISTER_TITLE$.holder
+				NOR = {
+					title:$MINISTER_TITLE$ = title:e_minister_grand_marshal
+					title:$MINISTER_TITLE$ = {
+						has_title_law = celestial_ministry_appointment_succession_law
+					}
+				}
+			}
+			title:$MINISTER_TITLE$ = {
+				add_title_law = celestial_ministry_appointment_succession_law
+			}
+		}
+
+		# Make them a minister if they don't have the council position
+		if = {
+			limit = {
+				NOT = { has_council_position = $MINISTER_POSITION$ }
+			}
+			top_liege = {
+				assign_councillor_type = {
+					type = $MINISTER_POSITION$
+					target = scope:new_minister
+					remove_existing_councillor = yes
+				}
+			}
+		}
+		# If we have any vassals remaining, let's move them to where they are supposed to be
+		if = {
+			limit = {
+				vassal_count > 0
+			}
+			create_title_and_vassal_change = {
+				type = granted
+				save_scope_as = minister_vassal_change
+			}
+			every_vassal = {
+				change_liege = {
+					liege = top_liege # I.e. the top liege
+					change = scope:minister_vassal_change
+				}
+			}
+			resolve_title_and_vassal_change = scope:minister_vassal_change
+		}
+		# If the new minister should be the diarch, make it so
+		if = {
+			limit = {
+				OR = {
+					AND = {
+						top_liege ?= {
+							has_realm_law = grand_chancellor_law
+						}
+						title:e_minister_chancellor = {
+							this = title:$MINISTER_TITLE$
+							holder = scope:new_minister
+						}
+					}
+					AND = {
+						top_liege ?= {
+							has_realm_law = grand_marshal_law
+						}
+						title:e_minister_grand_marshal = {
+							this = title:$MINISTER_TITLE$
+							holder = scope:new_minister
+						}
+					}
+					AND = {
+						top_liege ?= {
+							has_realm_law = grand_censor_law
+						}
+						title:e_minister_censor = {
+							this = title:$MINISTER_TITLE$
+							holder = scope:new_minister
+						}
+					}
+					AND = {
+						top_liege ?= {
+							has_realm_law = WJ_grand_taiwei_law
+						}
+						title:e_minister_of_war = {
+							this = title:$MINISTER_TITLE$
+							holder = scope:new_minister
+						}
+					}
+				}
+			}
+			top_liege = {
+				if = {
+					limit = {
+						diarch != scope:new_minister
+					}
+					if = {
+						limit = {
+							NOT = { has_diarchy_type = grand_secretariat }
+						}
+						if = {#  Clear out any old diarchy
+							limit = { has_active_diarchy = yes }
+							end_diarchy = yes
+						}
+						try_start_diarchy = grand_secretariat
+					}
+					set_diarch = scope:new_minister
+				}
+			}
+		}
+
+		# Save and track accomplishment for the Gate domicile building
+		if = {
+			limit = {
+				title:e_minister_chancellor = {
+					this = title:$MINISTER_TITLE$
+					holder = scope:new_minister
+				}
+			}
+			scope:new_minister.house ?= {
+				house_head ?= {
+					if = {
+						limit = {
+							exists = domicile
+						}
+						domicile ?= {
+							set_family_accomplishment_effect = { ACCOMPLISHMENT = family_accomplishment_minister }
+						}
+					}
+				}
+			}
+		}
+		if = {
+			limit = {
+				title:e_minister_grand_marshal = {
+					this = title:$MINISTER_TITLE$
+					holder = scope:new_minister
+				}
+			}
+			scope:new_minister.house ?= {
+				house_head ?= {
+					if = {
+						limit = {
+							exists = domicile
+						}
+						domicile ?= {
+							set_family_accomplishment_effect = { ACCOMPLISHMENT = family_accomplishment_grand_marshal }
+						}
+					}
+				}
+			}
+		}
+		if = { # make sure the minister is participant in the Dynastic Cycle situation
+			limit = {
+				NOT = {
+					any_character_situation = {
+						situation_type = dynastic_cycle
+					}
+				}
+				top_liege ?= {
+					any_character_situation = {
+						situation_type = dynastic_cycle
+					}
+				}
+			}
+
+			situation:dynastic_cycle = {
+				add_manual_participant = prev
+			}
+		}
+		if = {
+			limit = {
+				NOT = { has_character_modifier = minister_scheme_slots_modifier }
+			}
+			add_character_modifier = minister_scheme_slots_modifier
+		}
+		# Move capital to realm capital
+		scope:councillor_liege.capital_county = {
+			save_scope_as = capital_county
+		}
+		if = {
+			limit = {
+				scope:councillor_liege.capital_county != title:$MINISTER_TITLE$.title_capital_county
+			}
+			title:$MINISTER_TITLE$ = {
+				set_capital_county = scope:capital_county
+			}
+		}
+		every_held_title = {
+			limit = {
+				is_noble_family_title = yes
+			}
+			set_capital_county = scope:capital_county
+		}
+		if = {
+			limit = { is_ai = yes }
+			domicile ?= {
+				move_domicile = scope:capital_county.title_province
+			}
+		}
+		if = {
+			limit = {
+				is_in_army = no
+				is_travelling = no
+				NOT = { exists = involved_activity }
+			}
+			set_location_to_default = yes
+		}
+	}
+	# Native obligation write, only after every title/vassal transaction above resolves.
+	# Correct a stale opening/default level for a real Han/Jin imperial councillor.
+	if = {
+		limit = {
+			is_alive = yes
+			is_independent_ruler = no
+			government_has_flag = government_is_celestial
+			WJ_han_jin_law_trigger = yes
+			liege = top_liege
+			liege = scope:councillor_liege
+			scope:councillor_liege = { tgp_has_access_to_ministry_trigger = yes }
+			has_title = title:$MINISTER_TITLE$
+			has_council_position = $MINISTER_POSITION$
+			is_councillor_of = scope:councillor_liege
+			tgp_is_any_minister = yes
+			NOT = { exists = scope:swapped_position }
+		}
+		if = {
+			limit = {
+				has_title = title:e_minister_grand_marshal
+				NOT = { vassal_contract_obligation_level:celestial_ministry_obligations = 2 }
+			}
+			vassal_contract_set_obligation_level = { type = celestial_ministry_obligations level = 2 }
+		}
+		else_if = {
+			limit = {
+				NOT = { has_title = title:e_minister_grand_marshal }
+				NOT = { vassal_contract_obligation_level:celestial_ministry_obligations = 1 }
+			}
+			vassal_contract_set_obligation_level = { type = celestial_ministry_obligations level = 1 }
+		}
+	}
+	if = {
+		limit = {
+			title:$MINISTER_TITLE$ = title:e_WJ_minister_tai_fu
+			scope:councillor_liege = { WJ_han_jin_law_trigger = yes }
+		}
+		add_character_flag = officer_tai_fu
+	}
+	if = {
+		limit = {
+			title:$MINISTER_TITLE$ = title:e_WJ_minister_zong_zheng
+			scope:councillor_liege = { WJ_han_jin_law_trigger = yes }
+		}
+		add_character_flag = officer_zong_zheng
+	}
+	if = {
+		limit = {
+			title:$MINISTER_TITLE$ = title:e_WJ_minister_cheng_xiang
+			scope:councillor_liege = { WJ_han_jin_law_trigger = yes }
+		}
+		add_character_flag = officer_cheng_xiang
+	}
+	if = {
+		limit = {
+			title:$MINISTER_TITLE$ = title:e_WJ_minister_guang_lu_xun
+			is_alive = yes
+			has_title = title:e_WJ_minister_guang_lu_xun
+			has_council_position = WJ_minister_guang_lu_xun
+			is_councillor_of = scope:councillor_liege
+			top_liege = scope:councillor_liege
+			scope:councillor_liege = { WJ_han_jin_law_trigger = yes }
+		}
+		add_character_flag = officer_guang_lu_xun
+	}
+	if = {
+		limit = { title:$MINISTER_TITLE$ = title:e_minister_grand_marshal }
+		add_character_flag = officer_da_jiang_jun
+	}
+	WJ_reconcile_contract_privileges_effect = yes
+}
+
+fired_minister_position_effect = {
+	if = {
+		limit = { has_character_flag = officer_da_jiang_jun }
+		remove_character_flag = officer_da_jiang_jun
+	}
+	if = {
+		limit = {
+			scope:councillor_liege = {
+				tgp_has_access_to_ministry_trigger = yes
+			}
+			NOT = { exists = scope:new_councillor }
+		}
+			switch = {
+			trigger = primary_title
+			title:e_WJ_minister_guang_lu_xun = {
+				if = {
+					limit = {
+						exists = title:e_WJ_minister_guang_lu_xun.current_heir
+						title:e_WJ_minister_guang_lu_xun.current_heir != this
+					}
+					title:e_WJ_minister_guang_lu_xun.current_heir = {
+						got_minister_position_effect = { MINISTER_TITLE = e_WJ_minister_guang_lu_xun MINISTER_POSITION = WJ_minister_guang_lu_xun }
+					}
+				}
+				else = {
+					destroy_and_fire_minister_effect = {
+						MINISTER = e_WJ_minister_guang_lu_xun
+					}
+				}
+			}
+			title:e_WJ_minister_tai_fu = {
+				remove_character_flag = officer_tai_fu
+				if = {
+					limit = {
+						exists = title:e_WJ_minister_tai_fu.current_heir
+					}
+					title:e_WJ_minister_tai_fu.current_heir = {
+						got_minister_position_effect = { MINISTER_TITLE = e_WJ_minister_tai_fu MINISTER_POSITION = WJ_minister_tai_fu }
+					}
+				}
+				else = {
+					destroy_and_fire_minister_effect = {
+						MINISTER = e_WJ_minister_tai_fu
+					}
+				}
+			}
+			title:e_minister_chancellor = {
+				if = {
+					limit = {
+						exists = title:e_minister_chancellor.current_heir
+					}
+					title:e_minister_chancellor.current_heir = {
+						got_minister_position_effect = { MINISTER_TITLE = e_minister_chancellor MINISTER_POSITION = councillor_chancellor }
+					}
+				}
+				else = {
+					destroy_and_fire_minister_effect = {
+						MINISTER = e_minister_chancellor
+					}
+				}
+			}
+			title:e_minister_censor = {
+				if = {
+					limit = {
+						exists = title:e_minister_censor.current_heir
+					}
+					title:e_minister_censor.current_heir = {
+						got_minister_position_effect = { MINISTER_TITLE = e_minister_censor MINISTER_POSITION = councillor_spymaster }
+					}
+				}
+				else = {
+					destroy_and_fire_minister_effect = {
+						MINISTER = e_minister_censor
+					}
+				}
+			}
+			title:e_minister_grand_marshal = {
+				if = {
+					limit = {
+						exists = title:e_minister_grand_marshal.current_heir
+					}
+					title:e_minister_grand_marshal.current_heir = {
+						got_minister_position_effect = { MINISTER_TITLE = e_minister_grand_marshal MINISTER_POSITION = minister_grand_marshal }
+					}
+				}
+				else = {
+					destroy_and_fire_minister_effect = {
+						MINISTER = e_minister_grand_marshal
+					}
+				}
+			}
+			title:e_minister_of_personnel = {
+				if = {
+					limit = {
+						exists = title:e_minister_of_personnel.current_heir
+					}
+					title:e_minister_of_personnel.current_heir = {
+						got_minister_position_effect = { MINISTER_TITLE = e_minister_of_personnel MINISTER_POSITION = minister_personnel }
+					}
+				}
+				else = {
+					destroy_and_fire_minister_effect = {
+						MINISTER = e_minister_of_personnel
+					}
+				}
+			}
+			title:e_minister_of_revenue = {
+				if = {
+					limit = {
+						exists = title:e_minister_of_revenue.current_heir
+					}
+					title:e_minister_of_revenue.current_heir = {
+						got_minister_position_effect = { MINISTER_TITLE = e_minister_of_revenue MINISTER_POSITION = councillor_steward }
+					}
+				}
+				else = {
+					destroy_and_fire_minister_effect = {
+						MINISTER = e_minister_of_revenue
+					}
+				}
+			}
+			title:e_minister_of_rites = {
+				if = {
+					limit = {
+						exists = title:e_minister_of_rites.current_heir
+					}
+					title:e_minister_of_rites.current_heir = {
+						got_minister_position_effect = { MINISTER_TITLE = e_minister_of_rites MINISTER_POSITION = councillor_court_chaplain }
+					}
+				}
+				else = {
+					destroy_and_fire_minister_effect = {
+						MINISTER = e_minister_of_rites
+					}
+				}
+			}
+			title:e_minister_of_war = {
+				if = {
+					limit = {
+						exists = title:e_minister_of_war.current_heir
+					}
+					title:e_minister_of_war.current_heir = {
+						got_minister_position_effect = { MINISTER_TITLE = e_minister_of_war MINISTER_POSITION = councillor_marshal }
+					}
+				}
+				else = {
+					destroy_and_fire_minister_effect = {
+						MINISTER = e_minister_of_war
+					}
+				}
+			}
+			title:e_minister_of_justice = {
+				if = {
+					limit = {
+						exists = title:e_minister_of_justice.current_heir
+					}
+					title:e_minister_of_justice.current_heir = {
+						got_minister_position_effect = { MINISTER_TITLE = e_minister_of_justice MINISTER_POSITION = minister_justice }
+					}
+				}
+				else = {
+					destroy_and_fire_minister_effect = {
+						MINISTER = e_minister_of_justice
+					}
+				}
+			}
+			title:e_minister_of_works = {
+				if = {
+					limit = {
+						exists = title:e_minister_of_works.current_heir
+					}
+					title:e_minister_of_works.current_heir = {
+						got_minister_position_effect = { MINISTER_TITLE = e_minister_of_works MINISTER_POSITION = minister_works }
+					}
+				}
+				else = {
+					destroy_and_fire_minister_effect = {
+						MINISTER = e_minister_of_works
+					}
+				}
+			}
+			title:e_WJ_minister_zong_zheng = {
+				remove_character_flag = officer_zong_zheng
+				if = {
+					limit = {
+						exists = title:e_WJ_minister_zong_zheng.current_heir
+					}
+					title:e_WJ_minister_zong_zheng.current_heir = {
+						got_minister_position_effect = { MINISTER_TITLE = e_WJ_minister_zong_zheng MINISTER_POSITION = WJ_minister_zong_zheng }
+					}
+				}
+				else = {
+					destroy_and_fire_minister_effect = {
+						MINISTER = e_WJ_minister_zong_zheng
+					}
+				}
+			}
+			title:e_WJ_minister_cheng_xiang = {
+				remove_character_flag = officer_cheng_xiang
+				if = {
+					limit = {
+						exists = title:e_WJ_minister_cheng_xiang.current_heir
+					}
+					title:e_WJ_minister_cheng_xiang.current_heir = {
+						got_minister_position_effect = { MINISTER_TITLE = e_WJ_minister_cheng_xiang MINISTER_POSITION = WJ_minister_cheng_xiang }
+					}
+				}
+				else = {
+					destroy_and_fire_minister_effect = {
+						MINISTER = e_WJ_minister_cheng_xiang
+					}
+				}
+			}
+		}
+		remove_character_modifier = minister_scheme_slots_modifier
+	}
+	WJ_reconcile_contract_privileges_effect = yes
+}
+
+# 唐法生效后只撤销本天朝的三个 WJ 扩展职，不走普通离职的继任交易。
+WJ_retire_han_jin_ministries_effect = {
+	if = {
+		limit = { has_realm_law = tang_province_title_law }
+		WJ_retire_han_jin_ministry_effect = { MINISTER_TITLE = e_WJ_minister_tai_fu MINISTER_POSITION = WJ_minister_tai_fu OFFICER_FLAG = officer_tai_fu }
+		WJ_retire_han_jin_ministry_effect = { MINISTER_TITLE = e_WJ_minister_zong_zheng MINISTER_POSITION = WJ_minister_zong_zheng OFFICER_FLAG = officer_zong_zheng }
+		WJ_retire_han_jin_ministry_effect = { MINISTER_TITLE = e_WJ_minister_cheng_xiang MINISTER_POSITION = WJ_minister_cheng_xiang OFFICER_FLAG = officer_cheng_xiang }
+		WJ_retire_han_jin_ministry_effect = { MINISTER_TITLE = e_WJ_minister_guang_lu_xun MINISTER_POSITION = WJ_minister_guang_lu_xun OFFICER_FLAG = officer_guang_lu_xun }
+	}
+}
+
+# 调用作用域：完成改制的内阁主人；不遍历全图，不改变其他头衔或转移财产。
+WJ_retire_han_jin_ministry_effect = {
+	save_scope_as = wj_retiring_ministry_liege
+	if = {
+		limit = {
+			exists = title:$MINISTER_TITLE$.holder
+			title:$MINISTER_TITLE$.holder = { top_liege = scope:wj_retiring_ministry_liege }
+		}
+		title:$MINISTER_TITLE$.holder = { save_scope_as = wj_retiring_minister }
+		# 仅终止该丞相本人正在主持的固化摄政；不碰原版尚书省或其他摄政。
+		if = {
+			limit = {
+				title:$MINISTER_TITLE$ = title:e_WJ_minister_cheng_xiang
+				has_diarchy_type = regency
+				exists = diarch
+				diarch = scope:wj_retiring_minister
+			}
+			end_diarchy = yes
+		}
+		# 先解除准确席位，避免销毁最高头衔后误伤人物兼有的其他官职。
+		if = {
+			limit = {
+				scope:wj_retiring_minister = {
+					has_council_position = $MINISTER_POSITION$
+					is_councillor_of = scope:wj_retiring_ministry_liege
+				}
+			}
+			always_fire_councillor = scope:wj_retiring_minister
+		}
+		destroy_title = title:$MINISTER_TITLE$
+		scope:wj_retiring_minister = {
+			remove_character_flag = $OFFICER_FLAG$
+			if = {
+				limit = { is_councillor = no }
+				remove_character_flag = is_in_the_council
+			}
+			if = {
+				limit = { tgp_has_minister_title = no }
+				remove_character_modifier = minister_scheme_slots_modifier
+			}
+		}
+	}
+}
