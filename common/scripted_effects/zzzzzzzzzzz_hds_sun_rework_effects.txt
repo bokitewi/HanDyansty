@@ -1,0 +1,553 @@
+﻿# 2026-10-10 孙家线重制（岘山之死 / 渡江立足 / 丹阳宣战兜底 / 孙权接续）。
+# 本文件只放新键，不覆盖任何旧定义。旧定义的改动在原文件里（见 docs 维护说明）。
+#
+# 存档诊断：全局变量 hds_diag_dy_*（计数），开新局跑过 200 年后在存档 variables 段里查。
+#   hds_diag_dy_attempts      丹阳开战尝试次数
+#   hds_diag_dy_war_started   成功开战次数
+#   hds_diag_dy_no_candidate  丹阳各县的最高领主没有一个可作对手（结盟/停战/已在交战/非独立）
+#   hds_diag_dy_cdw_false     有对手但 can_declare_war 全部失败（有地时的正常路径）
+#   hds_diag_dy_forced        走了强制开战（营地身份，或连续失败 3 次）
+#   hds_diag_dy_start_failed  start_war 之后仍然没有战争
+#   hds_diag_dy_last_actor    最近一次尝试的发起人
+
+# 全局计数 +1。
+hds_diag_bump_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = $NAME$ } }
+		set_global_variable = { name = $NAME$ value = 0 }
+	}
+	change_global_variable = { name = $NAME$ add = 1 }
+}
+
+# 记录当前营地头衔（营地政体时主头衔就是营地）。有地以后据此销毁营地。
+hds_sun_record_camp_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			is_landed = no
+			government_has_flag = government_is_landless_adventurer
+			exists = primary_title
+			primary_title = { is_landless_type_title = yes }
+		}
+		set_variable = { name = hds_sun_camp_title value = primary_title }
+	}
+}
+
+# 营地身份的人拿到了封地（立足县或丹阳之战胜利）：改天朝政体、销毁营地头衔。
+hds_sun_landed_from_camp_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			is_landed = yes
+			government_has_flag = government_is_landless_adventurer
+		}
+		change_government = celestial_government
+	}
+	if = {
+		limit = {
+			is_alive = yes
+			is_landed = yes
+			has_variable = hds_sun_camp_title
+		}
+		if = {
+			limit = {
+				var:hds_sun_camp_title = {
+					is_landless_type_title = yes
+					exists = holder
+					holder = prev
+				}
+			}
+			destroy_title = var:hds_sun_camp_title
+		}
+		remove_variable = hds_sun_camp_title
+	}
+}
+
+# 渡江立足。ROOT = 孙策或孙权（尚无封地）。
+# 只拿袁术势力的地：历阳县 c_uuii_p_1984 属袁术（或其封臣）时给历阳；
+# 否则给袁术境内离丹阳郡治最近的县（不拿袁术的首府）；袁术已死或无地则不给，调用方改走营地+强制开战。
+# 成功后：脱离原主、首府设在立足县、销毁家族庄园/营地（有地后不会再生成营地）。
+# DONE_FLAG：立足成功的标记；ESTATE_FLAG：庄园销毁完成的标记（hds_ensure_estate_effect 认这两个旧标记）。
+hds_sun_foothold_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			NOT = { has_character_flag = $DONE_FLAG$ }
+		}
+		save_scope_as = hds_foothold_actor
+		clear_saved_scope = hds_foothold_county
+		clear_saved_scope = hds_foothold_patron
+		if = {
+			limit = { is_landed = yes }
+			# 已经有封地：不需要立足县。
+			add_character_flag = $DONE_FLAG$
+		}
+		else = {
+			hds_sun_record_camp_effect = yes
+			character:yuan_shu ?= {
+				if = {
+					limit = {
+						is_alive = yes
+						is_landed = yes
+						NOT = { this = scope:hds_foothold_actor }
+					}
+					save_scope_as = hds_foothold_patron
+				}
+			}
+			if = {
+				limit = { exists = scope:hds_foothold_patron }
+				if = {
+					limit = {
+						title:c_uuii_p_1984 = {
+							exists = holder
+							holder = {
+								OR = {
+									this = scope:hds_foothold_patron
+									is_vassal_or_below_of = scope:hds_foothold_patron
+								}
+							}
+						}
+					}
+					title:c_uuii_p_1984 = { save_scope_as = hds_foothold_county }
+				}
+				else = {
+					title:d_danyang.title_capital_county.title_province = { save_scope_as = hds_foothold_target_prov }
+					scope:hds_foothold_patron = {
+						ordered_realm_county = {
+							limit = {
+								NOT = { this = scope:hds_foothold_patron.capital_county }
+							}
+							order_by = {
+								value = 0
+								subtract = "title_province.squared_distance(scope:hds_foothold_target_prov)"
+							}
+							save_scope_as = hds_foothold_county
+						}
+					}
+				}
+			}
+			if = {
+				limit = { exists = scope:hds_foothold_county }
+				create_title_and_vassal_change = { type = granted save_scope_as = hds_foothold_change add_claim_on_loss = no }
+				scope:hds_foothold_county = {
+					change_title_holder = { holder = scope:hds_foothold_actor change = scope:hds_foothold_change take_baronies = yes }
+				}
+				resolve_title_and_vassal_change = scope:hds_foothold_change
+				if = {
+					limit = { has_title = scope:hds_foothold_county }
+					add_character_flag = $DONE_FLAG$
+					hds_release_effect = yes
+					set_realm_capital = scope:hds_foothold_county
+					# 有地以后销毁家族庄园（hds_estate_to_camp_effect 对有地者不建营地）。
+					hds_estate_to_camp_effect = { DONE_FLAG = $ESTATE_FLAG$ }
+					hds_sun_landed_from_camp_effect = yes
+					# 孙坚庄园缓存不再需要；防止旧的恢复逻辑重建庄园。
+					title:h_china = {
+						remove_variable = hds_sun_family_title
+						remove_variable = hds_sun_original_estate
+					}
+				}
+			}
+		}
+	}
+}
+
+# 丹阳之战发起器（孙策、孙权、孙坚共用）。ROOT = 发起人；调用方已检查剧情阶段。
+# 有地：先走合法宣战（can_declare_war）；连续失败 3 次后强制开战。
+# 营地（无地）：直接强制开战。强制开战仍然尊重停战/结盟/已在交战（hds_candidate_enemy_trigger）。
+hds_sun_danyang_war_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			is_adult = yes
+			is_imprisoned = no
+			hds_can_campaign_trigger = yes
+		}
+		remove_character_flag = sworn_peace
+		save_scope_as = hds_campaign_actor
+		clear_saved_scope = hds_target_enemy
+		clear_saved_scope = hds_dy_forced_target
+		title:d_danyang = { save_scope_as = hds_target_duchy }
+		set_variable = { name = hds_requested_duchy value = title:d_danyang }
+		add_character_flag = { flag = hds_launch_authorized days = 1 }
+		hds_diag_bump_effect = { NAME = hds_diag_dy_attempts }
+		set_global_variable = { name = hds_diag_dy_last_actor value = scope:hds_campaign_actor }
+		# 1) 合法宣战
+		if = {
+			limit = { is_landed = yes }
+			title:d_danyang = {
+				random_de_jure_county = {
+					limit = {
+						exists = holder
+						holder ?= { is_alive = yes exists = top_liege }
+						holder.top_liege ?= {
+							hds_candidate_enemy_trigger = yes
+							NOT = { has_title = title:h_china }
+							scope:hds_campaign_actor ?= {
+								can_declare_war = {
+									defender = prev
+									casus_belli = hds_wu_invasion_cb
+									target_titles = { title:d_danyang }
+								}
+							}
+						}
+					}
+					holder.top_liege ?= { save_scope_as = hds_target_enemy }
+				}
+			}
+			if = {
+				limit = { exists = scope:hds_target_enemy }
+				hds_launch_selected_effect = { CB = hds_wu_invasion_cb }
+			}
+		}
+		# 2) 强制开战：营地身份，或有地但已连续失败 3 次
+		if = {
+			limit = {
+				NOT = { any_character_war = { using_cb = hds_wu_invasion_cb primary_attacker = scope:hds_campaign_actor } }
+				OR = {
+					is_landed = no
+					AND = {
+						has_variable = hds_dy_fail_count
+						var:hds_dy_fail_count >= 3
+					}
+				}
+			}
+			# 优先打丹阳郡头衔持有者所属的最高领主（郡头衔持有者必在其国内，满足 CB 的"守方持有目标"判定）
+			title:d_danyang = {
+				if = {
+					limit = {
+						exists = holder
+						holder.top_liege ?= { hds_candidate_enemy_trigger = yes NOT = { has_title = title:h_china } }
+					}
+					holder.top_liege = { save_scope_as = hds_dy_forced_target }
+				}
+				else = {
+					random_de_jure_county = {
+						limit = {
+							exists = holder
+							holder ?= { is_alive = yes exists = top_liege }
+							holder.top_liege ?= { hds_candidate_enemy_trigger = yes NOT = { has_title = title:h_china } }
+						}
+						holder.top_liege ?= { save_scope_as = hds_dy_forced_target }
+					}
+				}
+			}
+			if = {
+				limit = { exists = scope:hds_dy_forced_target }
+				hds_diag_bump_effect = { NAME = hds_diag_dy_forced }
+				start_war = {
+					cb = hds_wu_invasion_cb
+					target = scope:hds_dy_forced_target
+					target_title = title:d_danyang
+				}
+			}
+		}
+		# 结果
+		if = {
+			limit = { any_character_war = { using_cb = hds_wu_invasion_cb primary_attacker = scope:hds_campaign_actor } }
+			set_variable = { name = hds_dy_fail_count value = 0 }
+			remove_character_flag = hds_war_cooldown
+			hds_diag_bump_effect = { NAME = hds_diag_dy_war_started }
+			random_character_war = {
+				limit = { using_cb = hds_wu_invasion_cb primary_attacker = scope:hds_campaign_actor }
+				save_scope_as = hds_real_war
+			}
+			set_variable = { name = hds_current_war value = scope:hds_real_war }
+		}
+		else = {
+			if = {
+				limit = { NOT = { has_variable = hds_dy_fail_count } }
+				set_variable = { name = hds_dy_fail_count value = 0 }
+			}
+			change_variable = { name = hds_dy_fail_count add = 1 }
+			if = {
+				limit = {
+					title:d_danyang = {
+						NOT = {
+							any_de_jure_county = {
+								exists = holder
+								holder ?= { is_alive = yes exists = top_liege }
+								holder.top_liege ?= { hds_candidate_enemy_trigger = yes NOT = { has_title = title:h_china } }
+							}
+						}
+					}
+				}
+				hds_diag_bump_effect = { NAME = hds_diag_dy_no_candidate }
+			}
+			else_if = {
+				limit = { exists = scope:hds_dy_forced_target }
+				hds_diag_bump_effect = { NAME = hds_diag_dy_start_failed }
+			}
+			else = {
+				hds_diag_bump_effect = { NAME = hds_diag_dy_cdw_false }
+			}
+		}
+		remove_character_flag = hds_launch_authorized
+		remove_variable = hds_requested_duchy
+		add_character_flag = sworn_peace
+	}
+}
+
+# ---------------------------------------------------------------------------
+# 岘山之死（孙坚，ROOT = 孙坚）。由 hds_sun_tick_effect 每 60 天调用。
+# 联军解散即可（不要求玉玺）；191.1.1 之前不排期。窗口 191.1–192.12 内均匀落点；
+# 过了 192 年底才满足条件的，在 30–180 天内触发。刘表须在世且未被囚。
+hds_sj_xianshan_schedule_effect = {
+	if = {
+		limit = {
+			this = character:sun_jian
+			is_alive = yes
+			is_imprisoned = no
+			exists = global_var:hds_coalition_ended
+			current_date >= 191.1.1
+			NOT = { has_character_flag = hds_sj_departed }
+			NOT = { has_character_flag = hds_sj_xianshan_scheduled }
+			NOT = { has_character_flag = hds_sj_xianshan_cancelled }
+			exists = character:liu_biao
+			character:liu_biao ?= { is_alive = yes is_imprisoned = no }
+		}
+		add_character_flag = hds_sj_xianshan_scheduled
+		if = {
+			limit = { current_date < 191.4.1 }
+			trigger_event = { id = hds.5100 days = { 1 640 } }
+		}
+		else_if = {
+			limit = { current_date < 191.7.1 }
+			trigger_event = { id = hds.5100 days = { 1 550 } }
+		}
+		else_if = {
+			limit = { current_date < 191.10.1 }
+			trigger_event = { id = hds.5100 days = { 1 460 } }
+		}
+		else_if = {
+			limit = { current_date < 192.1.1 }
+			trigger_event = { id = hds.5100 days = { 1 365 } }
+		}
+		else_if = {
+			limit = { current_date < 192.4.1 }
+			trigger_event = { id = hds.5100 days = { 1 270 } }
+		}
+		else_if = {
+			limit = { current_date < 192.7.1 }
+			trigger_event = { id = hds.5100 days = { 1 180 } }
+		}
+		else_if = {
+			limit = { current_date < 192.10.1 }
+			trigger_event = { id = hds.5100 days = { 1 90 } }
+		}
+		else_if = {
+			limit = { current_date < 193.1.1 }
+			trigger_event = { id = hds.5100 days = { 1 30 } }
+		}
+		else = {
+			trigger_event = { id = hds.5100 days = { 30 180 } }
+		}
+	}
+}
+
+# hds.5100 选项。ROOT = 孙坚；scope:hds_xianshan_killer 在事件 immediate 里选好（黄祖，不在则刘表）。
+# 走正常死亡流程，on_death 钩子照常给孙策快照头衔与玉玺。
+hds_sj_xianshan_death_effect = {
+	if = {
+		limit = { is_alive = yes this = character:sun_jian }
+		set_global_variable = hds_sj_xianshan_done
+		if = {
+			limit = { exists = scope:hds_xianshan_killer }
+			death = { death_reason = death_battle killer = scope:hds_xianshan_killer }
+		}
+		else = {
+			death = { death_reason = death_battle }
+		}
+	}
+}
+
+# ---------------------------------------------------------------------------
+# 孙权接续。孙策（已继承孙坚）死时快照他的头衔，2 天后（原生继承完成后）交给孙权。
+
+# on_death 钩子，ROOT = 将死的孙策。
+hds_sq_snapshot_effect = {
+	title:h_china = { clear_variable_list = hds_sq_inherit_titles }
+	every_held_title = {
+		limit = { tier >= tier_county }
+		save_scope_as = hds_sq_snap_title
+		title:h_china = { add_to_variable_list = { name = hds_sq_inherit_titles target = scope:hds_sq_snap_title } }
+	}
+	if = { limit = { has_character_flag = hds_sc_departed } set_global_variable = hds_sq_from_departed }
+	if = { limit = { has_character_flag = hds_sc_wu_complete } set_global_variable = hds_sq_from_wu_complete }
+	if = { limit = { has_character_flag = hds_sc_base_paid } set_global_variable = hds_sq_troops_due }
+	set_global_variable = hds_sq_pending
+}
+
+# ROOT = title:h_china（hds_sq_handover_tick）。
+hds_sq_handover_effect = {
+	if = {
+		limit = {
+			has_global_variable = hds_sq_pending
+			NOT = { has_global_variable = hds_sq_leader }
+		}
+		clear_saved_scope = hds_sq_heir
+		if = {
+			limit = { has_global_variable = wj_hchar_sun_quan }
+			global_var:wj_hchar_sun_quan ?= {
+				if = { limit = { is_alive = yes } save_scope_as = hds_sq_heir }
+			}
+		}
+		if = {
+			limit = { NOT = { exists = scope:hds_sq_heir } }
+			character:sun_quan ?= {
+				if = { limit = { is_alive = yes } save_scope_as = hds_sq_heir }
+			}
+		}
+		remove_global_variable = hds_sq_pending
+		if = {
+			limit = { exists = scope:hds_sq_heir }
+			set_global_variable = { name = hds_sq_leader value = scope:hds_sq_heir }
+			create_title_and_vassal_change = { type = granted save_scope_as = hds_sq_change add_claim_on_loss = no }
+			title:h_china = {
+				if = {
+					limit = { has_variable_list = hds_sq_inherit_titles }
+					every_in_list = {
+						variable = hds_sq_inherit_titles
+						limit = {
+							exists = holder
+							NOT = { holder = scope:hds_sq_heir }
+							# 孙权本人已有封地时，不接营地/庄园这类无地头衔。
+							NOT = {
+								AND = {
+									is_landless_type_title = yes
+									scope:hds_sq_heir = { is_landed = yes }
+								}
+							}
+						}
+						change_title_holder = { holder = scope:hds_sq_heir change = scope:hds_sq_change take_baronies = yes }
+					}
+				}
+			}
+			resolve_title_and_vassal_change = scope:hds_sq_change
+			title:h_china = { clear_variable_list = hds_sq_inherit_titles }
+			scope:hds_sq_heir = {
+				house ?= {
+					if = {
+						limit = { NOT = { house_head ?= scope:hds_sq_heir } }
+						set_house_head = scope:hds_sq_heir
+					}
+				}
+				if = { limit = { has_global_variable = hds_sq_from_departed } add_character_flag = hds_sq_departed }
+				if = { limit = { has_global_variable = hds_sq_from_wu_complete } add_character_flag = hds_sq_wu_complete }
+				if = {
+					limit = {
+						NOT = { has_title = title:k_uuii_yangzhou }
+						NOT = { has_claim_on = title:k_uuii_yangzhou }
+					}
+					add_pressed_claim = title:k_uuii_yangzhou
+				}
+				hds_qxzl_protect_effect = yes
+				# 兄长部曲：孙策领过保底兵的，孙权补一支（营地/首府所在地）。
+				if = {
+					limit = { has_global_variable = hds_sq_troops_due }
+					hds_sq_reward_effect = yes
+				}
+				trigger_event = { id = hds.4100 days = 1 }
+			}
+			hds_schedule_effect = yes
+		}
+		remove_global_variable = hds_sq_from_departed
+		remove_global_variable = hds_sq_from_wu_complete
+	}
+}
+
+# 孙权补兵，一次。
+hds_sq_reward_effect = {
+	clear_saved_scope = hds_sq_army_location
+	if = { limit = { exists = domicile.domicile_location } domicile.domicile_location = { save_scope_as = hds_sq_army_location } }
+	else_if = { limit = { exists = capital_province } capital_province = { save_scope_as = hds_sq_army_location } }
+	if = {
+		limit = {
+			is_alive = yes
+			is_ruler = yes
+			exists = scope:hds_sq_army_location
+			NOT = { has_character_flag = hds_sq_base_paid }
+		}
+		spawn_army = {
+			name = hds_sq_base_army
+			men_at_arms = { type = light_footmen men = 3000 }
+			location = scope:hds_sq_army_location
+			uses_supply = yes inheritable = yes
+		}
+		add_character_flag = hds_sq_base_paid
+		remove_global_variable = hds_sq_troops_due
+	}
+}
+
+# 孙权每 60 天（hds_tick_effect）。ROOT = 孙权。
+hds_sq_tick_effect = {
+	if = {
+		limit = { hds_sq_leader_trigger = yes is_alive = yes }
+		save_scope_as = hds_sq_self
+		hds_finish_title_transfer_effect = yes
+		hds_sun_record_camp_effect = yes
+		hds_sun_landed_from_camp_effect = yes
+		if = {
+			limit = { has_global_variable = hds_sq_troops_due }
+			hds_sq_reward_effect = yes
+		}
+		# 孙策生前未出走：孙权成年后脱离原主、渡江立足（拿不到地则改营地）。
+		if = {
+			limit = {
+				NOT = { has_character_flag = hds_sq_departed }
+				is_adult = yes
+				is_imprisoned = no
+				is_ruler = yes
+			}
+			hds_release_effect = yes
+			hds_sun_foothold_effect = { DONE_FLAG = hds_sq_foothold_done ESTATE_FLAG = hds_sq_camp_converted }
+			if = {
+				limit = {
+					NOT = { has_character_flag = hds_sq_foothold_done }
+					is_independent_ruler = yes
+				}
+				hds_estate_to_camp_effect = { DONE_FLAG = hds_sq_camp_converted }
+				hds_sun_record_camp_effect = yes
+			}
+			if = {
+				limit = { is_independent_ruler = yes }
+				add_character_flag = hds_sq_departed
+				add_character_flag = sworn_peace
+			}
+		}
+		if = {
+			limit = { has_character_flag = hds_sq_departed }
+			if = {
+				limit = { is_adult = yes is_imprisoned = no exists = liege NOT = { is_independent_ruler = yes } }
+				hds_release_effect = yes
+			}
+			if = {
+				limit = { is_landed = yes NOT = { has_variable_list = hds_pending_titles } }
+				hds_claim_owned_duchies_effect = { KINGDOM = title:k_uuii_yangzhou }
+			}
+			if = {
+				limit = {
+					NOT = { has_character_flag = hds_sq_wu_complete }
+					NOT = { has_variable_list = hds_pending_titles }
+					hds_sun_danyang_control_trigger = { ACTOR = scope:hds_sq_self }
+				}
+				add_character_flag = hds_sq_wu_complete
+				remove_character_flag = sworn_peace
+			}
+			if = {
+				limit = { NOT = { has_character_flag = hds_sq_wu_complete } }
+				add_character_flag = sworn_peace
+				if = {
+					limit = { hds_can_campaign_trigger = yes }
+					hds_sun_danyang_war_effect = yes
+				}
+			}
+			else = {
+				if = {
+					limit = { hds_can_campaign_trigger = yes }
+					hds_try_regional_war_effect = { KINGDOM = title:k_uuii_yangzhou }
+				}
+			}
+		}
+	}
+}

@@ -1,0 +1,164 @@
+﻿# 乱世霸权·篡位与僭号（第 5 期，2026-10-10，L5/L6）
+# 设计见 docs/乱世霸权_天子与权臣_设计草案.md 第 9 节"第 5 期"。
+
+# 篡位共通：权臣取霸权（复用天命交接），旧天子封一个无地头衔，正统压到 $LEVEL$ 级，
+# 天下郡国制君主 10 年内可用"讨篡"CB，尊汉者对其好感下降。
+# $TITLE_TIER$ / $TITLE_NAME$：旧天子所得无地头衔的层级与名字。Scope：权臣
+hd_court_usurp_common_effect = {
+	save_scope_as = hd_court_usurper
+	title:h_china.holder = { save_scope_as = hd_court_deposed_emperor }
+	hd_court_release_effect = yes
+	scope:hd_court_deposed_emperor = {
+		if = {
+			limit = { has_active_diarchy = yes }
+			end_diarchy = yes
+		}
+	}
+	hd_transfer_mandate_to_claimant_effect = yes
+	# 旧天子：无地头衔
+	scope:hd_court_deposed_emperor ?= {
+		if = {
+			limit = { is_alive = yes }
+			create_dynamic_title = {
+				tier = $TITLE_TIER$
+				name = $TITLE_NAME$
+			}
+			scope:new_title = {
+				set_landless_title = yes
+				set_definitive_form = yes
+				save_scope_as = hd_court_deposed_title
+			}
+			create_title_and_vassal_change = {
+				type = granted
+				save_scope_as = hd_court_deposed_title_change
+				add_claim_on_loss = no
+			}
+			scope:hd_court_deposed_title = {
+				change_title_holder = {
+					holder = scope:hd_court_deposed_emperor
+					change = scope:hd_court_deposed_title_change
+				}
+			}
+			resolve_title_and_vassal_change = scope:hd_court_deposed_title_change
+			# 无地无世族的旧天子在天命交接中不会自动臣服，此处补上
+			if = {
+				limit = { NOT = { liege ?= scope:hd_court_usurper } }
+				create_title_and_vassal_change = {
+					type = swear_fealty
+					save_scope_as = hd_court_deposed_fealty_change
+					add_claim_on_loss = no
+				}
+				change_liege = {
+					liege = scope:hd_court_usurper
+					change = scope:hd_court_deposed_fealty_change
+				}
+				resolve_title_and_vassal_change = scope:hd_court_deposed_fealty_change
+			}
+			if = {
+				limit = { scope:hd_court_deposed_title = { tier = tier_kingdom } }
+				add_character_modifier = hd_court_ceremonial_monarch_modifier
+			}
+		}
+	}
+	# 篡位者：正统极低
+	if = {
+		limit = { legitimacy > legitimacy_level_$LEVEL$ }
+		add_legitimacy = {
+			value = legitimacy_level_$LEVEL$
+			subtract = legitimacy
+		}
+	}
+	remove_variable = hd_court_stance
+	remove_character_modifier = hd_court_stance_zunhan_modifier
+	remove_character_modifier = hd_court_stance_moni_modifier
+	title:h_china = {
+		set_variable = { name = hd_court_usurper value = scope:hd_court_usurper years = 10 }
+	}
+	every_ruler = {
+		limit = {
+			hd_court_stance_zunhan_trigger = yes
+			NOT = { this = scope:hd_court_usurper }
+		}
+		add_opinion = {
+			target = scope:hd_court_usurper
+			modifier = hd_court_usurper_opinion
+		}
+	}
+	hd_dc_kit_usurp_effect = yes
+	every_player = {
+		limit = { tgp_does_this_player_care_about_the_dynastic_cycle = yes }
+		trigger_event = hd_court.0020
+	}
+}
+
+# 僭号称帝（袁术式）：立一个动态帝国，与汉帝平分正统；自此谋逆，尊汉的邻国得讨伐之名。Scope：称帝者
+hd_court_proclaim_emperor_effect = {
+	save_scope_as = hd_court_pseudo_founder
+	create_dynamic_title = {
+		tier = empire
+		name = hd_court_pseudo_empire_name
+	}
+	scope:new_title = {
+		set_coa = scope:hd_court_pseudo_founder.house
+		save_scope_as = hd_court_pseudo_empire
+	}
+	create_title_and_vassal_change = {
+		type = created
+		save_scope_as = hd_court_pseudo_change
+		add_claim_on_loss = no
+	}
+	scope:hd_court_pseudo_empire = {
+		change_title_holder = {
+			holder = scope:hd_court_pseudo_founder
+			change = scope:hd_court_pseudo_change
+		}
+	}
+	resolve_title_and_vassal_change = scope:hd_court_pseudo_change
+	set_primary_title_to = scope:hd_court_pseudo_empire
+	# 平分正统：天子失其半，称帝者得之
+	title:h_china.holder ?= {
+		save_scope_as = hd_court_split_emperor
+		if = {
+			limit = { legitimacy > 0 }
+			save_scope_value_as = {
+				name = hd_court_split_legitimacy
+				value = {
+					value = legitimacy
+					multiply = 0.5
+				}
+			}
+			add_legitimacy = {
+				value = scope:hd_court_split_legitimacy
+				multiply = -1
+			}
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_court_split_legitimacy }
+		add_legitimacy = scope:hd_court_split_legitimacy
+	}
+	hd_court_set_stance_effect = { STANCE = moni }
+	add_character_modifier = hd_court_pseudo_emperor_modifier
+	every_ruler = {
+		limit = {
+			hd_court_stance_zunhan_trigger = yes
+			NOT = { this = scope:hd_court_pseudo_founder }
+		}
+		add_opinion = {
+			target = scope:hd_court_pseudo_founder
+			modifier = hd_court_pseudo_emperor_opinion
+		}
+	}
+	every_neighboring_top_liege_realm_owner = {
+		limit = {
+			hd_court_stance_zunhan_trigger = yes
+			hd_court_warlord_trigger = yes
+		}
+		set_variable = { name = hd_court_fengzhao_target value = scope:hd_court_pseudo_founder years = 10 }
+	}
+	hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_proclaim_emperor ACTOR = scope:hd_court_pseudo_founder }
+	every_player = {
+		limit = { tgp_does_this_player_care_about_the_dynastic_cycle = yes }
+		trigger_event = hd_court.0021
+	}
+}

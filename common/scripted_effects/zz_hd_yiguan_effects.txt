@@ -1,0 +1,514 @@
+﻿# 衣冠南渡：核心效果（触发、分区重算、结局、通告）。见 docs/衣冠南渡_设计草案.md
+# 县头衔变量：hd_yiguan_occ = 在沦陷区；hd_yiguan_front = 在前线分区
+# 局势变量：hd_yiguan_years、hd_yiguan_phase；变量列表 hd_yiguan_front_list（前线分区县）、hd_yiguan_front_lords（上年前线郡守）
+
+############################
+# 触发检测（每月，挂在天朝循环月度脉冲；无天朝循环时由年度脉冲兜底）
+############################
+hd_yiguan_try_start_effect = {
+	if = {
+		limit = {
+			hd_yiguan_enabled_trigger = yes
+			NOT = { exists = global_var:hd_yiguan_started }
+			OR = {
+				any_independent_ruler = {
+					count >= 2
+					hd_yiguan_north_power_trigger = yes
+				}
+				any_independent_ruler = {
+					highest_held_title_tier >= tier_empire
+					hd_yiguan_north_power_trigger = yes
+				}
+			}
+			any_county_in_region = {
+				region = hd_yiguan_north_region
+				count >= 50
+				hd_yiguan_occupied_county_trigger = yes
+			}
+		}
+		hd_yiguan_start_effect = yes
+	}
+}
+
+hd_yiguan_start_effect = {
+	set_global_variable = hd_yiguan_started
+	start_situation = {
+		type = hd_yiguan_nandu
+		save_scope_as = hd_yiguan_new_situation
+	}
+	scope:hd_yiguan_new_situation ?= {
+		set_variable = { name = hd_yiguan_years value = 0 }
+		set_variable = { name = hd_yiguan_phase value = 1 }
+		set_situation_center_province = title:c_luoyang.title_province
+		hd_yiguan_resync_effect = yes
+	}
+	hd_dc_kit_fire_global_effect = { CATALYST = catalyst_hd_yiguan_start }
+	hd_yiguan_notify_effect = { NOTICE = 1 }
+}
+
+############################
+# 阶段开始（每个分区各触发一次，只在首次时记录并通告）。Root：局势
+############################
+hd_yiguan_phase_start_effect = {
+	if = {
+		limit = {
+			OR = {
+				NOT = { has_variable = hd_yiguan_phase }
+				var:hd_yiguan_phase < $PHASE$
+			}
+		}
+		set_variable = { name = hd_yiguan_phase value = $PHASE$ }
+		if = {
+			limit = { var:hd_yiguan_phase > 1 }
+			hd_yiguan_notify_effect = { NOTICE = $PHASE$ }
+		}
+	}
+}
+
+############################
+# 月度：参与者抽事件（约 8%/月；事件内设 6 个月冷却）。Root：局势
+############################
+hd_yiguan_monthly_effect = {
+	every_situation_participant = {
+		limit = {
+			hd_yiguan_event_ready_trigger = yes
+			NOT = { has_variable = hd_yiguan_event_cd }
+		}
+		random = {
+			chance = 8
+			trigger_event = { on_action = hd_yiguan_event_pulse }
+		}
+	}
+}
+
+# 事件冷却。Scope：收事件的角色
+hd_yiguan_event_cd_effect = {
+	set_variable = {
+		name = hd_yiguan_event_cd
+		value = yes
+		days = 180
+	}
+}
+
+############################
+# 年度：计年、重算分区、判结局（前 23 年不判）。Root：局势
+############################
+hd_yiguan_yearly_effect = {
+	change_variable = { name = hd_yiguan_years add = 1 }
+	hd_yiguan_resync_effect = yes
+	if = {
+		limit = { var:hd_yiguan_years >= 23 }
+		hd_yiguan_check_endings_effect = yes
+	}
+}
+
+############################
+# 分区重算。Root：局势
+# 顺序：先移出、后加入，保证三分区互不重叠
+############################
+hd_yiguan_resync_effect = {
+	save_scope_as = hd_yiguan_sit
+
+	# 1. 沦陷区：北方八州中县华夏、宗主非华夏
+	every_county_in_region = {
+		region = hd_yiguan_north_region
+		if = {
+			limit = { hd_yiguan_occupied_county_trigger = yes }
+			add_to_list = hd_yiguan_occ_now
+			if = {
+				limit = { NOT = { has_variable = hd_yiguan_occ } }
+				save_temporary_scope_as = hd_yiguan_c
+				if = {
+					limit = { has_variable = hd_yiguan_front }
+					scope:hd_yiguan_sit.situation_sub_region:hd_yiguan_front = {
+						remove_dejure_title_from_sub_region = scope:hd_yiguan_c
+					}
+					remove_variable = hd_yiguan_front
+					scope:hd_yiguan_sit = {
+						remove_list_variable = {
+							name = hd_yiguan_front_list
+							target = scope:hd_yiguan_c
+						}
+					}
+				}
+				scope:hd_yiguan_sit.situation_sub_region:hd_yiguan_north = {
+					add_dejure_title_to_sub_region = scope:hd_yiguan_c
+				}
+				set_variable = hd_yiguan_occ
+			}
+		}
+		else_if = {
+			limit = { has_variable = hd_yiguan_occ }
+			save_temporary_scope_as = hd_yiguan_c
+			scope:hd_yiguan_sit.situation_sub_region:hd_yiguan_north = {
+				remove_dejure_title_from_sub_region = scope:hd_yiguan_c
+			}
+			remove_variable = hd_yiguan_occ
+		}
+	}
+
+	# 2. 前线郡守：与沦陷县接壤的独立公爵级汉人统治者
+	every_in_list = {
+		list = hd_yiguan_occ_now
+		every_neighboring_county = {
+			limit = {
+				NOT = { has_variable = hd_yiguan_occ }
+				holder ?= {
+					top_liege = {
+						is_independent_ruler = yes
+						highest_held_title_tier = tier_duchy
+						hd_yiguan_is_han_trigger = yes
+						NOT = { is_in_list = hd_yiguan_front_now }
+					}
+				}
+			}
+			holder.top_liege = { add_to_list = hd_yiguan_front_now }
+		}
+	}
+	# 撤销已不在前线者的标记
+	every_in_list = {
+		variable = hd_yiguan_front_lords
+		limit = { NOT = { is_in_list = hd_yiguan_front_now } }
+		remove_variable = hd_yiguan_frontline
+	}
+	clear_variable_list = hd_yiguan_front_lords
+	every_in_list = {
+		list = hd_yiguan_front_now
+		set_variable = {
+			name = hd_yiguan_frontline
+			value = yes
+			days = 400
+		}
+		save_temporary_scope_as = hd_yiguan_lord
+		scope:hd_yiguan_sit = {
+			add_to_variable_list = {
+				name = hd_yiguan_front_lords
+				target = scope:hd_yiguan_lord
+			}
+		}
+	}
+
+	# 3. 前线分区：先移出不再属于前线郡守的县
+	every_in_list = {
+		variable = hd_yiguan_front_list
+		limit = {
+			OR = {
+				has_variable = hd_yiguan_occ
+				NOT = {
+					holder ?= {
+						top_liege = { is_in_list = hd_yiguan_front_now }
+					}
+				}
+			}
+		}
+		add_to_list = hd_yiguan_front_drop
+	}
+	every_in_list = {
+		list = hd_yiguan_front_drop
+		save_temporary_scope_as = hd_yiguan_c
+		scope:hd_yiguan_sit.situation_sub_region:hd_yiguan_front = {
+			remove_dejure_title_from_sub_region = scope:hd_yiguan_c
+		}
+		remove_variable = hd_yiguan_front
+		scope:hd_yiguan_sit = {
+			remove_list_variable = {
+				name = hd_yiguan_front_list
+				target = scope:hd_yiguan_c
+			}
+		}
+	}
+	# 再加入前线郡守在荆扬以外、非沦陷的县
+	every_in_list = {
+		list = hd_yiguan_front_now
+		every_realm_county = {
+			limit = {
+				NOT = { has_variable = hd_yiguan_front }
+				NOT = { has_variable = hd_yiguan_occ }
+				NOT = { hd_yiguan_county_in_south_trigger = yes }
+			}
+			save_temporary_scope_as = hd_yiguan_c
+			scope:hd_yiguan_sit.situation_sub_region:hd_yiguan_front = {
+				add_dejure_title_to_sub_region = scope:hd_yiguan_c
+			}
+			set_variable = hd_yiguan_front
+			scope:hd_yiguan_sit = {
+				add_to_variable_list = {
+					name = hd_yiguan_front_list
+					target = scope:hd_yiguan_c
+				}
+			}
+		}
+	}
+}
+
+# 局势结束：清除县与人物标记。Root：局势
+hd_yiguan_clear_county_marks_effect = {
+	every_county_in_region = {
+		region = hd_yiguan_north_region
+		limit = {
+			OR = {
+				has_variable = hd_yiguan_occ
+				has_variable = hd_yiguan_front
+			}
+		}
+		remove_variable = hd_yiguan_occ
+		remove_variable = hd_yiguan_front
+	}
+	every_in_list = {
+		variable = hd_yiguan_front_list
+		remove_variable = hd_yiguan_front
+	}
+	every_in_list = {
+		variable = hd_yiguan_front_lords
+		remove_variable = hd_yiguan_frontline
+	}
+}
+
+############################
+# 结局判定（光复 > 汉化 > 沦丧；满 150 年南北分治）。Root：局势
+############################
+hd_yiguan_check_endings_effect = {
+	save_scope_as = hd_yiguan_sit
+	set_variable = { name = hd_yiguan_n_total value = 0 }
+	set_variable = { name = hd_yiguan_n_han value = 0 }
+	set_variable = { name = hd_yiguan_n_sin value = 0 }
+	set_variable = { name = hd_yiguan_n_heg value = 0 }
+	title:h_china.holder ?= { save_scope_as = hd_yiguan_hegemon }
+
+	every_county_in_region = {
+		region = hd_yiguan_north_region
+		scope:hd_yiguan_sit = { change_variable = { name = hd_yiguan_n_total add = 1 } }
+		if = {
+			limit = { holder ?= { top_liege = { hd_yiguan_is_han_trigger = yes } } }
+			scope:hd_yiguan_sit = { change_variable = { name = hd_yiguan_n_han add = 1 } }
+		}
+		if = {
+			limit = { holder ?= { top_liege = { hd_yiguan_is_sinicized_trigger = yes } } }
+			scope:hd_yiguan_sit = { change_variable = { name = hd_yiguan_n_sin add = 1 } }
+		}
+		if = {
+			limit = {
+				exists = scope:hd_yiguan_hegemon
+				holder ?= { top_liege = scope:hd_yiguan_hegemon }
+			}
+			scope:hd_yiguan_sit = { change_variable = { name = hd_yiguan_n_heg add = 1 } }
+		}
+	}
+
+	if = {
+		limit = { var:hd_yiguan_n_total > 0 }
+		set_variable = {
+			name = hd_yiguan_pct_han
+			value = {
+				value = var:hd_yiguan_n_han
+				multiply = 100
+				divide = var:hd_yiguan_n_total
+			}
+		}
+		set_variable = {
+			name = hd_yiguan_pct_sin
+			value = {
+				value = var:hd_yiguan_n_sin
+				multiply = 100
+				divide = var:hd_yiguan_n_total
+			}
+		}
+		set_variable = {
+			name = hd_yiguan_pct_heg
+			value = {
+				value = var:hd_yiguan_n_heg
+				multiply = 100
+				divide = var:hd_yiguan_n_total
+			}
+		}
+
+		if = {
+			limit = {
+				exists = scope:hd_yiguan_hegemon
+				scope:hd_yiguan_hegemon = {
+					hd_yiguan_is_huaxia_trigger = yes
+					has_government = celestial_government
+				}
+				var:hd_yiguan_pct_heg >= 60
+			}
+			hd_yiguan_end_effect = { OUTCOME = restored }
+		}
+		else_if = {
+			limit = {
+				var:hd_yiguan_pct_sin >= 30
+				OR = {
+					any_independent_ruler = {
+						highest_held_title_tier >= tier_empire
+						hd_yiguan_sinicized_power_trigger = yes
+					}
+					any_independent_ruler = {
+						count >= 3
+						hd_yiguan_sinicized_power_trigger = yes
+					}
+				}
+			}
+			hd_yiguan_end_effect = { OUTCOME = sinicized }
+		}
+		else_if = {
+			limit = { var:hd_yiguan_pct_han < 20 }
+			hd_yiguan_end_effect = { OUTCOME = lost }
+		}
+		else_if = {
+			limit = { var:hd_yiguan_years >= 150 }
+			hd_yiguan_end_effect = { OUTCOME = partition }
+		}
+	}
+}
+
+############################
+# 结局。Root：局势。$OUTCOME$ = restored / sinicized / lost / partition
+############################
+hd_yiguan_end_effect = {
+	set_global_variable = {
+		name = hd_yiguan_outcome
+		value = flag:$OUTCOME$
+	}
+	# 参与者先标记（局势结束后无法再查群体）
+	every_situation_participant = {
+		limit = { is_ai = no }
+		set_variable = {
+			name = hd_yiguan_notice_full
+			value = yes
+			days = 3
+		}
+	}
+	hd_yiguan_outcome_$OUTCOME$_effect = yes
+	# 北府统帅修正随局势撤销
+	every_in_global_list = {
+		variable = hd_yiguan_beifu_commanders
+		limit = { has_character_modifier = hd_yiguan_beifu_commander_modifier }
+		remove_character_modifier = hd_yiguan_beifu_commander_modifier
+	}
+	clear_global_variable_list = hd_yiguan_beifu_commanders
+	# 侨郡、土断在结束后 10 年内仍有效；北府兵随局势结束停止招募
+	set_global_variable = {
+		name = hd_yiguan_tuduan_window
+		value = yes
+		years = 10
+	}
+	end_situation = yes
+}
+
+# 南方三群体加修正。Root：局势
+hd_yiguan_south_groups_modifier_effect = {
+	every_situation_participant = {
+		limit = {
+			OR = {
+				hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_south_lord }
+				hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_front_duke }
+				hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_south_vassal }
+			}
+		}
+		add_character_modifier = {
+			modifier = $MODIFIER$
+			years = $YEARS$
+		}
+	}
+}
+
+hd_yiguan_hu_lords_modifier_effect = {
+	every_situation_participant = {
+		limit = { hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_hu_lord } }
+		add_character_modifier = {
+			modifier = $MODIFIER$
+			years = $YEARS$
+		}
+	}
+}
+
+hd_yiguan_outcome_restored_effect = {
+	title:h_china.holder ?= {
+		add_character_modifier = {
+			modifier = hd_yiguan_zhongxing_modifier
+			years = 30
+		}
+	}
+	every_situation_participant = {
+		limit = { hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_south_lord } }
+		add_character_modifier = {
+			modifier = hd_yiguan_beiding_modifier
+			years = 20
+		}
+	}
+	set_global_variable = {
+		name = hd_yiguan_restore_window
+		value = yes
+		years = 20
+	}
+	hd_dc_kit_fire_global_effect = { CATALYST = catalyst_hd_yiguan_restored }
+	hd_yiguan_notify_effect = { NOTICE = 11 }
+}
+
+hd_yiguan_outcome_sinicized_effect = {
+	every_independent_ruler = {
+		limit = { hd_yiguan_is_sinicized_trigger = yes }
+		add_character_modifier = {
+			modifier = hd_yiguan_heliu_modifier
+			years = 50
+		}
+	}
+	hd_dc_kit_fire_global_effect = { CATALYST = catalyst_hd_yiguan_sinicized }
+	hd_yiguan_notify_effect = { NOTICE = 12 }
+}
+
+hd_yiguan_outcome_lost_effect = {
+	hd_yiguan_south_groups_modifier_effect = { MODIFIER = hd_yiguan_pianan_modifier YEARS = 50 }
+	hd_yiguan_hu_lords_modifier_effect = { MODIFIER = hd_yiguan_ruzhu_modifier YEARS = 30 }
+	hd_dc_kit_fire_global_effect = { CATALYST = catalyst_hd_yiguan_lost }
+	hd_yiguan_notify_effect = { NOTICE = 13 }
+}
+
+hd_yiguan_outcome_partition_effect = {
+	hd_yiguan_south_groups_modifier_effect = { MODIFIER = hd_yiguan_fenzhi_south_modifier YEARS = 50 }
+	hd_yiguan_hu_lords_modifier_effect = { MODIFIER = hd_yiguan_fenzhi_north_modifier YEARS = 50 }
+	hd_dc_kit_fire_global_effect = { CATALYST = catalyst_hd_yiguan_partition }
+	hd_yiguan_notify_effect = { NOTICE = 14 }
+}
+
+############################
+# 通告：参与者玩家收事件，天下内其他玩家收弹窗。$NOTICE$：1 开始 / 2 南渡 / 3 对峙 / 11 光复 / 12 汉化 / 13 沦丧 / 14 南北分治
+############################
+hd_yiguan_notify_effect = {
+	every_player = {
+		limit = {
+			OR = {
+				hd_dc_in_china_trigger = yes
+				top_participant_group:hd_yiguan_nandu ?= { always = yes }
+				has_variable = hd_yiguan_notice_full
+			}
+		}
+		set_variable = {
+			name = hd_yiguan_notice
+			value = $NOTICE$
+			days = 3
+		}
+		trigger_event = {
+			id = hd_yiguan.0009
+			days = 1
+		}
+	}
+}
+
+############################
+# 侨郡善后（局势结束 10 年后自动移除）。由年度脉冲调用
+############################
+hd_yiguan_aftermath_yearly_effect = {
+	if = {
+		limit = {
+			exists = global_var:hd_yiguan_outcome
+			NOT = { exists = global_var:hd_yiguan_tuduan_window }
+			NOT = { exists = global_var:hd_yiguan_qiaojun_cleared }
+		}
+		set_global_variable = hd_yiguan_qiaojun_cleared
+		every_in_global_list = {
+			variable = hd_yiguan_qiaojun_list
+			remove_county_modifier = hd_yiguan_qiaojun_county_modifier
+		}
+		clear_global_variable_list = hd_yiguan_qiaojun_list
+	}
+}

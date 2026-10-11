@@ -18,7 +18,7 @@ norman_conquest_cb = {
 
 	is_allowed_claim_title = {
 		scope:claimant =  {
-			NOT = { has_trait = incapable }
+			is_incapable = no
 			is_imprisoned = no
 			OR = {
 				this = scope:attacker
@@ -72,7 +72,208 @@ norman_conquest_cb = {
 	}
 	
 	on_victory = {
+		scope:attacker = { show_pow_release_message_effect = yes }
+		
+		# Legitimacy
+		add_legitimacy_attacker_victory_effect = yes
 
+		#EP2 accolade glory gain for winning against higher ranked enemy
+		scope:attacker = { accolade_attacker_war_end_glory_gain_high_effect = yes }
+
+		# Set land acquisition type to conquest.
+		create_title_and_vassal_change = {
+			type = conquest
+			save_scope_as = change
+			add_claim_on_loss = yes
+		}
+
+		# Transfer landed titles to the attacker.
+		setup_claim_cb = {
+			titles = target_titles
+			attacker = scope:attacker
+			defender = scope:defender
+			claimant = scope:claimant
+			change = scope:change
+		}
+
+		# EP3 Laamp possibility warning
+		scope:defender = { ep3_war_loss_adventurer_tt_effect = yes }
+
+		#Hereward the Wake departs for the Fenlands
+		character:90028 = { save_scope_as = hereward }
+
+		if = {
+			limit = {
+				exists = scope:hereward
+			}
+
+			scope:hereward = {
+				trigger_event = {
+					id = ep3_laamps.6000
+					days = { 1 2 }
+				}
+			}
+		}
+
+		#Eadgar becomes a LAAMP
+		character:112 = { save_scope_as = eadgar }
+
+		if = {
+			limit = {
+				exists = scope:eadgar
+			}
+
+			scope:eadgar = {
+				trigger_event = {
+					id = ep3_laamps.7000
+					days = { 1 2 }
+				}
+			}
+		}
+	
+		every_in_list = {
+			list = target_titles
+
+			#Remove elective succession law from k_england.
+			clear_title_laws = yes
+
+			# Personally seize all duchy titles in Southern England AND duchy titles personally held by the King of England.
+			every_in_de_jure_hierarchy = {
+				limit = {
+					tier = tier_duchy
+					special_invasion_cb_seize_land_in_region_trigger = {
+						TARGET_REGION = custom_southern_england
+						TARGET_KINGDOM = title:k_england
+					}
+				}
+				if = {
+					limit = {
+						holder ?= {
+							top_liege ?= scope:defender
+
+							# Vassal players in England get to keep their holdings, so they can play as vassals of the new king instead of game-overing.
+							NAND = {
+								this != top_liege
+								is_ai = no
+							}
+						}
+					}
+					custom_description = {
+						text = custom_seize_title_and_below_de_jure
+						subject = scope:attacker
+						object = this
+						change_title_holder = {
+							holder = scope:attacker
+							change = scope:change
+							take_baronies = yes
+						}
+					}
+
+					# Grab the counties that go with the duchies, too.
+					every_in_de_jure_hierarchy = {
+						limit = {
+							tier = tier_county
+							holder ?= {
+								top_liege = scope:defender
+
+								# Vassal players in England get to keep their holdings, so they can play as vassals of the new king instead of game-overing.
+								NAND = {
+									this != top_liege
+									is_ai = no
+								}
+							}
+						}
+						hidden_effect = {
+							change_title_holder = {
+								holder = scope:attacker
+								change = scope:change
+								take_baronies = yes
+							}
+						}
+						add_to_temporary_list = county_titles_under_transfer
+					}
+				}
+			}
+			# Personally seize every county title in the Southern England AND county titles personally held by the King of England.
+			every_in_de_jure_hierarchy = {
+				limit = {
+					tier = tier_county
+					special_invasion_cb_seize_land_in_region_trigger = {
+						TARGET_REGION = custom_southern_england
+						TARGET_KINGDOM = title:k_england
+					}
+					NOT = { is_in_list = county_titles_under_transfer }
+				}
+				if = {
+					limit = {
+						holder ?= {
+							top_liege ?= scope:defender
+
+							# Vassal players in England get to keep their holdings, so they can play as vassals of the new king instead of game-overing.
+							NAND = {
+								this != top_liege
+								is_ai = no
+							}
+						}
+					}
+					custom_description = {
+						text = custom_seize_title
+						subject = scope:attacker
+						object = this
+						change_title_holder = {
+							holder = scope:attacker
+							change = scope:change
+							take_baronies = yes
+						}
+					}
+				}
+			}
+		}
+
+		resolve_title_and_vassal_change = scope:change
+		
+		scope:attacker = { 
+			give_nickname = nick_the_conqueror 
+			if = {
+				limit = { exists = global_var:started_norman_yoke_achievement }
+				add_achievement_global_variable_effect = {
+					VARIABLE = achievement_norman_yoke_war_flag
+					VALUE = yes
+				}
+			}
+			if = {
+				limit = {
+					is_ai = yes
+					has_title = title:c_middlesex
+				}
+				set_realm_capital = title:c_middlesex
+			}
+		}
+
+		modify_all_participants_fame_values = {
+			WINNER = scope:attacker
+			LOSER = scope:defender
+			FAME_BASE = scope:cb_prestige_factor # Set by 'setup_claim_cb'
+			IS_RELIGIOUS_WAR = no
+			WINNER_FAME_SCALE = 10
+			LOSER_FAME_SCALE = -10
+			WINNER_ALLY_FAME_SCALE = 10
+			LOSER_ALLY_FAME_SCALE = 10
+		}
+
+		# truce
+		add_truce_attacker_victory_effect = yes
+
+		# FP1: note the victory for future memorialisation via stele (if applicable).
+		scope:attacker = { fp1_remember_recent_conquest_victory_effect = yes }
+
+		set_global_variable = norman_conquest_cb_concluded
+
+		# EP3: note gold gained from military assistance/join war contracts and their war contribution threshold
+		laamp_as_mercenary_payout_tooltip_effect = yes
+
+		#Mandalas gain or lose piety/devotion depending on Decree
+		mandala_war_defeat_effects = yes
 	}
 
 	on_white_peace_desc = {
@@ -120,7 +321,7 @@ norman_conquest_cb = {
 				value = scope:cb_prestige_factor # Set by 'setup_claim_cb'
 				multiply = -5
 			}
-			stress_impact = {
+			stress_and_fulfillment_impact = {
  				ambitious = medium_stress_impact_gain
  				arrogant = medium_stress_impact_gain
  			}
@@ -154,7 +355,7 @@ norman_conquest_cb = {
 		}
 
 		scope:defender = {
-			stress_impact = {
+			stress_and_fulfillment_impact = {
 				arrogant = medium_stress_impact_gain
 			}
 		}
@@ -303,7 +504,7 @@ norwegian_invasion_cb = {
 
 	is_allowed_claim_title = {
 		scope:claimant =  {
-			NOT = { has_trait = incapable }
+			is_incapable = no
 			is_imprisoned = no
 			OR = {
 				this = scope:attacker
@@ -362,7 +563,295 @@ norwegian_invasion_cb = {
 	}
 	
 	on_victory = {
+		scope:attacker = { show_pow_release_message_effect = yes }
+		
+		# Legitimacy
+		add_legitimacy_attacker_victory_effect = yes
 
+		#EP2 accolade glory gain for winning against higher ranked enemy
+		scope:attacker = { accolade_attacker_war_end_glory_gain_high_effect = yes }
+
+		# Loc setup.
+		character:124 = { save_scope_as = tostig }
+		title:d_northumberland = { save_scope_as = northumberland}
+		title:d_york = { save_scope_as = york }
+		title:d_lancaster = { save_scope_as = lancaster}
+		custom_tooltip = norwegian_invasion_cb_victory_with_tostig_desc
+		# Set land acquisition type to conquest.
+		create_title_and_vassal_change = {
+			type = conquest
+			save_scope_as = change
+			add_claim_on_loss = yes
+		}
+		
+		# Transfer landed titles to the attacker.
+		setup_claim_cb = {
+			titles = target_titles
+			attacker = scope:attacker
+			defender = scope:defender
+			claimant = scope:claimant
+			change = scope:change
+		}
+
+		# EP3 Laamp possibility warning
+		scope:defender = { ep3_war_loss_adventurer_tt_effect = yes }
+		
+		every_in_list = {
+			list = target_titles
+
+			#Remove elective succession law from k_england.
+			clear_title_laws = yes	
+
+			# Personally seize all duchy titles in Northern England AND all duchy titles personally held by the King of England.
+			every_in_de_jure_hierarchy = {
+				limit = {
+					tier = tier_duchy
+					special_invasion_cb_seize_land_in_region_trigger = {
+						TARGET_REGION = custom_northern_england
+						TARGET_KINGDOM = title:k_england
+					}
+				}
+				if = {
+					limit = {
+						holder ?= {
+							top_liege ?= scope:defender
+
+							# Vassal players in England get to keep their holdings, so they can play as vassals of the new king instead of game-overing.
+							NAND = {
+								this != top_liege
+								is_ai = no
+							}
+						}
+					}
+					custom_description = {
+						text = custom_seize_title_and_below_de_jure
+						subject = scope:attacker
+						object = this
+						change_title_holder = {
+							holder = scope:attacker
+							change = scope:change
+							take_baronies = no
+						}
+					}
+
+					# Grab the counties that go with the duchies, too.
+					every_in_de_jure_hierarchy = {
+						limit = {
+							tier = tier_county
+							holder ?= {
+								top_liege = scope:defender
+
+								# Vassal players in England get to keep their holdings, so they can play as vassals of the new king instead of game-overing.
+								NAND = {
+									this != top_liege
+									is_ai = no
+								}
+							}
+						}
+						hidden_effect = {
+							change_title_holder = {
+								holder = scope:attacker
+								change = scope:change
+								take_baronies = no
+							}
+						}
+					}
+				}
+			}
+			# Personally seize every county title in the Northern England AND county titles personally held by the King of England.
+			every_in_de_jure_hierarchy = {
+				limit = {
+					tier = tier_county
+					special_invasion_cb_seize_land_in_region_trigger = {
+						TARGET_REGION = custom_northern_england
+						TARGET_KINGDOM = title:k_england
+					}
+				}
+				if = {
+					limit = {
+						holder ?= {
+							top_liege ?= scope:defender
+
+							# Vassal players in England get to keep their holdings, so they can play as vassals of the new king instead of game-overing.
+							NAND = {
+								this != top_liege
+								is_ai = no
+							}
+						}
+					}
+					custom_description = {
+						text = custom_seize_title
+						subject = scope:attacker
+						object = this
+						change_title_holder = {
+							holder = scope:attacker
+							change = scope:change
+							take_baronies = no
+						}
+					}
+				}
+			}
+		}				
+		resolve_title_and_vassal_change = scope:change
+
+		#If Tostig is still alive, and in Harold's court, give him back his northern lands, and give Hardrada a reward.
+		scope:attacker = {
+			if = {
+				limit = {
+					character:124 = {
+						is_alive = yes
+						is_pool_character = no
+						liege ?= scope:attacker
+					}
+				}
+
+				#Grab the appropriate titles.
+				title:d_northumberland = {
+					every_in_de_jure_hierarchy = {
+						continue = { tier >= tier_duchy }
+						add_to_list = tostig_reward_titles
+					}
+				}
+				title:d_york = {
+					every_in_de_jure_hierarchy = {
+						continue = { tier >= tier_duchy }
+						add_to_list = tostig_reward_titles
+					}
+				}
+				title:d_lancaster = {
+					every_in_de_jure_hierarchy = {
+						continue = { tier >= tier_duchy }
+						add_to_list = tostig_reward_titles
+					}
+				}
+
+				#Adjust titles.
+				hidden_effect = {
+					create_title_and_vassal_change = {
+						type = granted
+						save_scope_as = change
+						add_claim_on_loss = no
+					}
+					every_in_list = {
+						list = tostig_reward_titles
+						limit = { holder = scope:attacker }
+						change_title_holder = {
+							holder = character:124
+							change = scope:change
+						}
+					}
+					resolve_title_and_vassal_change = scope:change
+				
+					#A hook for Harold.
+					add_hook = {
+						type = loyalty_hook
+						target = character:124
+					}
+					#And some opinion.
+					reverse_add_opinion = {
+						target = character:124
+						modifier = loyal_servant
+					}
+				}
+			}
+		}
+
+		#If William already won the conquest, loose Normandy back into the continent.
+		scope:attacker = {
+			if = {
+				limit = {
+					any_vassal = {
+						primary_title = title:d_normandy
+					}
+				}
+				random_vassal = {
+					limit = { primary_title = title:d_normandy }
+					save_scope_as = free_william	#Harald Hardrada & William the Bastard? A friendship you could never imagine!
+				}
+				scope:free_william = {
+					#De-vassalise him.
+					create_title_and_vassal_change = {
+						type = independency
+						save_scope_as = change
+						add_claim_on_loss = no
+					}
+					becomes_independent = { change = scope:change }
+					resolve_title_and_vassal_change = scope:change
+					#Take away his "Conqueror" title. Clearly he does not deserve it.
+					if = {
+						#William goes back to being the Bastard.
+						limit = {
+							this = character:140
+							has_nickname = nick_the_conqueror
+						}
+						give_nickname = nick_the_bastard
+					}
+					else = {
+						#Anyone else will be mocked forever for their brief victory.
+						give_nickname = nick_the_unready
+					}
+				}
+			}
+			#And give him Maine & Sable too.
+			if = {
+				limit = { title:c_maine.holder.liege = scope:attacker }
+				create_title_and_vassal_change = {
+					type = revoked
+					save_scope_as = change
+					add_claim_on_loss = no
+				}
+				title:c_maine.holder = {
+					change_liege = {
+						liege = scope:free_william
+						change = scope:change
+					}
+				}
+				resolve_title_and_vassal_change = scope:change
+			}
+			if = {
+				limit = {
+					NOT = { title:c_sable.holder = title:c_maine.holder }
+					title:c_sable.holder.liege = scope:attacker
+				}
+				create_title_and_vassal_change = {
+					type = revoked
+					save_scope_as = change
+					add_claim_on_loss = no
+				}
+				title:c_sable.holder = {
+					change_liege = {
+						liege = scope:free_william
+						change = scope:change
+					}
+				}
+				resolve_title_and_vassal_change = scope:change
+			}
+		}
+
+		modify_all_participants_fame_values = {
+			WINNER = scope:attacker
+			LOSER = scope:defender
+			FAME_BASE = scope:cb_prestige_factor # Set by 'setup_claim_cb'
+			IS_RELIGIOUS_WAR = no
+			WINNER_FAME_SCALE = 10
+			LOSER_FAME_SCALE = -10
+			WINNER_ALLY_FAME_SCALE = 10
+			LOSER_ALLY_FAME_SCALE = 10
+		}
+
+		# truce
+		add_truce_attacker_victory_effect = yes
+
+		# FP1: note the victory for future memorialisation via stele (if applicable).
+		scope:attacker = { fp1_remember_recent_conquest_victory_effect = yes }
+
+		set_global_variable = norwegian_invasion_cb_concluded
+
+		# EP3: note gold gained from military assistance/join war contracts and their war contribution threshold
+		laamp_as_mercenary_payout_tooltip_effect = yes
+
+		#Mandalas gain or lose piety/devotion depending on Decree
+		mandala_war_victory_effects = yes
 	}
 
 	on_white_peace_desc = {
@@ -411,7 +900,7 @@ norwegian_invasion_cb = {
 				value = scope:cb_prestige_factor # Set by 'setup_claim_cb'
 				multiply = -5
 			}
-			stress_impact = {
+			stress_and_fulfillment_impact = {
 				ambitious = medium_stress_impact_gain
 				arrogant = medium_stress_impact_gain
 			}
@@ -445,7 +934,7 @@ norwegian_invasion_cb = {
 		}
 
 		scope:defender = {
-			stress_impact = {
+			stress_and_fulfillment_impact = {
 				arrogant = medium_stress_impact_gain
 			}
 		}
@@ -802,7 +1291,7 @@ sons_of_lothbrok_invasion_cb = {
 				value = minor_prestige_value
 				multiply = -1.0
 			}
-			stress_impact = {
+			stress_and_fulfillment_impact = {
 				ambitious = medium_stress_impact_gain
 				arrogant = medium_stress_impact_gain
 			}
@@ -818,7 +1307,7 @@ sons_of_lothbrok_invasion_cb = {
 		}
 
 		scope:defender = {
-			stress_impact = {
+			stress_and_fulfillment_impact = {
 				arrogant = medium_stress_impact_gain
 			}
 		}
@@ -1022,7 +1511,10 @@ azariqa_rebellion_cb = {
 		
 		hidden_effect = {
 			scope:attacker = {
-				faith = { save_scope_as = faith }
+				detach_rite_to_new_faith = {
+					target = rite:azariqa
+					save_scope_as = faith
+				}
 				set_up_dynamic_temporal_hof_title_effect = { NEW_HOLDER = scope:attacker }
 			}
 		}
@@ -1083,14 +1575,14 @@ azariqa_rebellion_cb = {
 
 		scope:attacker = {
 			add_prestige = mongol_invasion_cb_prestige_white_peace
-			stress_impact = {
+			stress_and_fulfillment_impact = {
 				ambitious = medium_stress_impact_gain
 				arrogant = medium_stress_impact_gain
 			}
 		}
 
 		scope:defender = {
-			stress_impact = {
+			stress_and_fulfillment_impact = {
 				arrogant = medium_stress_impact_gain
 			}
 		}
@@ -1385,7 +1877,7 @@ raiktor_claim_cb = {
 	on_white_peace = {
 		scope:attacker = {
 			show_pow_release_message_effect = yes
-			stress_impact = {
+			stress_and_fulfillment_impact = {
  				ambitious = medium_stress_impact_gain
  				arrogant = medium_stress_impact_gain
  			}
@@ -1430,7 +1922,7 @@ raiktor_claim_cb = {
 		}
 		# Defender neither gains nor loses any prestige.
 		scope:defender = {
-			stress_impact = {
+			stress_and_fulfillment_impact = {
  				arrogant = medium_stress_impact_gain
  			}
 		}
@@ -1630,7 +2122,7 @@ raiktor_conquest_cb = {
 		scope:attacker = {
 			random_courtier = {
 				limit = {
-					has_character_flag = raiktor
+					has_variable = raiktor
 				}
 				save_scope_as = vassal_to_be
 			}
@@ -1767,14 +2259,14 @@ raiktor_conquest_cb = {
 
 		scope:attacker = {
 			add_prestige = mongol_invasion_cb_prestige_white_peace
-			stress_impact = {
+			stress_and_fulfillment_impact = {
 				ambitious = medium_stress_impact_gain
 				arrogant = medium_stress_impact_gain
 			}
 		}
 
 		scope:defender = {
-			stress_impact = {
+			stress_and_fulfillment_impact = {
 				arrogant = medium_stress_impact_gain
 			}
 		}
@@ -2388,7 +2880,7 @@ diarch_vassalisation_cb = {
 				value = minor_prestige_value
 				multiply = -1.0
 			}
-			stress_impact = {
+			stress_and_fulfillment_impact = {
 				ambitious = medium_stress_impact_gain
 				arrogant = medium_stress_impact_gain
 			}
@@ -2404,7 +2896,7 @@ diarch_vassalisation_cb = {
 		}
 		
 		scope:defender = {
-			stress_impact = {
+			stress_and_fulfillment_impact = {
 				arrogant = medium_stress_impact_gain
 			}
 		}
@@ -2660,7 +3152,7 @@ remove_regent_cb = {
 				value = minor_prestige_value
 				multiply = -1.0
 			}
-			stress_impact = {
+			stress_and_fulfillment_impact = {
 				ambitious = medium_stress_impact_gain
 				arrogant = medium_stress_impact_gain
 			}
@@ -2688,7 +3180,7 @@ remove_regent_cb = {
 					}
 				}
 			}
-			stress_impact = {
+			stress_and_fulfillment_impact = {
 				arrogant = medium_stress_impact_gain
 			}
 		}

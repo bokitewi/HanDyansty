@@ -1,0 +1,743 @@
+﻿# 衣冠南渡：事件辅助效果（见 docs/衣冠南渡_设计草案.md 第 7 节）
+
+############################
+# 通用
+############################
+
+# 取一个沦陷县作为北人籍贯（新生成角色的文化）。结果：scope:hd_yiguan_origin_county
+hd_yiguan_pick_origin_county_effect = {
+	clear_saved_scope = hd_yiguan_origin_county
+	random_county_in_region = {
+		region = hd_yiguan_north_region
+		limit = { has_variable = hd_yiguan_occ }
+		save_scope_as = hd_yiguan_origin_county
+	}
+	if = {
+		limit = { NOT = { exists = scope:hd_yiguan_origin_county } }
+		title:c_luoyang = { save_scope_as = hd_yiguan_origin_county }
+	}
+}
+
+# Scope：南方宗主。取境内直辖一县（无同类修正者优先）。结果：scope:hd_yiguan_target_county
+hd_yiguan_pick_domain_county_effect = {
+	clear_saved_scope = hd_yiguan_target_county
+	random_held_county = {
+		limit = { NOT = { has_county_modifier = $MODIFIER$ } }
+		weight = {
+			base = 1
+			modifier = {
+				add = 4
+				development_level >= 10
+			}
+		}
+		save_scope_as = hd_yiguan_target_county
+	}
+	if = {
+		limit = { NOT = { exists = scope:hd_yiguan_target_county } }
+		random_held_county = { save_scope_as = hd_yiguan_target_county }
+	}
+}
+
+# 生成北方士族（入宫廷）。$SKILL$：stewardship / learning。Scope：收留者。结果：scope:hd_yiguan_gentry
+hd_yiguan_create_gentry_effect = {
+	save_scope_as = hd_yiguan_host
+	hd_yiguan_pick_origin_county_effect = yes
+	scope:hd_yiguan_origin_county = {
+		culture = { save_scope_as = hd_yiguan_gentry_culture }
+		faith = { save_scope_as = hd_yiguan_gentry_faith }
+		rite ?= { save_scope_as = hd_yiguan_gentry_rite }
+	}
+	create_character = {
+		location = root.capital_province
+		template = pool_repopulate_$SKILL$
+		age = { 25 45 }
+		gender_female_chance = 0
+		dynasty = generate
+		culture = scope:hd_yiguan_gentry_culture
+		faith = scope:hd_yiguan_gentry_faith
+		rite = scope:hd_yiguan_gentry_rite
+		$SKILL$ = { 14 20 }
+		save_scope_as = hd_yiguan_gentry
+	}
+	scope:hd_yiguan_gentry = {
+		set_variable = hd_yiguan_northerner
+	}
+	add_courtier = scope:hd_yiguan_gentry
+}
+
+# Scope：南方参与者。取另一位南方一侧参与者（与你接壤者优先）。结果：scope:hd_yiguan_other_south
+hd_yiguan_pick_other_south_effect = {
+	save_scope_as = hd_yiguan_self
+	clear_saved_scope = hd_yiguan_other_south
+	situation:hd_yiguan_nandu ?= {
+		every_situation_participant = {
+			limit = {
+				NOT = { this = scope:hd_yiguan_self }
+				hd_yiguan_south_side_trigger = yes
+			}
+			add_to_list = hd_yiguan_south_pool
+		}
+	}
+	random_in_list = {
+		list = hd_yiguan_south_pool
+		weight = {
+			base = 1
+			modifier = {
+				add = 9
+				any_realm_county = {
+					any_neighboring_county = {
+						holder ?= { top_liege = scope:hd_yiguan_self }
+					}
+				}
+			}
+		}
+		save_scope_as = hd_yiguan_other_south
+	}
+}
+
+# Scope：北方汉人封臣。取最近的南方宗主（与你接壤者优先）。结果：scope:hd_yiguan_near_south
+hd_yiguan_pick_near_south_lord_effect = {
+	save_scope_as = hd_yiguan_self
+	clear_saved_scope = hd_yiguan_near_south
+	situation:hd_yiguan_nandu ?= {
+		every_situation_participant = {
+			limit = { hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_south_lord } }
+			add_to_list = hd_yiguan_south_lords
+		}
+	}
+	random_in_list = {
+		list = hd_yiguan_south_lords
+		weight = {
+			base = 1
+			modifier = {
+				add = 9
+				any_realm_county = {
+					any_neighboring_county = {
+						holder ?= { top_liege = scope:hd_yiguan_self.top_liege }
+					}
+				}
+			}
+		}
+		save_scope_as = hd_yiguan_near_south
+	}
+}
+
+# Scope：胡人宗主。取其领地内都城以外的一个沦陷县（直辖者优先）。结果：scope:hd_yiguan_occ_county
+hd_yiguan_pick_own_occupied_county_effect = {
+	clear_saved_scope = hd_yiguan_occ_county
+	random_realm_county = {
+		limit = {
+			has_variable = hd_yiguan_occ
+			NOT = { this = root.capital_county }
+		}
+		weight = {
+			base = 1
+			modifier = {
+				add = 4
+				holder = root
+			}
+		}
+		save_scope_as = hd_yiguan_occ_county
+	}
+}
+
+############################
+# 难民
+############################
+
+# 闭关拒之：难民转投另一位南方参与者
+hd_yiguan_refugees_turned_away_effect = {
+	hd_yiguan_pick_other_south_effect = yes
+	scope:hd_yiguan_other_south ?= {
+		trigger_event = {
+			id = hd_yiguan.1002
+			days = { 10 30 }
+		}
+	}
+}
+
+############################
+# 流民帅：祖逖型 / 郗鉴型 / 苏峻型。结果：scope:hd_yiguan_shuai
+############################
+hd_yiguan_create_shuai_zuti_effect = {
+	hd_yiguan_create_shuai_effect = { MAR = 15 MAR2 = 20 DIP = 6 DIP2 = 10 STE = 6 STE2 = 10 TRAIT1 = brave TRAIT2 = just }
+}
+
+hd_yiguan_create_shuai_xijian_effect = {
+	hd_yiguan_create_shuai_effect = { MAR = 10 MAR2 = 14 DIP = 14 DIP2 = 18 STE = 14 STE2 = 18 TRAIT1 = patient TRAIT2 = honest }
+}
+
+hd_yiguan_create_shuai_sujun_effect = {
+	hd_yiguan_create_shuai_effect = { MAR = 15 MAR2 = 20 DIP = 5 DIP2 = 9 STE = 5 STE2 = 9 TRAIT1 = ambitious TRAIT2 = arrogant }
+}
+
+hd_yiguan_create_shuai_effect = {
+	save_scope_as = hd_yiguan_host
+	hd_yiguan_pick_origin_county_effect = yes
+	scope:hd_yiguan_origin_county = {
+		culture = { save_scope_as = hd_yiguan_shuai_culture }
+		faith = { save_scope_as = hd_yiguan_shuai_faith }
+		rite ?= { save_scope_as = hd_yiguan_shuai_rite }
+	}
+	create_character = {
+		location = root.capital_province
+		template = new_commander_character
+		age = { 30 45 }
+		gender_female_chance = 0
+		random_traits = no
+		dynasty = generate
+		culture = scope:hd_yiguan_shuai_culture
+		faith = scope:hd_yiguan_shuai_faith
+		rite = scope:hd_yiguan_shuai_rite
+		martial = { $MAR$ $MAR2$ }
+		diplomacy = { $DIP$ $DIP2$ }
+		stewardship = { $STE$ $STE2$ }
+		trait = $TRAIT1$
+		trait = $TRAIT2$
+		save_scope_as = hd_yiguan_shuai
+	}
+	scope:hd_yiguan_shuai = {
+		set_variable = hd_yiguan_northerner
+	}
+}
+
+# 授以前线一县：取宗主直辖、与沦陷县接壤的县（无则取非都城直辖县）
+hd_yiguan_shuai_grant_county_effect = {
+	clear_saved_scope = hd_yiguan_grant_county
+	random_held_county = {
+		limit = {
+			NOT = { this = root.capital_county }
+			any_neighboring_county = { has_variable = hd_yiguan_occ }
+		}
+		save_scope_as = hd_yiguan_grant_county
+	}
+	if = {
+		limit = { NOT = { exists = scope:hd_yiguan_grant_county } }
+		random_held_county = {
+			limit = { NOT = { this = root.capital_county } }
+			save_scope_as = hd_yiguan_grant_county
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_yiguan_grant_county }
+		add_courtier = scope:hd_yiguan_shuai
+		create_title_and_vassal_change = {
+			type = granted
+			save_scope_as = hd_yiguan_grant_change
+			add_claim_on_loss = no
+		}
+		scope:hd_yiguan_grant_county = {
+			change_title_holder = {
+				holder = scope:hd_yiguan_shuai
+				change = scope:hd_yiguan_grant_change
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_yiguan_grant_change
+	}
+	else = {
+		add_courtier = scope:hd_yiguan_shuai
+	}
+}
+
+# 收为将领：入朝，另拨流民军（不可继承：宗主去世即散）
+hd_yiguan_shuai_enlist_effect = {
+	add_courtier = scope:hd_yiguan_shuai
+	spawn_army = {
+		name = hd_yiguan_liumin_army
+		levies = 1500
+		location = root.capital_province
+		inheritable = no
+		save_temporary_scope_as = hd_yiguan_liumin_army
+	}
+	scope:hd_yiguan_liumin_army ?= { assign_commander = scope:hd_yiguan_shuai }
+}
+
+# 遣其北伐：在与你接壤（或任一）沦陷县起义，流民帅为首领
+hd_yiguan_shuai_north_effect = {
+	save_scope_as = hd_yiguan_sender
+	clear_saved_scope = hd_yiguan_north_target
+	random_county_in_region = {
+		region = hd_yiguan_north_region
+		limit = {
+			has_variable = hd_yiguan_occ
+			any_neighboring_county = {
+				holder ?= { top_liege = scope:hd_yiguan_sender }
+			}
+		}
+		save_scope_as = hd_yiguan_north_target
+	}
+	if = {
+		limit = { NOT = { exists = scope:hd_yiguan_north_target } }
+		random_county_in_region = {
+			region = hd_yiguan_north_region
+			limit = { has_variable = hd_yiguan_occ }
+			save_scope_as = hd_yiguan_north_target
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_yiguan_north_target }
+		hd_yiguan_spawn_uprising_effect = {
+			LEADER = scope:hd_yiguan_shuai
+			COUNTY = scope:hd_yiguan_north_target
+			MEN = 2000
+			BIG = no
+		}
+	}
+}
+
+# 拒纳：流民帅心怀怨望，数年后或起兵作乱
+hd_yiguan_shuai_refuse_effect = {
+	custom_tooltip = hd_yiguan_shuai_refuse_tt
+	scope:hd_yiguan_shuai = {
+		add_opinion = {
+			target = root
+			modifier = hd_yiguan_refused_opinion
+		}
+		set_variable = {
+			name = hd_yiguan_spurned_by
+			value = root
+		}
+	}
+	set_variable = {
+		name = hd_yiguan_spurned_shuai
+		value = scope:hd_yiguan_shuai
+	}
+	trigger_event = {
+		id = hd_yiguan.1110
+		days = { 730 1825 }
+	}
+}
+
+############################
+# 侨置
+############################
+
+# 选出一个可立的侨州（对应州有县沦陷、尚无人持有）。结果：scope:hd_yiguan_qiao_title
+hd_yiguan_pick_qiao_title_effect = {
+	clear_saved_scope = hd_yiguan_qiao_title
+	hd_yiguan_qiao_candidate_effect = { QIAO = d_hd_qiao_nansi KINGDOM = k_uuii_sili }
+	hd_yiguan_qiao_candidate_effect = { QIAO = d_hd_qiao_nanji KINGDOM = k_uuii_jizhou }
+	hd_yiguan_qiao_candidate_effect = { QIAO = d_hd_qiao_nanyou KINGDOM = k_uuii_youzhou }
+	hd_yiguan_qiao_candidate_effect = { QIAO = d_hd_qiao_nanbing KINGDOM = k_uuii_bingzhou }
+	hd_yiguan_qiao_candidate_effect = { QIAO = d_hd_qiao_nanqing KINGDOM = k_uuii_qingzhou }
+	hd_yiguan_qiao_candidate_effect = { QIAO = d_hd_qiao_nanyan KINGDOM = k_uuii_yanzhou }
+	hd_yiguan_qiao_candidate_effect = { QIAO = d_hd_qiao_nanxu KINGDOM = k_uuii_xuzhou }
+	hd_yiguan_qiao_candidate_effect = { QIAO = d_hd_qiao_nanyu KINGDOM = k_uuii_yuzhou }
+	random_in_list = {
+		list = hd_yiguan_qiao_candidates
+		save_scope_as = hd_yiguan_qiao_title
+	}
+}
+
+hd_yiguan_qiao_candidate_effect = {
+	if = {
+		limit = {
+			NOT = { exists = title:$QIAO$.holder }
+			title:$KINGDOM$ = {
+				any_de_jure_county = { has_variable = hd_yiguan_occ }
+			}
+		}
+		title:$QIAO$ = { add_to_list = hd_yiguan_qiao_candidates }
+	}
+}
+
+# 立侨州：授给有地的北人封臣；无则宗主自领
+hd_yiguan_create_qiao_effect = {
+	clear_saved_scope = hd_yiguan_qiao_holder
+	random_vassal = {
+		limit = {
+			is_landed = yes
+			has_variable = hd_yiguan_northerner
+		}
+		save_scope_as = hd_yiguan_qiao_holder
+	}
+	if = {
+		limit = { NOT = { exists = scope:hd_yiguan_qiao_holder } }
+		save_scope_as = hd_yiguan_qiao_holder
+	}
+	create_title_and_vassal_change = {
+		type = created
+		save_scope_as = hd_yiguan_qiao_change
+		add_claim_on_loss = no
+	}
+	scope:hd_yiguan_qiao_title = {
+		change_title_holder = {
+			holder = scope:hd_yiguan_qiao_holder
+			change = scope:hd_yiguan_qiao_change
+		}
+	}
+	resolve_title_and_vassal_change = scope:hd_yiguan_qiao_change
+}
+
+# 侨郡安户：境内直辖一县加侨郡，记入全局列表（局势结束 10 年后统一移除）
+hd_yiguan_add_qiaojun_effect = {
+	hd_yiguan_pick_domain_county_effect = { MODIFIER = hd_yiguan_qiaojun_county_modifier }
+	scope:hd_yiguan_target_county ?= {
+		add_county_modifier = { modifier = hd_yiguan_qiaojun_county_modifier }
+		add_to_global_variable_list = {
+			name = hd_yiguan_qiaojun_list
+			target = this
+		}
+	}
+}
+
+# 侨姓吴姓之争：$QIAO$ / $WU$ = up 或 down（扶侨姓：QIAO = up WU = down；扶吴姓反之）
+# 侨姓：华夏传承、本人文化与其首府县文化不同（北来者）；吴姓：本人文化与首府县文化相同（土著）
+hd_yiguan_qiao_wu_effect = {
+	every_vassal = {
+		limit = {
+			hd_yiguan_is_huaxia_trigger = yes
+			exists = capital_county
+			NOT = { culture = capital_county.culture }
+		}
+		add_opinion = {
+			target = root
+			modifier = hd_yiguan_favor_$QIAO$_opinion
+		}
+	}
+	every_vassal = {
+		limit = {
+			exists = capital_county
+			culture = capital_county.culture
+		}
+		add_opinion = {
+			target = root
+			modifier = hd_yiguan_favor_$WU$_opinion
+		}
+	}
+}
+
+# Scope：宗主。行土断：废除领内侨郡，每个换中额金币；领内侨州持有者不满
+hd_yiguan_tuduan_effect = {
+	save_scope_as = hd_yiguan_tuduan_lord
+	every_in_global_list = {
+		variable = hd_yiguan_qiaojun_list
+		limit = {
+			has_county_modifier = hd_yiguan_qiaojun_county_modifier
+			holder ?= {
+				OR = {
+					this = scope:hd_yiguan_tuduan_lord
+					target_is_liege_or_above = scope:hd_yiguan_tuduan_lord
+				}
+			}
+		}
+		add_to_list = hd_yiguan_tuduan_counties
+	}
+	every_in_list = {
+		list = hd_yiguan_tuduan_counties
+		remove_county_modifier = hd_yiguan_qiaojun_county_modifier
+		scope:hd_yiguan_tuduan_lord = { add_gold = medium_gold_value }
+	}
+	hd_yiguan_qiao_holders_opinion_effect = { QIAO = d_hd_qiao_nansi }
+	hd_yiguan_qiao_holders_opinion_effect = { QIAO = d_hd_qiao_nanji }
+	hd_yiguan_qiao_holders_opinion_effect = { QIAO = d_hd_qiao_nanyou }
+	hd_yiguan_qiao_holders_opinion_effect = { QIAO = d_hd_qiao_nanbing }
+	hd_yiguan_qiao_holders_opinion_effect = { QIAO = d_hd_qiao_nanqing }
+	hd_yiguan_qiao_holders_opinion_effect = { QIAO = d_hd_qiao_nanyan }
+	hd_yiguan_qiao_holders_opinion_effect = { QIAO = d_hd_qiao_nanxu }
+	hd_yiguan_qiao_holders_opinion_effect = { QIAO = d_hd_qiao_nanyu }
+}
+
+hd_yiguan_qiao_holders_opinion_effect = {
+	title:$QIAO$.holder ?= {
+		if = {
+			limit = {
+				NOT = { this = scope:hd_yiguan_tuduan_lord }
+				target_is_liege_or_above = scope:hd_yiguan_tuduan_lord
+			}
+			add_opinion = {
+				target = scope:hd_yiguan_tuduan_lord
+				modifier = hd_yiguan_tuduan_opinion
+			}
+		}
+	}
+}
+
+############################
+# 北府军
+############################
+
+# Scope：南方宗主。在领内的京口、广陵设北府基地
+hd_yiguan_found_beifu_effect = {
+	title:c_uuii_p_2086 = {
+		if = {
+			limit = { hd_yiguan_title_in_realm_trigger = { LORD = root } }
+			set_variable = hd_yiguan_beifu_base
+		}
+	}
+	title:c_uuii_p_7062 = {
+		if = {
+			limit = { hd_yiguan_title_in_realm_trigger = { LORD = root } }
+			set_variable = hd_yiguan_beifu_base
+		}
+	}
+}
+
+# 生成北府名将（刘牢之型）。结果：scope:hd_yiguan_beifu_general
+hd_yiguan_create_beifu_general_effect = {
+	hd_yiguan_pick_origin_county_effect = yes
+	scope:hd_yiguan_origin_county = {
+		culture = { save_scope_as = hd_yiguan_general_culture }
+		faith = { save_scope_as = hd_yiguan_general_faith }
+		rite ?= { save_scope_as = hd_yiguan_general_rite }
+	}
+	create_character = {
+		location = root.capital_province
+		template = new_commander_character
+		age = { 28 40 }
+		gender_female_chance = 0
+		dynasty = generate
+		culture = scope:hd_yiguan_general_culture
+		faith = scope:hd_yiguan_general_faith
+		rite = scope:hd_yiguan_general_rite
+		martial = { 16 22 }
+		trait = brave
+		save_scope_as = hd_yiguan_beifu_general
+	}
+	scope:hd_yiguan_beifu_general = {
+		set_variable = hd_yiguan_northerner
+	}
+	add_courtier = scope:hd_yiguan_beifu_general
+	set_variable = {
+		name = hd_yiguan_beifu_general
+		value = scope:hd_yiguan_beifu_general
+	}
+}
+
+# 削夺兵权后叛乱：北府将领据京口（或广陵）起兵
+hd_yiguan_beifu_revolt_effect = {
+	clear_saved_scope = hd_yiguan_revolt_county
+	if = {
+		limit = { title:c_uuii_p_2086 = { hd_yiguan_title_in_realm_trigger = { LORD = root } } }
+		title:c_uuii_p_2086 = { save_scope_as = hd_yiguan_revolt_county }
+	}
+	else_if = {
+		limit = { title:c_uuii_p_7062 = { hd_yiguan_title_in_realm_trigger = { LORD = root } } }
+		title:c_uuii_p_7062 = { save_scope_as = hd_yiguan_revolt_county }
+	}
+	if = {
+		limit = { exists = scope:hd_yiguan_revolt_county }
+		hd_yiguan_spawn_uprising_effect = {
+			LEADER = scope:hd_yiguan_beifu_general
+			COUNTY = scope:hd_yiguan_revolt_county
+			MEN = 1500
+			BIG = no
+		}
+	}
+}
+
+############################
+# 北方
+############################
+
+# Scope：汉人封臣。送一名非继承人族人南渡
+hd_yiguan_send_kin_south_effect = {
+	clear_saved_scope = hd_yiguan_kin
+	random_courtier = {
+		limit = {
+			is_close_or_extended_family_of = root
+			NOT = { root.player_heir ?= this }
+			is_ruler = no
+			is_imprisoned = no
+		}
+		save_scope_as = hd_yiguan_kin
+	}
+	if = {
+		limit = {
+			exists = scope:hd_yiguan_kin
+			exists = scope:hd_yiguan_near_south
+		}
+		scope:hd_yiguan_kin = { set_variable = hd_yiguan_northerner }
+		scope:hd_yiguan_near_south = {
+			add_courtier = scope:hd_yiguan_kin
+			add_opinion = {
+				target = root
+				modifier = hd_yiguan_kin_south_opinion
+			}
+		}
+	}
+}
+
+# Scope：胡人宗主。招安：首领得起事县，为你的封臣
+hd_yiguan_amnesty_rebel_effect = {
+	create_title_and_vassal_change = {
+		type = granted
+		save_scope_as = hd_yiguan_amnesty_change
+		add_claim_on_loss = no
+	}
+	scope:hd_yiguan_up_county = {
+		change_title_holder = {
+			holder = scope:hd_yiguan_new_leader
+			change = scope:hd_yiguan_amnesty_change
+		}
+	}
+	scope:hd_yiguan_new_leader = {
+		change_liege = {
+			liege = root
+			change = scope:hd_yiguan_amnesty_change
+		}
+	}
+	resolve_title_and_vassal_change = scope:hd_yiguan_amnesty_change
+	every_vassal = {
+		limit = {
+			culture = root.culture
+			NOT = { this = scope:hd_yiguan_new_leader }
+		}
+		add_opinion = {
+			target = root
+			modifier = hd_yiguan_amnesty_native_opinion
+		}
+	}
+}
+
+# Scope：汉人封臣。在宗主治下另一处沦陷县（与你接壤者优先）找起事之地。结果：scope:hd_yiguan_up_county
+hd_yiguan_pick_neighbor_uprising_county_effect = {
+	save_scope_as = hd_yiguan_self
+	clear_saved_scope = hd_yiguan_up_county
+	top_liege = { save_scope_as = hd_yiguan_self_tl }
+	random_county_in_region = {
+		region = hd_yiguan_north_region
+		limit = {
+			has_variable = hd_yiguan_occ
+			holder ?= {
+				NOT = { this = scope:hd_yiguan_self }
+				NOT = { target_is_liege_or_above = scope:hd_yiguan_self }
+				top_liege = scope:hd_yiguan_self_tl
+			}
+		}
+		weight = {
+			base = 1
+			modifier = {
+				add = 9
+				any_neighboring_county = {
+					holder ?= {
+						OR = {
+							this = scope:hd_yiguan_self
+							target_is_liege_or_above = scope:hd_yiguan_self
+						}
+					}
+				}
+			}
+		}
+		save_scope_as = hd_yiguan_up_county
+	}
+}
+
+# Scope：汉人封臣。结交南朝：与最近的南方宗主互加好感，记"心向南朝"
+hd_yiguan_contact_south_effect = {
+	hd_yiguan_pick_near_south_lord_effect = yes
+	scope:hd_yiguan_near_south ?= {
+		add_opinion = {
+			target = root
+			modifier = hd_yiguan_south_contact_opinion
+		}
+		root = {
+			add_opinion = {
+				target = scope:hd_yiguan_near_south
+				modifier = hd_yiguan_south_contact_opinion
+			}
+		}
+	}
+	set_variable = {
+		name = hd_yiguan_xinxiang
+		value = yes
+		years = 20
+	}
+}
+
+# Scope：胜利后独立的封臣。归附南朝：改投接壤的南方一侧参与者
+hd_yiguan_join_south_effect = {
+	save_scope_as = hd_yiguan_joiner
+	clear_saved_scope = hd_yiguan_join_lord
+	every_realm_county = {
+		every_neighboring_county = {
+			limit = {
+				holder ?= {
+					top_liege = {
+						hd_yiguan_south_side_trigger = yes
+						NOT = { is_in_list = hd_yiguan_join_candidates }
+					}
+				}
+			}
+			holder.top_liege = { add_to_list = hd_yiguan_join_candidates }
+		}
+	}
+	ordered_in_list = {
+		list = hd_yiguan_join_candidates
+		order_by = max_military_strength
+		save_scope_as = hd_yiguan_join_lord
+	}
+	if = {
+		limit = { exists = scope:hd_yiguan_join_lord }
+		create_title_and_vassal_change = {
+			type = swear_fealty
+			save_scope_as = hd_yiguan_join_change
+			add_claim_on_loss = no
+		}
+		change_liege = {
+			liege = scope:hd_yiguan_join_lord
+			change = scope:hd_yiguan_join_change
+		}
+		resolve_title_and_vassal_change = scope:hd_yiguan_join_change
+	}
+}
+
+############################
+# 北方版汉化改制（同天子版，但不投催化剂；完成后由 hd_dc_con_complete_sinicization_effect 打王朝汉化标记）
+############################
+hd_yiguan_sinicization_step_effect = {
+	save_scope_as = hd_dc_con_ruler
+	set_variable = {
+		name = hd_dc_con_sinicization_stage
+		value = $STAGE$
+	}
+	every_vassal = {
+		limit = { hd_dc_con_native_trigger = { CULTURE = scope:hd_dc_con_ruler.var:hd_dc_con_native_culture } }
+		add_opinion = {
+			target = scope:hd_dc_con_ruler
+			modifier = hd_dc_con_sinicization_native_opinion
+		}
+	}
+	every_vassal = {
+		limit = { hd_dc_is_chinese_heritage_trigger = yes }
+		add_opinion = {
+			target = scope:hd_dc_con_ruler
+			modifier = hd_dc_con_sinicization_han_opinion
+		}
+	}
+	random = {
+		chance = 20
+		custom_tooltip = hd_dc_con_native_revolt_risk_tt
+		hidden_effect = { hd_dc_con_native_revolt_effect = yes }
+	}
+	if = {
+		limit = { var:hd_dc_con_sinicization_stage = 1 }
+		trigger_event = {
+			id = hd_yiguan.3002
+			days = { 730 1095 }
+		}
+	}
+	else_if = {
+		limit = { var:hd_dc_con_sinicization_stage = 2 }
+		trigger_event = {
+			id = hd_yiguan.3003
+			days = { 730 1095 }
+		}
+	}
+	else_if = {
+		limit = { var:hd_dc_con_sinicization_stage = 3 }
+		trigger_event = {
+			id = hd_yiguan.3004
+			days = { 730 1095 }
+		}
+	}
+	else = {
+		remove_variable = hd_yiguan_north_reform
+		hd_dc_con_complete_sinicization_effect = yes
+	}
+}
+
+hd_yiguan_abandon_sinicization_effect = {
+	remove_variable = hd_yiguan_north_reform
+	hd_dc_con_abandon_sinicization_effect = yes
+}

@@ -4,9 +4,15 @@
 # Scope：角色。被历史剧本引擎托管（剧本优先，结束后才接入战略 AI）
 hd_strat_historical_managed_trigger = {
 	OR = {
-		owns_story_of_type = hd_story_cao_expansion
+		# 2026-10-10：曹操不再因扩张剧情被托管，战略 AI 也可为他开吞并战（共用 3 场战争上限，见 hd_strat_pulse_ready_trigger）。
+		AND = {
+			NOT = { this = character:cao_cao }
+			OR = {
+				owns_story_of_type = hd_story_cao_expansion
+				owns_story_of_type = hd_story_historical_ai_controller
+			}
+		}
 		owns_story_of_type = hd_story_yuan_expansion
-		owns_story_of_type = hd_story_historical_ai_controller
 		hds_managed_war_actor_trigger = yes
 		AND = {
 			this = character:tao_qian
@@ -19,7 +25,8 @@ hd_strat_historical_managed_trigger = {
 hd_strat_eligible_trigger = {
 	is_ai = yes
 	is_alive = yes
-	is_independent_ruler = yes
+	# 2026-10-10 乱世霸权（D33）：权臣虽是天子的封臣，仍以自己名义参与战略 AI
+	hd_court_independent_or_regent_trigger = yes
 	# 2026-10-09：排除佣兵团/冒险者/骑士团（无地公爵级头衔曾让 170 个佣兵团长领到 story 并宣战吞并）
 	is_landed = yes
 	NOT = { government_has_flag = cannot_be_vassal_or_liege }
@@ -58,7 +65,28 @@ hd_strat_base_target_trigger = {
 	NOT = { this = scope:hd_strat_actor }
 	NOT = { is_allied_to = scope:hd_strat_actor }
 	NOT = { is_at_war_with = scope:hd_strat_actor }
-	current_military_strength <= scope:hd_strat_actor.hd_strat_strength_ceiling_value
+	# 2026-10-10 乱世霸权（D4）：尊汉者不攻天子；天子为谋逆者所挟、或自己奉有天子的衣带诏时可兴兵奉迎
+	trigger_if = {
+		limit = {
+			has_title = title:h_china
+			scope:hd_strat_actor = { hd_court_stance_zunhan_trigger = yes }
+		}
+		hd_court_has_regent_trigger = yes
+		OR = {
+			title:h_china.var:hd_court_regent = { hd_court_stance_moni_trigger = yes }
+			scope:hd_strat_actor.var:hd_court_qinwang_edict ?= this
+		}
+	}
+	# 2026-10-10 乱世霸权（D29）：被挟持的 0 县天子按权臣的军力评估
+	trigger_if = {
+		limit = { hd_court_defender_is_held_emperor_trigger = yes }
+		title:h_china.var:hd_court_regent = {
+			current_military_strength <= scope:hd_strat_actor.hd_strat_strength_ceiling_value
+		}
+	}
+	trigger_else = {
+		current_military_strength <= scope:hd_strat_actor.hd_strat_strength_ceiling_value
+	}
 	scope:hd_strat_actor = { NOT = { has_truce = prev } }
 }
 
@@ -101,7 +129,14 @@ hd_strat_pulse_ready_trigger = {
 	is_imprisoned = no
 	NOT = { has_character_flag = hd_strat_war_cooldown }
 	gold >= -100
-	NOT = {
-		any_character_war = { primary_attacker = prev }
+	# 2026-10-10：曹操与他的扩张剧情共用 3 场战争上限（所有战争都算，含防御战）；其他人仍是"没有在主攻的战争"。
+	trigger_if = {
+		limit = { this = character:cao_cao }
+		hd_cao_expansion_has_war_slot_trigger = yes
+	}
+	trigger_else = {
+		NOT = {
+			any_character_war = { primary_attacker = prev }
+		}
 	}
 }

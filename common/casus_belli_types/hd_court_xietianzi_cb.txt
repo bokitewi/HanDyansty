@@ -1,0 +1,115 @@
+﻿# 乱世霸权·挟天子 CB（2026-10-10）。设计见 docs/乱世霸权_天子与权臣_设计草案.md（D3、D23~D26）。
+# - 斗争、对峙期，郡国制独立君主对与之接壤的天子之国（含挟天子者的领地）使用；立场不限
+# - 花费：1000 威望
+# - 胜利：攻方挟天子（hd_court_takeover_effect）。已有权臣时，京城县与汉帝国头衔归攻方，旧权臣罢官后带其余领地独立
+# - 战争中攻下京城县即次日以攻方胜利结束（hd_court.0002）
+# - 停战与战败赔偿：原版征服 CB 标准
+hd_court_xietianzi_cb = {
+	icon = celestial
+	group = conquest
+	# 奉衣带诏者不论接壤，故不能用引擎的"AI 只打邻国"预筛；接壤判定见 allowed_against_character
+	ai_only_against_neighbors = no
+
+	max_attacker_score_from_battles = 200
+	attacker_capital_gives_war_score = yes
+	imprisonment_by_attacker_give_war_score = yes
+
+	allowed_for_character = {
+		hd_cycle_is_divided_trigger = yes
+		is_independent_ruler = yes
+		hd_court_regent_eligible_trigger = yes
+		NOT = { government_has_flag = cannot_be_vassal_or_liege }
+	}
+
+	allowed_against_character = {
+		scope:defender = { has_title = title:h_china }
+		# D4：AI 尊汉者只在天子为谋逆者所挟时兴兵奉迎（奉衣带诏者不受此限）
+		trigger_if = {
+			limit = {
+				scope:attacker = {
+					is_ai = yes
+					hd_court_stance_zunhan_trigger = yes
+					NOT = { var:hd_court_qinwang_edict ?= scope:defender }
+				}
+			}
+			scope:defender = { hd_court_defender_is_held_emperor_trigger = yes }
+			title:h_china.var:hd_court_regent = { hd_court_stance_moni_trigger = yes }
+		}
+		trigger_if = {	# 须与天子之国接壤；奉衣带诏者不论接壤
+			limit = {
+				scope:attacker = {
+					NOT = { var:hd_court_qinwang_edict ?= scope:defender }
+				}
+			}
+			scope:attacker = {
+				any_neighboring_top_liege_realm_owner = { this = scope:defender }
+			}
+		}
+	}
+
+	should_invalidate = {
+		OR = {
+			hd_cycle_is_divided_trigger = no
+			scope:defender = { NOT = { has_title = title:h_china } }
+			scope:attacker = { hd_court_regent_eligible_trigger = no }
+		}
+	}
+	on_invalidated_desc = msg_invalidate_war_title
+	on_invalidated = {}
+
+	cost = {
+		prestige = {
+			value = 1000
+			if = {
+				limit = { scope:attacker.var:hd_court_qinwang_edict ?= scope:defender }
+				multiply = 0
+			}
+		}
+	}
+
+	on_declaration = {
+		on_declared_war = yes
+	}
+
+	on_victory_desc = hd_court_xietianzi_cb_victory_desc
+	on_victory = {
+		scope:attacker = { show_pow_release_message_effect = yes }
+		add_legitimacy_attacker_victory_effect = yes
+		scope:attacker = {
+			add_prestige_experience = major_prestige_value
+			# 第 4 期：奉衣带诏者胜后自择还政或挟持
+			if = {
+				limit = { var:hd_court_qinwang_edict ?= scope:defender }
+				scope:defender = { save_scope_as = hd_court_restore_emperor }
+				remove_variable = hd_court_qinwang_edict
+				trigger_event = hd_court.0010
+			}
+			else = {
+				hd_court_takeover_effect = yes
+			}
+		}
+		add_truce_attacker_victory_effect = yes
+	}
+
+	on_white_peace_desc = hd_court_xietianzi_cb_white_peace_desc
+	on_white_peace = {
+		scope:attacker = { show_pow_release_message_effect = yes }
+		add_truce_white_peace_effect = yes
+	}
+
+	on_defeat_desc = hd_court_xietianzi_cb_defeat_desc
+	on_defeat = {
+		scope:attacker = { show_pow_release_message_effect = yes }
+		scope:attacker = { pay_short_term_gold_reparations_effect = { GOLD_VALUE = 3 } }
+		add_truce_attacker_defeat_effect = yes
+	}
+
+	transfer_behavior = transfer
+	on_primary_attacker_death = inherit
+	on_primary_defender_death = inherit
+	attacker_allies_inherit = yes
+	defender_allies_inherit = yes
+
+	war_name = hd_court_xietianzi_cb_war_name
+	interface_priority = 95
+}

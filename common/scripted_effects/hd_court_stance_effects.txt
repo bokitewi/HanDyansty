@@ -1,0 +1,125 @@
+﻿# 乱世霸权·立场与朝廷特权（第 3 期，2026-10-10）
+# 设计见 docs/乱世霸权_天子与权臣_设计草案.md（D4、D7、L2）。
+
+# 设定立场。$STANCE$ = zunhan / moni。Scope：角色
+hd_court_set_stance_effect = {
+	set_variable = { name = hd_court_stance value = flag:$STANCE$ }
+	remove_character_modifier = hd_court_stance_zunhan_modifier
+	remove_character_modifier = hd_court_stance_moni_modifier
+	add_character_modifier = hd_court_stance_$STANCE$_modifier
+}
+
+# AI 首次获得战略 AI 故事时按性格、与天子的关系抽立场（已有立场不重抽）。Scope：AI 角色
+hd_court_assign_stance_effect = {
+	if = {
+		limit = {
+			is_ai = yes
+			NOT = { has_variable = hd_court_stance }
+			NOT = { has_title = title:h_china }
+		}
+		title:h_china.holder ?= { save_scope_as = hd_court_emperor_for_stance }
+		random_list = {
+			10 = {
+				modifier = { add = hd_court_zunhan_weight_value }
+				hd_court_set_stance_effect = { STANCE = zunhan }
+			}
+			10 = {
+				modifier = { add = hd_court_moni_weight_value }
+				hd_court_set_stance_effect = { STANCE = moni }
+			}
+		}
+	}
+}
+
+# 乱世结束时清除所有立场。Scope：任意
+hd_court_clear_all_stances_effect = {
+	every_ruler = {
+		limit = { has_variable = hd_court_stance }
+		remove_variable = hd_court_stance
+		remove_character_modifier = hd_court_stance_zunhan_modifier
+		remove_character_modifier = hd_court_stance_moni_modifier
+	}
+}
+
+# 授军职：沿用 WJ 军号授予流程，以临时旗标让独立君主通过军号资格判定（WJ_mr_eligible）。Scope：受封者
+hd_court_grant_rank_effect = {
+	add_character_flag = { flag = hd_court_rank_granting days = 1 }
+	if = {
+		limit = { primary_title = { tier = tier_duchy } }
+		random_list = {
+			20 = { trigger = { WJ_mr_start_band_4_available = yes } set_variable = { name = WJ_mr_start_band value = 4 } }
+			80 = { trigger = { WJ_mr_start_band_3_available = yes } set_variable = { name = WJ_mr_start_band value = 3 } }
+		}
+	}
+	else_if = {
+		limit = { primary_title = { tier = tier_county } }
+		random_list = {
+			10 = { trigger = { WJ_mr_start_band_2_available = yes } set_variable = { name = WJ_mr_start_band value = 2 } }
+			90 = { trigger = { WJ_mr_start_band_1_available = yes } set_variable = { name = WJ_mr_start_band value = 1 } }
+		}
+	}
+	if = {
+		limit = {
+			OR = {
+				has_variable = WJ_mr_start_band
+				primary_title = { NOR = { tier = tier_duchy tier = tier_county } }
+			}
+		}
+		WJ_mr_random_selection = yes
+	}
+	remove_variable = WJ_mr_start_band
+	if = {
+		limit = { WJ_mr_choice_valid = yes }
+		WJ_mr_apply_selected_rank = yes
+	}
+	remove_variable = WJ_mr_choice
+	remove_character_flag = hd_court_rank_granting
+}
+
+# 遥领某州：受命者获得目标所据之州（目标首都所在王国级法理头衔）内、目标之国所持各郡的宣称。
+# Scope：互动（scope:recipient 受命者，scope:secondary_recipient 目标）
+hd_court_yaoling_effect = {
+	scope:secondary_recipient.capital_county.kingdom ?= { save_scope_as = hd_court_yaoling_zhou }
+	if = {
+		limit = { exists = scope:hd_court_yaoling_zhou }
+		scope:hd_court_yaoling_zhou = {
+			every_in_de_jure_hierarchy = {
+				limit = {
+					tier = tier_duchy
+					any_de_jure_county = {
+						holder.top_liege ?= scope:secondary_recipient
+					}
+				}
+				scope:recipient = { add_pressed_claim = prev }
+			}
+		}
+	}
+}
+
+# 令征伐被拒（抗诏）。Scope：抗命者；需 scope:actor（秉政者）
+hd_court_defy_edict_effect = {
+	save_scope_as = hd_court_defier
+	add_character_modifier = { modifier = hd_court_defied_edict_modifier years = 5 }
+	if = {
+		limit = { legitimacy > 0 }
+		add_legitimacy = -100
+	}
+	every_ruler = {
+		limit = {
+			government_has_flag = government_is_celestial
+			NOT = { this = scope:hd_court_defier }
+			hd_dc_in_china_trigger = yes
+		}
+		add_opinion = {
+			target = scope:hd_court_defier
+			modifier = hd_court_defied_edict_opinion
+		}
+	}
+}
+
+# 授权奉诏讨伐（D 原文：双方获得宣战理由）。$ATTACKER$ 讨伐 $TARGET$，5 年。Scope：任意
+hd_court_authorize_campaign_effect = {
+	$ATTACKER$ = {
+		set_variable = { name = hd_court_fengzhao_target value = $TARGET$ years = 5 }
+	}
+}

@@ -52,11 +52,12 @@ hd_party_is_huanguan_trigger = {
 	is_eunuch_trigger = yes
 }
 
-# Scope：character。外戚：成年，宗族属于所在朝廷君主的后族
-# 后族宗族列表 hd_party_waiqi_dynasties 缓存在君主身上，由 hd_party_refresh_waiqi_list_effect 维护
+# Scope：character。外戚：成年，且属于所在朝廷君主的后族
+# 后族 = 宗族在 hd_party_waiqi_dynasties 中，或本人在 hd_party_waiqi_kin（后妃的兄弟姐妹，2026-10-10）中；
+# 两个列表缓存在君主身上，由 hd_party_refresh_waiqi_list_effect 维护。
+# 2026-10-10：离宫在野（游荡或做客）的本朝后族成员仍算外戚。
 hd_party_is_waiqi_trigger = {
 	is_adult = yes
-	exists = dynasty
 	OR = {
 		AND = {
 			exists = title:h_china.holder
@@ -64,12 +65,74 @@ hd_party_is_waiqi_trigger = {
 				top_liege = title:h_china.holder
 				is_tributary_of = title:h_china.holder
 			}
-			title:h_china.holder = {
-				is_target_in_variable_list = { name = hd_party_waiqi_dynasties target = prev.dynasty }
-			}
+			title:h_china.holder = { hd_party_court_has_waiqi_prev_trigger = yes }
 		}
-		top_liege ?= {
+		top_liege ?= { hd_party_court_has_waiqi_prev_trigger = yes }
+		hd_party_is_wandering_waiqi_trigger = yes
+	}
+}
+
+# Scope：朝廷君主；prev = 被判定的角色。prev 属于本朝廷后族
+hd_party_court_has_waiqi_prev_trigger = {
+	OR = {
+		AND = {
+			exists = prev.dynasty
 			is_target_in_variable_list = { name = hd_party_waiqi_dynasties target = prev.dynasty }
+		}
+		is_target_in_variable_list = { name = hd_party_waiqi_kin target = prev }
+	}
+}
+
+# Scope：后妃的兄弟姐妹；$RULER$ = 朝廷君主。可列入后妃兄弟姐妹名单 hd_party_waiqi_kin（不含君主本人与本宗族）
+hd_party_waiqi_kin_valid_trigger = {
+	is_alive = yes
+	NOT = { this = $RULER$ }
+	NOT = { dynasty ?= $RULER$.dynasty }
+}
+
+# Scope：character。离宫在野（游荡或做客、没有主公）的本朝后族成员（2026-10-10）
+# 所属朝廷记在 var:hd_party_waiqi_court，由外戚扫描在其仍在本国时写入；成为别国廷臣或封臣即不再满足
+hd_party_is_wandering_waiqi_trigger = {
+	OR = {
+		is_pool_character = yes
+		is_pool_guest = yes
+	}
+	exists = var:hd_party_waiqi_court
+	var:hd_party_waiqi_court = {
+		is_alive = yes
+		has_variable = hd_party_court	# 仍是有朋党的朝廷（乱世降到帝国级以下即失效）
+		hd_party_court_has_waiqi_prev_trigger = yes
+	}
+}
+
+# Scope：character；scope:hd_party_wq_court = 朝廷君主。外戚扫描的候选人（hd_party_waiqi_sweep_effects.txt）
+# 本国（最高领主是本朝廷君主）或离宫在野且原属本朝；非天子、非独立统治者、非宦官、非他党现任领袖
+hd_party_waiqi_sweep_candidate_trigger = {
+	is_alive = yes
+	is_adult = yes
+	NOT = { this = scope:hd_party_wq_court }
+	NOT = { has_title = title:h_china }
+	is_independent_ruler = no
+	OR = {
+		top_liege ?= scope:hd_party_wq_court
+		AND = {
+			OR = {
+				is_pool_character = yes
+				is_pool_guest = yes
+			}
+			var:hd_party_waiqi_court ?= scope:hd_party_wq_court
+		}
+	}
+	hd_party_is_huanguan_trigger = no
+	# 他党现任领袖不动（避免把正在领导别党的人拉走）
+	NOR = {
+		scope:hd_party_wq_court.var:hd_party_huanguan_leader ?= this
+		scope:hd_party_wq_court.var:hd_party_wuxun_leader ?= this
+		scope:hd_party_wq_court.var:hd_party_shizu_leader ?= this
+		scope:hd_party_wq_court.var:hd_party_hanmen_leader ?= this
+		AND = {
+			top_participant_group:dynastic_cycle.var:movement_leader ?= this
+			NOT = { top_participant_group:dynastic_cycle ?= { participant_group_type = pro_hegemon_movement } }
 		}
 	}
 }

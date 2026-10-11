@@ -1,0 +1,112 @@
+﻿# 乱世霸权·天子与权臣：斗争期入口（2026-10-10）
+# 设计见 docs/乱世霸权_天子与权臣_设计草案.md（D1、D9~D11、D13~D16）。
+# 由斗争期 on_start 调用（z_kuzhu_modified_dynastic_cycle.txt），仅在从治世或崩溃进入时执行（D16）。
+
+# Scope：任意（situation on_start）
+hd_court_chaos_entry_effect = {
+	if = {
+		limit = { exists = title:h_china.holder }
+		title:h_china.holder = { save_scope_as = hd_court_emperor }
+
+		# D11：霸权预设为无地头衔，天子照常持有直辖地；失去最后一县时霸权不会随之丢失。
+		# 旧权臣记录一律作废，下面重新认定。京城县（天子庄园所在县）记为 var:hd_court_capital_county。
+		hd_court_release_effect = yes
+		title:h_china = { set_landless_title = yes }
+		scope:hd_court_emperor = {
+			if = {
+				limit = { capital_county ?= { tier = tier_county } }
+				capital_county = { save_scope_as = hd_court_entry_capital }
+			}
+		}
+		if = {
+			limit = { exists = scope:hd_court_entry_capital }
+			title:h_china = {
+				set_variable = { name = hd_court_capital_county value = scope:hd_court_entry_capital }
+			}
+		}
+
+		# D9：剧本固定摄政（须仍是天子的封臣）不自立，先记为权臣，待其余封臣自立后走挟天子流程。
+		scope:hd_court_emperor = {
+			if = {
+				limit = {
+					var:hd_dong_fixed_regent ?= {
+						is_alive = yes
+						liege = scope:hd_court_emperor
+					}
+				}
+				var:hd_dong_fixed_regent = { save_scope_as = hd_court_entry_regent }
+			}
+			else_if = {
+				limit = {
+					title:h_china.var:hd_dc_ten_qjc_regent ?= {
+						is_alive = yes
+						liege = scope:hd_court_emperor
+					}
+				}
+				title:h_china.var:hd_dc_ten_qjc_regent = { save_scope_as = hd_court_entry_regent }
+			}
+		}
+		if = {
+			limit = { exists = scope:hd_court_entry_regent }
+			title:h_china = {
+				set_variable = { name = hd_court_regent value = scope:hd_court_entry_regent }
+			}
+		}
+
+		# D1/D13：有县、非朝官、非权臣的直属封臣全部自立；D10：全部带讨逆标记；D15：不设停战。
+		scope:hd_court_emperor = {
+			every_vassal = {
+				limit = { hd_court_entry_secedes_trigger = yes }
+				add_to_temporary_list = hd_court_entry_seceders
+			}
+		}
+		every_in_list = {
+			list = hd_court_entry_seceders
+			if = {
+				limit = { exists = joined_faction }
+				leave_faction = joined_faction
+			}
+			# 须在 becomes_independent 之前写入，此时主头衔尚未变化（同「要求独立」被拒）
+			primary_title = {
+				set_variable = {
+					name = hd_dc_taoni_rebel
+					value = scope:hd_court_emperor.primary_title
+					years = 10
+				}
+			}
+		}
+		create_title_and_vassal_change = {
+			type = independency
+			save_scope_as = hd_court_entry_change
+			add_claim_on_loss = no
+		}
+		every_in_list = {
+			list = hd_court_entry_seceders
+			becomes_independent = { change = scope:hd_court_entry_change }
+		}
+		resolve_title_and_vassal_change = scope:hd_court_entry_change
+
+		# D14：朝贡关系一并解除。
+		scope:hd_court_emperor = {
+			every_tributary = { end_tributary = yes }
+		}
+
+		# D9/D1b：剧本摄政走完整的挟天子流程（直辖地归权臣、霸权定都京城、立摄政与傀儡）。
+		# 此时权臣记录就是此人本身，不会触发 D23 的"旧权臣"分支。
+		if = {
+			limit = {
+				exists = scope:hd_court_entry_regent
+				scope:hd_court_entry_regent = { hd_court_regent_eligible_trigger = yes }
+			}
+			scope:hd_court_entry_regent = { hd_court_takeover_effect = yes }
+		}
+	}
+}
+
+# 终结乱世：清除全部立场；挟持关系保留（V6）。
+# 霸权保持无地头衔，不再恢复：原版没有 set_landless_title = no 的用例，
+# 且 mod 的董卓剧本早已把霸权设为无地、从不恢复，现行局面一直如此运行。
+# Scope：任意
+hd_court_end_luanshi_effect = {
+	hd_court_clear_all_stances_effect = yes
+}

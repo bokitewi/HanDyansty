@@ -125,6 +125,12 @@ NEW = {
     'catalyst_hd_nomad_power_rises': ('草原强权崛起', '年度变动：有王国级以上的游牧统治者，其权威首次达到#V 3#!级'),
     'catalyst_hd_nomad_invasion_minor': ('游牧寇边', '游牧势力进犯天下之内王国级以下的统治者'),
     'catalyst_hd_nomad_invasion_major': ('游牧大举入侵', '游牧势力进犯天下之内王国级以上的统治者'),
+    # 衣冠南渡（docs/衣冠南渡_设计草案.md 第 10 节）
+    'catalyst_hd_yiguan_start': ('衣冠南渡', '北方沦于胡人，衣冠士族纷纷南渡'),
+    'catalyst_hd_yiguan_restored': ('中原光复', '衣冠南渡以中原光复告终'),
+    'catalyst_hd_yiguan_sinicized': ('胡汉合流', '衣冠南渡以北方胡人汉化告终'),
+    'catalyst_hd_yiguan_lost': ('中原沦丧', '衣冠南渡以中原沦丧告终'),
+    'catalyst_hd_yiguan_partition': ('南北分治', '衣冠南渡历百五十年，以南北分治告终'),
 }
 
 # ---------------------------------------------------------------------------
@@ -237,6 +243,23 @@ ADD = {
               ('catalyst_hd_siyi_raid_won', 'm')],
     },
 }
+
+# 衣冠南渡（docs/衣冠南渡_设计草案.md 第 10 节）：开始/沦丧投坏出口，光复/汉化投好出口，南北分治仅群雄逐鹿→对峙
+YIGUAN_BAD = [('catalyst_hd_yiguan_start', 'h'), ('catalyst_hd_yiguan_lost', 'l')]
+YIGUAN_GOOD = [('catalyst_hd_yiguan_restored', 'h'), ('catalyst_hd_yiguan_sinicized', 'l')]
+for _ph, _out in BAD_OUTLET.items():
+    if _out in REMOVE_OUTLETS.get(_ph, []):
+        continue
+    ADD.setdefault(_ph, {})
+    ADD[_ph][_out] = ADD[_ph].get(_out, []) + YIGUAN_BAD
+for _ph, _outs in GOOD_OUTLETS.items():
+    for _out in _outs:
+        if _out in REMOVE_OUTLETS.get(_ph, []):
+            continue
+        ADD.setdefault(_ph, {})
+        ADD[_ph][_out] = ADD[_ph].get(_out, []) + YIGUAN_GOOD
+ADD.setdefault(CHA, {})
+ADD[CHA][STA] = ADD[CHA].get(STA, []) + [('catalyst_hd_yiguan_partition', 'l')]
 
 # N12：本期好事，全额从坏出口扣
 KEEP = {

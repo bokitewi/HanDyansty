@@ -1,0 +1,184 @@
+﻿# 184历史职官：开局一次性配置（docs/184历史职官_实施记录.md）。
+# 只用于 184.1.1 新局；开局后走正常任免，不重复执行。
+
+# 军戍契约：与 WJ_TEST_184_set_military_office_effect 相同的原生写法，单独保留，不依赖测试文件。
+hd_184_set_colonel_military_contract_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			is_landed = yes
+			is_landless_ruler = no
+			highest_held_title_tier = tier_county
+			has_government = celestial_government
+			top_liege = title:h_china.holder
+			WJ_has_celestial_province_contract_trigger = yes
+		}
+		vassal_contract_set_obligation_level = {
+			type = celestial_provinces
+			level = 3 # 军戍
+		}
+		if = {
+			limit = { NOT = { has_realm_law = celestial_military_appointment_succession_law } }
+			add_realm_law_skip_effects = celestial_military_appointment_succession_law
+		}
+	}
+}
+
+# 两校尉：军戍契约 + 固定军职。须在 WJ_mr_initial_ranks（开局第 1 天随机授号）之前执行。
+hd_184_fixed_colonels_effect = {
+	character:hd184_char_ling_zheng ?= {
+		hd_184_set_colonel_military_contract_effect = yes
+		if = {
+			limit = { WJ_mr_xiaowei_huqiang_available = yes }
+			set_variable = { name = WJ_mr_choice value = 163 } # 护羌校尉
+			WJ_mr_apply_selected_rank = yes
+			remove_variable = WJ_mr_choice
+		}
+	}
+	character:hd184_char_ji_chou ?= {
+		hd_184_set_colonel_military_contract_effect = yes
+		if = {
+			limit = { WJ_mr_xiaowei_huwu_available = yes }
+			set_variable = { name = WJ_mr_choice value = 164 } # 护乌桓校尉
+			WJ_mr_apply_selected_rank = yes
+			remove_variable = WJ_mr_choice
+		}
+	}
+}
+
+# 实际获授官职者补足资格：入仕、贤望点数下限；等级上限由 hd_184_office_cap_step_effect 逐日补。
+# 门槛按最高非家族头衔：帝国 7 级(12000)、王国 5 级(5500)、公国 3 级(2000)、县 1 级(100)。
+hd_184_office_qualify_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			government_has_flag = government_is_celestial
+			any_held_title = { is_noble_family_title = no tier >= tier_county }
+		}
+		if = {
+			limit = { WJ_has_entry_road_trigger = no }
+			if = {
+				limit = { any_held_title = { is_noble_family_title = no tier >= tier_empire } }
+				WJ_grant_road_maocai_effect = yes
+			}
+			else = {
+				WJ_grant_road_xiaolian_effect = yes
+			}
+		}
+		if = {
+			limit = { any_held_title = { is_noble_family_title = no tier >= tier_empire } }
+			set_variable = { name = hd184_office_req_level value = 7 }
+			set_variable = { name = hd184_office_req_merit value = 12000 }
+		}
+		else_if = {
+			limit = { any_held_title = { is_noble_family_title = no tier >= tier_kingdom } }
+			set_variable = { name = hd184_office_req_level value = 5 }
+			set_variable = { name = hd184_office_req_merit value = 5500 }
+		}
+		else_if = {
+			limit = { any_held_title = { is_noble_family_title = no tier >= tier_duchy } }
+			set_variable = { name = hd184_office_req_level value = 3 }
+			set_variable = { name = hd184_office_req_merit value = 2000 }
+		}
+		else = {
+			set_variable = { name = hd184_office_req_level value = 1 }
+			set_variable = { name = hd184_office_req_merit value = 100 }
+		}
+		if = {
+			limit = { merit < var:hd184_office_req_merit }
+			change_merit = { value = var:hd184_office_req_merit subtract = merit }
+		}
+		remove_variable = hd184_office_req_merit
+		if = {
+			limit = { NOT = { has_trait = WJ_mingshi_trait } }
+			add_trait = WJ_mingshi_trait
+		}
+		set_variable = { name = hd184_office_cap_steps value = 0 }
+		trigger_event = { on_action = hd_184_office_cap_step days = 1 }
+	}
+}
+
+# 等级上限不够时补一档宦海：先把仕历、政绩、清谈、军功依次补到 25（各 +1），再把仕历补到 100（+2）。
+# 每天只补一档，次日按刷新后的贤望等级再判断；最多 6 次。
+hd_184_office_cap_step_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			has_variable = hd184_office_req_level
+			merit_level < var:hd184_office_req_level
+			var:hd184_office_cap_steps < 6
+			has_trait = WJ_mingshi_trait
+		}
+		if = {
+			limit = { has_trait_xp = { trait = WJ_mingshi_trait track = zili value < 25 } }
+			add_trait_xp = { trait = WJ_mingshi_trait track = zili value = 25 }
+		}
+		else_if = {
+			limit = { has_trait_xp = { trait = WJ_mingshi_trait track = zhengji value < 25 } }
+			add_trait_xp = { trait = WJ_mingshi_trait track = zhengji value = 25 }
+		}
+		else_if = {
+			limit = { has_trait_xp = { trait = WJ_mingshi_trait track = qingtan value < 25 } }
+			add_trait_xp = { trait = WJ_mingshi_trait track = qingtan value = 25 }
+		}
+		else_if = {
+			limit = { has_trait_xp = { trait = WJ_mingshi_trait track = jungong value < 25 } }
+			add_trait_xp = { trait = WJ_mingshi_trait track = jungong value = 25 }
+		}
+		else_if = {
+			limit = { has_trait_xp = { trait = WJ_mingshi_trait track = zili value < 100 } }
+			add_trait_xp = { trait = WJ_mingshi_trait track = zili value = 100 }
+		}
+		else_if = {
+			limit = { has_trait_xp = { trait = WJ_mingshi_trait track = zhengji value < 100 } }
+			add_trait_xp = { trait = WJ_mingshi_trait track = zhengji value = 100 }
+		}
+		change_variable = { name = hd184_office_cap_steps add = 1 }
+		trigger_event = { on_action = hd_184_office_cap_step days = 1 }
+	}
+	else = {
+		remove_variable = hd184_office_req_level
+		remove_variable = hd184_office_cap_steps
+	}
+}
+
+hd_184_office_qualify_all_effect = {
+	# 中央官署
+	character:he_jin ?= { hd_184_office_qualify_effect = yes }
+	character:yuan_kui ?= { hd_184_office_qualify_effect = yes }
+	character:zhang_ji ?= { hd_184_office_qualify_effect = yes }
+	character:yang_ci ?= { hd_184_office_qualify_effect = yes }
+	character:nanyang_zhang_002 ?= { hd_184_office_qualify_effect = yes }
+	character:deng_sheng_2 ?= { hd_184_office_qualify_effect = yes }
+	character:liu_yu_3 ?= { hd_184_office_qualify_effect = yes }
+	character:WJ_liu_tao_184 ?= { hd_184_office_qualify_effect = yes }
+	character:cui_lie ?= { hd_184_office_qualify_effect = yes }
+	character:yang_biao ?= { hd_184_office_qualify_effect = yes }
+	character:liu_kuan ?= { hd_184_office_qualify_effect = yes }
+	# 州刺史（郭勋未授幽州，见实施记录）
+	character:huang_wan ?= { hd_184_office_qualify_effect = yes }
+	# 郡太守、国相
+	character:liu_wei_4 ?= { hd_184_office_qualify_effect = yes }
+	character:taiyuan_guo_002 ?= { hd_184_office_qualify_effect = yes }
+	character:qixian_wang_003 ?= { hd_184_office_qualify_effect = yes }
+	character:chu_gong ?= { hd_184_office_qualify_effect = yes }
+	character:xinye_lai_007 ?= { hd_184_office_qualify_effect = yes }
+	character:chen_yi ?= { hd_184_office_qualify_effect = yes }
+	character:li_can ?= { hd_184_office_qualify_effect = yes }
+	character:shujun_zhao_005 ?= { hd_184_office_qualify_effect = yes }
+	character:chen_yi_lu ?= { hd_184_office_qualify_effect = yes }
+	character:yingchuan_li_009 ?= { hd_184_office_qualify_effect = yes }
+	character:henan_zhong_003 ?= { hd_184_office_qualify_effect = yes }
+	character:huang_juan ?= { hd_184_office_qualify_effect = yes }
+	character:guo_dian ?= { hd_184_office_qualify_effect = yes }
+	character:chenggu_chen_002 ?= { hd_184_office_qualify_effect = yes }
+	character:nanzheng_zhang_002 ?= { hd_184_office_qualify_effect = yes }
+	character:li_xie ?= { hd_184_office_qualify_effect = yes }
+	character:hd184_char_jiang_pei ?= { hd_184_office_qualify_effect = yes }
+	character:yu_xin ?= { hd_184_office_qualify_effect = yes }
+	character:taiyuan_wen_001 ?= { hd_184_office_qualify_effect = yes }
+	character:taiyuan_wang_031 ?= { hd_184_office_qualify_effect = yes }
+	# 两校尉
+	character:hd184_char_ling_zheng ?= { hd_184_office_qualify_effect = yes }
+	character:hd184_char_ji_chou ?= { hd_184_office_qualify_effect = yes }
+}

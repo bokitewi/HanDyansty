@@ -104,6 +104,31 @@ hd_cao_expansion_tick_effect = {
 				if = {
 					limit = { is_ai = yes }
 					hd_cao_expansion_try_war_effect = yes
+					# 2026-10-10：空转计数。本地区没有扩张战在打、这次也没开出新战，记一次；
+					# 连续 6 次（约一年）就算本地区打完，弹出换方向菜单。开出新战或仍有战在打则清零。
+					if = {
+						limit = {
+							NOT = {
+								any_character_war = {
+									using_cb = hd_cao_expansion_cb
+									primary_attacker = character:cao_cao
+								}
+							}
+						}
+						if = {
+							limit = { NOT = { has_variable = hd_cao_expansion_idle_ticks } }
+							set_variable = { name = hd_cao_expansion_idle_ticks value = 0 }
+						}
+						change_variable = { name = hd_cao_expansion_idle_ticks add = 1 }
+						if = {
+							limit = { var:hd_cao_expansion_idle_ticks >= 6 }
+							remove_variable = hd_cao_expansion_idle_ticks
+							hd_cao_expansion_finish_region_effect = { REASON = flag:hd_cao_expansion_stalled }
+						}
+					}
+					else = {
+						remove_variable = hd_cao_expansion_idle_ticks
+					}
 				}
 			}
 			else_if = {
@@ -123,72 +148,77 @@ hd_cao_expansion_tick_effect = {
 
 hd_cao_expansion_try_war_effect = {
 	clear_saved_scope = hd_cao_expansion_target
+	clear_saved_scope = hd_cao_expansion_target_duchy
 
-	# Simple lists are event-context-local. Clear explicitly in case another
-	# callback reused this context, then deduplicate by realm owner, not county.
-	every_in_list = {
-		list = hd_cao_expansion_candidates
-		remove_from_list = hd_cao_expansion_candidates
-	}
-
-	# First priority: a legal independent realm directly bordering Cao Cao's
-	# top-liege realm and holding land inside the current campaign region.
-	# Across-water realms are not treated as adjacent.
-	random_neighboring_top_liege_realm_owner = {
-		limit = {
-			hd_cao_expansion_strategic_target_trigger = yes
-			any_realm_county = {
-				target_is_de_jure_liege_or_above = scope:hd_cao_expansion_region_scope
+	# 2026-10-10：按郡找（守方, 郡）对。目标是本地区（州）下的一个郡，守方须在该郡有县。
+	# 同一个州头衔只能有一场战争，改成按郡后不同的郡可以同时开战（共用 3 场战争上限）。
+	# 第一优先：与曹操国境相邻的独立势力。跨水不算相邻。
+	scope:hd_cao_expansion_region_scope = {
+		every_in_de_jure_hierarchy = {
+			limit = {
+				tier = tier_duchy
+				NOT = { exists = scope:hd_cao_expansion_target }
 			}
-			NOT = { is_allied_to = character:cao_cao }
-			NOT = { is_at_war_with = character:cao_cao }
-			character:cao_cao = {
-				NOT = { has_truce = prev }
-				can_declare_war = {
-					defender = prev
-					casus_belli = hd_cao_expansion_cb
-					target_titles = { scope:hd_cao_expansion_region_scope }
+			save_scope_as = hd_cao_expansion_scan_duchy
+			random_de_jure_county = {
+				limit = {
+					exists = holder
+					holder ?= { exists = top_liege }
+					holder.top_liege ?= {
+						hd_cao_expansion_strategic_target_trigger = yes
+						any_neighboring_top_liege_realm_owner = { this = character:cao_cao }
+						NOT = { is_allied_to = character:cao_cao }
+						NOT = { is_at_war_with = character:cao_cao }
+						character:cao_cao = {
+							NOT = { has_truce = prev }
+							can_declare_war = {
+								defender = prev
+								casus_belli = hd_cao_expansion_cb
+								target_titles = { scope:hd_cao_expansion_scan_duchy }
+							}
+						}
+					}
 				}
+				holder.top_liege = { save_scope_as = hd_cao_expansion_target }
+				scope:hd_cao_expansion_scan_duchy = { save_scope_as = hd_cao_expansion_target_duchy }
 			}
 		}
-		save_scope_as = hd_cao_expansion_target
 	}
 
-	# Fallback: only when no legal adjacent target exists, use the original
-	# region-wide realm-owner scan.
+	# 兜底：没有相邻的合法目标时，本地区内任何合法目标都可以。
 	if = {
 		limit = {
 			NOT = { exists = scope:hd_cao_expansion_target }
 		}
 		scope:hd_cao_expansion_region_scope = {
-			every_de_jure_county = {
-				limit = { exists = holder }
-				holder.top_liege = {
-					if = {
-						limit = {
+			every_in_de_jure_hierarchy = {
+				limit = {
+					tier = tier_duchy
+					NOT = { exists = scope:hd_cao_expansion_target }
+				}
+				save_scope_as = hd_cao_expansion_scan_duchy
+				random_de_jure_county = {
+					limit = {
+						exists = holder
+						holder ?= { exists = top_liege }
+						holder.top_liege ?= {
 							hd_cao_expansion_strategic_target_trigger = yes
-							NOT = { is_in_list = hd_cao_expansion_candidates }
+							NOT = { is_allied_to = character:cao_cao }
+							NOT = { is_at_war_with = character:cao_cao }
+							character:cao_cao = {
+								NOT = { has_truce = prev }
+								can_declare_war = {
+									defender = prev
+									casus_belli = hd_cao_expansion_cb
+									target_titles = { scope:hd_cao_expansion_scan_duchy }
+								}
+							}
 						}
-						add_to_list = hd_cao_expansion_candidates
 					}
+					holder.top_liege = { save_scope_as = hd_cao_expansion_target }
+					scope:hd_cao_expansion_scan_duchy = { save_scope_as = hd_cao_expansion_target_duchy }
 				}
 			}
-		}
-		random_in_list = {
-			list = hd_cao_expansion_candidates
-			limit = {
-				NOT = { is_allied_to = character:cao_cao }
-				NOT = { is_at_war_with = character:cao_cao }
-				character:cao_cao = {
-					NOT = { has_truce = prev }
-					can_declare_war = {
-						defender = prev
-						casus_belli = hd_cao_expansion_cb
-						target_titles = { scope:hd_cao_expansion_region_scope }
-					}
-				}
-			}
-			save_scope_as = hd_cao_expansion_target
 		}
 	}
 
@@ -197,18 +227,19 @@ hd_cao_expansion_try_war_effect = {
 			is_ai = yes
 			hd_cao_expansion_actor_ready_trigger = yes
 			exists = scope:hd_cao_expansion_target
+			exists = scope:hd_cao_expansion_target_duchy
 			# Revalidate the exact pair and exact title immediately before starting.
 			scope:hd_cao_expansion_target = { hd_cao_expansion_strategic_target_trigger = yes }
 			can_declare_war = {
 				defender = scope:hd_cao_expansion_target
 				casus_belli = hd_cao_expansion_cb
-				target_titles = { scope:hd_cao_expansion_region_scope }
+				target_titles = { scope:hd_cao_expansion_target_duchy }
 			}
 		}
 		start_war = {
 			cb = hd_cao_expansion_cb
 			target = scope:hd_cao_expansion_target
-			target_title = scope:hd_cao_expansion_region_scope
+			target_title = scope:hd_cao_expansion_target_duchy
 		}
 		# Only claim success in logs after finding the actual created war.
 		if = {
