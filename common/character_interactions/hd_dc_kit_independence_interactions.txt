@@ -5,16 +5,39 @@
 # - 同意：和平自立，双方停战 1825 天，原主君无讨逆 CB（hd_dc_kit_demand_independence_accepted_effect）
 # - 拒绝：照样自立，但主头衔记叛离标记 10 年，原主君主头衔的现任持有者可用「讨逆」CB（hd_dc_kit_demand_independence_declined_effect）
 # - AI 领主是否同意：基础 -10，对封臣好感 ×0.5，性格每项 ±30，军力比（封臣/领主）≥1 +60、≥0.5 +30、≥0.25 0、<0.25 -40
-# - AI 封臣是否发起（每 24 个月评估）：军力比 <0.25 不发起，≥1 +60、≥0.5 +30；性格每项 ±30，忠诚 -100；
+# - AI 封臣是否发起（每 60 个月评估，2026-10-11 由 24 改）：军力比 <0.25 不发起，≥1 +60、≥0.5 +30；性格每项 ±30，忠诚 -100；
 #   对领主好感 ×-0.5；忠顺于领主（is_obedient_to）则不发起
+# 2026-10-11 用户指定（独立/招降过频修复）：
+# - 次级封臣（直属领主本身也是封臣）不再脱离整个势力，同意或拒绝都改投直属领主的上级
+#   （原版 change_liege_or_become_independent 写法），不记讨逆、不设停战；拒绝时原领主对其好感 -20（5 年）
+# - 被招降/请求归附后 5 年内（hd_submission_recently_submitted）不得发起
+# - 只有 1 个县（sub_realm_size < 2）不得发起
+# - AI 评估间隔 24 → 60 个月
+# - 真正自立者 3 年内不主动请求归附（hd_dc_recently_independent 标记，见 hd_petition_actor_trigger）
 
 hd_dc_demand_independence_interaction = {
 	category = interaction_category_vassal
 	icon = independence
 	interface_priority = 110
-	desc = hd_dc_demand_independence_interaction_desc
+	desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { scope:recipient = { is_independent_ruler = no } }
+				desc = hd_dc_demand_independence_interaction_desc_sub
+			}
+			desc = hd_dc_demand_independence_interaction_desc
+		}
+	}
 	greeting = negative
-	notification_text = hd_dc_demand_independence_interaction_notification
+	notification_text = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { scope:recipient = { is_independent_ruler = no } }
+				desc = hd_dc_demand_independence_interaction_notification_sub
+			}
+			desc = hd_dc_demand_independence_interaction_notification
+		}
+	}
 	popup_on_receive = yes
 	pause_on_receive = yes
 	# 领主拒绝同样会自立，故领主不愿接受时也必须能发出
@@ -44,16 +67,42 @@ hd_dc_demand_independence_interaction = {
 	is_valid_showing_failures_only = {
 		scope:actor = {
 			NOT = { is_at_war_with = scope:recipient }
+			custom_tooltip = {
+				text = hd_dc_demand_indep_recently_submitted_tt
+				NOT = { has_character_modifier = hd_submission_recently_submitted }
+			}
+			custom_tooltip = {
+				text = hd_dc_demand_indep_min_size_tt
+				sub_realm_size >= 2
+			}
 		}
 	}
 
 	on_accept = {
-		hd_dc_kit_demand_independence_accepted_effect = yes
+		if = {
+			limit = { scope:recipient = { is_independent_ruler = no } }
+			hd_dc_kit_demand_independence_transfer_effect = yes
+		}
+		else = {
+			hd_dc_kit_demand_independence_accepted_effect = yes
+		}
 	}
 
 	on_decline = {
-		custom_tooltip = hd_dc_demand_independence_decline_tt
-		hd_dc_kit_demand_independence_declined_effect = yes
+		if = {
+			limit = { scope:recipient = { is_independent_ruler = no } }
+			scope:recipient = {
+				add_opinion = {
+					target = scope:actor
+					modifier = hd_dc_left_for_overlord_opinion
+				}
+			}
+			hd_dc_kit_demand_independence_transfer_effect = yes
+		}
+		else = {
+			custom_tooltip = hd_dc_demand_independence_decline_tt
+			hd_dc_kit_demand_independence_declined_effect = yes
+		}
 	}
 
 	# AI 领主是否同意（大于 0 即同意）。拒绝同样会自立，但领主拿到讨逆 CB，故领主越强越倾向拒绝
@@ -165,7 +214,7 @@ hd_dc_demand_independence_interaction = {
 	ai_targets = {
 		ai_recipients = liege
 	}
-	ai_frequency = 24
+	ai_frequency = 60
 
 	# AI 封臣是否发起（root = scope:actor = 封臣）
 	ai_will_do = {
