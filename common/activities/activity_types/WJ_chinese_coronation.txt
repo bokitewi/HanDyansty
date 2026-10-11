@@ -1,0 +1,138 @@
+# Native activity planning, invitations, expenses and three phases; no church/anointment branch.
+activity_wj_coronation = {
+ is_shown = { WJ_cr_can_plan = yes }
+ can_start_showing_failures_only = {
+  WJ_cr_can_plan = yes is_available = yes age >= coronation_minimum_age_value
+  NOT = { is_activity_type_on_cooldown = activity_wj_coronation }
+ }
+ can_always_plan = no
+ is_valid = {
+  scope:host = {
+   WJ_cr_can_plan = yes is_alive = yes is_incapable = no is_imprisoned = no
+   primary_title = scope:activity.var:wj_cr_title
+  }
+  trigger_if = { limit = { is_current_phase_active = yes } has_attending_activity_guests = yes }
+ }
+ on_invalidated = { scope:host = { WJ_cr_cleanup = yes } }
+ on_host_death = { scope:host = { WJ_cr_cleanup = yes } }
+ is_single_location = yes
+ province_filter = domicile_domain
+ ai_province_filter = capital
+ max_province_icons = 3
+ is_location_valid = { has_holding = yes this = scope:host.capital_province }
+ province_description = { desc = WJ_cr_location_desc }
+ cooldown = { years = 3 }
+ ai_will_do = { value = 0 }
+ cost = {
+  gold = { if = { limit = { has_treasury = no } add = coronation_cost } }
+  treasury = { if = { limit = { has_treasury = yes } add = coronation_cost } }
+ }
+ ui_predicted_cost = {
+  gold = { if = { limit = { has_treasury = no } add = coronation_cost } }
+  treasury = { if = { limit = { has_treasury = yes } add = coronation_cost } }
+ }
+ special_option_category = special_type
+ options = {
+  special_type = {
+   WJ_cr_type_king = {
+    default = { WJ_cr_king = yes }
+    is_valid = { WJ_cr_king = yes }
+    ai_will_do = { value = 0 }
+   }
+   WJ_cr_type_usurp = {
+    default = { WJ_cr_emperor = yes primary_title = { tier = tier_empire } exists = title:h_china.holder }
+    is_valid = { WJ_cr_emperor = yes primary_title = { tier = tier_empire } exists = title:h_china.holder }
+    ai_will_do = { value = 0 }
+   }
+   WJ_cr_type_found = {
+    default = { WJ_cr_emperor = yes primary_title = { tier = tier_empire } NOT = { exists = title:h_china.holder } }
+    is_valid = { WJ_cr_emperor = yes primary_title = { tier = tier_empire } NOT = { exists = title:h_china.holder } }
+    ai_will_do = { value = 0 }
+   }
+   WJ_cr_type_accession = {
+    default = { WJ_cr_emperor = yes primary_title = { tier = tier_hegemony } }
+    is_valid = { WJ_cr_emperor = yes primary_title = { tier = tier_hegemony } }
+    ai_will_do = { value = 0 }
+   }
+  }
+  ceremony_size = {
+   coronation_small_ceremony = { default = yes ai_will_do = { value = 0 } }
+   coronation_medium_ceremony = {
+    cost = {
+     gold = { if = { limit = { has_treasury = no } add = coronation_medium_ceremony_value add = coronation_medium_ceremony_realm_size_cost multiply = activity_cost_scale_by_era } }
+     treasury = { if = { limit = { has_treasury = yes } add = coronation_medium_ceremony_treasury_value add = coronation_medium_ceremony_realm_size_cost multiply = activity_cost_scale_by_era } }
+    }
+    ai_will_do = { value = 0 }
+   }
+   coronation_large_ceremony = {
+    cost = {
+     gold = { if = { limit = { has_treasury = no } add = coronation_large_ceremony_value add = coronation_large_ceremony_realm_size_cost multiply = activity_cost_scale_by_era } }
+     treasury = { if = { limit = { has_treasury = yes } add = coronation_large_ceremony_treasury_value add = coronation_large_ceremony_realm_size_cost multiply = activity_cost_scale_by_era } }
+    }
+    ai_will_do = { value = 0 }
+   }
+  }
+ }
+ max_guests = 100
+ max_guest_arrival_delay_time = { months = 5 }
+ guest_invite_rules = { defaults = {
+  1 = activity_invite_rule_close_family 1 = activity_invite_rule_vassals
+  2 = activity_invite_rule_councillors 2 = activity_invite_rule_friends
+  3 = activity_invite_rule_courtiers 4 = activity_invite_rule_guests
+ } }
+ can_be_activity_guest = { is_adult = yes in_diplomatic_range = scope:host is_pool_guest = no }
+ guest_join_chance = { base = -25 base_activity_modifier = yes activity_guest_shared_ai_accept_modifier = yes
+  modifier = { is_vassal_of = scope:host add = 500 desc = coronation_special_vassal_value }
+ }
+ host_intents = { intents = { coronation_impress_attendees coronation_embrace_supporters coronation_exalt_crown } default = coronation_impress_attendees }
+ guest_intents = { intents = { coronation_bear_witness coronation_offer_support } default = coronation_bear_witness }
+ guest_subsets = { supporter detractor }
+ on_start = {
+  activity_setup_special_type_progression_effect = yes
+  set_variable = { name = wj_cr_title value = scope:host.primary_title }
+  if = { limit = { has_activity_option = { category = ceremony_size option = coronation_medium_ceremony } } change_variable = { name = activity_special_type_progression add = 10 } }
+  else_if = { limit = { has_activity_option = { category = ceremony_size option = coronation_large_ceremony } } change_variable = { name = activity_special_type_progression add = 20 } }
+  scope:host = { set_variable = { name = hide_make_primary_title value = 1 } }
+ }
+ phases = {
+  WJ_cr_phase_preparation = {
+   order = 1 is_predefined = yes location_source = pickable
+   on_phase_active = {
+    if = { limit = { this = scope:host }
+     scope:activity = { progress_activity_phase_after = { weeks = 6 }
+      every_attending_character = { limit = { this != scope:host OR = { has_activity_intent = coronation_offer_support opinion = { target = scope:host value >= 20 } } }
+       scope:activity = { add_to_guest_subset = { name = supporter target = prev } }
+      }
+     }
+     trigger_event = WJ_cr.1
+    }
+   }
+  }
+  WJ_cr_phase_investiture = {
+   order = 2 is_predefined = yes
+   on_phase_active = { if = { limit = { this = scope:host }
+    scope:activity = { progress_activity_phase_after = { days = 3 } }
+    trigger_event = WJ_cr.2
+   } }
+  }
+  WJ_cr_phase_banquet = {
+   order = 3 is_predefined = yes
+   on_phase_active = { if = { limit = { this = scope:host }
+    scope:activity = { progress_activity_phase_after = { weeks = 3 } }
+    trigger_event = WJ_cr.3
+   } }
+  }
+ }
+ on_complete = { if = { limit = { this = scope:host } WJ_cr_complete = yes } }
+ conclusion_description = { desc = WJ_cr_conclusion_desc }
+ window_characters = {
+  host = { camera = camera_body effect = { scope:host = { add_to_list = characters } } scripted_animation = { animation = personality_honorable } }
+  guest = { camera = camera_body_left effect = { random_attending_character = { limit = { this != scope:host } add_to_list = characters } } scripted_animation = { animation = admiration } }
+ }
+ background = {
+  texture = "gfx/interface/illustrations/event_scenes/tgp_asia_throne_room.dds"
+  environment = "environment_tgp_frontend_celestial_main"
+  ambience = "event:/DLC/EP4/SFX/Events/Event_Backgrounds/tgp_study_asia"
+ }
+}
+
