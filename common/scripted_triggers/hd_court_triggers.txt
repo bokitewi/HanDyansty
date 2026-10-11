@@ -1,0 +1,116 @@
+﻿# 乱世霸权·天子与权臣（2026-10-10）
+# 设计见 docs/乱世霸权_天子与权臣_设计草案.md（D1~D16）。
+
+# 持有朝官（部长）头衔：帝国级无地头衔、非世族头衔。
+# 原版 tgp_has_minister_title 已被 UUII 桩化为 always = no，故按头衔形态判定。
+# Scope：角色
+hd_court_is_court_official_trigger = {
+	any_held_title = {
+		tier = tier_empire
+		is_landless_type_title = yes
+		is_noble_family_title = no
+	}
+}
+
+# 当前存在权臣（挟天子者）。权臣记在 title:h_china 的 var:hd_court_regent 上，须仍是天子的封臣。
+# Scope：任意
+hd_court_has_regent_trigger = {
+	exists = title:h_china.holder
+	title:h_china.var:hd_court_regent ?= {
+		is_alive = yes
+		is_landed = yes
+		liege ?= title:h_china.holder
+	}
+}
+
+# 当前权臣本人。Scope：角色
+hd_court_is_regent_trigger = {
+	hd_court_has_regent_trigger = yes
+	this = title:h_china.var:hd_court_regent
+}
+
+# D17：有资格成为权臣——郡国制、在世、有地，且不是天子本人。Scope：角色
+hd_court_regent_eligible_trigger = {
+	is_alive = yes
+	is_landed = yes
+	government_has_flag = government_is_celestial
+	NOT = { has_title = title:h_china }
+}
+
+# D28：乱世 CB 的攻方——独立君主，或权臣（视同独立君主）。Scope：攻方
+hd_court_independent_or_regent_trigger = {
+	OR = {
+		is_independent_ruler = yes
+		hd_court_is_regent_trigger = yes
+	}
+}
+
+# D29：防守方是"有权臣的天子"。Scope：防守方
+hd_court_defender_is_held_emperor_trigger = {
+	has_title = title:h_china
+	hd_court_has_regent_trigger = yes
+}
+
+# 秉政者：有权臣时为权臣，否则为天子本人。所有朝廷特权按此判定。
+# Scope：被检查的角色
+hd_court_controller_trigger = {
+	trigger_if = {
+		limit = { hd_court_has_regent_trigger = yes }
+		this = title:h_china.var:hd_court_regent
+	}
+	trigger_else = {
+		has_title = title:h_china
+	}
+}
+
+# D13：进入斗争期时会自立的天子直属封臣（有县、非朝官、非权臣）。
+# Scope：天子的直属封臣
+hd_court_entry_secedes_trigger = {
+	any_sub_realm_county = { always = yes }
+	hd_court_is_court_official_trigger = no
+	NOT = { title:h_china.var:hd_court_regent ?= this }
+}
+
+############################################################
+# 第 3 期：立场与朝廷特权（2026-10-10，D4/D7、L2）
+############################################################
+
+# 立场：尊汉（奉汉天子）/ 谋逆。记在角色 var:hd_court_stance。
+# 显示名用"尊汉"，与朋党立场"尊王"（忠于本朝君主）区分。Scope：角色
+hd_court_stance_zunhan_trigger = { var:hd_court_stance ?= flag:zunhan }
+hd_court_stance_moni_trigger = { var:hd_court_stance ?= flag:moni }
+
+# 朝廷特权的对象：天下内的郡国制独立君主，不是天子、不是权臣。Scope：角色
+hd_court_warlord_trigger = {
+	is_alive = yes
+	is_landed = yes
+	is_independent_ruler = yes
+	government_has_flag = government_is_celestial
+	NOT = { has_title = title:h_china }
+	hd_dc_in_china_trigger = yes
+}
+
+# 朝廷特权可用的时代：斗争、对峙期，天子在位。Scope：任意
+hd_court_privileges_active_trigger = {
+	hd_cycle_is_divided_trigger = yes
+	exists = title:h_china.holder
+}
+
+# AI 尊汉者不以乱世 CB 攻打天子（含挟天子集团）。Scope：CB（scope:attacker/scope:defender）
+hd_court_ai_respects_emperor_trigger = {
+	NAND = {
+		scope:attacker = {
+			is_ai = yes
+			hd_court_stance_zunhan_trigger = yes
+		}
+		scope:defender = { has_title = title:h_china }
+	}
+}
+
+# 奉诏讨伐 CB 的授权：攻方受命征讨防守方，或防守方受命征讨攻方（双方皆得 CB）。Scope：CB
+hd_court_fengzhao_authorized_trigger = {
+	OR = {
+		scope:attacker.var:hd_court_fengzhao_target ?= scope:defender
+		scope:defender.var:hd_court_fengzhao_target ?= scope:attacker
+	}
+}

@@ -1,0 +1,870 @@
+﻿# Native 10_tgp_interactions military aid only. Restore native entries removed by main mod.
+# Keep vanilla cost, letters, native picker and multi-war effects. Added district access guards.
+celestial_request_military_aid_interaction = {
+	icon = icon_soldier_survivor
+	interface_priority = 60
+	category = interaction_category_vassal
+	common_interaction = no
+	desc = WJ_zw_request_aid_desc
+	filter_tags = { celestial_ministry }
+
+	#ai_maybe = yes
+	#ai_min_reply_days = 4
+	#ai_max_reply_days = 9
+	popup_on_receive = yes
+	pause_on_receive = yes
+
+	cooldown = { days = 30 }
+
+	greeting = positive
+	notification_text = celestial_request_military_aid_interaction_msg
+
+	pre_answer_yes_key = ACCEPT
+	pre_answer_no_key = DECLINE
+
+	# Let's save our top liege's marshal, or if there is none, we default to the top liege
+	# This is the person we send our request to
+	redirect = {
+		scope:recipient = {
+			if = {
+				limit = {
+					this = scope:actor.top_liege
+				}
+				WJ_save_military_handler = { SCOPE = recipient }
+			}
+		}
+	}
+
+	cost = {
+	}
+
+	is_shown = {
+		# District subordinates ask their own head; heads retain central access.
+		scope:actor = { OR = { NOT = { WJ_dd_member_trigger = yes } WJ_dd_head_trigger = yes } }
+		scope:actor = {
+			government_has_mechanic = administrative
+			government_allows = merit
+			top_liege != this
+			OR = {
+				is_governor = yes
+				has_title = title:e_minister_grand_marshal
+			}
+		}
+		scope:recipient = {
+			# Has to be admin - this makes little sense otherwise.
+			government_has_mechanic = administrative
+			# Target has to be the top liege or, in the case of China, the minister of war.
+			OR = {
+				this = scope:actor.top_liege
+				AND = {
+					WJ_central_military_handler = yes
+					liege = {
+						tgp_has_access_to_ministry_trigger = yes
+						this = scope:actor.top_liege
+					}
+				}
+			}
+		}
+	}
+
+	is_valid_showing_failures_only = {
+  WJ_zw_request_aid_valid = yes
+  custom_tooltip = {
+   text = WJ_dd_central_route_tt
+   scope:actor = { OR = { NOT = { WJ_dd_member_trigger = yes } WJ_dd_head_trigger = yes } }
+  }
+		custom_tooltip = {
+			text = celestial_request_military_aid_no_military_governors_desc
+			scope:recipient.top_liege = {
+				any_vassal_or_below = {
+					OR = {
+						vassal_contract_has_flag = celestial_military_appointment
+						vassal_contract_has_flag = meritocratic_military_appointment
+					}
+				}
+			}
+		}
+
+		custom_tooltip = {
+			text = celestial_request_military_aid_no_available_military_governors_desc
+			scope:recipient.top_liege = {
+				any_vassal_or_below = {
+					tgp_celestial_military_governor_can_join_war_trigger = {
+						TARGET_GOVERNOR = scope:actor
+						MINISTER_OF_WAR = scope:recipient
+					}
+				}
+			}
+		}
+
+		scope:actor = {
+			is_at_war = yes # Has to be at war
+			is_at_war_with_liege = no # But not with liege - No troops if YOU are the one doing the uprising
+			NOR = {
+				is_at_war_with = scope:recipient # Not at war with recipient
+				# You are not at war with anyone within the realm (this to prevent weird cases of asking for troops in any internal wars)
+				custom_tooltip = {
+					text = petition_liege_vassal_war_tt
+					any_war_enemy = {
+						top_liege = scope:actor.top_liege
+					}
+				}
+			}
+			# You have to be the war leader
+			trigger_if = {
+				limit = { is_at_war = yes }
+				custom_description = {
+					text = target_is_not_war_leader
+					object = scope:actor
+					any_character_war = {
+						scope:actor = { is_leader_in_war = prev }
+					}
+				}
+			}
+		}
+
+		trigger_if = {
+			limit = {
+				scope:actor = { is_ai = yes }
+			}
+			NOT = {
+				scope:recipient = { has_variable = celestial_request_military_aid_cooldown }
+			}
+		}
+	}
+
+	can_send = { WJ_zw_request_aid_valid = yes }
+
+	on_send = {
+	}
+
+	# Hook
+	send_option = {
+		is_valid = {
+			scope:actor = { has_usable_hook = scope:recipient }
+			NOT = {
+				scope:recipient = { has_hook = scope:actor }
+			}
+		}
+		flag = hook
+		localization = GENERIC_SPEND_A_HOOK
+	}
+	# Dominant Family
+	send_option = {
+		is_shown = {
+			scope:actor = {
+				house ?= { is_dominant_family = yes }
+			}
+		}
+		flag = dominant_family
+		localization = OPTION_DOMINANT_FAMILY
+	}
+	should_use_extra_icon = {
+		scope:actor = { has_usable_hook = scope:recipient }
+	}
+	extra_icon = "gfx/interface/icons/character_interactions/hook_icon.dds"
+	send_options_exclusive = no
+
+	auto_accept = yes
+
+	on_accept = {
+  if = {
+   limit = { WJ_zw_request_aid_valid = yes scope:actor = { OR = { NOT = { WJ_dd_member_trigger = yes } WJ_dd_head_trigger = yes } } }
+
+		if = {
+			limit = {
+				scope:hook = yes
+				scope:actor = { has_usable_hook = scope:recipient }
+			}
+			scope:actor = { use_hook = scope:recipient }
+		}
+		scope:actor = {
+			if = {
+				limit = {
+					is_ai = yes
+				}
+				# Add opinion
+				add_opinion = {
+					target = scope:recipient
+					modifier = grateful_opinion
+					opinion = 10
+				}
+				# Set up AI cooldown to prevent spam
+				if = {
+					limit = {
+						NOT = { has_variable = celestial_request_military_aid_cooldown }
+					}
+					set_variable = {
+						name = celestial_request_military_aid_cooldown
+						years = 1
+					}
+				}
+			}
+			# If you have a hook or is a dominant family, you can request aid for free
+			if = {
+				limit = {
+					NOR = {
+						scope:hook = yes
+						scope:dominant_family = yes
+					}
+				}
+				pay_short_term_treasury = {
+					target = scope:recipient
+					treasury = 50
+				}
+			}
+			# Trigger catalyst if applicable
+			tgp_activate_catalyst_against_hegemon_effect = {
+				HEGEMON = scope:recipient
+				CATALYST = catalyst_hegemon_influenced_by_interaction
+			}
+		}
+
+		# Time to find a military governor to join the war. First, save everyone to a list.
+		scope:recipient.top_liege = {
+			every_vassal_or_below = {
+				limit = {
+					tgp_celestial_military_governor_can_join_war_trigger = {
+						TARGET_GOVERNOR = scope:actor
+						MINISTER_OF_WAR = scope:recipient
+					}
+				}
+				add_to_list = military_governors
+			}
+		}
+
+		# Figure out what military strength we'll need
+		scope:actor = {
+			every_character_war = {
+				limit = {
+					scope:actor = { is_leader_in_war = prev }
+				}
+				add_to_list = actor_ongoing_wars
+			}
+			ordered_in_list = {
+				list = actor_ongoing_wars
+				order_by = {
+					value = 0
+					if = {
+						limit = {
+							is_defender = scope:actor
+						}
+						every_war_attacker = {
+							add = current_military_strength
+						}
+					}
+					else_if = {
+						limit = {
+							is_attacker = scope:actor
+						}
+						every_war_defender = {
+							add = current_military_strength
+						}
+					}
+				}
+				save_temporary_scope_value_as = {
+					name = estimated_military_strength_needed
+					value = {
+						value = 0
+						if = {
+							limit = {
+								is_defender = scope:actor
+							}
+							every_war_attacker = {
+								add = current_military_strength
+							}
+						}
+						else_if = {
+							limit = {
+								is_attacker = scope:actor
+							}
+							every_war_defender = {
+								add = current_military_strength
+							}
+						}
+					}
+				}
+			}
+		}
+
+		# Find and assign a suitable governor
+		random_in_list = {
+			list = military_governors
+			weight = {
+				base = 10
+				# Try to pick someone nearby
+				modifier = {
+					realm_to_title_distance_squared = {
+						target = scope:actor.primary_title
+						value < 10000
+					}
+					add = 20
+				}
+				modifier = {
+					realm_to_title_distance_squared = {
+						target = scope:actor.primary_title
+						value < 30000
+					}
+					add = 10
+				}
+				# Prioritize governors with enough military strength
+				modifier = {
+					current_military_strength >= scope:estimated_military_strength_needed
+					add = 20
+				}
+				# Slight increase for a governor who isn't already in a war
+				modifier = {
+					is_at_war = no
+					add = 10
+				}
+				# Miniscule bonus for players, so we make sure they get something to do
+				modifier = {
+					is_ai = no
+					add = 5
+				}
+			}
+			save_scope_as = joining_governor
+		}
+		scope:recipient = {
+			change_influence = major_influence_value
+			if = {
+				limit = {
+					is_ai = yes
+				}
+				custom_tooltip = request_emperor_title_troops_approve_desc
+			}
+			# Send recipient a letter event and let them respond
+			trigger_event = {
+				id = tgp_interaction_event.0010
+				days = { 1 5 }
+			}
+		}
+	
+  }
+ }
+
+	on_decline = {
+		scope:actor = {
+			if = {
+				limit = { is_ai = yes }
+				# Add opinion
+				add_opinion = {
+					target = scope:recipient
+					modifier = disappointed_opinion
+					opinion = -20
+				}
+				# Set up AI cooldown to prevent spam
+				if = {
+					limit = {
+						NOT = { has_variable = celestial_request_military_aid_cooldown }
+					}
+					set_variable = { # If declined, we make the cooldown a bit longer to prevent the AI from asking again too soon
+						name = celestial_request_military_aid_cooldown
+						years = 3
+					}
+				}
+				else = { # Just in case - If we have a cooldown already, refresh it
+					remove_variable = celestial_request_military_aid_cooldown
+					set_variable = {
+						name = celestial_request_military_aid_cooldown
+						years = 3
+					}
+				}
+			}
+			hidden_effect = {
+				send_interface_message = {
+					type = msg_admin_provincial_army_request_denied
+					title = msg_admin_provincial_army_request_denied.title
+					desc = msg_admin_provincial_army_request_denied.desc
+					left_icon = scope:recipient
+					right_icon = scope:target
+				}
+			}
+		}
+		scope:recipient = {
+			if = {
+				limit = {
+					is_ai = yes
+				}
+				custom_tooltip = request_emperor_title_troops_deny_desc
+			}
+			if = {
+				limit = { scope:dominant_family = yes }
+				change_influence = medium_influence_loss
+			}
+		}
+	}
+
+	ai_targets = {
+		ai_recipients = top_liege
+		ai_recipients = liege
+		ai_recipients = peer_vassals
+	}
+	ai_frequency_by_tier = {
+		barony = 0
+		county = 24
+		duchy = 6
+		kingdom = 6
+		empire = 6
+		hegemony = 0
+	}
+
+	ai_potential = {
+		is_at_war = yes
+	}
+
+	ai_will_do = {
+		base = 0
+
+		# Make sure to request aid if you have no one else on your side
+		modifier = {
+			add = 100
+			any_war_ally = {
+				count < 1
+				this != scope:actor
+			}
+		}
+
+		# Keep asking for help if your side is weaker than the enemy side - But do so less frequently
+		modifier = {
+			add = 30
+			any_character_war = {
+				# Set up scope values so that we can compare strength
+				save_temporary_scope_value_as = {
+					name = ai_will_do_defender_strength
+					value = 0
+				}
+				save_temporary_scope_value_as = {
+					name = ai_will_do_attacker_strength
+					value = 0
+				}
+				any_war_defender = {
+					count = all
+					save_temporary_scope_value_as = {
+						name = ai_will_do_defender_strength
+						value = {
+							value = scope:ai_will_do_defender_strength
+							add = current_military_strength
+						}
+					}
+				}
+				any_war_attacker = {
+					count = all
+					save_temporary_scope_value_as = {
+						name = ai_will_do_attacker_strength
+						value = {
+							value = scope:ai_will_do_attacker_strength
+							add = current_military_strength
+						}
+					}
+				}
+				# Check if actor's side is weaker than the opponent
+				OR = {
+					AND = {
+						is_defender = scope:actor
+						scope:ai_will_do_defender_strength < scope:ai_will_do_attacker_strength
+					}
+					AND = {
+						is_attacker = scope:actor
+						scope:ai_will_do_attacker_strength < scope:ai_will_do_defender_strength
+					}
+				}
+			}
+		}
+
+		# Grand Campaign
+		modifier = {
+			add = 30
+			any_character_war = {
+				using_cb = grand_campaign_kingdom_invasion_cb
+			}
+		}
+	}
+
+	ai_accept = {
+		base = 100 # There's no real reason for the AI to refuse
+	}
+}
+
+celestial_send_military_aid_interaction = {
+	icon = icon_soldier_survivor
+	interface_priority = 70
+	category = interaction_category_vassal
+	common_interaction = no
+	desc = WJ_zw_send_aid_desc
+	
+	filter_tags = { admin_governor }
+
+	popup_on_receive = yes
+	pause_on_receive = yes
+
+	pre_answer_yes_key = ACCEPT
+	pre_answer_no_key = DECLINE
+	
+	shows_military_strength = yes
+
+	cost = {
+		influence = {
+			value = {
+				add = medium_influence_value
+				desc = BASE
+			}
+			if = {
+				limit = {
+					scope:actor = { WJ_central_military_handler = yes }
+				}
+				multiply = {
+					value = 0.25
+					desc = WJ_central_military_handler_desc
+				}
+			}
+		}
+	}
+
+	is_shown = {
+		scope:actor = {
+			OR = {
+				# If you are the minister of war
+				WJ_central_military_handler = yes
+				# Or if you are an independent admin ruler with military governors
+				AND = {
+					top_liege = this
+					government_has_mechanic = administrative
+					government_allows = merit
+				}
+			}
+		}
+		scope:recipient = {
+			top_liege = scope:actor.top_liege
+			OR = {
+				is_landed = yes
+				has_title = title:e_minister_grand_marshal
+			}
+		}
+	}
+
+	is_valid_showing_failures_only = {
+  WJ_zw_send_aid_valid = yes
+		custom_tooltip = {
+			text = celestial_request_military_aid_no_military_governors_desc
+			scope:recipient.top_liege = {
+				any_vassal_or_below = {
+					OR = {
+						vassal_contract_has_flag = celestial_military_appointment
+						vassal_contract_has_flag = meritocratic_military_appointment
+					}
+				}
+			}
+		}
+
+		custom_tooltip = {
+			text = celestial_request_military_aid_no_available_military_governors_desc
+			scope:recipient.top_liege = {
+				any_vassal_or_below = {
+					WJ_dd_central_candidate_trigger = { BENEFICIARY = scope:recipient }
+					tgp_celestial_military_governor_can_join_war_trigger = {
+						TARGET_GOVERNOR = scope:recipient
+						MINISTER_OF_WAR = scope:actor
+					}
+				}
+			}
+		}
+
+		scope:recipient = {
+			is_at_war = yes # Has to be at war
+			is_at_war_with_liege = no # But not with liege
+			NOT = { is_at_war_with = scope:actor }
+			# Has to be a war leader
+			trigger_if = {
+				limit = { is_at_war = yes }
+				custom_description = {
+					text = target_is_not_war_leader
+					object = scope:recipient
+					any_character_war = {
+						scope:recipient = { is_leader_in_war = prev }
+					}
+				}
+			}
+		}
+	}
+
+	populate_recipient_list = {
+		scope:actor.top_liege = {
+			every_vassal_or_below = {
+				limit = {
+					WJ_dd_central_candidate_trigger = { BENEFICIARY = scope:recipient }
+					tgp_celestial_military_governor_can_join_war_trigger = {
+						TARGET_GOVERNOR = scope:recipient
+						MINISTER_OF_WAR = scope:actor
+					}
+				}
+				add_to_list = characters
+			}
+		}
+	}
+
+	can_send = {
+  WJ_zw_send_aid_valid = yes
+  exists = scope:secondary_recipient
+  scope:secondary_recipient = {
+   WJ_dd_central_candidate_trigger = { BENEFICIARY = scope:recipient }
+   tgp_celestial_military_governor_can_join_war_trigger = { TARGET_GOVERNOR = scope:recipient MINISTER_OF_WAR = scope:actor }
+  }
+ }
+
+	on_send = {
+	}
+	
+	is_highlighted = {
+		scope:recipient = {
+			is_at_war = yes
+		}
+	}
+
+	auto_accept = yes
+
+	on_accept = {
+  if = {
+   limit = {
+    WJ_zw_send_aid_valid = yes
+    scope:secondary_recipient = {
+     WJ_dd_central_candidate_trigger = { BENEFICIARY = scope:recipient }
+     tgp_celestial_military_governor_can_join_war_trigger = { TARGET_GOVERNOR = scope:recipient MINISTER_OF_WAR = scope:actor }
+    }
+   }
+
+		scope:recipient = {
+			# Save scopes for events
+			save_scope_as = governor_at_war
+			scope:secondary_recipient = { save_scope_as = governor_joining }
+
+			# Have secondary_recipient join recipient's wars
+			every_character_war = {
+				limit = {
+					scope:recipient = { is_leader_in_war = prev }
+					is_attacker = scope:recipient
+				}
+				add_attacker = scope:secondary_recipient
+			}
+			every_character_war = {
+				limit = {
+					scope:recipient = { is_leader_in_war = prev }
+					is_defender = scope:recipient
+				}
+				add_defender = scope:secondary_recipient
+			}
+
+			# If recipient is AI, add some opinion
+			if = {
+				limit = {
+					is_ai = yes
+				}
+				add_opinion = {
+					target = scope:actor
+					modifier = grateful_opinion
+					opinion = 10
+				}
+			}
+
+			# Send recipient a letter event and let them know of your action
+			if = {
+				limit = {
+					scope:actor != scope:recipient
+				}
+				trigger_event = {
+					id = tgp_interaction_event.0015
+				}
+			}
+		}
+
+		scope:secondary_recipient = {
+			# Send recipient a letter event and let them know of your action
+			trigger_event = {
+				id = tgp_interaction_event.0016
+			}
+		}
+
+		scope:actor = {
+			hidden_effect = {
+				send_interface_toast = {
+					type = event_toast_effect_neutral
+					title = celestial_send_military_aid_confirmation
+					left_icon = scope:recipient
+					right_icon = scope:secondary_recipient
+
+					custom_tooltip = celestial_send_military_aid_effect_desc
+				}
+			}
+		}
+	
+  }
+ }
+
+	on_decline = {
+		# Interaction is auto accepted and cannot be declined
+	}
+
+	ai_targets = {
+		ai_recipients = peer_vassals
+		max = 30
+	}
+	ai_targets = {
+		ai_recipients = vassals
+		max = 30
+	}
+	ai_targets = { # So the minister of war can send aid to the hegemon
+		ai_recipients = liege
+	}
+	ai_frequency_by_tier = {
+		barony = 0
+		county = 0
+		duchy = 0
+		kingdom = 8
+		empire = 4
+		hegemony = 3
+	}
+
+	ai_potential = {
+		OR = {
+			# If you are the minister of war
+			WJ_central_military_handler = yes
+			# Or if you are an independent admin ruler with military governors
+			AND = {
+				top_liege = this
+				government_has_mechanic = administrative
+				government_allows = merit
+				# Han/Jin: only an actual Zhongwai replaces the emperor.
+				trigger_if = { limit = { government_has_flag = government_is_celestial } NOT = { any_vassal = { WJ_zw_valid = yes } } }
+				trigger_else = { tgp_has_access_to_ministry_trigger = no }
+			}
+		}
+	}
+
+	ai_will_do = {
+		base = 0
+
+		# Make sure to send aid if there is no one helping
+		modifier = {
+			add = 100
+			scope:recipient = {
+				vassal_contract_has_flag = celestial_civil_appointment
+				any_war_ally = {
+					count < 1
+					this != scope:actor
+				}
+			}
+		}
+		
+		# We'll make sure to send a bit more help to the hegemon (for immersion, more than he actually needing it)
+		modifier = {
+			add = 100
+			scope:recipient = {
+				top_liege = this
+				any_war_ally = {
+					count < 3
+				}
+			}
+		}
+		
+		# We always want to send the grand marshal to the top liege
+		modifier = {
+			add = 100
+			scope:recipient = {
+				top_liege = this
+			}
+			scope:secondary_recipient = {
+				has_title = title:e_minister_grand_marshal
+			}
+		}
+
+		# Send more aid if recipient is weaker than the enemy side - But do so less frequently
+		modifier = {
+			add = 40
+			scope:recipient = {
+				any_character_war = {
+					# Set up scope values so that we can compare strength
+					save_temporary_scope_value_as = {
+						name = ai_will_do_defender_strength
+						value = 0
+					}
+					save_temporary_scope_value_as = {
+						name = ai_will_do_attacker_strength
+						value = 0
+					}
+					any_war_defender = {
+						count = all
+						save_temporary_scope_value_as = {
+							name = ai_will_do_defender_strength
+							value = {
+								value = scope:ai_will_do_defender_strength
+								add = current_military_strength
+							}
+						}
+					}
+					any_war_attacker = {
+						count = all
+						save_temporary_scope_value_as = {
+							name = ai_will_do_attacker_strength
+							value = {
+								value = scope:ai_will_do_attacker_strength
+								add = current_military_strength
+							}
+						}
+					}
+					# Check if actor's side is weaker than the opponent
+					OR = {
+						AND = {
+							is_defender = scope:actor
+							scope:ai_will_do_defender_strength < scope:ai_will_do_attacker_strength
+						}
+						AND = {
+							is_attacker = scope:actor
+							scope:ai_will_do_attacker_strength < scope:ai_will_do_defender_strength
+						}
+					}
+				}
+			}
+		}
+		
+		# We always want to send the grand marshal to the top liege
+		modifier = {
+			factor = {
+				value = 1
+				if = {
+					limit = {
+						scope:secondary_recipient = { highest_held_title_tier >= tier_empire }
+					}
+					add = 3
+				}
+				else_if = {
+					limit = {
+						scope:secondary_recipient = { highest_held_title_tier >= tier_kingdom }
+					}
+					add = 2
+				}
+				else_if = {
+					limit = {
+						scope:secondary_recipient = { highest_held_title_tier >= tier_duchy }
+					}
+					add = 1.5
+				}
+			}
+			scope:secondary_recipient = {
+				is_at_war = no
+			}
+		}
+		
+		# Players get a bit of extra score if not already busy
+		modifier = {
+			factor = 2
+			scope:secondary_recipient = {
+				is_ai = no
+				is_at_war = no
+			}
+		}
+	}
+
+	ai_accept = {
+		base = 100 # Auto accepted/no reason to refuse
+	}
+}

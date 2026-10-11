@@ -1,0 +1,356 @@
+﻿# 衣冠南渡：义军起义与举州归南的战争效果（复用 zz_hd_uprising_war_effects.txt 的结算）
+
+############################
+# 发动义军起义
+# $LEADER$：首领（已有角色或刚生成）；$COUNTY$：起事县；$MEN$：义军人数；$BIG$ = yes 时目标另含两个相邻沦陷县
+# 结果：scope:hd_yiguan_up_war（成功时存在）
+############################
+hd_yiguan_spawn_uprising_effect = {
+	clear_saved_scope = hd_yiguan_up_war
+	clear_saved_scope = hd_yiguan_up_n1
+	clear_saved_scope = hd_yiguan_up_n2
+	$COUNTY$ = {
+		save_scope_as = hd_yiguan_up_county
+		title_province = { save_scope_as = hd_yiguan_up_province }
+		holder.top_liege = { save_scope_as = hd_yiguan_up_defender }
+	}
+	$LEADER$ = { save_scope_as = hd_yiguan_up_leader }
+
+	if = {
+		limit = { always = $BIG$ }
+		scope:hd_yiguan_up_county = {
+			random_neighboring_county = {
+				limit = {
+					has_variable = hd_yiguan_occ
+					holder ?= { top_liege = scope:hd_yiguan_up_defender }
+				}
+				save_scope_as = hd_yiguan_up_n1
+			}
+			random_neighboring_county = {
+				limit = {
+					has_variable = hd_yiguan_occ
+					holder ?= { top_liege = scope:hd_yiguan_up_defender }
+					NOT = { this = scope:hd_yiguan_up_n1 }
+				}
+				save_scope_as = hd_yiguan_up_n2
+			}
+		}
+	}
+
+	if = {
+		limit = {
+			exists = scope:hd_yiguan_up_defender
+			NOT = { scope:hd_yiguan_up_leader = scope:hd_yiguan_up_defender }
+		}
+		scope:hd_yiguan_up_leader = {
+			if = {
+				limit = { NOT = { has_government = landless_adventurer_government } }
+				set_location = scope:hd_yiguan_up_province
+				create_landless_adventurer_title_effect = {
+					REASON = flag:historical
+					FLAVOR_CHAR = scope:hd_yiguan_up_leader
+				}
+			}
+			if = {
+				limit = {
+					exists = scope:hd_yiguan_up_n1
+					exists = scope:hd_yiguan_up_n2
+				}
+				start_war = {
+					cb = hd_yiguan_uprising_cb
+					target = scope:hd_yiguan_up_defender
+					target_title = scope:hd_yiguan_up_county
+					target_title = scope:hd_yiguan_up_n1
+					target_title = scope:hd_yiguan_up_n2
+				}
+			}
+			else_if = {
+				limit = { exists = scope:hd_yiguan_up_n1 }
+				start_war = {
+					cb = hd_yiguan_uprising_cb
+					target = scope:hd_yiguan_up_defender
+					target_title = scope:hd_yiguan_up_county
+					target_title = scope:hd_yiguan_up_n1
+				}
+			}
+			else = {
+				start_war = {
+					cb = hd_yiguan_uprising_cb
+					target = scope:hd_yiguan_up_defender
+					target_title = scope:hd_yiguan_up_county
+				}
+			}
+			random_character_war = {
+				limit = {
+					primary_attacker = scope:hd_yiguan_up_leader
+					using_cb = hd_yiguan_uprising_cb
+				}
+				save_scope_as = hd_yiguan_up_war
+			}
+		}
+		if = {
+			limit = { exists = scope:hd_yiguan_up_war }
+			scope:hd_yiguan_up_leader = {
+				spawn_army = {
+					name = hd_yiguan_uprising_army
+					levies = $MEN$
+					location = scope:hd_yiguan_up_province
+					origin = scope:hd_yiguan_up_province
+					uses_supply = yes
+					inheritable = no
+					war = scope:hd_yiguan_up_war
+					save_temporary_scope_as = hd_yiguan_up_army
+				}
+			}
+			scope:hd_yiguan_up_army ?= { assign_commander = scope:hd_yiguan_up_leader }
+		}
+	}
+}
+
+# 生成义军首领（汉人，军事 12–18）。$COUNTY$：起事县。结果：scope:hd_yiguan_new_leader
+hd_yiguan_create_rebel_leader_effect = {
+	$COUNTY$ = {
+		title_province = { save_scope_as = hd_yiguan_leader_province }
+		culture = { save_scope_as = hd_yiguan_leader_culture }
+		faith = { save_scope_as = hd_yiguan_leader_faith }
+		rite ?= { save_scope_as = hd_yiguan_leader_rite }
+	}
+	create_character = {
+		location = scope:hd_yiguan_leader_province
+		template = new_commander_character
+		age = { 25 45 }
+		gender_female_chance = 0
+		dynasty = generate
+		culture = scope:hd_yiguan_leader_culture
+		faith = scope:hd_yiguan_leader_faith
+		rite = scope:hd_yiguan_leader_rite
+		martial = { 12 18 }
+		trait = brave
+		save_scope_as = hd_yiguan_new_leader
+	}
+}
+
+# 义军追加兵力（暗中资助）。Scope：任意。须已有 scope:hd_yiguan_up_war 与 scope:hd_yiguan_up_leader
+hd_yiguan_reinforce_uprising_effect = {
+	if = {
+		limit = { exists = scope:hd_yiguan_up_war }
+		scope:hd_yiguan_up_leader = {
+			spawn_army = {
+				name = hd_yiguan_uprising_army
+				levies = $MEN$
+				location = scope:hd_yiguan_up_province
+				origin = scope:hd_yiguan_up_province
+				uses_supply = yes
+				inheritable = no
+				war = scope:hd_yiguan_up_war
+			}
+		}
+	}
+}
+
+############################
+# 义军胜利：取得目标县与占领县，独立并改天朝制；响应起义的封臣一并独立，与南方接壤者可议归南
+############################
+hd_yiguan_uprising_victory_effect = {
+	if = {
+		limit = { exists = root.war }
+		root.war = { save_scope_as = hd_yiguan_victory_war }
+		hd_uprising_settle_occupied_counties_on_victory_effect = {
+			WAR = scope:hd_yiguan_victory_war
+		}
+		create_title_and_vassal_change = {
+			type = conquest
+			save_scope_as = hd_yiguan_up_change
+			add_claim_on_loss = no
+		}
+		every_in_list = {
+			list = target_titles
+			limit = {
+				holder ?= {
+					OR = {
+						this = scope:defender
+						target_is_liege_or_above = scope:defender
+					}
+				}
+			}
+			change_title_holder = {
+				holder = scope:attacker
+				change = scope:hd_yiguan_up_change
+				take_baronies = yes
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_yiguan_up_change
+		hd_uprising_grant_independence_effect = {
+			WAR = scope:hd_yiguan_victory_war
+		}
+		scope:attacker = { hd_force_celestial_effect = yes }
+
+		# 响应起义的封臣
+		create_title_and_vassal_change = {
+			type = independency
+			save_scope_as = hd_yiguan_ally_change
+			add_claim_on_loss = no
+		}
+		scope:hd_yiguan_victory_war = {
+			every_war_attacker = {
+				limit = {
+					NOT = { this = scope:attacker }
+					is_landed = yes
+					target_is_liege_or_above = scope:defender
+				}
+				becomes_independent = { change = scope:hd_yiguan_ally_change }
+				add_to_list = hd_yiguan_freed_allies
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_yiguan_ally_change
+		every_in_list = {
+			list = hd_yiguan_freed_allies
+			add_truce_both_ways = {
+				character = scope:defender
+				days = 1825
+				war = scope:hd_yiguan_victory_war
+				result = victory
+			}
+			if = {
+				limit = {
+					hd_yiguan_active_trigger = yes
+					hd_yiguan_borders_south_side_trigger = yes
+				}
+				trigger_event = {
+					id = hd_yiguan.2120
+					days = 3
+				}
+			}
+		}
+	}
+}
+
+# 义军失败或白和：响应起义的封臣记"附逆"
+hd_yiguan_uprising_failed_allies_effect = {
+	if = {
+		limit = { exists = root.war }
+		root.war = {
+			every_war_attacker = {
+				limit = {
+					NOT = { this = scope:attacker }
+					target_is_liege_or_above = scope:defender
+				}
+				add_prestige = medium_prestige_loss
+				scope:defender = {
+					add_opinion = {
+						target = prev
+						modifier = hd_yiguan_rebel_ally_opinion
+					}
+				}
+			}
+		}
+	}
+}
+
+############################
+# 举州归南。Scope：发起的汉人封臣
+############################
+hd_yiguan_guinan_start_effect = {
+	save_scope_as = hd_yiguan_gn_vassal
+	liege = { save_scope_as = hd_yiguan_gn_liege }
+	clear_saved_scope = hd_yiguan_gn_lord
+	clear_saved_scope = hd_yiguan_gn_war
+	every_realm_county = {
+		every_neighboring_county = {
+			limit = {
+				holder ?= {
+					top_liege = {
+						hd_yiguan_south_side_trigger = yes
+						NOT = { is_in_list = hd_yiguan_gn_candidates }
+					}
+				}
+			}
+			holder.top_liege = { add_to_list = hd_yiguan_gn_candidates }
+		}
+	}
+	ordered_in_list = {
+		list = hd_yiguan_gn_candidates
+		order_by = max_military_strength
+		save_scope_as = hd_yiguan_gn_lord
+	}
+	if = {
+		limit = { exists = scope:hd_yiguan_gn_lord }
+		start_war = {
+			cb = hd_yiguan_guinan_cb
+			target = scope:hd_yiguan_gn_liege
+		}
+		random_character_war = {
+			limit = {
+				primary_attacker = scope:hd_yiguan_gn_vassal
+				using_cb = hd_yiguan_guinan_cb
+			}
+			save_scope_as = hd_yiguan_gn_war
+		}
+		scope:hd_yiguan_gn_war ?= {
+			set_variable = {
+				name = hd_yiguan_guinan_lord
+				value = scope:hd_yiguan_gn_lord
+			}
+			if = {
+				limit = {
+					NOT = { is_participant = scope:hd_yiguan_gn_lord }
+				}
+				add_attacker = scope:hd_yiguan_gn_lord
+			}
+		}
+		if = {
+			limit = { exists = scope:hd_yiguan_gn_war }
+			scope:hd_yiguan_gn_lord = { trigger_event = hd_yiguan.3101 }
+		}
+	}
+}
+
+# 归南胜利：脱离原宗主，改投接壤的南方宗主（其已不在则自立）
+hd_yiguan_guinan_victory_effect = {
+	clear_saved_scope = hd_yiguan_gn_lord
+	root.war ?= {
+		save_scope_as = hd_yiguan_gn_war
+		var:hd_yiguan_guinan_lord ?= { save_scope_as = hd_yiguan_gn_lord }
+	}
+	if = {
+		limit = {
+			exists = scope:hd_yiguan_gn_lord
+			scope:hd_yiguan_gn_lord = {
+				is_alive = yes
+				is_landed = yes
+				is_independent_ruler = yes
+			}
+		}
+		create_title_and_vassal_change = {
+			type = swear_fealty
+			save_scope_as = hd_yiguan_gn_change
+			add_claim_on_loss = no
+		}
+		scope:attacker = {
+			change_liege = {
+				liege = scope:hd_yiguan_gn_lord
+				change = scope:hd_yiguan_gn_change
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_yiguan_gn_change
+	}
+	else = {
+		create_title_and_vassal_change = {
+			type = independency
+			save_scope_as = hd_yiguan_gn_change
+			add_claim_on_loss = no
+		}
+		scope:attacker = {
+			becomes_independent = { change = scope:hd_yiguan_gn_change }
+		}
+		resolve_title_and_vassal_change = scope:hd_yiguan_gn_change
+	}
+	scope:attacker = {
+		add_truce_both_ways = {
+			character = scope:defender
+			days = 1825
+			war = scope:hd_yiguan_gn_war
+			result = victory
+		}
+	}
+}

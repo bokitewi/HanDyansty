@@ -1,0 +1,182 @@
+﻿# 天朝循环·时代特色：紧张期套件（docs/天朝循环_时代特色重制计划.md §3.3）—— 弹劾
+# 以原版"诽谤"（slander_scheme.txt）为底：政治类、秘密阴谋。
+# "罪证" = 阴谋优势（agent charges）：每完成一阶段得一点；上书时每点罪证 +5% 成功率。
+# 可花钱伪造罪证（+2 罪证、+10% 成功率、保密 −15）；伪造被识破计"罪行昭彰"，且弹劾必败。
+hd_dc_ten_impeach = {
+	# Basic Setup
+	skill = diplomacy
+	desc = "hd_dc_ten_impeach_desc_general"
+	success_desc = "HD_DC_TEN_IMPEACH_SUCCESS_DESC"
+	discovery_desc = "HD_DC_TEN_IMPEACH_DISCOVERY_DESC"
+	icon = icon_scheme_slander
+	illustration = "gfx/interface/illustrations/event_scenes/corridor.dds"
+	category = political
+	target_type = character
+	is_secret = yes
+	maximum_breaches = 5
+	cooldown = { years = 5 }
+
+	# Parameters（同诽谤）
+	speed_per_skill_point = t2_spsp_owner_value
+	speed_per_target_skill_point = t2_spsp_target_value
+	spymaster_speed_per_skill_point = t2_spsp_owner_spy_value
+	target_spymaster_speed_per_skill_point = 0
+	tier_speed = 1
+	base_progress_goal = t3_base_phase_length_value
+	maximum_secrecy = 95
+	base_maximum_success = t2_base_max_success_value
+	phases_per_agent_charge = 1
+	success_chance_growth_per_skill_point = t3_scgpsp_value
+
+	# Core Triggers
+	allow = {
+		hd_dc_kit_ten_can_impeach_trigger = yes
+	}
+
+	valid = {
+		scope:owner = {
+			is_imprisoned = no
+			exists = title:h_china.holder
+			NOT = { this = title:h_china.holder }
+		}
+		scope:target = {
+			is_alive = yes
+			is_imprisoned = no
+			this != scope:owner
+			hd_dc_kit_ten_is_power_minister_trigger = yes
+		}
+	}
+
+	# Agents
+	agent_leave_threshold = -25
+	agent_join_chance = {
+		base = 0
+		ai_agent_join_chance_basic_suite_modifier = yes
+		ai_agent_join_chance_hostile_general_suite_modifier = yes
+	}
+	valid_agent = { is_valid_agent_standard_trigger = yes }
+	agent_groups_owner_perspective = { courtiers guests scripted_relations peer_vassals vassals family puppets }
+	agent_groups_target_character_perspective = { courtiers peer_vassals vassals scripted_relations family }
+
+	odds_prediction = {
+		add = base_odds_prediction_target_is_char_value
+		add = odds_skill_contribution_diplomacy_value
+		add = agent_groups_owner_perspective_value
+		add = agent_groups_target_character_perspective_value
+		add = odds_slander_scheme_misc_value
+		min = 0
+	}
+
+	# Base Chances
+	base_success_chance = {
+		base = 0
+
+		# Skill
+		scheme_type_skill_success_chance_modifier = { SKILL = DIPLOMACY }
+
+		diplomacy_scheme_base_chance_modifier = yes
+
+		# Countermeasures
+		apply_political_scheme_success_chance_adjustments_modifier = yes
+
+		# Family Feud
+		house_feud_hostile_scheme_success_modifier = yes
+
+		# Diarchs are better at schemes within their liege's realm
+		diarch_scheming_within_realm_bonus_modifier = yes
+
+		political_scheme_title_base_chance_modifier = yes
+
+		# 权臣势大：目标是天子的辅政或朋党领袖
+		modifier = {
+			add = -10
+			desc = "HD_DC_TEN_IMPEACH_VS_STRONG"
+			scope:target = {
+				OR = {
+					is_diarch_of_target = title:h_china.holder
+					hd_party_is_any_leader_of_court_trigger = { COURT = title:h_china.holder }
+				}
+			}
+		}
+		# 天子本就不喜此人
+		modifier = {
+			add = 10
+			desc = "HD_DC_TEN_IMPEACH_EMPEROR_DISLIKES"
+			title:h_china.holder ?= {
+				opinion = {
+					target = scope:target
+					value < 0
+				}
+			}
+		}
+	}
+	base_secrecy = {
+		add = secrecy_base_value
+		add = countermeasure_apply_secrecy_maluses_value
+		add = eparch_scheme_secrecy_bonus_value
+	}
+
+	# On Actions
+	on_start = {
+		set_variable = {
+			name = apply_countermeasures
+			value = flag:political
+		}
+		# 从脚本发起时的后备谋士
+		if = {
+			limit = {
+				scheme_owner = {
+					NOT = { has_variable = agents_added }
+				}
+			}
+			add_agent_slot = agent_intermediary
+			add_agent_slot = agent_bureaucrat
+			add_agent_slot = agent_political_socialite
+			add_agent_slot = agent_amanuensis
+			add_agent_slot = agent_courtesan
+		}
+	}
+	on_phase_completed = {
+		hd_dc_kit_ten_impeach_prep_effect = yes
+	}
+	on_hud_click = {
+		hd_dc_kit_ten_impeach_prep_effect = yes
+	}
+	on_semiyearly = {
+		if = {
+			limit = {
+				scheme_owner = { is_ai = yes }
+			}
+			hd_dc_kit_ten_impeach_prep_effect = yes
+		}
+	}
+
+	## Invalidation
+	on_invalidated = {
+		scheme_target_character = {
+			save_scope_as = target
+		}
+		scheme_owner = {
+			save_scope_as = owner
+			send_interface_toast = {
+				type = event_toast_effect_neutral
+				title = hd_dc_ten_impeach_invalidated_title
+				left_icon = scope:target
+				if = {
+					limit = {
+						scope:target = { is_alive = no }
+					}
+					custom_tooltip = scheme_target_died
+				}
+				else = {
+					custom_tooltip = hd_dc_ten_impeach_invalidated_tt
+				}
+			}
+		}
+	}
+
+	## Ongoing
+	on_monthly = {
+		hostile_scheme_monthly_discovery_chance_effect = yes
+	}
+}

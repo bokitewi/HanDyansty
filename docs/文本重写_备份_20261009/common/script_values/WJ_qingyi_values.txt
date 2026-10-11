@@ -1,0 +1,185 @@
+﻿# 清议 / 月旦评数值（清议重制，2026-10-08）。
+
+# Character scope。五项主技能中的最高值（不计勇武）。
+# 用原版已有的“技能 >= 技能”比较写法逐项取最大。
+WJ_qingyi_max_skill = {
+	if = {
+		limit = {
+			martial >= diplomacy
+			martial >= stewardship
+			martial >= intrigue
+			martial >= learning
+		}
+		value = martial
+	}
+	else_if = {
+		limit = {
+			stewardship >= diplomacy
+			stewardship >= intrigue
+			stewardship >= learning
+		}
+		value = stewardship
+	}
+	else_if = {
+		limit = {
+			intrigue >= diplomacy
+			intrigue >= learning
+		}
+		value = intrigue
+	}
+	else_if = {
+		limit = { learning >= diplomacy }
+		value = learning
+	}
+	else = {
+		value = diplomacy
+	}
+}
+
+# Character scope（候选人）。月旦评提名分：
+# 威望等级×10 + 最高头衔等级×10 + 最高技能 + 随机 0–15。
+# 提名时只计算一次并写入候选人变量，排序不重复掷骰。
+WJ_qingyi_yuedan_nom_score = {
+	value = prestige_level
+	multiply = 10
+	add = {
+		value = highest_held_title_tier
+		multiply = 10
+	}
+	add = WJ_qingyi_max_skill
+	add = { integer_range = { min = 0 max = 15 } }
+}
+
+# Character scope（候选人），scope:wj_yd_voter = 投票者。
+# 均衡式投票分：好感、声望能力、关系与性格、朋党、随机。
+WJ_qingyi_yuedan_vote_score = {
+	value = 0
+	# 好感 ÷5，压在 -20…+20
+	add = {
+		value = "scope:wj_yd_voter.opinion(root)"
+		divide = 5
+		min = -20
+		max = 20
+	}
+	# 威望等级×3 + 最高技能÷2
+	add = {
+		value = prestige_level
+		multiply = 3
+	}
+	add = {
+		value = WJ_qingyi_max_skill
+		divide = 2
+	}
+	# 亲族或好友 +15，宿敌 -30
+	if = {
+		limit = {
+			OR = {
+				is_close_family_of = scope:wj_yd_voter
+				has_relation_friend = scope:wj_yd_voter
+			}
+		}
+		add = 15
+	}
+	if = {
+		limit = { has_relation_rival = scope:wj_yd_voter }
+		add = -30
+	}
+	# 性格共通每项 +5、相对每项 -5，各封顶 ±15
+	if = {
+		limit = { number_of_personality_traits_in_common = { target = scope:wj_yd_voter value >= 3 } }
+		add = 15
+	}
+	else_if = {
+		limit = { number_of_personality_traits_in_common = { target = scope:wj_yd_voter value = 2 } }
+		add = 10
+	}
+	else_if = {
+		limit = { number_of_personality_traits_in_common = { target = scope:wj_yd_voter value = 1 } }
+		add = 5
+	}
+	if = {
+		limit = { number_of_opposing_personality_traits = { target = scope:wj_yd_voter value >= 3 } }
+		add = -15
+	}
+	else_if = {
+		limit = { number_of_opposing_personality_traits = { target = scope:wj_yd_voter value = 2 } }
+		add = -10
+	}
+	else_if = {
+		limit = { number_of_opposing_personality_traits = { target = scope:wj_yd_voter value = 1 } }
+		add = -5
+	}
+	# 朋党：双方都有党时，同党 +10、不同党 -10
+	if = {
+		limit = {
+			WJ_qingyi_has_party_trigger = yes
+			scope:wj_yd_voter = { WJ_qingyi_has_party_trigger = yes }
+		}
+		if = {
+			limit = { top_participant_group:dynastic_cycle = scope:wj_yd_voter.top_participant_group:dynastic_cycle }
+			add = 10
+		}
+		else = {
+			add = -10
+		}
+	}
+	# 随机 0–5（每个投票者对每个候选人只算一次，写入临时变量后再排序）
+	add = { integer_range = { min = 0 max = 5 } }
+}
+
+# Character scope（候选人）。计票排序：票数（含拉票加成）优先，平票比提名分。
+WJ_qingyi_yuedan_tally_score = {
+	value = 0
+	if = {
+		limit = { has_variable = wj_yd_votes }
+		add = var:wj_yd_votes
+	}
+	if = {
+		limit = { has_variable = wj_yd_bonus }
+		add = var:wj_yd_bonus
+	}
+	multiply = 1000
+	if = {
+		limit = { has_variable = wj_yd_nom_score }
+		add = var:wj_yd_nom_score
+	}
+}
+
+# Character scope。AI 举办清议的打分（数值见计划第 1 节第 22 项）。
+WJ_qingyi_ai_host_score = {
+	value = 35
+	if = {
+		limit = { has_trait = scholar }
+		add = 25
+	}
+	if = {
+		limit = { has_trait = gregarious }
+		add = 15
+	}
+	if = {
+		limit = { has_trait = shy }
+		add = -20
+	}
+	if = {
+		limit = { has_trait = WJ_mingshi_trait }
+		add = 20
+	}
+	if = {
+		limit = { WJ_qingyi_yuedan_host_eligible_trigger = yes }
+		add = 20
+	}
+}
+
+# 拉票外交辩论的对标值：原版平均技能值；筹备选了“深论题”时难度 -1（相当于判定 +1）。
+# 需 scope:activity。
+WJ_qingyi_yd_duel_target = {
+	value = average_skill_rating
+	if = {
+		limit = {
+			scope:activity = {
+				has_activity_option = { category = qingyi_option_topic_depth option = qingyi_topic_deep }
+			}
+		}
+		add = -1
+	}
+}

@@ -1,0 +1,113 @@
+﻿# Public no-op interfaces retained for generic callers after unsupported
+# European, regency, and TGP Japan systems were disabled.
+
+faction_demand_regent_transfer_effect = {
+	if = {
+		limit = { always = no }
+		$NEW_REGENT$ = { save_temporary_scope_as = hd_disabled_regent_candidate }
+		set_variable = {
+			name = hd_disabled_regent_transfer_reason
+			value = flag:$REASON$
+		}
+	}
+}
+create_love_artifact_poetry_effect = {
+	$OWNER$ = { }
+}
+# Restored from vanilla 1.20 (10_dlc_tgp_japan_scripted_effects.txt): celestial governments use house blocs.
+tgp_bloc_members_join_faction_effect = {
+	if = { # Japanese blocs
+		limit = { scope:faction.faction_leader.house.house_confederation.leading_house ?= scope:faction.faction_leader.house }
+		scope:faction.faction_leader.house.house_confederation ?= {
+			every_confederation_member = {
+				limit = { can_join_faction = scope:faction }
+				join_faction = scope:faction
+			}
+		}
+	}
+}
+tgp_destroy_ceremonial_throne_effect = { }
+tgp_japan_demand_administrative_refusal_effect = { }
+# Restored from vanilla 1.20 (10_dlc_tgp_japan_scripted_effects.txt): celestial governments use house blocs.
+tgp_liege_change_bloc_management_effect = {
+	$VASSAL$ = {
+		if = { # Leave if not a valid member anymore
+			limit = {
+				OR = {
+					exists = confederation.leading_house
+					exists = house.house_confederation
+				}
+			}
+			save_temporary_scope_as = vassal_temp
+			house ?= { save_temporary_scope_as = vassal_house_temp }
+			liege ?= { save_temporary_scope_as = new_liege }
+			confederation ?= {
+				save_temporary_scope_as = current_bloc_temp
+				leading_house = { save_temporary_scope_as = current_bloc_leader_temp }
+			}
+			house.house_confederation ?= {
+				save_temporary_scope_as = current_house_bloc_temp
+				leading_house = { save_temporary_scope_as = current_house_bloc_leader_temp }
+			}
+			if = {
+				limit = {
+					exists = scope:current_bloc_temp
+					exists =  scope:old_liege
+					trigger_if = { # If a vassal
+						limit = { is_independent_ruler = no }
+						scope:new_liege.liege != scope:old_liege.liege
+						scope:new_liege = {
+							is_independent_ruler = no
+						}
+					}
+					trigger_else = {
+						NOT = { scope:vassal_temp = scope:old_liege.top_liege }
+					}
+				}
+				scope:current_bloc_temp = {
+					if = {
+						limit = {
+							scope:vassal_temp = {
+								is_house_head = yes
+								house.house_confederation = scope:current_bloc_temp
+								scope:new_liege = {
+									is_independent_ruler = no
+								}
+							}
+						}
+						scope:vassal_house_temp = {
+							tgp_leave_house_bloc_effect = {
+								OPINION = flag:no
+								TRUCE = flag:yes
+							}
+						}
+					}
+					else_if = {
+						limit = { scope:vassal_temp.confederation = scope:current_bloc_temp }
+						remove_confederation_member = scope:vassal_temp
+					}
+				}
+				debug_log = "Bloc liege change member leave"
+				debug_log_scopes = yes
+			}
+			if = { # Join if not a member of valid
+				limit = {
+					is_house_head = no
+					exists = scope:current_house_bloc_temp
+					scope:vassal_house_temp.house_head.liege ?= liege
+					NOT = { confederation = scope:vassal_house_temp.house_confederation }
+				}
+				confederation ?= {
+					save_temporary_scope_as = current_bloc_temp
+					remove_confederation_member = scope:vassal_temp
+				}
+				house.house_confederation = {
+					save_temporary_scope_as = house_bloc_temp
+					add_confederation_member = scope:vassal_temp
+				}
+				debug_log = "Bloc liege change member join"
+				debug_log_scopes = yes
+			}
+		}
+	}
+}

@@ -1,0 +1,224 @@
+﻿# HDPC annual direct-death control; new games only.
+hdpc_initialize_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hdpc_disabled } }
+		set_global_variable = { name = hdpc_disabled value = 0 }
+		set_global_variable = { name = hdpc_active value = 0 }
+		set_global_variable = { name = hdpc_years_elapsed value = 0 }
+		set_global_variable = { name = hdpc_cycles value = 0 }
+		set_global_variable = { name = hdpc_census_runs value = 0 }
+		set_global_variable = { name = hdpc_living value = 0 }
+		set_global_variable = { name = hdpc_pooled value = 0 }
+		set_global_variable = { name = hdpc_rulers value = 0 }
+		set_global_variable = { name = hdpc_pressure value = 0 }
+		set_global_variable = { name = hdpc_death_budget value = 0 }
+		set_global_variable = { name = hdpc_killed_last value = 0 }
+		set_global_variable = { name = hdpc_pool_killed_last value = 0 }
+		set_global_variable = { name = hdpc_court_killed_last value = 0 }
+		set_global_variable = { name = hdpc_failed_last value = 0 }
+		set_global_variable = { name = hdpc_courts_last value = 0 }
+		set_global_variable = { name = hdpc_candidates_last value = 0 }
+	}
+}
+
+# Statistics only; no deaths, active-state changes or clock advancement.
+hdpc_census_effect = {
+	hdpc_initialize_effect = yes
+	set_global_variable = { name = hdpc_living value = 0 }
+	set_global_variable = { name = hdpc_pooled value = 0 }
+	set_global_variable = { name = hdpc_rulers value = 0 }
+	every_living_character = {
+		change_global_variable = { name = hdpc_living add = 1 }
+		if = {
+			limit = { is_pool_character = yes }
+			change_global_variable = { name = hdpc_pooled add = 1 }
+		}
+		if = {
+			limit = { is_ruler = yes }
+			change_global_variable = { name = hdpc_rulers add = 1 }
+		}
+	}
+	change_global_variable = { name = hdpc_census_runs add = 1 }
+}
+
+hdpc_guard_scheme_agents_effect = {
+	every_living_character = {
+		limit = { has_owned_scheme = yes }
+		every_scheme = {
+			every_scheme_agent_character = {
+				add_character_flag = { flag = hdpc_scheme_agent_guard days = 2 }
+			}
+		}
+	}
+}
+
+# Reasons follow vanilla courtier_guest_management.2001.
+hdpc_kill_character_effect = {
+	if = {
+		limit = { age < 65 }
+		death = { death_reason = death_accident }
+	}
+	else = { death = { death_reason = death_old_age } }
+	if = {
+		limit = { is_alive = no }
+		change_global_variable = { name = hdpc_killed_last add = 1 }
+		change_global_variable = { name = hdpc_living subtract = 1 }
+	}
+	else = { change_global_variable = { name = hdpc_failed_last add = 1 } }
+}
+
+# Snapshot before killing, then recheck protection and remaining budget.
+hdpc_process_pool_effect = {
+	clear_global_variable_list = hdpc_pool_candidates
+	every_living_character = {
+		limit = { hdpc_pool_death_candidate_trigger = yes }
+		add_to_global_variable_list = { name = hdpc_pool_candidates target = this }
+		change_global_variable = { name = hdpc_candidates_last add = 1 }
+	}
+	every_in_global_list = {
+		variable = hdpc_pool_candidates
+		if = {
+			limit = {
+				hdpc_death_budget_available_trigger = yes
+				hdpc_pool_death_candidate_trigger = yes
+			}
+			random = {
+				chance = hdpc_pool_death_chance_value
+				hdpc_kill_character_effect = yes
+				if = {
+					limit = { is_alive = no }
+					change_global_variable = { name = hdpc_pool_killed_last add = 1 }
+					change_global_variable = { name = hdpc_pooled subtract = 1 }
+				}
+			}
+		}
+	}
+	clear_global_variable_list = hdpc_pool_candidates
+}
+
+# Ruler scope; preserve the existing rank-based minimum court sizes.
+hdpc_process_court_effect = {
+	save_scope_as = hdpc_court
+	save_scope_as = liege
+	change_global_variable = { name = hdpc_courts_last add = 1 }
+	set_local_variable = { name = hdpc_court_size value = 0 }
+	every_courtier = { change_local_variable = { name = hdpc_court_size add = 1 } }
+	set_local_variable = { name = hdpc_court_reserve value = hdpc_court_reserve_value }
+	clear_local_variable_list = hdpc_candidates
+	if = {
+		limit = { local_var:hdpc_court_size > local_var:hdpc_court_reserve }
+		every_courtier = {
+			limit = { hdpc_court_death_candidate_trigger = yes }
+			add_to_local_variable_list = { name = hdpc_candidates target = this }
+			change_global_variable = { name = hdpc_candidates_last add = 1 }
+		}
+		every_in_local_list = {
+			variable = hdpc_candidates
+			if = {
+				limit = {
+					hdpc_death_budget_available_trigger = yes
+					local_var:hdpc_court_size > local_var:hdpc_court_reserve
+					scope:hdpc_court = { hdpc_court_allowed_trigger = yes }
+					hdpc_court_death_candidate_trigger = yes
+				}
+				random = {
+					chance = hdpc_court_death_chance_value
+					hdpc_kill_character_effect = yes
+					if = {
+						limit = { is_alive = no }
+						change_global_variable = { name = hdpc_court_killed_last add = 1 }
+						change_local_variable = { name = hdpc_court_size subtract = 1 }
+					}
+				}
+			}
+		}
+	}
+	clear_local_variable_list = hdpc_candidates
+}
+
+# Once activated above 10,000, continue until 8,000.
+hdpc_execute_cycle_effect = {
+	hdpc_census_effect = yes
+	set_global_variable = { name = hdpc_pressure value = 0 }
+	set_global_variable = { name = hdpc_death_budget value = 0 }
+	set_global_variable = { name = hdpc_killed_last value = 0 }
+	set_global_variable = { name = hdpc_pool_killed_last value = 0 }
+	set_global_variable = { name = hdpc_court_killed_last value = 0 }
+	set_global_variable = { name = hdpc_failed_last value = 0 }
+	set_global_variable = { name = hdpc_courts_last value = 0 }
+	set_global_variable = { name = hdpc_candidates_last value = 0 }
+	if = {
+		limit = { global_var:hdpc_living > hdpc_start_threshold_value }
+		set_global_variable = { name = hdpc_active value = 1 }
+	}
+	else_if = {
+		limit = { global_var:hdpc_living <= hdpc_target_low_value }
+		set_global_variable = { name = hdpc_active value = 0 }
+	}
+	if = {
+		limit = { global_var:hdpc_active = 1 }
+		set_global_variable = { name = hdpc_pressure value = 1 }
+		set_global_variable = { name = hdpc_death_budget value = hdpc_normal_death_budget_value }
+		if = {
+			limit = { global_var:hdpc_living > hdpc_target_high_value }
+			set_global_variable = { name = hdpc_pressure value = 2 }
+			set_global_variable = { name = hdpc_death_budget value = hdpc_high_death_budget_value }
+		}
+		hdpc_guard_scheme_agents_effect = yes
+		hdpc_process_pool_effect = yes
+		every_ruler = {
+			if = {
+				limit = {
+					hdpc_death_budget_available_trigger = yes
+					hdpc_court_allowed_trigger = yes
+				}
+				hdpc_process_court_effect = yes
+			}
+		}
+		if = {
+			limit = { global_var:hdpc_living <= hdpc_target_low_value }
+			set_global_variable = { name = hdpc_active value = 0 }
+			set_global_variable = { name = hdpc_pressure value = 0 }
+		}
+	}
+	set_global_variable = { name = hdpc_years_elapsed value = 0 }
+	set_global_variable = { name = hdpc_has_run value = yes }
+	change_global_variable = { name = hdpc_cycles add = 1 }
+}
+
+hdpc_due_cycle_effect = {
+	hdpc_initialize_effect = yes
+	if = {
+		limit = {
+			global_var:hdpc_disabled = 0
+			OR = {
+				NOT = { has_global_variable = hdpc_has_run }
+				global_var:hdpc_years_elapsed >= hdpc_interval_years_value
+			}
+		}
+		hdpc_execute_cycle_effect = yes
+	}
+}
+
+hdpc_yearly_effect = {
+	hdpc_initialize_effect = yes
+	if = {
+		limit = { global_var:hdpc_disabled = 0 }
+		if = {
+			limit = { has_global_variable = hdpc_has_run }
+			change_global_variable = { name = hdpc_years_elapsed add = 1 }
+		}
+		hdpc_due_cycle_effect = yes
+	}
+}
+
+hdpc_pause_effect = {
+	hdpc_initialize_effect = yes
+	set_global_variable = { name = hdpc_disabled value = 1 }
+	set_global_variable = { name = hdpc_pressure value = 0 }
+}
+
+hdpc_resume_effect = {
+	hdpc_initialize_effect = yes
+	set_global_variable = { name = hdpc_disabled value = 0 }
+}

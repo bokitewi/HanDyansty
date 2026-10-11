@@ -1,0 +1,230 @@
+﻿# Sun Jian independence + Danyang invasion (hard event around 200).
+# All effects run with ROOT = Sun Jian unless stated otherwise.
+
+# Family and retainers follow Sun Jian into his own court after independence.
+# Idempotent: family members already in his court are skipped, retainers use receipt flags.
+# Imprisoned retainers are skipped and retried on the next 60-day tick.
+hds_sj_court_effect = {
+	if = {
+		limit = { is_alive = yes is_ruler = yes this = character:sun_jian }
+		save_scope_as = hds_sj_patron
+		# Close family who are not married to an outsider. Sun Ce always follows as designated heir.
+		every_close_family_member = {
+			limit = {
+				is_alive = yes
+				is_imprisoned = no
+				is_ruler = no
+				is_landed = no
+				NOT = { is_courtier_of = scope:hds_sj_patron }
+				OR = {
+					AND = { trigger_if = { limit = { has_global_variable = wj_hchar_sun_ce } this = global_var:wj_hchar_sun_ce } trigger_else = { always = no } }
+					NOT = { any_spouse = { NOT = { this = scope:hds_sj_patron } } }
+				}
+			}
+			set_employer = scope:hds_sj_patron
+		}
+		# Retainers: titles pass to a living successor first (hds_nr_relinquish_effect), then they join.
+		hds_nr_recruit_one_effect = { ID = cheng_pu RECEIPT = hds_sj_joined_cheng_pu }
+		hds_nr_recruit_one_effect = { ID = huang_gai RECEIPT = hds_sj_joined_huang_gai }
+		hds_nr_recruit_one_effect = { ID = han_dang RECEIPT = hds_sj_joined_han_dang }
+		hds_nr_recruit_one_effect = { ID = jiang_qin RECEIPT = hds_sj_joined_jiang_qin }
+		hds_nr_recruit_one_effect = { ID = chen_wu RECEIPT = hds_sj_joined_chen_wu }
+		hds_nr_recruit_one_effect = { ID = dong_xi RECEIPT = hds_sj_joined_dong_xi }
+	}
+}
+
+# 5000 heavy infantry, once. Estate rulers use the domicile location, landed rulers their capital.
+hds_sj_reward_effect = {
+	if = {
+		limit = { is_alive = yes is_ruler = yes NOT = { has_character_flag = hds_sj_troops_paid } }
+		if = {
+			limit = { exists = domicile.domicile_location }
+			spawn_army = {
+				name = hds_sj_heavy_army
+				men_at_arms = { type = armored_footmen men = 5000 }
+				location = domicile.domicile_location
+				uses_supply = yes inheritable = yes
+			}
+			add_character_flag = hds_sj_troops_paid
+		}
+		else_if = {
+			limit = { exists = capital_province }
+			spawn_army = {
+				name = hds_sj_heavy_army
+				men_at_arms = { type = armored_footmen men = 5000 }
+				location = capital_province
+				uses_supply = yes inheritable = yes
+			}
+			add_character_flag = hds_sj_troops_paid
+		}
+	}
+}
+
+# Option a of hds.5000. Leaves any liege, claims Yangzhou, receives troops.
+# Seal holder: the Yuan Shu / Liu Biao plot replaces the invasion.
+# No seal: the Danyang invasion is launched by the tick (or right away).
+hds_sj_independence_effect = {
+	if = {
+		limit = {
+			this = character:sun_jian
+			is_alive = yes
+			is_ruler = yes
+			NOT = { has_character_flag = hds_sj_departed }
+		}
+		hds_release_effect = yes
+		if = {
+			limit = { is_alive = yes is_independent_ruler = yes }
+			hds_sj_estate_to_camp_effect = yes
+		}
+		if = {
+			limit = { is_independent_ruler = yes }
+			if = { limit = { NOT = { has_title = title:k_uuii_yangzhou } } add_pressed_claim = title:k_uuii_yangzhou }
+			add_character_flag = hds_sj_departed
+			add_character_flag = hds_sj_wu_authorized
+			add_character_flag = sworn_peace
+			remove_character_flag = hds_sj_land_deferred
+			hds_qxzl_protect_effect = yes
+			hds_sj_reward_effect = yes
+			hds_sj_court_effect = yes
+			if = {
+				limit = { hds_sj_seal_plot_ready_trigger = yes }
+				# The flag expires by itself, so a stalled plot can never block the invasion forever.
+				add_character_flag = { flag = hds_sj_seal_plot days = 240 }
+				character:yuan_shu ?= { trigger_event = { id = hds.5001 days = 3 } }
+			}
+			else = {
+				if = {
+					limit = { hds_can_campaign_trigger = yes }
+					hds_sj_try_danyang_war_effect = yes
+				}
+			}
+		}
+	}
+}
+
+# Sun Jian's copy of the Danyang launcher. Same native can_declare_war gate as Sun Ce.
+hds_sj_try_danyang_war_effect = {
+	if = {
+		limit = {
+			exists = character:sun_jian this = character:sun_jian is_alive = yes
+			hds_can_campaign_trigger = yes
+			has_character_flag = hds_sj_departed
+			has_character_flag = hds_sj_wu_authorized
+			NOT = { has_character_flag = hds_sj_wu_complete }
+		}
+		remove_character_flag = sworn_peace
+		save_scope_as = hds_campaign_actor
+		clear_saved_scope = hds_target_enemy
+		title:d_danyang = { save_scope_as = hds_target_duchy }
+		set_variable = { name = hds_requested_duchy value = title:d_danyang }
+		add_character_flag = { flag = hds_launch_authorized days = 1 }
+		title:d_danyang = {
+			random_de_jure_county = {
+				limit = {
+					exists = holder
+					holder ?= { is_alive = yes exists = top_liege }
+					holder.top_liege ?= {
+						hds_candidate_enemy_trigger = yes
+						scope:hds_campaign_actor ?= {
+							is_alive = yes
+							can_declare_war = {
+								defender = prev
+								casus_belli = hds_wu_invasion_cb
+								target_titles = { title:d_danyang }
+							}
+						}
+					}
+				}
+				holder.top_liege ?= { save_scope_as = hds_target_enemy }
+			}
+		}
+		if = {
+			limit = { exists = scope:hds_target_enemy }
+			hds_launch_selected_effect = { CB = hds_wu_invasion_cb }
+		}
+		remove_character_flag = hds_launch_authorized
+		remove_variable = hds_requested_duchy
+		add_character_flag = sworn_peace
+	}
+}
+
+# Called from hds_sun_tick_effect every 60 days while Sun Jian lives.
+hds_sj_tick_effect = {
+	if = {
+		limit = { hds_sj_land_hunger_ready_trigger = yes }
+		hds_queue_event_effect = { EVENT = hds.5000 LEASE = hds_lease_5000 }
+	}
+	if = {
+		limit = { has_character_flag = hds_sj_departed }
+		hds_finish_title_transfer_effect = yes
+		# A plot whose conspirators died or were imprisoned is cancelled; the invasion proceeds.
+		if = {
+			limit = {
+				has_character_flag = hds_sj_seal_plot
+				NOT = { hds_sj_plot_actors_ready_trigger = yes }
+			}
+			remove_character_flag = hds_sj_seal_plot
+		}
+		hds_sj_reward_effect = yes
+		hds_sj_court_effect = yes
+		if = {
+			limit = { NOT = { has_character_flag = hds_sj_wu_complete } }
+			add_character_flag = sworn_peace
+			if = {
+				limit = { is_landed = yes NOT = { has_variable_list = hds_pending_titles } }
+				hds_claim_owned_duchies_effect = { KINGDOM = title:k_uuii_yangzhou }
+			}
+			if = {
+				limit = { hds_sj_wu_control_trigger = yes NOT = { has_variable_list = hds_pending_titles } }
+				add_character_flag = hds_sj_wu_complete
+				remove_character_flag = sworn_peace
+			}
+		}
+		if = {
+			limit = {
+				NOT = { has_character_flag = hds_sj_wu_complete }
+				NOT = { has_character_flag = hds_sj_seal_plot }
+				hds_can_campaign_trigger = yes
+			}
+			hds_sj_try_danyang_war_effect = yes
+		}
+	}
+}
+
+# ROOT = Yuan Shu (hds.5001 option). Warns Sun Jian after a short delay.
+hds_sj_plot_begin_effect = {
+	if = {
+		limit = { hds_sj_plot_actors_ready_trigger = yes }
+		character:sun_jian ?= {
+			if = {
+				limit = { has_character_flag = hds_sj_seal_plot }
+				trigger_event = { id = hds.5002 days = { 20 40 } }
+			}
+		}
+	}
+}
+
+# ROOT = Sun Jian (hds.5002 option). The ambush follows after a further delay.
+hds_sj_plot_warned_effect = {
+	if = {
+		limit = { is_alive = yes has_character_flag = hds_sj_seal_plot }
+		trigger_event = { id = hds.5003 days = { 30 60 } }
+	}
+}
+
+# ROOT = Sun Jian (hds.5003 option). Deterministic murder through the normal death path,
+# so the on_death hook (hds_sun_before_death) still snapshots titles, estate and seal for Sun Ce.
+hds_sj_plot_death_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			this = character:sun_jian
+			has_character_flag = hds_sj_seal_plot
+			hds_sj_plot_actors_ready_trigger = yes
+		}
+		remove_character_flag = hds_sj_seal_plot
+		add_character_flag = hds_sj_plot_resolved
+		hd_dc_begin_protection_reason_effect = { TARGET = this ACTOR = character:liu_biao ACTION = execute REASON = has_execute_reason }
+		death = { death_reason = death_murder killer = character:liu_biao }
+	}
+}

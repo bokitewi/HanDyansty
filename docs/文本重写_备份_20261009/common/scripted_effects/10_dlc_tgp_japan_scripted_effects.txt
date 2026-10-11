@@ -1,0 +1,601 @@
+﻿
+
+# CK3 1.20 dependencies required by the logged callers.
+restore_ceremonial_liege_faction_reward_effect = {
+	top_liege = {
+		save_temporary_scope_as = regent_temp
+		primary_title = {
+			save_temporary_scope_as = realm_temp
+			var:administrative_ui_special_title.holder = { save_temporary_scope_as = ceremonial_liege_temp }
+		}
+	}
+	scope:ceremonial_liege_temp = {
+		custom_tooltip = tenno_duchy_creation_tt
+		if = {
+			limit = { has_legitimacy = yes }
+			add_legitimacy = major_legitimacy_gain
+		}
+		else = {
+			show_as_tooltip = { add_legitimacy = major_legitimacy_gain }
+		}
+		if = {
+			limit = {
+				NOT = { has_realm_law = single_heir_succession_law }
+			}
+			add_realm_law_skip_effects = single_heir_succession_law
+		}
+	}
+}
+
+tgp_renounce_estate_effect = {
+	save_scope_as = retired
+	random_held_title = {
+		limit = { is_noble_family_title = yes }
+		current_heir = {
+			save_scope_as = new_player
+			if = {
+				limit = { scope:retired = { is_ai = no } }
+				save_scope_as = new_human_player_character
+			}
+		}
+	}
+	if = {
+		limit = {
+			NOT = { exists = scope:new_player }
+		}
+		player_heir ?= {
+			save_scope_as = new_player
+			if = {
+				limit = { scope:retired = { is_ai = no } }
+				save_scope_as = new_human_player_character
+			}
+		}
+	}
+	add_character_modifier = { modifier = ep3_renounced_estate }
+	custom_tooltip = {
+		text = renounce_noble_family_title_decision_tt
+		send_interface_toast = {
+			type = event_toast_effect_neutral
+			title = renounce_noble_family_title_decision_toast_title
+			custom_tooltip = renounce_noble_family_title_decision_toast_desc
+			left_icon = scope:new_player
+			right_icon = this
+		}
+	}
+	if = {
+		limit = {
+			NOT = { has_trait = devoted }
+		}
+		add_trait = devoted
+	}
+	# TODO TIT-74285 use clean depose = yes after abdication also subjected to admin_allows_holding_multiple_primary_tier_titles
+	if = {
+		limit = { exists = scope:new_player }
+		hidden_effect = {
+			scope:new_player ?= {
+				set_variable = {
+					name = previous_holder_grandeur_value
+					value = prev.court_grandeur_current
+				}
+			}
+			create_title_and_vassal_change = {
+				type = granted
+				save_scope_as = title_change
+				add_claim_on_loss = no
+			}
+			if = {
+				limit = { is_governor = no }
+				every_held_title = {
+					limit = { tier > tier_barony }
+					change_title_holder_include_vassals = {
+						holder = scope:new_player
+						change = scope:title_change
+					}
+				}
+				# pass all artifacts away
+				every_character_artifact = {
+					if = {
+						limit = { is_equipped = yes }
+						add_to_list = equipped
+					}
+					set_owner = {
+						target = scope:new_player
+						history = {
+							type = inherited
+							recipient = scope:new_player
+						}
+					}
+				}
+			}
+			else = {
+				# pass the artifact if it's binded to NF (should not happen in vanilla tho), take from others title or not binded to a title
+				every_character_artifact = {
+					limit = {
+						trigger_if = {
+							limit = { has_variable = artifact_succession_title }
+							OR = {
+								var:artifact_succession_title.holder ?= { this != scope:retired }
+								var:artifact_succession_title ?= { is_noble_family_title = yes }
+							}
+						}
+					}
+					if = {
+						limit = { is_equipped = yes }
+						add_to_list = equipped
+					}
+					set_owner = {
+						target = scope:new_player
+						history = {
+							type = inherited
+							recipient = scope:new_player
+						}
+					}
+				}
+				every_held_title = {
+					limit = { is_noble_family_title = yes }
+					change_title_holder = {
+						holder = scope:new_player
+						change = scope:title_change
+					}
+				}
+			}
+			resolve_title_and_vassal_change = scope:title_change
+			if = {
+				limit = { is_ruler = yes }
+				primary_title.current_heir = { save_scope_as = heir_temp }
+				# now handle title succession
+				every_character_artifact = {
+					limit = { var:artifact_succession_title.holder ?= scope:retired }
+					if = {
+						limit = { is_equipped = yes }
+						add_to_list = equipped
+					}
+					set_owner = {
+						target = scope:heir_temp
+						history = {
+							type = inherited
+							recipient = scope:heir_temp
+						}
+					}
+				}
+				create_title_and_vassal_change = {
+					type = appointment
+					save_scope_as = title_change
+					add_claim_on_loss = no
+				}
+				every_held_title = {
+					limit = { tier > tier_barony }
+					change_title_holder_include_vassals = {
+						holder = scope:heir_temp
+						change = scope:title_change
+					}
+				}
+				resolve_title_and_vassal_change = scope:title_change
+				every_in_list = {
+					list = equipped
+					limit = { artifact_owner = { can_equip_artifact = prev } }
+					equip_artifact_to_owner = yes
+				}
+				pay_short_term_gold = {
+					target = scope:new_player
+					gold = gold
+				}
+			}
+		}
+		house = {
+			if = {
+				limit = { NOT = { house_head = scope:new_player } }
+				set_house_head = scope:new_player
+			}
+		}
+		if = {
+			limit = { exists = scope:new_human_player_character }
+			set_player_character = scope:new_human_player_character
+		}
+		progress_towards_friend_effect = {
+			REASON = friend_retired_from_governorship
+			CHARACTER = scope:new_player
+			OPINION = default_friend_opinion
+		}
+	}
+	tgp_step_down_title_recipient_tooltip_effect = yes
+	set_variable = {
+		name = appointment_trait_override
+		value = trait:intellect_good_3
+	}
+}
+
+tgp_japan_schoolhouse_education_boost_effect = {
+	save_scope_as = student
+	house.house_head.domicile ?= {
+		if = {
+			limit = {
+				has_domicile_parameter = japanese_schoolhouse_education_boost_1
+			}
+			switch = {
+				trigger = has_domicile_building
+				japanese_schoolhouse_01 = { scope:student = { education_point_add_general_effect = { VALUE = 1 } } }
+				japanese_schoolhouse_02 = { scope:student = { education_point_add_general_effect = { VALUE = 2 } } }
+				japanese_schoolhouse_03 = { scope:student = { education_point_add_general_effect = { VALUE = 3 } } }
+				japanese_schoolhouse_04 = { scope:student = { education_point_add_general_effect = { VALUE = 4 } } }
+				japanese_schoolhouse_04 = { scope:student = { education_point_add_general_effect = { VALUE = 5 } } }
+				japanese_schoolhouse_04 = { scope:student = { education_point_add_general_effect = { VALUE = 6 } } }
+			}
+		}
+	}
+}
+
+tgp_learn_chinese_effect_birthday = {
+	if = {
+		limit = {
+			should_learn_chinese_trigger = yes
+		}
+		learn_language = language_chinese
+		every_player = {
+			limit = {
+				OR = {
+					is_parent_of = scope:child_learned_chinese
+					this = scope:child_learned_chinese
+					has_relation_guardian = scope:child_learned_chinese
+					has_relation_elder = scope:child_learned_chinese
+				}
+			}
+			send_interface_toast = {
+				type = event_childhood_good_with_text
+				title = japanese_korean_child_learned_chinese_title
+				desc = japanese_korean_child_learned_chinese_effect
+				left_icon = scope:child_learned_chinese
+				show_as_tooltip = {
+					scope:child_learned_chinese = {
+						learn_language = language_chinese
+					}
+				}
+			}
+		}
+	}
+}
+
+setup_japan_house_name_scopes_effect = {
+	save_scope_as = new_head
+	save_scope_as = new_house_head # don't ask
+	house ?= {
+		save_scope_as = old_house
+		house_head = { save_scope_as = old_head }
+	}
+	if = {
+		limit = { domicile.domicile_location.county.holder ?= scope:new_head }
+		domicile.domicile_location.barony = {
+			save_scope_as = domicile_barony
+			county = { save_scope_as = domicile_county }
+		}
+	}
+	else_if = {
+		limit = {
+			is_landed = no
+			scope:old_head.domicile.domicile_location.county.holder ?= scope:old_head
+		}
+		scope:old_head.domicile.domicile_location.barony = {
+			save_scope_as = domicile_barony
+			county = { save_scope_as = domicile_county }
+		}
+	}
+	else_if = {
+		limit = { is_landed = yes }
+		save_scope_as = land_haver
+	}
+	else = {
+		limit = { house.house_head ?= { is_landed = yes } }
+		house.house_head = { save_scope_as = land_haver }
+	}
+	scope:land_haver.capital_county ?= {
+		save_scope_as = primary_county
+		random_county_province = {
+			limit = {
+				has_holding = yes
+				NOT = { has_holding_type = church_holding }
+			}
+			alternative_limit = { has_holding = yes }
+			barony = { save_scope_as = random_barony }
+		}
+	}
+	if = {
+		limit = { NOT = { exists = scope:random_barony } }
+		location.barony = { save_scope_as = random_barony }
+	}
+}
+
+add_random_internal_japanese_manor_building = {
+	random_list = {
+		10 = {
+			trigger = {
+				NOT = { has_domicile_building_or_higher = japanese_main_tax_collectors_01 }
+				domicile_building_has_free_internal_slot = japanese_manor_main_01
+			}
+			add_domicile_building = japanese_main_tax_collectors_01
+			if = {
+				limit = { has_domicile_building = japanese_manor_main_03 }
+				add_domicile_building = japanese_main_tax_collectors_02
+			}
+		}
+		10 = {
+			trigger = {
+				NOT = { has_domicile_building_or_higher = japanese_main_carpenter_01 }
+				domicile_building_has_free_internal_slot = japanese_manor_main_01
+			}
+			add_domicile_building = japanese_main_carpenter_01
+			if = {
+				limit = { has_domicile_building = japanese_manor_main_03 }
+				add_domicile_building = japanese_main_carpenter_02
+			}
+		}
+		10 = {
+			trigger = {
+				NOT = { has_domicile_building_or_higher = sarugaku_stage_01 }
+				domicile_building_has_free_internal_slot = japanese_manor_main_01
+			}
+			add_domicile_building = sarugaku_stage_01
+			if = {
+				limit = { has_domicile_building = japanese_manor_main_03 }
+				add_domicile_building = sarugaku_stage_02
+			}
+		}
+		10 = {
+			trigger = {
+				NOT = { has_domicile_building_or_higher = japanese_manor_office_01 }
+				domicile_building_has_free_internal_slot = japanese_manor_main_01
+			}
+			add_domicile_building = japanese_manor_office_01
+			if = {
+				limit = { has_domicile_building = japanese_manor_main_03 }
+				add_domicile_building = japanese_manor_office_02
+			}
+		}
+		10 = {
+			trigger = {
+				NOT = { has_domicile_building_or_higher = japanese_manor_servants_quarters_01 }
+				domicile_building_has_free_internal_slot = japanese_manor_main_01
+			}
+			add_domicile_building = japanese_manor_servants_quarters_01
+			if = {
+				limit = { has_domicile_building = japanese_manor_main_03 }
+				add_domicile_building = japanese_manor_servants_quarters_02
+			}
+		}
+		10 = {
+			trigger = {
+				NOT = { has_domicile_building_or_higher = japanese_manor_library_confucian_01 }
+				domicile_building_has_free_internal_slot = japanese_manor_main_01
+			}
+			add_domicile_building = japanese_manor_library_confucian_01
+			if = {
+				limit = { has_domicile_building = japanese_manor_main_03 }
+				add_domicile_building = japanese_manor_library_confucian_02
+			}
+		}
+	}
+}
+
+fill_external_japanese_manor_building_effect = {
+	switch = {
+		trigger = has_domicile_building_or_higher
+		japanese_manor_main_05 = {
+			while = {
+				limit = { free_external_domicile_building_slots >= 1 }
+				add_random_external_japanese_manor_building = yes
+			}
+		}
+		japanese_manor_main_04 = {
+			while = {
+				limit = { free_external_domicile_building_slots >= 2 }
+				add_random_external_japanese_manor_building = yes
+			}
+		}
+		japanese_manor_main_03 = {
+			while = {
+				limit = { free_external_domicile_building_slots >= 3 }
+				add_random_external_japanese_manor_building = yes
+			}
+		}
+		japanese_manor_main_02 = {
+			while = {
+				limit = { free_external_domicile_building_slots >= 4 }
+				add_random_external_japanese_manor_building = yes
+			}
+		}
+		japanese_manor_main_01 = {
+			while = {
+				limit = { free_external_domicile_building_slots >= 5 }
+				add_random_external_japanese_manor_building = yes
+			}
+		}
+	}
+}
+
+add_random_external_japanese_manor_building = {
+	if = {
+		limit = { free_external_domicile_building_slots >= 1 }
+		random_list = {
+			10 = {
+				trigger = {
+					NOT = { has_domicile_building_or_higher = japanese_fields_01 }
+				}
+				add_domicile_building = japanese_fields_01
+				if = {
+					limit = {
+						has_domicile_building_or_higher = japanese_fields_01
+						has_domicile_building_or_higher = japanese_manor_main_03
+					}
+					add_domicile_building = japanese_fields_02
+				}
+			}
+			10 = {
+				trigger = {
+					NOT = { has_domicile_building_or_higher = japanese_shrine_01 }
+					owner.house = { has_house_aspiration_parameter = unlocks_japanese_manor_shrine }
+				}
+				add_domicile_building = japanese_shrine_01
+				if = {
+					limit = {
+						has_domicile_building_or_higher = japanese_shrine_01
+						has_domicile_building_or_higher = japanese_manor_main_03
+					}
+					add_domicile_building = japanese_shrine_02
+				}
+			}
+			10 = {
+				trigger = {
+					NOT = { has_domicile_building_or_higher = japanese_brewery_01 }
+					owner.house = { has_house_aspiration_parameter = unlocks_japanese_manor_brewery }
+				}
+				add_domicile_building = japanese_brewery_01
+				if = {
+					limit = {
+						has_domicile_building_or_higher = japanese_brewery_01
+						has_domicile_building_or_higher = japanese_manor_main_03
+					}
+					add_domicile_building = japanese_brewery_02
+				}
+			}
+			10 = {
+				trigger = {
+					owner = { government_has_mechanic = administrative }
+					NOT = { has_domicile_building_or_higher = japanese_archive_01 }
+					owner.house = { has_house_aspiration_parameter = unlocks_japanese_manor_archive }
+				}
+				add_domicile_building = japanese_archive_01
+				if = {
+					limit = {
+						has_domicile_building_or_higher = japanese_archive_01
+						has_domicile_building_or_higher = japanese_manor_main_03
+					}
+					add_domicile_building = japanese_archive_02
+				}
+			}
+			10 = {
+				trigger = {
+					NOT = { has_domicile_building_or_higher = japanese_armory_01 }
+					owner.house = { has_house_aspiration_parameter = unlocks_japanese_manor_armory }
+				}
+				add_domicile_building = japanese_armory_01
+				if = {
+					limit = {
+						has_domicile_building_or_higher = japanese_armory_01
+						has_domicile_building_or_higher = japanese_manor_main_03
+					}
+					add_domicile_building = japanese_armory_02
+				}
+			}
+			10 = {
+				trigger = {
+					NOT = { has_domicile_building_or_higher = japanese_watch_house_01 }
+					owner.house = { has_house_aspiration_parameter = unlocks_japanese_manor_watch_house }
+				}
+				add_domicile_building = japanese_watch_house_01
+				if = {
+					limit = {
+						has_domicile_building_or_higher = japanese_watch_house_01
+						has_domicile_building_or_higher = japanese_manor_main_03
+					}
+					add_domicile_building = japanese_watch_house_02
+				}
+			}
+			10 = {
+				trigger = {
+					NOT = { has_domicile_building_or_higher = japanese_horse_pastures_01 }
+				}
+				add_domicile_building = japanese_horse_pastures_01
+				if = {
+					limit = {
+						has_domicile_building_or_higher = japanese_horse_pastures_01
+						has_domicile_building_or_higher = japanese_manor_main_03
+					}
+					add_domicile_building = japanese_horse_pastures_02
+				}
+			}
+			10 = {
+				trigger = {
+					NOT = { has_domicile_building_or_higher = japanese_tea_plantation_01 }
+				}
+				add_domicile_building = japanese_tea_plantation_01
+				if = {
+					limit = {
+						has_domicile_building_or_higher = japanese_tea_plantation_01
+						has_domicile_building_or_higher = japanese_manor_main_03
+					}
+					add_domicile_building = japanese_tea_plantation_02
+				}
+			}
+			10 = {
+				trigger = {
+					NOT = { has_domicile_building_or_higher = japanese_stables_01 }
+				}
+				add_domicile_building = japanese_stables_01
+				if = {
+					limit = {
+						has_domicile_building_or_higher = japanese_stables_01
+						has_domicile_building_or_higher = japanese_manor_main_03
+					}
+					add_domicile_building = japanese_stables_02
+				}
+			}
+			10 = {
+				trigger = {
+					NOT = { has_domicile_building_or_higher = japanese_workshop_01 }
+				}
+				add_domicile_building = japanese_workshop_01
+				if = {
+					limit = {
+						has_domicile_building_or_higher = japanese_workshop_01
+						has_domicile_building_or_higher = japanese_manor_main_03
+					}
+					add_domicile_building = japanese_workshop_02
+				}
+			}
+			10 = {
+				trigger = {
+					NOT = { has_domicile_building_or_higher = japanese_tea_house_01 }
+					owner.house = { has_house_aspiration_parameter = unlocks_japanese_manor_tea_house }
+				}
+				add_domicile_building = japanese_tea_house_01
+				if = {
+					limit = {
+						has_domicile_building_or_higher = japanese_tea_house_01
+						has_domicile_building_or_higher = japanese_manor_main_03
+					}
+					add_domicile_building = japanese_tea_house_02
+				}
+			}
+			10 = {
+				trigger = {
+					NOT = { has_domicile_building_or_higher = japanese_garden_01 }
+				}
+				add_domicile_building = japanese_garden_01
+				if = {
+					limit = {
+						has_domicile_building_or_higher = japanese_garden_01
+						has_domicile_building_or_higher = japanese_manor_main_03
+					}
+					add_domicile_building = japanese_garden_02
+				}
+			}
+		}
+	}
+}
+
+
+# CK3 1.20 dependencies required by the logged callers.
+tgp_set_historical_house_relation_effect = {
+	if = {
+		limit = {
+			house_relation_is_valid_to_start_trigger = {
+				HOUSE = this
+				OTHER_HOUSE = $OTHER_HOUSE$
+			}
+		}
+		set_house_relation = {
+			target = $OTHER_HOUSE$
+			level = $LEVEL$
+			description = house_relation_reason_historical_desc
+		}
+	}
+}

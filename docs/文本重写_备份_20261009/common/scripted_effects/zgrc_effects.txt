@@ -1,0 +1,1335 @@
+﻿##############################
+# 烛广 Regional Customs —— 可复用接口
+##############################
+
+# ============================================================
+# 内容分发（整组）—— 规则判断集中于此，开局初始化 / debug 决议 / 联动 共用
+# ============================================================
+zgrc_distribute_all_effect = {
+	# 【春秋版屏蔽】地域风俗分发依赖原版地理头衔（d_youzhou / c_yizhou_1 …），本环境无 → 不调用
+	# if = {
+	# 	limit = { has_game_rule = zgrc_init_regional_customs_enabled }
+	# 	zgrc_distribute_regional_customs_effect = yes
+	# }
+	if = {
+		limit = { has_game_rule = zgrc_init_hanjia_guandai_enabled }
+		zgrc_distribute_hanjia_guandai_effect = yes
+	}
+	# 【春秋版屏蔽】公羊学分发依赖原版地理头衔（d_ziqing / c_qizhou …），本环境无 → 不调用
+	# if = {
+	# 	limit = { has_game_rule = zgrc_init_gongyang_rite_enabled }
+	# 	zgrc_distribute_gongyang_rite_effect = yes
+	# }
+}
+
+
+# ============================================================
+# 汉家冠带 · 全局分发（开局 + debug 决议复用）
+# 遍历所有可玩角色（伯爵及以上，即有头衔者）；
+# 其文化拥有华夏礼乐 → 该角色家族（house）全员添加特质
+# ============================================================
+zgrc_distribute_hanjia_guandai_effect = {
+	every_ruler = {
+		limit = {
+			# NOT = { has_trait = zgrc_hanjia_guandai }
+			culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue }
+		}
+		house ?= {
+			every_house_member = {
+				add_trait = zgrc_hanjia_guandai
+			}
+		}
+	}
+}
+
+# ============================================================
+# 地域风俗 · 公国转化（DUCHY=公国id，CULTURE=目标汉文化分支）
+# 将公国领地 county 文化、及头衔持有者（中华传承）与其宫廷，改写为目标汉文化分支
+# ============================================================
+zgrc_apply_duchy_culture_effect = {
+	title:$DUCHY$ = {
+		every_de_jure_county = {
+			# if = {
+			# 	limit = { culture = { has_cultural_pillar = heritage_chinese } }
+			# 	set_county_culture = culture:$CULTURE$
+			# }
+			set_county_culture = culture:$CULTURE$
+			# 伯爵领级别头衔持有者及其廷臣
+			holder ?= {
+				if = {
+					limit = { culture = { has_cultural_pillar = heritage_chinese } }
+					set_culture = culture:$CULTURE$
+					every_courtier = {
+						limit = { culture = { has_cultural_pillar = heritage_chinese } }
+						set_culture = culture:$CULTURE$
+					}
+				}
+			}
+		}
+		holder ?= {
+			if = {
+				limit = { culture = { has_cultural_pillar = heritage_chinese } }
+				set_culture = culture:$CULTURE$
+				every_courtier = {
+					limit = { culture = { has_cultural_pillar = heritage_chinese } }
+					set_culture = culture:$CULTURE$
+				}
+			}
+		}
+	}
+}
+
+# ============================================================
+# 地域风俗 · 伯爵领转化（COUNTY=伯爵领id，CULTURE=目标汉文化分支）
+# 用途：公国内部跨越汉志分区时逐县改写
+# 顺序：与公国级互不重叠 —— 公国级只写「本文化独有的公国」，
+#       跨文化的公国（▼）一律不用公国级、全部按县列出，故无先后依赖
+# 语义：与公国级完全一致 —— county 文化强制写；
+#       持有者与其宫廷仅"中华传承"者改写
+# ============================================================
+zgrc_apply_county_culture_effect = {
+	title:$COUNTY$ = {
+		set_county_culture = culture:$CULTURE$
+		holder ?= {
+			if = {
+				limit = { culture = { has_cultural_pillar = heritage_chinese } }
+				set_culture = culture:$CULTURE$
+				every_courtier = {
+					limit = { culture = { has_cultural_pillar = heritage_chinese } }
+					set_culture = culture:$CULTURE$
+				}
+			}
+		}
+	}
+}
+
+# 公羊学 · 角色转化（RITE=目标学派）：须信儒家；1178 起仅非统治者儒生
+zgrc_set_gongyang_rite_effect = {
+	if = {
+		limit = {
+			faith = faith:confucian_faith
+			OR = {
+				NOT = { game_start_date >= 1178.10.1 }
+				is_ruler = no
+			}
+		}
+		set_character_rite = rite:$RITE$
+	}
+	every_courtier = {
+		if = {
+			limit = {
+				faith = faith:confucian_faith
+				OR = {
+					NOT = { game_start_date >= 1178.10.1 }
+					is_ruler = no
+				}
+			}
+			set_character_rite = rite:$RITE$
+		}
+	}
+}
+
+# 公羊学 · 公国转化（DUCHY / RITE）：县固定改；人只改信儒家者
+zgrc_apply_duchy_rite_effect = {
+	title:$DUCHY$ = {
+		every_de_jure_county = {
+			set_county_rite = rite:$RITE$
+			holder ?= { zgrc_set_gongyang_rite_effect = { RITE = $RITE$ } }
+		}
+		holder ?= { zgrc_set_gongyang_rite_effect = { RITE = $RITE$ } }
+	}
+}
+
+# 公羊学 · 伯爵领转化（COUNTY / RITE）
+zgrc_apply_county_rite_effect = {
+	title:$COUNTY$ = {
+		set_county_rite = rite:$RITE$
+		holder ?= { zgrc_set_gongyang_rite_effect = { RITE = $RITE$ } }
+	}
+}
+
+# 公羊学 · 开局分发：齐恒常；鲁 + 冀州仅 867
+zgrc_distribute_gongyang_rite_effect = {
+	# —— 齐：发源之地，恒常 ——
+	zgrc_apply_duchy_rite_effect = { DUCHY = d_ziqing RITE = zgrc_gongyang }
+	zgrc_apply_county_rite_effect = { COUNTY = c_qizhou RITE = zgrc_gongyang }
+	zgrc_apply_county_rite_effect = { COUNTY = c_dezhou RITE = zgrc_gongyang }
+	zgrc_apply_county_rite_effect = { COUNTY = c_dizhou RITE = zgrc_gongyang }
+	zgrc_apply_county_rite_effect = { COUNTY = c_mizhou RITE = zgrc_gongyang }
+
+	# —— 鲁 + 冀州：仅 867 开局 ——
+	if = {
+		limit = { NOT = { game_start_date >= 1066.9.15 } }
+		zgrc_apply_county_rite_effect = { COUNTY = c_yanzhou RITE = zgrc_gongyang }
+		zgrc_apply_county_rite_effect = { COUNTY = c_langya RITE = zgrc_gongyang }
+		zgrc_apply_county_rite_effect = { COUNTY = c_haizhou RITE = zgrc_gongyang }
+		zgrc_apply_county_rite_effect = { COUNTY = c_yunzhou RITE = zgrc_gongyang }
+		zgrc_apply_county_rite_effect = { COUNTY = c_huaiyang RITE = zgrc_gongyang }
+		zgrc_apply_county_rite_effect = { COUNTY = c_jizhou RITE = zgrc_gongyang }
+	}
+}
+
+# ============================================================
+# 地域风俗 · 全局分配（开局 + debug 决议复用）
+# 按《汉书》地理志分区，逐文化块分配（原版头衔）：
+#   独有公国 → 公国级；跨区公国 → 逐县（伯爵级）
+# ============================================================
+zgrc_distribute_regional_customs_effect = {
+	# ============================================================
+	# 分文化块 · 汉志 24 区 —— 每块先公国级、后伯爵领级
+	# 依据：《汉书·地理志》24 区风俗 + 0docs/汉地划分_细化.md
+	# 公国名→头衔 ID 均经 titles_l_simp_chinese.yml + landed_titles 反查核实
+	# 规则：本文化独有之公国写公国级；跨文化公国（▼）不写公国级，
+	#       一律按县细化 —— 每县只写一次，故各块先后无关、互不覆盖
+	# ============================================================
+
+	# 1. 燕 ——「上谷至辽东，地广民希，数被胡寇，俗与赵、代相类」
+	# 公国级：幽州｜御夷｜辽西｜辽东
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_youzhou CULTURE = youzhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_yanyun_yuyi CULTURE = youzhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_liaoxi CULTURE = youzhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_LIAO_dongjing CULTURE = youzhou }
+	# 伯爵级：易定（易州）｜云朔（蔚州·弘州）｜桑干（永兴）｜辽中京（承德）
+	zgrc_apply_county_culture_effect = { COUNTY = c_yizhou_1 CULTURE = youzhou }      # 易州＝涿郡易县（易定）
+	zgrc_apply_county_culture_effect = { COUNTY = c_yuzhou CULTURE = youzhou }        # 蔚州＝代郡（云朔）
+	zgrc_apply_county_culture_effect = { COUNTY = c_hongzhou_2 CULTURE = youzhou }    # 弘州＝代郡/上谷（云朔）
+	zgrc_apply_county_culture_effect = { COUNTY = c_yongxing CULTURE = youzhou }      # 永兴（桑干）
+	zgrc_apply_county_culture_effect = { COUNTY = c_lzj_chengde CULTURE = youzhou }
+
+	# 2. 赵 ——「赵、中山地薄人众……悲歌慷慨，起则椎剽掘冢」
+	# 公国级：成德｜邢洺｜瀛莫
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_chengde CULTURE = jizhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_xingming CULTURE = jizhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_yingmo CULTURE = jizhou }
+	# 伯爵级：魏博（魏州·贝州）｜易定（定州）｜沧景（沧州）
+	zgrc_apply_county_culture_effect = { COUNTY = c_weizhou CULTURE = jizhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_beizhou CULTURE = jizhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_dingzhou CULTURE = jizhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_cangzhou CULTURE = jizhou }
+
+	# 3. 齐 ——「号为冠带衣履天下」「清河以南，渤海之高乐、高城、重合、阳信……皆齐分」
+	# 公国级：淄青
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_ziqing CULTURE = hd_qi_state }
+	# 伯爵级：沧景（德州·棣州）｜兖海（密州）｜郓曹（齐州）
+	zgrc_apply_county_culture_effect = { COUNTY = c_dezhou CULTURE = hd_qi_state }
+	zgrc_apply_county_culture_effect = { COUNTY = c_dizhou CULTURE = hd_qi_state }
+	zgrc_apply_county_culture_effect = { COUNTY = c_mizhou CULTURE = hd_qi_state }
+	zgrc_apply_county_culture_effect = { COUNTY = c_qizhou CULTURE = hd_qi_state }
+
+	# 4. 鲁 ——「汉兴以来，鲁东海多至卿相」
+	# 公国级：无（兖海·郓曹·徐泗皆跨区，全按县分写）
+	# 伯爵级：兖海（兖州·沂州·海州）｜郓曹（郓州）｜徐泗（淮阳）
+	zgrc_apply_county_culture_effect = { COUNTY = c_yanzhou CULTURE = qingzhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_langya CULTURE = qingzhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_haizhou CULTURE = qingzhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_yunzhou CULTURE = qingzhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_huaiyang CULTURE = qingzhou }
+
+	# 5. 宋 ——「沛、梁、楚、山阳、济阴、东平……皆宋分」
+	# 公国级：无（徐泗·汴宋·郓曹皆跨区，全按县分写）
+	# 伯爵级：徐泗（徐州·宿州）｜汴宋（宋州·单州·亳州·汴州）｜郓曹（曹州）
+	zgrc_apply_county_culture_effect = { COUNTY = c_xuzhou_1 CULTURE = yanzhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_suzhou CULTURE = yanzhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_songzhou CULTURE = yanzhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_shanzhou CULTURE = yanzhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_bozhou CULTURE = yanzhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_caozhou CULTURE = yanzhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_bianzhou CULTURE = yanzhou }
+
+	# 6. 卫 ——「东郡及魏郡之黎阳、河内之野王、朝歌，皆卫分」（本体仅东郡一线）
+	# 公国级：无（汉志归卫者皆为县）
+	# 伯爵级：郑滑（滑州）｜魏博（博州）｜郓曹（濮州）
+	zgrc_apply_county_culture_effect = { COUNTY = c_huazhou CULTURE = hd_wei_state }       # 滑州＝东郡白马（郑滑）
+	zgrc_apply_county_culture_effect = { COUNTY = c_bozhou_1 CULTURE = hd_wei_state }      # 博州＝东郡聊城（魏博）
+	zgrc_apply_county_culture_effect = { COUNTY = c_puzhou_2 CULTURE = hd_wei_state }      # 濮州＝东郡濮阳（郓曹）
+
+	# 7. 陈 ——「妇人尊贵，好祭祀，用史巫，故其俗巫鬼」
+	# 公国级：无（汉志归陈者皆为县）
+	# 伯爵级：陈许（陈州）
+	zgrc_apply_county_culture_effect = { COUNTY = c_huaining CULTURE = hd_chen_state }
+
+	# 8. 韩 ——「高士宦，好文法，民以贪遴争讼生分为失」
+	# 公国级：无（陈许跨区，全按县分写）
+	# 伯爵级：陈许（许州）
+	zgrc_apply_county_culture_effect = { COUNTY = c_yingchuan CULTURE = hd_han_state }     # 许州＝颍川郡（陈许）
+
+	# 9. 郑 ——「土陿而险，山居谷汲，男女亟聚会，故其俗淫」
+	# 公国级：无（郑滑跨区，全按县分写）
+	# 伯爵级：郑滑（郑州）
+	zgrc_apply_county_culture_effect = { COUNTY = c_zhengzhou CULTURE = hd_zheng_state }   # 郑州＝新郑/荥阳/成皋（郑滑）
+
+	# 10. 周 ——「巧伪趋利，贵财贱义，喜为商贾」「雒阳东贾齐鲁，南贾梁楚」
+	# 公国级：东畿
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_dongji CULTURE = hd_zhou_state }
+	# 伯爵级：陕虢（陕州）
+	zgrc_apply_county_culture_effect = { COUNTY = c_shanzhou_2 CULTURE = hd_zhou_state }
+
+	# 11. 关中 ——「五方杂厝，风俗不纯」「号称陆海，为九州膏腴」（三辅＋弘农）
+	# 公国级：永兴｜凤翔｜兴凤
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_yongxing CULTURE = han }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_fengxiang CULTURE = han }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_xingfeng CULTURE = han }
+	# 伯爵级：金商（商州）｜陕虢（虢州）
+	zgrc_apply_county_culture_effect = { COUNTY = c_shangzhou CULTURE = han }
+	zgrc_apply_county_culture_effect = { COUNTY = c_guozhou CULTURE = han }
+
+	# 12. 南阳 ——「颖川、南阳，本夏禹之国。夏人上忠，其敝鄙朴」
+	# 公国级：无（襄邓跨区，全按县分写）
+	# 伯爵级：襄邓（邓州·唐州·随州·均州）
+	zgrc_apply_county_culture_effect = { COUNTY = c_dengzhou_1 CULTURE = yuzhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_tangzhou CULTURE = yuzhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_suizhou_1 CULTURE = yuzhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_junzhou CULTURE = yuzhou }
+
+	# 13. 汝南 —— 汝南郡（民性急）
+	# 公国级：无（汉志归汝南者皆为县）
+	# 伯爵级：陈许（蔡州）｜汴宋（颍州）｜淮西（光州）
+	zgrc_apply_county_culture_effect = { COUNTY = c_caizhou CULTURE = xuzhou }     # 蔡州＝汝南·上蔡（陈许）
+	zgrc_apply_county_culture_effect = { COUNTY = c_yingzhou CULTURE = xuzhou }    # 颍州＝汝南·汝阴（汴宋）
+	zgrc_apply_county_culture_effect = { COUNTY = c_guangzhou CULTURE = xuzhou }   # 光州＝汝南·弋阳（淮西）
+
+	# 14. 河东 ——「河东土地平易，有盐铁之饶……君子深思，小人俭陋」
+	# 公国级：河中（汉河东郡安邑）
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_hezhong CULTURE = hd_hedong }
+
+	# 15. 晋 ——「太原、上党又多晋公族子孙……号为难治」
+	# 公国级：河东（公国）｜泽潞（上党郡）
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_hedong CULTURE = bingzhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_zelu CULTURE = bingzhou }
+	# 伯爵级：雁门（忻州）
+	zgrc_apply_county_culture_effect = { COUNTY = c_xinzhou CULTURE = bingzhou }
+
+	# 16. 河内 ——「俗刚强，多豪桀侵夺，薄恩礼，好生分」
+	# 公国级：河阳（怀州·卫州）
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_heyang CULTURE = hd_henei }
+
+	# 17. 北地（北方边郡）——「定襄、云中、五原……其民鄙朴，少礼文，好射猎。雁门亦同俗」
+	# 公国级：天德（五原）
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_tiande CULTURE = hd_beidi }
+	# 伯爵级：云朔（大同·朔州·应州）｜雁门（代州）｜桑干（柔远·九十九泉·怀安）｜振武（云内州·青山·胜州）
+	zgrc_apply_county_culture_effect = { COUNTY = c_datong_2 CULTURE = hd_beidi }        # 大同＝雁门平城（云朔）
+	zgrc_apply_county_culture_effect = { COUNTY = c_shuozhou CULTURE = hd_beidi }        # 朔州＝马邑（云朔）
+	zgrc_apply_county_culture_effect = { COUNTY = c_yingzhou_5 CULTURE = hd_beidi }      # 应州＝阴馆（云朔）
+	zgrc_apply_county_culture_effect = { COUNTY = c_daizhou CULTURE = hd_beidi }         # 代州＝雁门广武（雁门）
+	zgrc_apply_county_culture_effect = { COUNTY = c_rouyuan CULTURE = hd_beidi }         # 柔远＝定襄/云中北（桑干）
+	zgrc_apply_county_culture_effect = { COUNTY = c_jiushijiuquan CULTURE = hd_beidi }   # 九十九泉＝定襄北（桑干）
+	zgrc_apply_county_culture_effect = { COUNTY = c_lxj_yunneizhou CULTURE = hd_beidi }  # 云内州＝云中（振武）
+	zgrc_apply_county_culture_effect = { COUNTY = c_qingshan CULTURE = hd_beidi }
+	zgrc_apply_county_culture_effect = { COUNTY = c_shengzhou CULTURE = hd_beidi }
+	zgrc_apply_county_culture_effect = { COUNTY = c_huaian CULTURE = hd_beidi }
+
+	# 18. 西北（西北边郡）——「天水、陇西……及安定、北地、上郡、西河，皆迫近戎狄，修习战备」
+	# 公国级：泾原｜秦成｜邠宁｜鄜坊｜夏绥｜朔方｜鄯州 d_longyou｜西宁 d_xining
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_jingyuan CULTURE = hd_xibei }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_qincheng CULTURE = hd_xibei }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_binning CULTURE = hd_xibei }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_fufang CULTURE = hd_xibei }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_xiasui CULTURE = hd_xibei }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_shuofang CULTURE = hd_xibei }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_longyou CULTURE = hd_xibei }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_xining CULTURE = hd_xibei }
+	# 伯爵级：振武（麟州·府州）
+	zgrc_apply_county_culture_effect = { COUNTY = c_linzhou CULTURE = hd_xibei }
+	zgrc_apply_county_culture_effect = { COUNTY = c_fuzhou CULTURE = hd_xibei }
+
+	# 19. 河西（河西四郡）——「自武威以西……少盗贼，有和气之应」
+	# 公国级：河西｜甘肃｜瓜沙｜祁连｜镇番 d_xiutu｜居延
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_hexi CULTURE = liangzhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_gansu CULTURE = liangzhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_guasha CULTURE = liangzhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_qilian CULTURE = liangzhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_xiutu CULTURE = liangzhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_juyan CULTURE = liangzhou }
+
+	# 20. 楚 ——「信巫鬼，重淫祀」「江陵，故郢都……东有云梦之饶」
+	# 公国级：荆南（南郡）｜鄂岳｜湖南｜零陵｜五溪 d_wuxi（武陵郡）
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_jingnan CULTURE = jingzhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_eyue CULTURE = jingzhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_hunan CULTURE = jingzhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_lingling CULTURE = jingzhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_wuxi CULTURE = jingzhou }
+	# 伯爵级：襄邓（襄阳·郢州）｜陈许（申州）｜黔中（思州·施州）
+	zgrc_apply_county_culture_effect = { COUNTY = c_xiangyang CULTURE = jingzhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_yingzhou_2 CULTURE = jingzhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_shenzhou CULTURE = jingzhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_sizhou CULTURE = jingzhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_shizhou_1 CULTURE = jingzhou }
+
+	# 21. 吴 ——「吴粤之君皆好勇……好用剑，轻死易发」
+	# 公国级：淮南｜江东｜宣歙｜浙西｜浙东｜江西｜定江｜建宁｜威武｜平海｜昭信
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_huainan CULTURE = yangzhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_jiangdong CULTURE = yangzhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_xuanshe CULTURE = yangzhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_zhexi CULTURE = yangzhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_zhedong CULTURE = yangzhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_jiangxi CULTURE = yangzhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_dingjiang CULTURE = yangzhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_jianning CULTURE = yangzhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_weiwu CULTURE = yangzhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_pinghai CULTURE = yangzhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_zhaoxin CULTURE = yangzhou }
+	# 伯爵级：淮西（寿州·庐州·历阳·濠州·舒州）｜徐泗（泗州）
+	zgrc_apply_county_culture_effect = { COUNTY = c_shouzhou CULTURE = yangzhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_lujiang CULTURE = yangzhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_liyang_2 CULTURE = yangzhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_haozhou CULTURE = yangzhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_shuzhou CULTURE = yangzhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_sizhou_2 CULTURE = yangzhou }
+
+	# 22. 粤 ——「处近海，多犀、象、毒冒、珠玑、银、铜、果、布之凑。番禺，其一都会也」
+	# 公国级：岭南｜惠循｜高凉｜琼管｜桂管｜静江｜容管｜邕管｜海东｜升龙｜林西｜乂安
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_lingnan CULTURE = jiaozhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_huixun CULTURE = jiaozhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_gaoliang CULTURE = jiaozhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_qiongguan CULTURE = jiaozhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_guiguan CULTURE = jiaozhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_jingjiang CULTURE = jiaozhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_rongguan CULTURE = jiaozhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_yongguan CULTURE = jiaozhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_hai_dong CULTURE = jiaozhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_thang_long CULTURE = jiaozhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_lam_tay CULTURE = jiaozhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_nghe_an CULTURE = jiaozhou }
+
+	# 23. 巴蜀 ——「巴、蜀、广汉本南夷……俗不愁苦」「汉中淫失枝柱，与巴蜀同俗」
+	# 公国级：西川｜邛南｜东川｜武信｜兴元｜利阆｜巴渠｜夔忠
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_xichuan CULTURE = yizhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_qiongnan CULTURE = yizhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_dongchuan CULTURE = yizhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_wuxin CULTURE = yizhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_xingyuan CULTURE = yizhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_lilang CULTURE = yizhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_baqu CULTURE = yizhou }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_kuizhong CULTURE = yizhou }
+	# 伯爵级：黔中（黔州·溱州·南州·播州·夷州）｜金商（金州）｜襄邓（房州）
+	zgrc_apply_county_culture_effect = { COUNTY = c_qianzhou_1 CULTURE = yizhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_zhenxi CULTURE = yizhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_nanzhou CULTURE = yizhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_bochuan CULTURE = yizhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_yizhou_3 CULTURE = yizhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_jinzhou_1 CULTURE = yizhou }
+	zgrc_apply_county_culture_effect = { COUNTY = c_fangzhou_1 CULTURE = yizhou }
+
+	# 24. 东北 ——「玄菟、乐浪，武帝时置……箕子去之朝鲜，教其民以礼义」「东夷天性柔顺」
+	# 公国级：六州｜鸭渌长岭｜北界｜海州｜开城
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_yukju CULTURE = hd_dongbei }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_BAL_amnok_jangryeong CULTURE = hd_dongbei }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_bukgye CULTURE = hd_dongbei }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_haeju CULTURE = hd_dongbei }
+	zgrc_apply_duchy_culture_effect = { DUCHY = d_gaeseong CULTURE = hd_dongbei }
+	# 伯爵级：交州（交州·东州）｜东界（高城·登州）｜沃沮（南海）
+	zgrc_apply_county_culture_effect = { COUNTY = c_gyoju CULTURE = hd_dongbei }
+	zgrc_apply_county_culture_effect = { COUNTY = c_dongju CULTURE = hd_dongbei }
+	zgrc_apply_county_culture_effect = { COUNTY = c_goseong CULTURE = hd_dongbei }
+	zgrc_apply_county_culture_effect = { COUNTY = c_deungju CULTURE = hd_dongbei }
+	zgrc_apply_county_culture_effect = { COUNTY = c_BAL_namhae CULTURE = hd_dongbei }
+
+	# —— 力大飞砖：汉文化统治者（帝国部堂随中华持有者，其余随当地）——
+	zgrc_apply_ruler_local_culture_effect = yes
+}
+
+# ============================================================
+# 力大飞砖 · 汉文化统治者随当地风俗（帝国部堂随中华持有者）
+# every_ruler 中固定原版汉文化（han）者：
+#   帝国级别及以上 → 随中华霸权持有者（皇帝）文化
+#   其余 → 所在位置的汉文化分支
+# ============================================================
+zgrc_apply_ruler_local_culture_effect = {
+	every_ruler = {
+		limit = {
+			culture = culture:han
+		}
+		if = {
+			limit = {
+				highest_held_title_tier >= tier_empire
+			}
+			set_culture = title:h_china.holder.culture
+			every_courtier = {
+				limit = { culture = { has_cultural_pillar = heritage_chinese } }
+				set_culture = title:h_china.holder.culture
+			}
+			every_vassal = {
+				limit = { culture = { has_cultural_pillar = heritage_chinese } }
+				set_culture = title:h_china.holder.culture
+			}
+		}
+		else = {
+			if = {
+				limit = {
+					location.county.culture = { has_cultural_pillar = heritage_chinese }
+				}
+				set_culture = location.county.culture
+				every_courtier = {
+					limit = { culture = { has_cultural_pillar = heritage_chinese } }
+					set_culture = location.county.culture
+				}
+				every_vassal = {
+					limit = { culture = { has_cultural_pillar = heritage_chinese } }
+					set_culture = location.county.culture
+				}
+			}
+			else = {
+				set_culture = title:h_china.holder.culture
+				every_courtier = {
+					limit = { culture = { has_cultural_pillar = heritage_chinese } }
+					set_culture = title:h_china.holder.culture
+				}
+				every_vassal = {
+					limit = { culture = { has_cultural_pillar = heritage_chinese } }
+					set_culture = title:h_china.holder.culture
+				}
+			}
+		}
+	}
+}
+
+# ============================================================
+# 革新同步 —— 同步 effect
+# 触发：yearly_culture_pulse + 全局计数为 0（见 on_action）
+# 逻辑：随机选一个已知革新 → 同步给首领最高领主治下全部华夏礼乐文化
+# ============================================================
+zgrc_innovation_sync_effect = {
+	# 随机选一个已知革新
+	random_known_innovation = {
+		save_scope_as = chosen_innovation
+	}
+	# 未选中（该文化无已知革新）→ 跳过同步
+	if = {
+		limit = { exists = scope:chosen_innovation }
+		# 同步给首领最高领主治下全部华夏礼乐文化
+		culture_head = {
+			top_liege = {
+				every_sub_realm_county = {
+					culture = {
+						if = {
+							limit = {
+								has_cultural_tradition = tradition_zgrc_hua_xia_li_yue
+								NOT = { has_innovation = scope:chosen_innovation }
+							}
+							add_innovation = scope:chosen_innovation
+							# 消息通知：该文化有领袖 → 通知其文化领袖
+							if = {
+								limit = { exists = culture_head }
+								culture_head = {
+									send_interface_toast = {
+										type = event_toast_effect_good
+										title = zgrc_innovation_sync_toast_title
+										left_icon = this
+										custom_tooltip = zgrc_innovation_sync_toast_desc
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+# ============================================================
+# 革新初始化 —— 与原版 han 对齐
+# 依据：原版 tgp_silk_road_innovation_setup_effect 的 CHINA 段（culture:han）
+# 触发：on_game_start_after_lobby（经 zgrc_game_start_init 调用）
+# 效果：全部华夏礼乐文化开局解锁与原版 han 一致的中华革新（867+ 9 项；1066+ 追加 5 项）
+#      另按开局日期补挂原版 han 的时代与基础革新（见下方「时代与基础革新」段）：
+#        han 有专属 history/cultures/han.txt，866 即中世纪早期、1055 即中世纪盛期；
+#        本文化只吃组文件 heritage_chinese.txt（950 / 1150 才 join），故须在此补齐。
+# ============================================================
+zgrc_innovation_init_effect = {
+	every_culture_global = {
+		limit = {
+			has_cultural_tradition = tradition_zgrc_hua_xia_li_yue
+		}
+		# —— 全部开局（867 / 1066 / 1178）—— 防重保护（原版 tgp 丝路革新已配置给 han）
+		if = { limit = { NOT = { has_innovation = innovation_block_printing } } add_innovation = innovation_block_printing }
+		if = { limit = { NOT = { has_innovation = innovation_coking } } add_innovation = innovation_coking }
+		if = { limit = { NOT = { has_innovation = innovation_composite_crossbow } } add_innovation = innovation_composite_crossbow }
+		if = { limit = { NOT = { has_innovation = innovation_cupellation } } add_innovation = innovation_cupellation }
+		if = { limit = { NOT = { has_innovation = innovation_dragon_kiln } } add_innovation = innovation_dragon_kiln }
+		if = { limit = { NOT = { has_innovation = innovation_lacquered_armor } } add_innovation = innovation_lacquered_armor }
+		if = { limit = { NOT = { has_innovation = innovation_pharmacopoeia } } add_innovation = innovation_pharmacopoeia }
+		if = { limit = { NOT = { has_innovation = innovation_sericulture } } add_innovation = innovation_sericulture }
+		if = { limit = { NOT = { has_innovation = innovation_waterworks } } add_innovation = innovation_waterworks }
+		# —— 原版兵法承接（867 唐即得）——
+		if = { limit = { NOT = { has_innovation = innovation_repeating_crossbow } } add_innovation = innovation_repeating_crossbow }
+		if = { limit = { NOT = { has_innovation = innovation_zgrc_han_bingfa } } add_innovation = innovation_zgrc_han_bingfa }
+		# —— 1066 起追加 ——
+		if = {
+			limit = { game_start_date >= 1066.1.1 }
+			if = { limit = { NOT = { has_innovation = innovation_bulkheads } } add_innovation = innovation_bulkheads }
+			if = { limit = { NOT = { has_innovation = innovation_champa_rice } } add_innovation = innovation_champa_rice }
+			if = { limit = { NOT = { has_innovation = innovation_compass } } add_innovation = innovation_compass }
+			if = { limit = { NOT = { has_innovation = innovation_double_entry_bookkeeping } } add_innovation = innovation_double_entry_bookkeeping }
+			if = { limit = { NOT = { has_innovation = innovation_fire_medicine } } add_innovation = innovation_fire_medicine }
+			# —— 宋制（1066 起）——
+			if = { limit = { NOT = { has_innovation = innovation_zgrc_han_wubei } } add_innovation = innovation_zgrc_han_wubei }
+		}
+		# ============================================================
+		# 时代与基础革新 —— 对齐原版 han
+		# 依据：原版 history/cultures/han.txt
+		#   han 有专属历史文件（个体文件优先于组文件），故不吃组文件 heritage_chinese.txt；
+		#   本文化为数据库新建文化、只吃组文件，于是 867 开局停在部落时代、
+		#   1066 开局停在中世纪早期（组文件 950 才 join 早期、1150 才 join 盛期）。
+		# 对策：按开局日期补挂 han 的时代与对应日期块的革新，使开局进度与 han 一致。
+		#   han：866.1.1 join 中世纪早期；1055.1.1 join 中世纪盛期
+		# ============================================================
+		# ① 时代（join_era 连带该时代之前的全部时代）
+		if = {
+			limit = { game_start_date >= 1055.1.1 }
+			join_era = culture_era_high_medieval
+		}
+		else_if = {
+			limit = { game_start_date >= 866.1.1 }
+			join_era = culture_era_early_medieval
+		}
+		# ② 865.1.1 块（全部开局；repeating_crossbow 已在上面「原版兵法承接」给出）
+		if = { limit = { NOT = { has_innovation = innovation_motte } } add_innovation = innovation_motte }
+		if = { limit = { NOT = { has_innovation = innovation_barracks } } add_innovation = innovation_barracks }
+		if = { limit = { NOT = { has_innovation = innovation_catapult } } add_innovation = innovation_catapult }
+		if = { limit = { NOT = { has_innovation = innovation_mustering_grounds } } add_innovation = innovation_mustering_grounds }
+		if = { limit = { NOT = { has_innovation = innovation_development_01 } } add_innovation = innovation_development_01 }
+		if = { limit = { NOT = { has_innovation = innovation_city_planning } } add_innovation = innovation_city_planning }
+		if = { limit = { NOT = { has_innovation = innovation_currency_01 } } add_innovation = innovation_currency_01 }
+		if = { limit = { NOT = { has_innovation = innovation_crop_rotation } } add_innovation = innovation_crop_rotation }
+		if = { limit = { NOT = { has_innovation = innovation_casus_belli } } add_innovation = innovation_casus_belli }
+		if = { limit = { NOT = { has_innovation = innovation_ledger } } add_innovation = innovation_ledger }
+		if = { limit = { NOT = { has_innovation = innovation_plenary_assemblies } } add_innovation = innovation_plenary_assemblies }
+		# ③ 867.1.1 块
+		if = {
+			limit = { game_start_date >= 867.1.1 }
+			if = { limit = { NOT = { has_innovation = innovation_arched_saddle } } add_innovation = innovation_arched_saddle }
+		}
+		# ④ 900.1.1 块
+		if = {
+			limit = { game_start_date >= 900.1.1 }
+			if = { limit = { NOT = { has_innovation = innovation_bannus } } add_innovation = innovation_bannus }
+			if = { limit = { NOT = { has_innovation = innovation_quilted_armor } } add_innovation = innovation_quilted_armor }
+			if = { limit = { NOT = { has_innovation = innovation_gavelkind } } add_innovation = innovation_gavelkind }
+		}
+		# ⑤ 1050.1.1 块
+		if = {
+			limit = { game_start_date >= 1050.1.1 }
+			if = { limit = { NOT = { has_innovation = innovation_battlements } } add_innovation = innovation_battlements }
+			if = { limit = { NOT = { has_innovation = innovation_horseshoes } } add_innovation = innovation_horseshoes }
+			if = { limit = { NOT = { has_innovation = innovation_mangonel } } add_innovation = innovation_mangonel }
+			if = { limit = { NOT = { has_innovation = innovation_house_soldiers } } add_innovation = innovation_house_soldiers }
+			if = { limit = { NOT = { has_innovation = innovation_hereditary_rule } } add_innovation = innovation_hereditary_rule }
+			if = { limit = { NOT = { has_innovation = innovation_development_02 } } add_innovation = innovation_development_02 }
+			if = { limit = { NOT = { has_innovation = innovation_royal_prerogative } } add_innovation = innovation_royal_prerogative }
+			if = { limit = { NOT = { has_innovation = innovation_manorialism } } add_innovation = innovation_manorialism }
+			if = { limit = { NOT = { has_innovation = innovation_currency_02 } } add_innovation = innovation_currency_02 }
+			if = { limit = { NOT = { has_innovation = innovation_chronicle_writing } } add_innovation = innovation_chronicle_writing }
+		}
+		# ⑥ 1060.1.1 块
+		if = {
+			limit = { game_start_date >= 1060.1.1 }
+			if = { limit = { NOT = { has_innovation = innovation_trebuchet } } add_innovation = innovation_trebuchet }
+			if = { limit = { NOT = { has_innovation = innovation_hoardings } } add_innovation = innovation_hoardings }
+			if = { limit = { NOT = { has_innovation = innovation_land_grants } } add_innovation = innovation_land_grants }
+			if = { limit = { NOT = { has_innovation = innovation_castle_baileys } } add_innovation = innovation_castle_baileys }
+			if = { limit = { NOT = { has_innovation = innovation_burhs } } add_innovation = innovation_burhs }
+			if = { limit = { NOT = { has_innovation = innovation_baliffs } } add_innovation = innovation_baliffs }
+			if = { limit = { NOT = { has_innovation = innovation_armilary_sphere } } add_innovation = innovation_armilary_sphere }
+			if = { limit = { NOT = { has_innovation = innovation_men_at_arms } } add_innovation = innovation_men_at_arms }
+			if = { limit = { NOT = { has_innovation = innovation_guilds } } add_innovation = innovation_guilds }
+			if = { limit = { NOT = { has_innovation = innovation_currency_03 } } add_innovation = innovation_currency_03 }
+			if = { limit = { NOT = { has_innovation = innovation_development_03 } } add_innovation = innovation_development_03 }
+			if = { limit = { NOT = { has_innovation = innovation_divine_right } } add_innovation = innovation_divine_right }
+			if = { limit = { NOT = { has_innovation = innovation_advanced_bowmaking } } add_innovation = innovation_advanced_bowmaking }
+		}
+	}
+}
+# ============================================================
+# 革新初始化 —— 原版 han 文化专段
+# 原版 han 有专属 history/cultures/han.txt（个体文件优先于组文件），
+# 不读上面的 every_culture_global 段（那一段只覆盖本 mod 的文化），
+# 故本 mod 的「汉家兵法 / 汉传武备」必须单独补给它，
+# 否则原版汉文化无法解锁汉家 MAA（见 common/men_at_arms_types/zgrc_maa_types.txt）。
+# 触发：on_game_start_after_lobby（经 zgrc_game_start_init 调用，紧跟上一 effect）
+# ============================================================
+zgrc_innovation_init_han_effect = {
+	culture:han = {
+		# —— 全部开局：汉家兵法（867 唐即得）——
+		if = { limit = { NOT = { has_innovation = innovation_zgrc_han_bingfa } } add_innovation = innovation_zgrc_han_bingfa }
+		# —— 1066 起：汉传武备 ——
+		if = {
+			limit = { game_start_date >= 1066.1.1 }
+			if = { limit = { NOT = { has_innovation = innovation_zgrc_han_wubei } } add_innovation = innovation_zgrc_han_wubei }
+		}
+	}
+}
+
+
+##############################
+# 极端爆发 · 义军响应（on_war_started，War 作用域）
+# 机制直接绑定 tradition_zgrc_hou_sheng_shen_si（zgrc_linnan_xiangying_effect 仅显示）
+# 事件1：民粹（汉人起义）→ 直接添加汉家义勇事件兵（按被攻击方头衔）
+# 事件2：农民（汉人起义）→ 直接添加汉家义勇事件兵（按被攻击方头衔）
+# 事件3：普通战争（收复故土）→ 触发唯一事件 2001（义军来投，玩家选择）
+##############################
+zgrc_jiduan_baofa_effect = {
+	# —— 事件1：民粹 —— 乡勇来投（直接来投）——
+	if = {
+		limit = {
+			scope:war = { primary_attacker = { culture = { has_cultural_tradition = tradition_zgrc_hou_sheng_shen_si } } }
+			scope:war = { primary_defender = { NOT = { culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue } } } }
+			scope:war = { primary_attacker = { is_leading_faction_type = populist_faction } }
+		}
+		scope:war = {
+			primary_attacker = {
+				spawn_army = {
+					name = zgrc_yijun_army_name
+					men_at_arms = {
+						type = zgrc_hanjia_yiyong
+						stacks = {
+							value = 8   # 王国及以下：约800人
+							if = {
+								limit = { scope:war = { primary_defender = { highest_held_title_tier >= tier_empire } } }
+								add = 2   # 帝国：约1000人
+							}
+							if = {
+								limit = { scope:war = { primary_defender = { highest_held_title_tier >= tier_hegemony } } }
+								add = 4   # 霸主：约14000人
+							}
+						}
+					}
+				war = scope:war
+				location = this.location
+				origin = this.location
+				inheritable = no
+			}
+		}
+	}
+}
+# —— 事件2：农民 —— 乡勇聚义（直接来投）——
+	else_if = {
+		limit = {
+			scope:war = { primary_attacker = { culture = { has_cultural_tradition = tradition_zgrc_hou_sheng_shen_si } } }
+			scope:war = { primary_attacker = { OR = {
+						is_leading_faction_type = peasant_faction
+						is_leading_faction_type = escalated_peasant_faction
+					} } }
+		}
+		scope:war = {
+			primary_attacker = {
+				spawn_army = {
+					name = zgrc_yijun_army_name
+					men_at_arms = {
+						type = zgrc_hanjia_yiyong
+						stacks = {
+							value = 8   # 王国及以下：约800人
+							if = {
+								limit = { scope:war = { primary_defender = { highest_held_title_tier >= tier_empire } } }
+								add = 2   # 帝国：约1000人
+							}
+							if = {
+								limit = { scope:war = { primary_defender = { highest_held_title_tier >= tier_hegemony } } }
+								add = 4   # 霸主：约14000人
+							}
+						}
+					}
+				war = scope:war
+				location = this.location
+				origin = this.location
+				inheritable = no
+			}
+		}
+	}
+}
+# —— 事件3：普通战争 —— 义军来投（收复故土，唯一事件 2001）——
+	# 攻击方及其最高领主须同为华夏礼乐（避免异族宗主麾下的汉军假「收复」之名触发）
+	else_if = {
+		limit = {
+			scope:war = { 
+				primary_attacker = {
+					culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue }
+					top_liege = { culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue } }
+				}
+				primary_defender = { NOT = { culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue } } }
+				# 空安全：CB 弱引用失效时不下钻（on_war_started 边缘时序）
+				scope:war = { exists = casus_belli }
+			}
+			scope:war.casus_belli = {
+				any_in_list = {
+					list = target_titles
+					OR = {
+						title_province ?= { culture = { has_cultural_tradition = tradition_zgrc_hou_sheng_shen_si } }   # county 级目标（?= 保护非 county）
+						any_de_jure_county = { culture = { has_cultural_tradition = tradition_zgrc_hou_sheng_shen_si } }  # duchy/kingdom 的 de_jure counties
+					}
+				}
+			}
+		}
+		scope:war = {
+			primary_attacker = {
+				trigger_event = { id = zgrc_common.2001 }
+			}
+		}
+	}
+}
+##############################
+# 天下响应 · 封臣表态（on_war_started，War 作用域）
+# 设计基线：文化向（华夏礼乐 + 厚生慎死）。完全忽略政体：客观底线只用 is_landed。
+# 流程：大事判定（2 条 AND + 战争性质三路 OR）→ 遍历防御方封臣 → 触发事件 1010
+# 传参：var zgrc_luanshi_war（战争）
+##############################
+# 大事判定（War 作用域）：
+#   ① 防御方为「独立君主」且**帝国（含霸主）级以上**、**正统性等级 ≥ 4**，且持「华夏礼乐」传统——社稷级战事。
+#      注1：防御方若本身是藩属，其封臣的 top_liege 便不是防御方，故须排除，以免误认君父；
+#      注2：防御方若无华夏礼乐，则属蛮夷内乱，与我华夏无涉（麾下华裔封臣亦不作响应）；
+#   ② 来犯者成气候：攻击方军力 ≥ 防御方 × zgrc_luanshi_ratio_lo（0.8），上不封顶；
+#   ③ 战争性质够重（三路 OR，兼收「瞄准头衔」与「针对整国」两类 CB）：
+#      S1 社稷之争：目标含帝国级头衔 / 直指任一方首都（瞄准头衔型）；
+#      S2 亡国之战：亡国级 CB 白名单（zgrc_luanshi_annihilation_cb_trigger）——
+#         蒙古入侵、大圣战、绝罚解散帝国、天朝大征伐等「针对整国」之战，
+#         其 target_titles 为空或仅「邻接领地」，既无帝国级头衔也不含首都，
+#         无法用头衔层级判定捕获，只能按 CB 识别；
+#      S3 主头衔被夺：目标直指防御方最高头衔（兜底）。
+##############################
+zgrc_tianxia_xiangying_effect = {
+	if = {
+		limit = {
+			# ① 防御方为独立君主，且帝国（含霸主）级以上，且君父须有华夏礼乐：社稷级战事
+			scope:war.primary_defender = {
+				is_independent_ruler = yes
+				highest_held_title_tier >= tier_empire
+				# 正统性：君父须有足够正统（等级 ≥ 4）方可谓社稷所系
+				legitimacy_level >= 4
+				culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue }
+			}
+			# ② 来犯者成气候：攻击方 ≥ 防御方 × ratio_lo（愈强愈该响应，上不封顶）
+			scope:war.primary_attacker.current_military_strength >= {
+				value = {
+					value = scope:war.primary_defender.current_military_strength
+					multiply = zgrc_luanshi_ratio_lo
+				}
+			}
+			# ③ 战争性质够重：三路 OR
+			OR = {
+				# S1 社稷之争：目标含帝国级头衔 / 直指任一方首都
+				AND = {
+					# 空安全：CB 弱引用失效时不下钻（on_war_started 边缘时序）
+					scope:war = { exists = casus_belli }
+					scope:war.casus_belli = {
+						OR = {
+							any_in_list = {
+								list = target_titles
+								tier >= tier_empire
+							}
+							any_in_list = {
+								list = target_titles
+								OR = {
+									title_province ?= { this = scope:war.primary_defender.capital_province }
+									title_province ?= { this = scope:war.primary_attacker.capital_province }
+									any_de_jure_county = { this = scope:war.primary_defender.capital_county }
+									any_de_jure_county = { this = scope:war.primary_attacker.capital_county }
+								}
+							}
+						}
+					}
+				}
+				# S2 亡国之战：亡国级 CB 白名单（针对整国而非头衔的战争）
+				scope:war = { zgrc_luanshi_annihilation_cb_trigger = yes }
+				# S3 主头衔被夺：目标直指防御方最高头衔
+				AND = {
+					# 空安全：CB 弱引用失效时不下钻（on_war_started 边缘时序）
+					scope:war = { exists = casus_belli }
+					scope:war.casus_belli = {
+						any_in_list = {
+							list = target_titles
+							this = scope:war.primary_defender.primary_title
+						}
+					}
+				}
+			}
+		}
+		zgrc_luanshi_ask_effect = yes
+	}
+}
+
+# 遍历合格封臣：传参 + 发问（全部 / 仅玩家 由 game_rule 决定）
+zgrc_luanshi_ask_effect = {
+	scope:war.primary_defender = {
+		every_vassal_or_below = {
+			limit = {
+				# ① 客观底线：有实土（忽略政体）
+				is_landed = yes
+				# ② 文化底线：厚生慎死（机制绑定）
+				culture = { has_cultural_tradition = tradition_zgrc_hou_sheng_shen_si }
+				# ③ 冷却底线：同一人 10 年内不重复被问
+				NOT = { has_character_flag = zgrc_luanshi_asked }
+			}
+			# ④ 规则判定：全部（含 AI）/ 仅玩家
+			if = {
+				limit = {
+					OR = {
+						has_game_rule = zgrc_luanshi_xiangying_enabled
+						AND = {
+							has_game_rule = zgrc_luanshi_xiangying_player_only
+							is_ai = no
+						}
+					}
+				}
+				set_variable = { name = zgrc_luanshi_war value = scope:war }
+				add_character_flag = { flag = zgrc_luanshi_asked years = zgrc_luanshi_cooldown_years }
+				if = {
+					limit = { is_ai = yes }
+					random = {
+						chance = zgrc_luanshi_ai_chance
+						trigger_event = { id = zgrc_common.1010 }
+					}
+				}
+				else = {
+					trigger_event = { id = zgrc_common.1010 }
+				}
+			}
+		}
+	}
+}
+
+# 选项A · 勤王：散家财、起乡勇，奔赴君父之难
+zgrc_luanshi_muster_effect = {
+	# 散家财（自有金，事件消耗）
+	remove_short_term_gold = zgrc_luanshi_muster_cost
+	# 起乡勇（汉家义勇事件兵：随行不编入常备）
+	spawn_army = {
+		name = zgrc_yijun_army_name
+		men_at_arms = {
+			type = zgrc_hanjia_yiyong
+			stacks = zgrc_luanshi_muster_stacks
+		}
+		location = root.location
+		origin = root.location
+		inheritable = no
+		war = root.var:zgrc_luanshi_war
+	}
+	# 入列防御方（与君父并肩）
+	root.var:zgrc_luanshi_war ?= { add_defender = root }
+	# 众望所归：义声素著者再勤王，威望倍之
+	if = {
+		limit = { has_character_modifier = zgrc_zhongyi_modifier }
+		add_prestige = 100
+	}
+	# 忠义之名
+	add_character_modifier = {
+		modifier = zgrc_zhongyi_modifier
+		years = 5
+	}
+	add_prestige = 100
+	# 传言·美名立乡：县记忠义传闻
+	zgrc_wenyan_mark_effect = { RUMOR = zgrc_wen_zhongyi HERO = zgrc_wen_hero_zhongyi }
+	remove_variable = zgrc_luanshi_war
+}
+
+# ============================================================
+# 传言系统 —— 立名于乡（美名/恶名传闻）
+# 存储：county 变量（计数制寿命）+ 主角 scope 变量 + 王国门禁变量
+# 调用：zgrc_wenyan_mark_effect = { RUMOR = 传闻变量名 HERO = 主角变量名 }
+# ============================================================
+zgrc_wenyan_mark_effect = {
+	capital_county = {
+		# 同类传闻已存在则刷新计数与主角
+		set_variable = { name = $RUMOR$ value = zgrc_wen_rumor_count }
+		set_variable = { name = $HERO$ value = root }
+	}
+}
+
+# 旅行听闻：只听脚下县——当前所在伯爵领有传闻则按类型分发事件
+# 调用方：on_action zgrc_wenyan_travel_check（root = 旅行者）
+zgrc_wenyan_try_hear_effect = {
+	if = {
+		limit = {
+			# 空安全：与 on_action zgrc_wenyan_travel_check 同因（启程首步 / 海上 / 无伯爵领）
+			exists = current_travel_plan
+			current_travel_plan = {
+				exists = current_location
+				current_location = { exists = county }
+			}
+		}
+		current_travel_plan.current_location.county = {
+			save_scope_as = zgrc_wen_county
+		}
+	}
+	if = {
+		limit = { exists = scope:zgrc_wen_county }
+		# 持久化为 root 变量（事件内以 var 访问；参考道士mod：跨链 save_scope 不可靠）
+		set_variable = { name = zgrc_wen_county value = scope:zgrc_wen_county }
+		if = {
+			limit = {
+				scope:zgrc_wen_county = {
+					has_variable = zgrc_wen_zhongyi
+					# 校验：本人不听自己的传闻（本县此传闻主角即旅行者时不触发、不消耗计数）
+					NOT = { var:zgrc_wen_hero_zhongyi ?= { this = root } }
+				}
+			}
+			trigger_event = zgrc_common.3001
+		}
+		else_if = {
+			limit = {
+				scope:zgrc_wen_county = {
+					has_variable = zgrc_wen_rende
+					# 校验：本人不听自己的传闻
+					NOT = { var:zgrc_wen_hero_rende ?= { this = root } }
+				}
+			}
+			trigger_event = zgrc_common.3002
+		}
+		else_if = {
+			limit = {
+				scope:zgrc_wen_county = {
+					has_variable = zgrc_wen_yexin
+					# 校验：本人不听自己的传闻
+					NOT = { var:zgrc_wen_hero_yexin ?= { this = root } }
+				}
+			}
+			trigger_event = zgrc_common.3003
+		}
+		else_if = {
+			limit = {
+				scope:zgrc_wen_county = {
+					has_variable = zgrc_wen_funi
+					# 校验：本人不听自己的传闻
+					NOT = { var:zgrc_wen_hero_funi ?= { this = root } }
+				}
+			}
+			trigger_event = zgrc_common.3004
+		}
+	}
+}
+
+# 选项B · 举义：义旗在手，与来犯者共击旧主
+zgrc_luanshi_rebel_effect = {
+	# 起乡勇（同上）
+	spawn_army = {
+		name = zgrc_yijun_army_name
+		men_at_arms = {
+			type = zgrc_hanjia_yiyong
+			stacks = zgrc_luanshi_muster_stacks
+		}
+		location = root.location
+		origin = root.location
+		inheritable = no
+	}
+	# 与旧主断绝，自树一帜
+	create_title_and_vassal_change = {
+		type = independency
+		save_scope_as = zgrc_luanshi_indep_change
+	}
+	change_liege_or_become_independent = {
+		CHANGE = scope:zgrc_luanshi_indep_change
+		VASSAL = this
+	}
+	resolve_title_and_vassal_change = scope:zgrc_luanshi_indep_change
+	# 投向天命所归者，共击旧主
+	root.var:zgrc_luanshi_war ?= { add_attacker = root }
+	# 野心之名
+	add_character_modifier = {
+		modifier = zgrc_yexin_modifier
+		years = 5
+	}
+	# 传言·恶名立乡：同室操戈记野心，助胡伐汉记附逆
+	if = {
+		limit = {
+			root.var:zgrc_luanshi_war.primary_attacker = {
+				culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue }
+			}
+		}
+		zgrc_wenyan_mark_effect = { RUMOR = zgrc_wen_yexin HERO = zgrc_wen_hero_yexin }
+	}
+	else = {
+		zgrc_wenyan_mark_effect = { RUMOR = zgrc_wen_funi HERO = zgrc_wen_hero_funi }
+	}
+	remove_variable = zgrc_luanshi_war
+}
+
+# ============================================================
+# 祖风 · 跨大区迁居（出生时判定，「后代风俗」的配套机制）
+# 六大方区（汉书风俗大区）：
+#   yanzhao 燕赵·北方（燕 赵 晋 河内 北地）
+#   qilu    齐鲁·东方（齐 鲁 宋）
+#   sanhe   三河·中原（周 韩 郑 卫 陈 南阳）
+#   qinlong 秦陇·巴蜀（关中 河东 西北 河西 巴蜀）
+#   jingwu  荆吴·南方（楚 汝南 吴 粤）
+#   dongyi  东夷·辽海（东北）
+# 调用顺序（同文化改属前记录，改文化后挂载）：
+#   ① zgrc_zufeng_set_origin_effect = yes   ← 记录旧文化大区，须在 set_culture 之前
+#   ② set_culture = ...                     ← 出生：location.county.culture
+#                                             入乡随俗：capital_county.culture
+#   ③ zgrc_zufeng_clear_effect = yes        ← 清旧祖风（全量、有则移除），二次迁居时才需要
+#   ④ zgrc_zufeng_apply_effect = yes        ← 按新文化大区挂「某祖风」modifier
+# 同大区内跨风俗不改祖风；不在六区内者（无大区归属）不挂；任何时刻至多 1 条祖风。
+# 调用点（2 处）：
+#   · on_action zgrc_hanjia_children_on_birth —— 新生儿随出生地风俗（① ② ④）
+#   · 事件 zgrc_common.0002 A「入乡随俗」—— 久居他乡改从当地风俗（① ② ③ ④）
+# ============================================================
+
+# ① 记录祖上（继承）大区 → 变量 zgrc_zufeng_from（存 flag 值）
+zgrc_zufeng_set_origin_effect = {
+	# 默认：不在六区内（无祖风）
+	set_variable = { name = zgrc_zufeng_from value = flag:none }
+	# 燕赵·北方
+	if = {
+		limit = {
+			OR = {
+				culture = { this = culture:youzhou }
+				culture = { this = culture:jizhou }
+				culture = { this = culture:bingzhou }
+				culture = { this = culture:hd_henei }
+				culture = { this = culture:hd_beidi }
+			}
+		}
+		set_variable = { name = zgrc_zufeng_from value = flag:yanzhao }
+	}
+	# 齐鲁·东方
+	else_if = {
+		limit = {
+			OR = {
+				culture = { this = culture:hd_qi_state }
+				culture = { this = culture:qingzhou }
+				culture = { this = culture:yanzhou }
+			}
+		}
+		set_variable = { name = zgrc_zufeng_from value = flag:qilu }
+	}
+	# 三河·中原
+	else_if = {
+		limit = {
+			OR = {
+				culture = { this = culture:hd_zhou_state }
+				culture = { this = culture:hd_han_state }
+				culture = { this = culture:hd_zheng_state }
+				culture = { this = culture:hd_wei_state }
+				culture = { this = culture:hd_chen_state }
+				culture = { this = culture:yuzhou }
+			}
+		}
+		set_variable = { name = zgrc_zufeng_from value = flag:sanhe }
+	}
+	# 秦陇·巴蜀
+	else_if = {
+		limit = {
+			OR = {
+				culture = { this = culture:han }
+				culture = { this = culture:hd_hedong }
+				culture = { this = culture:hd_xibei }
+				culture = { this = culture:liangzhou }
+				culture = { this = culture:yizhou }
+			}
+		}
+		set_variable = { name = zgrc_zufeng_from value = flag:qinlong }
+	}
+	# 荆吴·南方
+	else_if = {
+		limit = {
+			OR = {
+				culture = { this = culture:jingzhou }
+				culture = { this = culture:xuzhou }
+				culture = { this = culture:yangzhou }
+				culture = { this = culture:jiaozhou }
+			}
+		}
+		set_variable = { name = zgrc_zufeng_from value = flag:jingwu }
+	}
+	# 东夷·辽海
+	else_if = {
+		limit = { culture = { this = culture:hd_dongbei } }
+		set_variable = { name = zgrc_zufeng_from value = flag:dongyi }
+	}
+}
+
+# ③ 清旧祖风 —— 全量、有则清理（30 条）
+#    用于二次迁居（入乡随俗）先清掉旧祖风，保证任何时刻至多 1 条祖风
+zgrc_zufeng_clear_effect = {
+	# 源：燕赵·北方
+	if = { limit = { has_character_modifier = zgrc_zufeng_yanzhao_qilu_modifier } remove_character_modifier = zgrc_zufeng_yanzhao_qilu_modifier }
+	if = { limit = { has_character_modifier = zgrc_zufeng_yanzhao_sanhe_modifier } remove_character_modifier = zgrc_zufeng_yanzhao_sanhe_modifier }
+	if = { limit = { has_character_modifier = zgrc_zufeng_yanzhao_qinlong_modifier } remove_character_modifier = zgrc_zufeng_yanzhao_qinlong_modifier }
+	if = { limit = { has_character_modifier = zgrc_zufeng_yanzhao_jingwu_modifier } remove_character_modifier = zgrc_zufeng_yanzhao_jingwu_modifier }
+	if = { limit = { has_character_modifier = zgrc_zufeng_yanzhao_dongyi_modifier } remove_character_modifier = zgrc_zufeng_yanzhao_dongyi_modifier }
+	# 源：齐鲁·东方
+	if = { limit = { has_character_modifier = zgrc_zufeng_qilu_yanzhao_modifier } remove_character_modifier = zgrc_zufeng_qilu_yanzhao_modifier }
+	if = { limit = { has_character_modifier = zgrc_zufeng_qilu_sanhe_modifier } remove_character_modifier = zgrc_zufeng_qilu_sanhe_modifier }
+	if = { limit = { has_character_modifier = zgrc_zufeng_qilu_qinlong_modifier } remove_character_modifier = zgrc_zufeng_qilu_qinlong_modifier }
+	if = { limit = { has_character_modifier = zgrc_zufeng_qilu_jingwu_modifier } remove_character_modifier = zgrc_zufeng_qilu_jingwu_modifier }
+	if = { limit = { has_character_modifier = zgrc_zufeng_qilu_dongyi_modifier } remove_character_modifier = zgrc_zufeng_qilu_dongyi_modifier }
+	# 源：三河·中原
+	if = { limit = { has_character_modifier = zgrc_zufeng_sanhe_yanzhao_modifier } remove_character_modifier = zgrc_zufeng_sanhe_yanzhao_modifier }
+	if = { limit = { has_character_modifier = zgrc_zufeng_sanhe_qilu_modifier } remove_character_modifier = zgrc_zufeng_sanhe_qilu_modifier }
+	if = { limit = { has_character_modifier = zgrc_zufeng_sanhe_qinlong_modifier } remove_character_modifier = zgrc_zufeng_sanhe_qinlong_modifier }
+	if = { limit = { has_character_modifier = zgrc_zufeng_sanhe_jingwu_modifier } remove_character_modifier = zgrc_zufeng_sanhe_jingwu_modifier }
+	if = { limit = { has_character_modifier = zgrc_zufeng_sanhe_dongyi_modifier } remove_character_modifier = zgrc_zufeng_sanhe_dongyi_modifier }
+	# 源：秦陇·巴蜀
+	if = { limit = { has_character_modifier = zgrc_zufeng_qinlong_yanzhao_modifier } remove_character_modifier = zgrc_zufeng_qinlong_yanzhao_modifier }
+	if = { limit = { has_character_modifier = zgrc_zufeng_qinlong_qilu_modifier } remove_character_modifier = zgrc_zufeng_qinlong_qilu_modifier }
+	if = { limit = { has_character_modifier = zgrc_zufeng_qinlong_sanhe_modifier } remove_character_modifier = zgrc_zufeng_qinlong_sanhe_modifier }
+	if = { limit = { has_character_modifier = zgrc_zufeng_qinlong_jingwu_modifier } remove_character_modifier = zgrc_zufeng_qinlong_jingwu_modifier }
+	if = { limit = { has_character_modifier = zgrc_zufeng_qinlong_dongyi_modifier } remove_character_modifier = zgrc_zufeng_qinlong_dongyi_modifier }
+	# 源：荆吴·南方
+	if = { limit = { has_character_modifier = zgrc_zufeng_jingwu_yanzhao_modifier } remove_character_modifier = zgrc_zufeng_jingwu_yanzhao_modifier }
+	if = { limit = { has_character_modifier = zgrc_zufeng_jingwu_qilu_modifier } remove_character_modifier = zgrc_zufeng_jingwu_qilu_modifier }
+	if = { limit = { has_character_modifier = zgrc_zufeng_jingwu_sanhe_modifier } remove_character_modifier = zgrc_zufeng_jingwu_sanhe_modifier }
+	if = { limit = { has_character_modifier = zgrc_zufeng_jingwu_qinlong_modifier } remove_character_modifier = zgrc_zufeng_jingwu_qinlong_modifier }
+	if = { limit = { has_character_modifier = zgrc_zufeng_jingwu_dongyi_modifier } remove_character_modifier = zgrc_zufeng_jingwu_dongyi_modifier }
+	# 源：东夷·辽海
+	if = { limit = { has_character_modifier = zgrc_zufeng_dongyi_yanzhao_modifier } remove_character_modifier = zgrc_zufeng_dongyi_yanzhao_modifier }
+	if = { limit = { has_character_modifier = zgrc_zufeng_dongyi_qilu_modifier } remove_character_modifier = zgrc_zufeng_dongyi_qilu_modifier }
+	if = { limit = { has_character_modifier = zgrc_zufeng_dongyi_sanhe_modifier } remove_character_modifier = zgrc_zufeng_dongyi_sanhe_modifier }
+	if = { limit = { has_character_modifier = zgrc_zufeng_dongyi_qinlong_modifier } remove_character_modifier = zgrc_zufeng_dongyi_qinlong_modifier }
+	if = { limit = { has_character_modifier = zgrc_zufeng_dongyi_jingwu_modifier } remove_character_modifier = zgrc_zufeng_dongyi_jingwu_modifier }
+}
+
+# ④ 按新文化大区挂祖风 modifier（须在 set_culture 之后调用）
+#    同一新大区下的 5 个来源分支互斥（var:zgrc_zufeng_from 只有一个值）
+zgrc_zufeng_apply_effect = {
+	# 出生地：燕赵·北方
+	if = {
+		limit = {
+			OR = {
+				culture = { this = culture:youzhou }
+				culture = { this = culture:jizhou }
+				culture = { this = culture:bingzhou }
+				culture = { this = culture:hd_henei }
+				culture = { this = culture:hd_beidi }
+			}
+		}
+		if = { limit = { var:zgrc_zufeng_from = flag:qilu } add_character_modifier = { modifier = zgrc_zufeng_qilu_yanzhao_modifier years = zgrc_zufeng_years } }
+		else_if = { limit = { var:zgrc_zufeng_from = flag:sanhe } add_character_modifier = { modifier = zgrc_zufeng_sanhe_yanzhao_modifier years = zgrc_zufeng_years } }
+		else_if = { limit = { var:zgrc_zufeng_from = flag:qinlong } add_character_modifier = { modifier = zgrc_zufeng_qinlong_yanzhao_modifier years = zgrc_zufeng_years } }
+		else_if = { limit = { var:zgrc_zufeng_from = flag:jingwu } add_character_modifier = { modifier = zgrc_zufeng_jingwu_yanzhao_modifier years = zgrc_zufeng_years } }
+		else_if = { limit = { var:zgrc_zufeng_from = flag:dongyi } add_character_modifier = { modifier = zgrc_zufeng_dongyi_yanzhao_modifier years = zgrc_zufeng_years } }
+	}
+	# 出生地：齐鲁·东方
+	else_if = {
+		limit = {
+			OR = {
+				culture = { this = culture:hd_qi_state }
+				culture = { this = culture:qingzhou }
+				culture = { this = culture:yanzhou }
+			}
+		}
+		if = { limit = { var:zgrc_zufeng_from = flag:yanzhao } add_character_modifier = { modifier = zgrc_zufeng_yanzhao_qilu_modifier years = zgrc_zufeng_years } }
+		else_if = { limit = { var:zgrc_zufeng_from = flag:sanhe } add_character_modifier = { modifier = zgrc_zufeng_sanhe_qilu_modifier years = zgrc_zufeng_years } }
+		else_if = { limit = { var:zgrc_zufeng_from = flag:qinlong } add_character_modifier = { modifier = zgrc_zufeng_qinlong_qilu_modifier years = zgrc_zufeng_years } }
+		else_if = { limit = { var:zgrc_zufeng_from = flag:jingwu } add_character_modifier = { modifier = zgrc_zufeng_jingwu_qilu_modifier years = zgrc_zufeng_years } }
+		else_if = { limit = { var:zgrc_zufeng_from = flag:dongyi } add_character_modifier = { modifier = zgrc_zufeng_dongyi_qilu_modifier years = zgrc_zufeng_years } }
+	}
+	# 出生地：三河·中原
+	else_if = {
+		limit = {
+			OR = {
+				culture = { this = culture:hd_zhou_state }
+				culture = { this = culture:hd_han_state }
+				culture = { this = culture:hd_zheng_state }
+				culture = { this = culture:hd_wei_state }
+				culture = { this = culture:hd_chen_state }
+				culture = { this = culture:yuzhou }
+			}
+		}
+		if = { limit = { var:zgrc_zufeng_from = flag:yanzhao } add_character_modifier = { modifier = zgrc_zufeng_yanzhao_sanhe_modifier years = zgrc_zufeng_years } }
+		else_if = { limit = { var:zgrc_zufeng_from = flag:qilu } add_character_modifier = { modifier = zgrc_zufeng_qilu_sanhe_modifier years = zgrc_zufeng_years } }
+		else_if = { limit = { var:zgrc_zufeng_from = flag:qinlong } add_character_modifier = { modifier = zgrc_zufeng_qinlong_sanhe_modifier years = zgrc_zufeng_years } }
+		else_if = { limit = { var:zgrc_zufeng_from = flag:jingwu } add_character_modifier = { modifier = zgrc_zufeng_jingwu_sanhe_modifier years = zgrc_zufeng_years } }
+		else_if = { limit = { var:zgrc_zufeng_from = flag:dongyi } add_character_modifier = { modifier = zgrc_zufeng_dongyi_sanhe_modifier years = zgrc_zufeng_years } }
+	}
+	# 出生地：秦陇·巴蜀
+	else_if = {
+		limit = {
+			OR = {
+				culture = { this = culture:han }
+				culture = { this = culture:hd_hedong }
+				culture = { this = culture:hd_xibei }
+				culture = { this = culture:liangzhou }
+				culture = { this = culture:yizhou }
+			}
+		}
+		if = { limit = { var:zgrc_zufeng_from = flag:yanzhao } add_character_modifier = { modifier = zgrc_zufeng_yanzhao_qinlong_modifier years = zgrc_zufeng_years } }
+		else_if = { limit = { var:zgrc_zufeng_from = flag:qilu } add_character_modifier = { modifier = zgrc_zufeng_qilu_qinlong_modifier years = zgrc_zufeng_years } }
+		else_if = { limit = { var:zgrc_zufeng_from = flag:sanhe } add_character_modifier = { modifier = zgrc_zufeng_sanhe_qinlong_modifier years = zgrc_zufeng_years } }
+		else_if = { limit = { var:zgrc_zufeng_from = flag:jingwu } add_character_modifier = { modifier = zgrc_zufeng_jingwu_qinlong_modifier years = zgrc_zufeng_years } }
+		else_if = { limit = { var:zgrc_zufeng_from = flag:dongyi } add_character_modifier = { modifier = zgrc_zufeng_dongyi_qinlong_modifier years = zgrc_zufeng_years } }
+	}
+	# 出生地：荆吴·南方
+	else_if = {
+		limit = {
+			OR = {
+				culture = { this = culture:jingzhou }
+				culture = { this = culture:xuzhou }
+				culture = { this = culture:yangzhou }
+				culture = { this = culture:jiaozhou }
+			}
+		}
+		if = { limit = { var:zgrc_zufeng_from = flag:yanzhao } add_character_modifier = { modifier = zgrc_zufeng_yanzhao_jingwu_modifier years = zgrc_zufeng_years } }
+		else_if = { limit = { var:zgrc_zufeng_from = flag:qilu } add_character_modifier = { modifier = zgrc_zufeng_qilu_jingwu_modifier years = zgrc_zufeng_years } }
+		else_if = { limit = { var:zgrc_zufeng_from = flag:sanhe } add_character_modifier = { modifier = zgrc_zufeng_sanhe_jingwu_modifier years = zgrc_zufeng_years } }
+		else_if = { limit = { var:zgrc_zufeng_from = flag:qinlong } add_character_modifier = { modifier = zgrc_zufeng_qinlong_jingwu_modifier years = zgrc_zufeng_years } }
+		else_if = { limit = { var:zgrc_zufeng_from = flag:dongyi } add_character_modifier = { modifier = zgrc_zufeng_dongyi_jingwu_modifier years = zgrc_zufeng_years } }
+	}
+	# 出生地：东夷·辽海
+	else_if = {
+		limit = { culture = { this = culture:hd_dongbei } }
+		if = { limit = { var:zgrc_zufeng_from = flag:yanzhao } add_character_modifier = { modifier = zgrc_zufeng_yanzhao_dongyi_modifier years = zgrc_zufeng_years } }
+		else_if = { limit = { var:zgrc_zufeng_from = flag:qilu } add_character_modifier = { modifier = zgrc_zufeng_qilu_dongyi_modifier years = zgrc_zufeng_years } }
+		else_if = { limit = { var:zgrc_zufeng_from = flag:sanhe } add_character_modifier = { modifier = zgrc_zufeng_sanhe_dongyi_modifier years = zgrc_zufeng_years } }
+		else_if = { limit = { var:zgrc_zufeng_from = flag:qinlong } add_character_modifier = { modifier = zgrc_zufeng_qinlong_dongyi_modifier years = zgrc_zufeng_years } }
+		else_if = { limit = { var:zgrc_zufeng_from = flag:jingwu } add_character_modifier = { modifier = zgrc_zufeng_jingwu_dongyi_modifier years = zgrc_zufeng_years } }
+	}
+	remove_variable = zgrc_zufeng_from
+}
+
+# ============================================================
+# 大复仇 · 亲人被害 → 直系亲属复仇抉择（root = 死者）
+# ============================================================
+# 闸①：死者死有余辜（被合法处决）→ 不复仇（断环，防无限复仇链）
+# 闸②：凶手已知（scope:killer 存在，见 death.txt:3「If a killer is known」）
+#        秘密谋杀未揭发时 killer 不存在 → 家人无从复仇
+# 范围：父母 + 子女 + 兄弟姐妹
+# 事件：zgrc_common.4001（玩家自选；AI 按 ai_chance 权重自选）
+# ============================================================
+zgrc_dachou_on_death_effect = {
+	save_scope_as = zgrc_victim
+
+	if = {
+		limit = {
+			exists = scope:killer
+			NOT = { scope:killer = root }
+			# 被合法处决者＝罪犯，死有余辜：亲属不得对行刑者复仇
+			NOT = { scope:death_reason ?= flag:death_execution }
+		}
+
+		scope:killer = { save_scope_as = zgrc_killer }
+
+		# —— 子嗣 ——
+		every_child = {
+			limit = { zgrc_can_revenge_trigger = yes }
+			trigger_event = { id = zgrc_common.4001 days = 3 }
+		}
+
+		# —— 兄弟姐妹 ——
+		every_sibling = {
+			limit = { zgrc_can_revenge_trigger = yes }
+			trigger_event = { id = zgrc_common.4001 days = 3 }
+		}
+
+		# —— 父亲 ——
+		if = {
+			limit = { exists = father }
+			father = {
+				if = {
+					limit = { zgrc_can_revenge_trigger = yes }
+					trigger_event = { id = zgrc_common.4001 days = 3 }
+				}
+			}
+		}
+
+		# —— 母亲 ——
+		if = {
+			limit = { exists = mother }
+			mother = {
+				if = {
+					limit = { zgrc_can_revenge_trigger = yes }
+					trigger_event = { id = zgrc_common.4001 days = 3 }
+				}
+			}
+		}
+	}
+}

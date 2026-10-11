@@ -1,0 +1,74 @@
+﻿# Native title/vassal changes are character-rooted; defer until transactions finish.
+on_title_gain = { on_actions = { WJ_mr_changed WJ_mr_conquest } }
+on_title_lost = { on_actions = { WJ_mr_changed } }
+on_vassal_change = { on_actions = { WJ_mr_changed } }
+on_government_change = { on_actions = { WJ_mr_changed } }
+on_liege_government_change = { on_actions = { WJ_mr_changed } }
+on_death = { on_actions = { WJ_mr_death } }
+# New campaigns only, after startup laws/contracts (including the 184 fixtures) settle.
+on_game_start_after_lobby = { on_actions = { WJ_mr_new_game } }
+WJ_mr_new_game = {
+ effect = {
+  every_ruler = {
+   limit = {
+    is_independent_ruler = yes
+    government_has_flag = government_is_celestial
+    government_has_flag = government_is_celestial
+   }
+   trigger_event = { on_action = WJ_mr_initial_ranks days = 1 }
+  }
+ }
+}
+WJ_mr_initial_ranks = {
+ trigger = {
+  is_alive = yes
+  is_independent_ruler = yes
+  government_has_flag = government_is_celestial
+  government_has_flag = government_is_celestial
+ }
+ effect = {
+  every_vassal_or_below = { WJ_mr_initialize_rank = yes }
+ }
+}
+WJ_mr_changed = {
+ trigger = { OR = { government_has_flag = government_is_celestial WJ_mr_has_rank = yes has_variable = WJ_mr_asker any_vassal_or_below = { OR = { WJ_mr_has_rank = yes has_variable = WJ_mr_asker } } } }
+ effect = { trigger_event = { on_action = WJ_mr_after_change days = 1 } }
+}
+WJ_mr_after_change = {
+ effect = {
+  WJ_mr_reconcile = yes
+  every_vassal_or_below = { limit = { OR = { WJ_mr_has_rank = yes has_variable = WJ_mr_asker } } WJ_mr_reconcile = yes }
+  # 全境找申请人只在全图仍有进行中申请时执行；否则只处理本人及其下属树。
+  if = {
+   limit = {
+    exists = global_var:hd_mr_active_request_count
+    global_var:hd_mr_active_request_count > 0
+   }
+   top_liege = { every_vassal_or_below = { limit = { has_variable = WJ_mr_asker } WJ_mr_reconcile = yes } }
+  }
+ }
+}
+WJ_mr_death = {
+ trigger = { OR = { government_has_flag = government_is_celestial WJ_mr_has_rank = yes has_variable = WJ_mr_asker } }
+ effect = {
+  save_scope_as = WJ_mr_deceased
+		if = {
+			limit = {
+				trigger_if = {
+					limit = { exists = global_var:hd_mr_active_request_count }
+					global_var:hd_mr_active_request_count > 0
+				}
+				trigger_else = { always = no }
+			}
+			top_liege = { every_vassal_or_below = { limit = { has_variable = WJ_mr_asker OR = { var:WJ_mr_asker = scope:WJ_mr_deceased var:WJ_mr_reviewer = scope:WJ_mr_deceased this = scope:WJ_mr_deceased } } WJ_mr_failure = yes } }
+		}
+  WJ_mr_end_request = yes WJ_mr_clear_rank = yes remove_variable = WJ_mr_award_realm
+ }
+}
+WJ_mr_conquest = {
+ trigger = { scope:title = { tier = tier_hegemony } OR = { scope:transfer_type = flag:conquest scope:transfer_type = flag:conquest_holy_war scope:transfer_type = flag:conquest_claim scope:transfer_type = flag:conquest_populist scope:transfer_type = flag:usurped scope:transfer_type = flag:faction_demand } }
+ effect = {
+  every_vassal_or_below = { limit = { var:WJ_mr_award_realm ?= scope:title } WJ_mr_clear_rank = yes remove_variable = WJ_mr_award_realm }
+  every_vassal_or_below = { limit = { var:WJ_mr_realm ?= scope:title } WJ_mr_failure = yes }
+ }
+}

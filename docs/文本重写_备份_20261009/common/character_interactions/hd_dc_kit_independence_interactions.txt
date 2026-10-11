@@ -1,0 +1,267 @@
+﻿# 天朝循环·时代特色：乱世「要求独立」（2026-10-08 用户指定，取代进入群雄割据时的自动自立脚本）
+# - 时代：整个乱世（崩溃 / 群雄割据 / 对峙，hd_cycle_is_luanshi_trigger）
+# - 行为人：县级及以上有地封臣，其最高领主须是天朝循环参与者；对象：其直属领主
+# - 免费；对同一领主冷却 5 年；不得被囚禁、不得与领主交战
+# - 同意：和平自立，双方停战 1825 天，原主君无讨逆 CB（hd_dc_kit_demand_independence_accepted_effect）
+# - 拒绝：照样自立，但主头衔记叛离标记 10 年，原主君主头衔的现任持有者可用「讨逆」CB（hd_dc_kit_demand_independence_declined_effect）
+# - AI 领主是否同意：基础 -10，对封臣好感 ×0.5，性格每项 ±30，军力比（封臣/领主）≥1 +60、≥0.5 +30、≥0.25 0、<0.25 -40
+# - AI 封臣是否发起（每 24 个月评估）：军力比 <0.25 不发起，≥1 +60、≥0.5 +30；性格每项 ±30，忠诚 -100；
+#   对领主好感 ×-0.5；忠顺于领主（is_obedient_to）则不发起
+
+hd_dc_demand_independence_interaction = {
+	category = interaction_category_vassal
+	icon = independence
+	interface_priority = 110
+	desc = hd_dc_demand_independence_interaction_desc
+	greeting = negative
+	notification_text = hd_dc_demand_independence_interaction_notification
+	popup_on_receive = yes
+	pause_on_receive = yes
+	# 领主拒绝同样会自立，故领主不愿接受时也必须能发出
+	can_send_despite_rejection = yes
+
+	cooldown_against_recipient = { years = 5 }
+
+	is_shown = {
+		scope:actor != scope:recipient
+		hd_cycle_is_luanshi_trigger = yes
+		scope:actor = {
+			is_landed = yes
+			highest_held_title_tier >= tier_county
+			liege = scope:recipient
+			top_liege = {
+				top_participant_group:dynastic_cycle ?= { always = yes }
+			}
+		}
+	}
+
+	is_available = {
+		is_imprisoned = no
+	}
+
+	is_valid_showing_failures_only = {
+		scope:actor = {
+			NOT = { is_at_war_with = scope:recipient }
+		}
+	}
+
+	on_accept = {
+		hd_dc_kit_demand_independence_accepted_effect = yes
+	}
+
+	on_decline = {
+		custom_tooltip = hd_dc_demand_independence_decline_tt
+		hd_dc_kit_demand_independence_declined_effect = yes
+	}
+
+	# AI 领主是否同意（大于 0 即同意）。拒绝同样会自立，但领主拿到讨逆 CB，故领主越强越倾向拒绝
+	ai_accept = {
+		base = -10
+		opinion_modifier = {
+			who = scope:recipient
+			opinion_target = scope:actor
+			multiplier = 0.5
+			desc = AI_OPINION_REASON
+		}
+		# 军力比 = 封臣 / 领主（max_military_strength）；用乘法比较，避免除以 0
+		modifier = {
+			add = 60
+			scope:actor.max_military_strength >= scope:recipient.max_military_strength
+			desc = hd_dc_demand_indep_ai_strength_1
+		}
+		modifier = {
+			add = 30
+			scope:actor.max_military_strength < scope:recipient.max_military_strength
+			scope:actor.max_military_strength >= {
+				value = scope:recipient.max_military_strength
+				multiply = 0.5
+			}
+			desc = hd_dc_demand_indep_ai_strength_05
+		}
+		modifier = {
+			add = -40
+			scope:actor.max_military_strength < {
+				value = scope:recipient.max_military_strength
+				multiply = 0.25
+			}
+			desc = hd_dc_demand_indep_ai_strength_weak
+		}
+		# 性格：同意 +30
+		modifier = {
+			add = 30
+			scope:recipient = { has_trait = content }
+			desc = trait_content
+		}
+		modifier = {
+			add = 30
+			scope:recipient = { has_trait = calm }
+			desc = trait_calm
+		}
+		modifier = {
+			add = 30
+			scope:recipient = { has_trait = forgiving }
+			desc = trait_forgiving
+		}
+		modifier = {
+			add = 30
+			scope:recipient = { has_trait = generous }
+			desc = trait_generous
+		}
+		modifier = {
+			add = 30
+			scope:recipient = { has_trait = craven }
+			desc = trait_craven
+		}
+		modifier = {
+			add = 30
+			scope:recipient = { has_trait = humble }
+			desc = trait_humble
+		}
+		modifier = {
+			add = 30
+			scope:recipient = { has_trait = trusting }
+			desc = trait_trusting
+		}
+		# 性格：拒绝 -30
+		modifier = {
+			add = -30
+			scope:recipient = { has_trait = wrathful }
+			desc = trait_wrathful
+		}
+		modifier = {
+			add = -30
+			scope:recipient = { has_trait = ambitious }
+			desc = trait_ambitious
+		}
+		modifier = {
+			add = -30
+			scope:recipient = { has_trait = arrogant }
+			desc = trait_arrogant
+		}
+		modifier = {
+			add = -30
+			scope:recipient = { has_trait = vengeful }
+			desc = trait_vengeful
+		}
+		modifier = {
+			add = -30
+			scope:recipient = { has_trait = stubborn }
+			desc = trait_stubborn
+		}
+		modifier = {
+			add = -30
+			scope:recipient = { has_trait = brave }
+			desc = trait_brave
+		}
+		modifier = {
+			add = -30
+			scope:recipient = { has_trait = paranoid }
+			desc = trait_paranoid
+		}
+	}
+
+	ai_targets = {
+		ai_recipients = liege
+	}
+	ai_frequency = 24
+
+	# AI 封臣是否发起（root = scope:actor = 封臣）
+	ai_will_do = {
+		base = 0
+		# 军力比 = 封臣 / 领主
+		modifier = {
+			add = 60
+			scope:actor.max_military_strength >= scope:recipient.max_military_strength
+		}
+		modifier = {
+			add = 30
+			scope:actor.max_military_strength < scope:recipient.max_military_strength
+			scope:actor.max_military_strength >= {
+				value = scope:recipient.max_military_strength
+				multiply = 0.5
+			}
+		}
+		# 性格：发起 +30
+		modifier = {
+			add = 30
+			has_trait = ambitious
+		}
+		modifier = {
+			add = 30
+			has_trait = brave
+		}
+		modifier = {
+			add = 30
+			has_trait = arrogant
+		}
+		modifier = {
+			add = 30
+			has_trait = wrathful
+		}
+		modifier = {
+			add = 30
+			has_trait = stubborn
+		}
+		modifier = {
+			add = 30
+			has_trait = paranoid
+		}
+		modifier = {
+			add = 30
+			has_trait = vengeful
+		}
+		# 性格：不发起 -30
+		modifier = {
+			add = -30
+			has_trait = content
+		}
+		modifier = {
+			add = -30
+			has_trait = craven
+		}
+		modifier = {
+			add = -30
+			has_trait = humble
+		}
+		modifier = {
+			add = -30
+			has_trait = trusting
+		}
+		modifier = {
+			add = -30
+			has_trait = forgiving
+		}
+		modifier = {
+			add = -30
+			has_trait = generous
+		}
+		modifier = {
+			add = -30
+			has_trait = calm
+		}
+		modifier = {
+			add = -100
+			has_trait = loyal
+		}
+		# 对领主越不满越想走
+		opinion_modifier = {
+			who = scope:actor
+			opinion_target = scope:recipient
+			multiplier = -0.5
+		}
+		# （置于末尾，避免被 add 抵消）
+		# 军力比 < 0.25：怕被讨逆，不发起
+		modifier = {
+			factor = 0
+			scope:actor.max_military_strength < {
+				value = scope:recipient.max_military_strength
+				multiply = 0.25
+			}
+		}
+		# 忠顺于领主则不发起
+		modifier = {
+			factor = 0
+			is_obedient_to = scope:recipient
+		}
+	}
+}

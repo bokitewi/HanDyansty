@@ -1,0 +1,707 @@
+﻿# Native request with the six actual regency offices; other costs and rules retained.
+declare_me_regent_interaction = {
+	category = interaction_category_diarch
+	icon = icon_declare_me_regent
+	filter_tags = { admin_liege }
+
+	desc = declare_me_regent_interaction_desc
+	notification_text = DECLARE_ME_REGENT_PROPOSAL
+
+	interface_priority = 20
+	ai_min_reply_days = 4
+	ai_max_reply_days = 9
+
+	is_shown = {
+		# The obvious.
+		scope:actor != scope:recipient
+		# Only useable on your liege.
+		scope:recipient = scope:actor.liege
+		# And said-liege can't be in a regency already...
+		scope:recipient = {
+			trigger_if = {
+				limit = {
+					NOT = { has_diarchy_type = grand_secretariat }
+				}
+				has_active_diarchy = no
+			}
+			trigger_else = {
+				scope:actor = {
+					OR = {
+						has_title = title:e_minister_grand_marshal
+						has_title = title:e_minister_chancellor
+						has_title = title:e_minister_censor
+						has_title = title:e_minister_of_war
+						has_title = title:e_WJ_minister_tai_fu
+						has_title = title:e_WJ_minister_cheng_xiang
+					}
+				}
+			}
+		}
+		# ... or have declared you their regent already!
+		scope:actor = {
+			is_designated_diarch = no
+			NOR = {
+				is_diarch_of_target = scope:recipient
+				# Can't be used during the Cid story cycle
+				has_variable = ongoing_cid_story_cycle
+			}
+		}
+	}
+
+	is_valid_showing_failures_only = {
+		scope:actor = {
+			# Can't do if you're already expected to be regent.
+			is_designated_diarch = no
+			# Can't be too young.
+			is_adult = yes
+			# Or imprisoned.
+			is_imprisoned = no
+			# Or, for that matter, incapable.
+			NOT = { has_trait = incapable }
+			is_diarch_valid_trigger = yes
+		}
+		# Put a general cooldown on this stuff.
+		scope:recipient = {
+			trigger_if = {
+				limit = {
+					exists = designated_diarch
+				}
+				time_after_diarch_designated = { years >= 10 }
+			}
+		}
+	}
+
+	# No general cooldown: if your liege changes, ask away.
+	# Long specific cooldown, though. We don't want these going through constantly.
+	cooldown_against_recipient = { years = 10 }
+
+	# High cost to reduce spam.
+	cost = { prestige = 500 }
+
+	#Use hook
+	send_options_exclusive = no
+	send_option = {
+		is_valid = {
+			scope:actor = { has_usable_hook = scope:recipient }
+		}
+		flag = hook
+		localization = GENERIC_SPEND_A_HOOK
+	}
+	should_use_extra_icon = {
+		scope:actor = { has_usable_hook = scope:recipient }
+	}
+	extra_icon = "gfx/interface/icons/character_interactions/hook_icon.dds"
+
+	on_accept = {
+		scope:actor = {
+			send_interface_toast = {
+				type = event_toast_effect_good
+				title = declare_me_regent_interaction.tt.success
+				left_icon = scope:recipient
+				# Jump the queue to become diarch.
+				scope:recipient = {
+					if = {
+						limit = {
+							has_diarchy_type = grand_secretariat
+						}
+						if = {
+							limit = {
+								scope:actor = {
+									has_title = title:e_minister_grand_marshal
+								}
+							}
+							add_realm_law = grand_marshal_law
+						}
+						else_if = {
+							limit = {
+								scope:actor = {
+									has_title = title:e_minister_chancellor
+								}
+							}
+							add_realm_law = grand_chancellor_law
+						}
+						else_if = {
+							limit = {
+								scope:actor = {
+									has_title = title:e_minister_censor
+								}
+							}
+							add_realm_law = grand_censor_law
+						}
+						else_if = {
+							limit = { scope:actor = { has_title = title:e_minister_of_war } }
+							add_realm_law = WJ_grand_taiwei_law
+						}
+						else_if = {
+							limit = { scope:actor = { has_title = title:e_WJ_minister_tai_fu } }
+							add_realm_law = WJ_grand_taifu_law
+						}
+						else_if = {
+							limit = { scope:actor = { has_title = title:e_WJ_minister_cheng_xiang } }
+							add_realm_law = WJ_grand_chengxiang_law
+						}
+						scope:actor = {
+							set_variable = {
+								name = asked_to_be_secretary_director
+								value = yes
+							}
+						}
+					}
+					else = {
+						designate_diarch = scope:actor
+					}
+				}
+				# This prompts some strife.
+				change_strife_opinion = major_strife_gain
+			}
+			# If you used a hook, calc some extra stuff.
+			## We move this outside of the toast because we've not got enough room for all this info in there.
+			if = {
+				limit = {
+					scope:hook = yes
+					has_usable_hook = scope:recipient
+				}
+				# Use the hook up.
+				use_hook = scope:recipient
+				# Plus scope:recipient is _very_ upset.
+				reverse_add_opinion = {
+					target = scope:recipient
+					modifier = suspicion_opinion
+					opinion = -20
+				}
+			}
+		}
+		scope:recipient = {
+			# Some folks may not be happy.
+			custom_tooltip = declare_me_regent_interaction.tt.warning.opinions.succession
+			custom_tooltip = declare_me_regent_interaction.tt.warning.opinions.courtlies
+		}
+
+		# Object explorer logging.
+		scope:actor = {
+			diarch_interaction_set_or_update_global_variable_effect = { VARIABLE = di_track_desigme_accept }
+			diarch_interaction_add_to_global_list_effect = { VARIABLE_LIST = di_track_desigme_accept_actor_list }
+		}
+		scope:recipient = {
+			diarch_interaction_add_to_global_list_effect = { VARIABLE_LIST = di_track_desigme_accept_recipient_list }
+		}
+	}
+
+	on_decline = {
+		scope:actor = {
+			send_interface_toast = {
+				type = event_toast_effect_bad
+				title = declare_me_regent_interaction.tt.failure
+				left_icon = scope:recipient
+				# AI lose opinion of their opposite number.
+				if = {
+					limit = { is_ai = yes }
+					add_opinion = {
+						target = scope:recipient
+						modifier = insult_opinion
+						opinion = -40
+					}
+				}
+				# Even trying produces some strife.
+				change_strife_opinion = medium_strife_gain
+			}
+		}
+
+		# Object explorer logging.
+		scope:actor = {
+			diarch_interaction_set_or_update_global_variable_effect = { VARIABLE = di_track_desigme_decline }
+			diarch_interaction_add_to_global_list_effect = { VARIABLE_LIST = di_track_desigme_decline_actor_list }
+		}
+		scope:recipient = {
+			diarch_interaction_add_to_global_list_effect = { VARIABLE_LIST = di_track_desigme_decline_recipient_list }
+		}
+	}
+
+	auto_accept = {
+		scope:recipient = {
+			custom_description = {
+				text = "spending_hook"
+				subject = scope:actor
+				object = scope:recipient
+				scope:hook = yes
+			}
+		}
+	}
+
+	ai_accept = {
+		# Try to make it 0 for most interactions
+		base = -40
+
+		# Weight for dislike of current regent.
+		# Designated regent.
+		modifier = {
+			add = {
+				# Designated diarchs.
+				if = {
+					limit = {
+						designated_diarch ?= {
+							save_temporary_scope_as = diarch_successor_temp
+							save_temporary_opinion_value_as = {
+								name = recipient_opinion_temp
+								target = scope:diarch_successor_temp
+							}
+						}
+					}
+					add = scope:recipient_opinion_temp
+					# Invert to get the true total.
+					multiply = -1
+				}
+				# Expected diarchs.
+				else_if = {
+					limit = {
+						diarchy_successor ?= {
+							save_temporary_scope_as = diarch_successor_temp
+							scope:actor = {
+								save_temporary_opinion_value_as = {
+									name = recipient_opinion_temp
+									target = scope:diarch_successor_temp
+								}
+							}
+						}
+					}
+					add = scope:recipient_opinion_temp
+					# Invert to get the true total.
+					multiply = -1
+				}
+			}
+			desc = declare_me_regent_interaction.tt.opinion_of_current_regent
+		}
+		# Opinion of scope:actor.
+		opinion_modifier = {
+			who = scope:recipient
+			opinion_target = scope:actor
+			multiplier = 0.5
+		}
+		# Personality.
+		ai_value_modifier = {
+			# Meek characters are more likely to accept this.
+			ai_boldness = -0.5
+			# Characters with low energy just want to avoid all this planning.
+			ai_energy = -0.25
+		}
+		# Familial closeness.
+		## Close family get a decent boost.
+		modifier = {
+			add = 30
+			desc = declare_me_regent_interaction.tt.actor_is.close_family
+			is_close_family_of = scope:actor
+			# Make sure this isn't cancelled out by the incumbent sharing the relation.
+			diarchy_successor = {
+				NOT = {
+					is_close_family_of = scope:recipient
+				}
+			}
+		}
+		## Extended family get a minor boost.
+		modifier = {
+			add = 20
+			desc = declare_me_regent_interaction.tt.actor_is.extended_family
+			is_extended_family_of = scope:actor
+			# Make sure this isn't cancelled out by the incumbent sharing the relation.
+			diarchy_successor = {
+				NOT = {
+					is_extended_family_of = scope:recipient
+				}
+			}
+		}
+		## House members get a slight boost.
+		modifier = {
+			add = 10
+			desc = declare_me_regent_interaction.tt.actor_is.house_member
+			house = scope:actor.house
+			NOT = {
+				is_close_or_extended_family_of = scope:actor
+			}
+			# Make sure this isn't cancelled out by the incumbent sharing the relation.
+			diarchy_successor = {
+				house != scope:recipient.house
+			}
+		}
+		# Relationships.
+		## Positive.
+		modifier = {
+			add = 25
+			desc = declare_me_regent_interaction.tt.actor_is.positive_relationship
+			has_any_good_relationship_with_character_trigger = { CHARACTER = scope:actor }
+			# We don't factor for this in the designated/expected diarch 'cause the matrix of overlap'd be hellish.
+		}
+		## Negative.
+		modifier = {
+			add = -25
+			desc = declare_me_regent_interaction.tt.actor_is.negative_relationship
+			has_any_bad_relationship_with_character_trigger = { CHARACTER = scope:actor }
+			# We don't factor for this in the designated/expected diarch 'cause the matrix of overlap'd be hellish.
+		}
+		# Succession score is a direct factor.
+		modifier = {
+			add = scope:actor.diarchy_regent_succession_score_value
+			desc = declare_me_regent_interaction.tt.actor_is.succession_score
+			scope:recipient = {
+				NOT = { has_diarchy_type = grand_secretariat }
+			}
+		}
+
+		# Grand Secretariat
+		modifier = {
+			scope:recipient = {
+				has_diarchy_type = grand_secretariat
+			}
+			scope:actor.top_participant_group:dynastic_cycle ?= {
+				exists = var:movement_favored
+	 		}
+	 		desc = diarch_candidate_score.grand_secretariat.favored_value
+			add = 20
+		}
+		modifier = {
+			scope:recipient = {
+				has_diarchy_type = grand_secretariat
+			}
+			scope:actor = {
+				is_any_movement_leader = yes
+	 		}
+	 		desc = you_are_a_movement_leader_desc_value
+			add = 20
+		}
+		modifier = {
+			scope:recipient = {
+				has_diarchy_type = grand_secretariat
+			}
+			scope:actor = {
+				is_in_pro_hegemon_or_hegemon_movement = yes
+	 		}
+	 		desc = diarch_candidate_score.grand_secretariat.pro_hegemon_value
+			add = 20
+		}
+		modifier = {
+			scope:recipient = {
+				has_diarchy_type = grand_secretariat
+			}
+			scope:actor = {
+				has_court_position = favored_minister_court_position
+			}
+			desc = grand_secretariat_aptitude.favored_minister_value
+			add = 20
+		}
+		modifier = {
+			scope:recipient = {
+				has_diarchy_type = grand_secretariat
+			}
+			desc = actors_merit_level_desc
+			add = {
+				if = {
+					limit = {
+						scope:actor.merit_level >= scope:actor.top_liege.diarch.merit_level
+						scope:actor.merit >= scope:actor.top_liege.merit
+					}
+					add = 10
+				}
+				else = {
+					add = -10
+				}
+			}
+		}
+		modifier = {
+			scope:recipient = {
+				has_diarchy_type = grand_secretariat
+			}
+			desc = ACTOR_HIGH_MOVEMENT_POWER
+			add = {
+				if = {
+					limit = {
+						exists = scope:actor.top_liege.diarch.var:movement_power
+						exists = scope:actor.var:movement_power
+				 		scope:actor.var:movement_power >= scope:actor.top_liege.diarch.var:movement_power
+					}
+					add = 10
+				}
+				else = {
+					add = -40
+				}
+			}
+		}
+		# Events
+		modifier = {
+			add = 25
+			desc = tgp_power_undermined_modifier_tt
+			has_character_modifier = tgp_power_undermined_modifier
+			# We don't factor for this in the designated/expected diarch 'cause the matrix of overlap'd be hellish.
+		}
+	}
+
+	# AI
+	#ai_targets = { ai_recipients = liege }
+	#ai_frequency = 0
+	#
+	#ai_potential = {
+	#	# Turning off for the AI for the moment due to not being able to display who you'll offend if you do it.
+	#	## Should otherwise work and can be turned back on again if wished.
+	#	always = no
+	#	# Some traits lock the AI out.
+	#	## Calc these first 'cause they're cheaper.
+	#	NOR = {
+	#		has_trait = lazy
+	#		has_trait = humble
+	#		has_trait = content
+	#	}
+	#	OR = {
+	#		# Driven by traits or personality.
+	#		has_trait = arrogant
+	#		has_trait = ambitious
+	#		# Family think themselves worthy.
+	#		any_close_or_extended_family_member = { this = liege }
+	#	}
+	#}
+
+	ai_will_do = {
+		# Most AI think this is audacious.
+		base = 0
+
+		# Weight for personality.
+		## Both modifier.
+		ai_value_modifier = {
+			# Bold, energetic characters fancy the gig.
+			ai_boldness = 0.5
+			ai_energy = 0.5
+		}
+		## And traits!
+		### These are balanced differently to the other interactions, so it's deliberate that they're not using the @values here.
+		### +++ Ambitious.
+		modifier = {
+			add = 15
+			has_trait = ambitious
+		}
+		### ++ Arrogant.
+		modifier = {
+			add = 10
+			has_trait = arrogant
+		}
+		### + Diligent.
+		modifier = {
+			add = 5
+			has_trait = diligent
+		}
+		### + Loyal.
+		modifier = {
+			add = 5
+			has_trait = loyal
+		}
+		### - Humble.
+		modifier = {
+			add = -5
+			has_trait = humble
+		}
+		### --- Content.
+		modifier = {
+			add = -15
+			has_trait = content
+		}
+		### --- Lazy.
+		modifier = {
+			add = -15
+			has_trait = lazy
+		}
+		# Weight by proximity to the ruler: close family, spouses, etc.
+		modifier = {
+			add = 25
+			OR = {
+				any_close_or_extended_family_member = { this = scope:recipient }
+				any_spouse = { this = scope:recipient }
+			}
+		}
+		# Councillors have ambitions.
+		modifier = {
+			add = 25
+			is_councillor = yes
+		}
+		# Weight for opinion of current regent.
+		modifier = {
+			add = {
+				scope:recipient = {
+					# Designated diarchs.
+					if = {
+						limit = {
+							designated_diarch ?= {
+								save_temporary_scope_as = diarch_successor_temp
+								scope:actor = {
+									save_temporary_opinion_value_as = {
+										name = actor_opinion_temp
+										target = scope:diarch_successor_temp
+									}
+								}
+							}
+						}
+						add = scope:actor_opinion_temp
+						# Invert to get the true total.
+						multiply = -1
+					}
+					# Expected diarchs.
+					else_if = {
+						limit = {
+							diarchy_successor ?= {
+								save_temporary_scope_as = diarch_successor_temp
+								scope:actor = {
+									save_temporary_opinion_value_as = {
+										name = actor_opinion_temp
+										target = scope:diarch_successor_temp
+									}
+								}
+							}
+						}
+						add = scope:actor_opinion_temp
+						# Invert to get the true total.
+						multiply = -1
+					}
+				}
+			}
+			always = yes
+		}
+		# The AI will only use a Hook if they couldn't otherwise do this
+		modifier = {
+			scope:hook = yes
+			add = -1
+		}
+		# Grand Secretariat
+		modifier = {
+			scope:recipient = {
+				has_diarchy_type = grand_secretariat
+			}
+			add = {
+				if = {
+	 				limit = {
+			 			scope:actor.top_participant_group:dynastic_cycle ?= {
+				 			exists = var:movement_favored
+		 				}
+		 			}
+					add = 10
+				}
+				if = {
+					limit = {
+						scope:actor = {
+							has_court_position = favored_minister_court_position
+						}
+					}
+					add = 20
+				}
+				if = {
+	 				limit = {
+	 					scope:actor.merit_level >= scope:actor.top_liege.diarch.merit_level
+	 					scope:actor.merit >= scope:actor.top_liege.merit
+		 			}
+					add = 10
+				}
+				if = {
+					limit = {
+						exists = scope:actor.top_liege.diarch.var:movement_power
+						exists = scope:actor.var:movement_power
+					}
+					if = {
+		 				limit = {
+				 			scope:actor.var:movement_power >= scope:actor.top_liege.diarch.var:movement_power
+			 			}
+						add = 10
+					}
+					else = {
+						add = -100
+					}
+				}
+			}
+		}
+	}
+}
+
+
+# Exactly one capital upper title; the protected county and all other titles remain untouched.
+WJ_grant_capital_titles_interaction = {
+ category = interaction_category_vassal
+ icon = grant_governorship
+ interface_priority = 59
+ desc = WJ_grant_capital_titles_interaction_desc
+ is_shown = {
+  scope:actor != scope:recipient
+  scope:actor = {
+   WJ_capital_grant_actor_valid = yes
+   OR = {
+    AND = { exists = capital_province.kingdom capital_province.kingdom = { holder = scope:actor } }
+    AND = { exists = capital_province.duchy capital_province.duchy = { holder = scope:actor } }
+   }
+  }
+  scope:recipient = {
+   OR = { target_is_liege_or_above = scope:actor is_pool_guest_of = scope:actor }
+  }
+ }
+ is_valid_showing_failures_only = {
+  scope:actor = { WJ_capital_grant_actor_valid = yes }
+  WJ_capital_grant_recipient_valid = yes
+ }
+ send_options_exclusive = yes
+ send_option = {
+  flag = WJ_capital_grant_kingdom
+  localization = WJ_capital_grant_kingdom
+  is_shown = { exists = scope:actor.capital_province.kingdom scope:actor.capital_province.kingdom ?= { holder = scope:actor } }
+  is_valid = { WJ_capital_title_grantable = { TITLE = scope:actor.capital_province.kingdom TIER = tier_kingdom } }
+  starts_enabled = { WJ_capital_title_grantable = { TITLE = scope:actor.capital_province.kingdom TIER = tier_kingdom } }
+ }
+ send_option = {
+  flag = WJ_capital_grant_duchy
+  localization = WJ_capital_grant_duchy
+  is_shown = { exists = scope:actor.capital_province.duchy scope:actor.capital_province.duchy ?= { holder = scope:actor } }
+  is_valid = { WJ_capital_title_grantable = { TITLE = scope:actor.capital_province.duchy TIER = tier_duchy } }
+  starts_enabled = {
+   NOT = { WJ_capital_title_grantable = { TITLE = scope:actor.capital_province.kingdom TIER = tier_kingdom } }
+   WJ_capital_title_grantable = { TITLE = scope:actor.capital_province.duchy TIER = tier_duchy }
+  }
+ }
+ can_send = {
+  scope:actor = { WJ_capital_grant_actor_valid = yes }
+  WJ_capital_grant_recipient_valid = yes
+  OR = {
+   AND = { scope:WJ_capital_grant_kingdom = yes WJ_capital_title_grantable = { TITLE = scope:actor.capital_province.kingdom TIER = tier_kingdom } }
+   AND = { scope:WJ_capital_grant_duchy = yes WJ_capital_title_grantable = { TITLE = scope:actor.capital_province.duchy TIER = tier_duchy } }
+  }
+ }
+ on_send = {
+  if = {
+   limit = { scope:WJ_capital_grant_kingdom = yes }
+   scope:actor.capital_province.kingdom = { save_scope_as = WJ_capital_grant_selected_title }
+  }
+  else_if = {
+   limit = { scope:WJ_capital_grant_duchy = yes }
+   scope:actor.capital_province.duchy = { save_scope_as = WJ_capital_grant_selected_title }
+  }
+ }
+ on_accept = {
+  if = {
+   limit = {
+    exists = scope:WJ_capital_grant_selected_title
+    scope:actor = { WJ_capital_grant_actor_valid = yes }
+    WJ_capital_grant_recipient_valid = yes
+    OR = {
+     AND = {
+      scope:WJ_capital_grant_kingdom = yes
+      scope:WJ_capital_grant_selected_title = scope:actor.capital_province.kingdom
+      WJ_capital_title_grantable = { TITLE = scope:WJ_capital_grant_selected_title TIER = tier_kingdom }
+     }
+     AND = {
+      scope:WJ_capital_grant_duchy = yes
+      scope:WJ_capital_grant_selected_title = scope:actor.capital_province.duchy
+      WJ_capital_title_grantable = { TITLE = scope:WJ_capital_grant_selected_title TIER = tier_duchy }
+     }
+    }
+   }
+   create_title_and_vassal_change = { type = granted save_scope_as = WJ_capital_title_change add_claim_on_loss = no }
+   scope:recipient = { change_liege = { liege = scope:actor change = scope:WJ_capital_title_change } }
+   scope:WJ_capital_grant_selected_title = { change_title_holder = { holder = scope:recipient change = scope:WJ_capital_title_change } }
+   resolve_title_and_vassal_change = scope:WJ_capital_title_change
+  }
+  else = {
+   scope:actor = { send_interface_toast = { type = event_toast_effect_bad title = WJ_capital_grant_invalid left_icon = scope:recipient } }
+  }
+ }
+ auto_accept = yes
+ ai_will_do = { base = 0 }
+}

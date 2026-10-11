@@ -1,0 +1,142 @@
+﻿# Single army movement handling. No every_army_in_location in this call graph.
+on_army_enter_province = { on_actions = { embattle_on_army_enter_province } }
+embattle_on_army_enter_province = {
+    trigger = { exists = scope:army }
+    effect = {
+        scope:army = {
+            hd_embattle_maintain_army_effect = yes
+            # Baseline movement XP is player-army-only. AI appointment still runs above.
+            if = {
+                limit = {
+                    has_game_rule = embattle_side_commanders_trait_xp_enabled
+                    exists = army_owner
+                    army_owner = { is_ai = no }
+                }
+                if = {
+                    limit = { hd_embattle_left_valid_trigger = yes }
+                    var:embattle_left_flank_commander = { hd_embattle_march_xp_effect = yes }
+                }
+                if = {
+                    limit = { hd_embattle_right_valid_trigger = yes }
+                    var:embattle_right_flank_commander = { hd_embattle_march_xp_effect = yes }
+                }
+            }
+        }
+    }
+}
+# Former separate movement XP endpoint is not registered: prevents double awards.
+embattle_on_army_enter_province_2 = { }
+
+on_game_start = { on_actions = { embattle_on_game_start } }
+on_game_start_after_lobby = { on_actions = { embattle_on_game_start } }
+embattle_on_game_start = {
+    effect = { hd_embattle_migrate_once_effect = yes }
+}
+
+# Ensure stationary defenders as well as attackers receive initial appointment checks.
+on_combat_start = { on_actions = { hd_embattle_on_combat_start } }
+hd_embattle_on_combat_start = {
+    effect = {
+        every_combat_side = {
+            every_side_commander = {
+                if = {
+                    limit = { exists = commanding_army }
+                    commanding_army = { hd_embattle_maintain_army_effect = yes }
+                }
+            }
+        }
+    }
+}
+on_combat_unit_join_side = { on_actions = { hd_embattle_on_combat_join } }
+hd_embattle_on_combat_join = {
+    trigger = { exists = scope:army }
+    effect = {
+        scope:army = { hd_embattle_maintain_army_effect = yes }
+        # A reinforcement may change the effective side commander.
+        if = {
+            limit = { exists = side_commander }
+            side_commander = {
+                if = {
+                    limit = { exists = commanding_army }
+                    commanding_army = { hd_embattle_maintain_army_effect = yes }
+                }
+            }
+        }
+    }
+}
+
+on_combat_end_winner = { on_actions = { hd_embattle_on_combat_end } }
+on_combat_end_loser = { on_actions = { hd_embattle_on_combat_end } }
+hd_embattle_on_combat_end = {
+    effect = {
+        if = {
+            limit = { exists = combat }
+            combat = {
+                save_scope_as = hd_embattle_finished_combat
+                every_in_list = {
+                    variable = hd_embattle_buffed_commanders
+                    limit = {
+                        exists = var:hd_embattle_buff_combat
+                        var:hd_embattle_buff_combat = scope:hd_embattle_finished_combat
+                    }
+                    hd_embattle_clear_bonus_effect = yes
+                }
+                clear_variable_list = hd_embattle_buffed_commanders
+            }
+        }
+    }
+}
+# Compatibility for old callers; normal registration above invokes cleanup only once.
+embattle_on_combat_end_remove_modifier = {
+    on_actions = { hd_embattle_on_combat_end }
+}
+embattle_on_combat_end_remove_traits = { }
+
+# The ONE retained local-army iteration is completion-time siege XP, not movement.
+on_siege_completion = { on_actions = { embattle_on_siege_completion } }
+embattle_on_siege_completion = {
+    trigger = {
+        has_game_rule = embattle_side_commanders_trait_xp_enabled
+        exists = scope:barony
+        exists = scope:barony.title_province
+    }
+    effect = {
+        scope:barony.title_province = {
+            every_army_in_location = {
+                limit = { exists = army_commander }
+                hd_embattle_normalize_army_effect = yes
+                if = {
+                    limit = { hd_embattle_left_valid_trigger = yes }
+                    var:embattle_left_flank_commander = { hd_embattle_siege_xp_effect = yes }
+                }
+                if = {
+                    limit = { hd_embattle_right_valid_trigger = yes }
+                    var:embattle_right_flank_commander = { hd_embattle_siege_xp_effect = yes }
+                }
+            }
+        }
+    }
+}
+on_raid_action_completion = { on_actions = { embattle_on_raid_action_completion } }
+embattle_on_raid_action_completion = {
+    trigger = { has_game_rule = embattle_side_commanders_trait_xp_enabled }
+    effect = {
+        hd_embattle_normalize_army_effect = yes
+        if = {
+            limit = { hd_embattle_left_valid_trigger = yes }
+            var:embattle_left_flank_commander = { hd_embattle_raid_xp_effect = yes }
+        }
+        if = {
+            limit = { hd_embattle_right_valid_trigger = yes }
+            var:embattle_right_flank_commander = { hd_embattle_raid_xp_effect = yes }
+        }
+    }
+}
+
+# RETIRED callbacks can still exist in an old save's delayed queue.
+# No triggers, effects, or links: a queued callback terminates without rescheduling.
+embattle_on_combat_start_tactic_polling = { }
+embattle_on_combat_start_tactic_polling_2 = { }
+embattle_on_combat_start_tactic_polling_3 = { }
+embattle_on_combat_start_tactic_polling_4 = { }
+embattle_on_combat_start_tactic_polling_5 = { }

@@ -1,0 +1,145 @@
+﻿# House Unity helpers for celestial government (house blocs <-> house unity).
+# Root = any scope. HOUSE = a house scope; VALUE = unity delta; DESC = localisation key shown in the unity history.
+# No-op if the house has no unity (e.g. house head is not under a government with house_unity).
+hd_bloc_unity_effect = {
+	if = {
+		limit = {
+			exists = $HOUSE$
+			$HOUSE$ = { has_house_unity = yes }
+			exists = $HOUSE$.house_head
+		}
+		$HOUSE$ = {
+			add_unity_value = {
+				value = $VALUE$
+				character = $HOUSE$.house_head
+				desc = $DESC$
+			}
+		}
+	}
+}
+
+# The three effects below run in house-head scope and act on the head's house.
+# PARAM = parameter marking the aspiration (hd_aspiration_<key>), CAP = unity ceiling, VALUE = yearly amount (> 0).
+hd_aspiration_unity_cap_effect = {
+	house ?= {
+		if = {
+			limit = {
+				has_house_unity = yes
+				has_house_aspiration_parameter = $PARAM$
+				house_unity_value > $CAP$
+			}
+			add_unity_value = {
+				value = {
+					value = $CAP$
+					subtract = house_unity_value
+				}
+				character = house_head
+				desc = hd_unity_aspiration_cap.desc
+			}
+		}
+	}
+}
+
+hd_aspiration_unity_up_effect = {
+	house ?= {
+		if = {
+			limit = {
+				has_house_unity = yes
+				has_house_aspiration_parameter = $PARAM$
+				house_unity_value < $CAP$
+			}
+			add_unity_value = {
+				value = $VALUE$
+				character = house_head
+				desc = hd_unity_aspiration_drift_up.desc
+			}
+		}
+	}
+}
+
+hd_aspiration_unity_down_effect = {
+	house ?= {
+		if = {
+			limit = {
+				has_house_unity = yes
+				has_house_aspiration_parameter = $PARAM$
+				house_unity_value > 0
+			}
+			add_unity_value = {
+				value = {
+					value = 0
+					subtract = $VALUE$
+				}
+				character = house_head
+				desc = hd_unity_aspiration_drift_down.desc
+			}
+		}
+	}
+}
+
+# Scope = house head. Yearly aspiration rules (cap first, then drift): 礼仪 +1/160, 繁荣 +1/140, 仕宦 0/140, 军阀 -1/120.
+hd_celestial_house_unity_yearly_effect = {
+	if = {
+		limit = {
+			government_has_flag = government_has_house_unity
+			exists = house
+			is_house_head = yes
+		}
+		hd_aspiration_unity_cap_effect = { PARAM = hd_aspiration_celestial_traditional CAP = 160 }
+		hd_aspiration_unity_up_effect = { PARAM = hd_aspiration_celestial_traditional CAP = 160 VALUE = 1 }
+		hd_aspiration_unity_cap_effect = { PARAM = hd_aspiration_celestial_family CAP = 140 }
+		hd_aspiration_unity_up_effect = { PARAM = hd_aspiration_celestial_family CAP = 140 VALUE = 1 }
+		hd_aspiration_unity_cap_effect = { PARAM = hd_aspiration_celestial_governor CAP = 140 }
+		hd_aspiration_unity_cap_effect = { PARAM = hd_aspiration_celestial_warlord CAP = 120 }
+		hd_aspiration_unity_down_effect = { PARAM = hd_aspiration_celestial_warlord VALUE = 1 }
+		hd_celestial_house_unity_events_effect = yes
+	}
+}
+
+# Scope = house head. Fires the unity-level flavour events, each at most once per 10 years per head.
+hd_celestial_house_unity_events_effect = {
+	if = {
+		limit = {
+			house = { house_unity_value <= critical_house_unity }
+			NOT = { has_character_flag = hd_unity_split_cd }
+		}
+		add_character_flag = {
+			flag = hd_unity_split_cd
+			years = 10
+		}
+		trigger_event = {
+			id = hd_unity.0003
+			days = { 30 180 }
+		}
+	}
+	else_if = {
+		limit = {
+			house = { house_unity_value <= low_house_unity }
+			NOT = { has_character_flag = hd_unity_discord_cd }
+		}
+		add_character_flag = {
+			flag = hd_unity_discord_cd
+			years = 10
+		}
+		trigger_event = {
+			id = hd_unity.0001
+			days = { 30 180 }
+		}
+	}
+	else_if = {
+		limit = {
+			house = { house_unity_value >= high_house_unity }
+			exists = liege
+			NOT = { liege = this }
+			NOT = { has_character_flag = hd_unity_suspicion_cd }
+		}
+		add_character_flag = {
+			flag = hd_unity_suspicion_cd
+			years = 10
+		}
+		trigger_event = {
+			id = hd_unity.0002
+			days = { 30 180 }
+		}
+	}
+}

@@ -1,0 +1,156 @@
+﻿# 乱世霸权·天子与权臣（2026-10-10）。只向原有 on_action 追加子项。
+
+on_county_occupied = {
+	on_actions = {
+		hd_court_on_county_occupied
+		hd_court_welcome_army
+	}
+}
+
+on_death = {
+	on_actions = { hd_court_on_death }
+}
+
+on_title_gain = {
+	on_actions = { hd_court_on_title_gain }
+}
+
+yearly_global_pulse = {
+	on_actions = { hd_court_yearly }
+}
+
+# D24：郡国制战争领袖攻下天子京城县（战争须以天子为主防守方）。
+# root：占领者；scope:county：被占领的县；scope:war：该场战争
+hd_court_on_county_occupied = {
+	trigger = {
+		exists = title:h_china.holder
+		title:h_china.var:hd_court_capital_county ?= scope:county
+		hd_cycle_is_divided_trigger = yes
+		is_independent_ruler = yes
+		hd_court_regent_eligible_trigger = yes
+		scope:war = {
+			primary_attacker = root
+			primary_defender = title:h_china.holder
+		}
+	}
+	effect = {
+		scope:war = { save_scope_as = hd_court_occ_war }
+		trigger_event = { id = hd_court.0002 days = 1 }
+	}
+}
+
+# D18：权臣死亡，交由天子次日检查继承。root：死者
+hd_court_on_death = {
+	trigger = {
+		exists = title:h_china.holder
+		title:h_china.var:hd_court_regent ?= root
+		NOT = { title:h_china.holder = root }
+	}
+	effect = {
+		title:h_china.holder = {
+			trigger_event = { id = hd_court.0003 days = 2 }
+		}
+	}
+}
+
+# D19 天子更替；D8 京城或天子原领地易手。root：新持有者；scope:title；scope:previous_holder
+hd_court_on_title_gain = {
+	trigger = {
+		hd_cycle_is_divided_trigger = yes
+		exists = title:h_china.holder
+		OR = {
+			scope:title = title:h_china
+			title:h_china.var:hd_court_capital_county ?= scope:title
+			AND = {
+				scope:title = { tier = tier_county }
+				scope:previous_holder ?= title:h_china.holder
+			}
+		}
+	}
+	effect = {
+		trigger_event = { id = hd_court.0003 days = 1 }
+	}
+}
+
+# 每年检查继承与空缺
+hd_court_yearly = {
+	trigger = {
+		hd_cycle_is_divided_trigger = yes
+		exists = title:h_china.holder
+	}
+	effect = {
+		hd_court_repair_effect = yes
+		hd_court_vacancy_check_effect = yes
+		# 立场补发：战略 AI 故事在本系统之前已发放的 AI 也抽立场（D4）
+		every_ruler = {
+			limit = {
+				is_ai = yes
+				NOT = { has_variable = hd_court_stance }
+				owns_story_of_type = hd_strategic_ai_story
+			}
+			hd_court_assign_stance_effect = yes
+		}
+	}
+}
+
+# 第 4 期：喜迎王师。root：占领者；scope:county
+hd_court_welcome_army = {
+	trigger = {
+		hd_cycle_is_divided_trigger = yes
+		OR = {
+			has_variable = hd_court_qinwang_host
+			has_variable = hd_court_qinwang_edict
+		}
+		scope:war = { primary_attacker = root }
+	}
+	effect = {
+		random = {
+			chance = 25
+			hd_court_welcome_army_effect = yes
+			if = {
+				limit = { is_ai = no }
+				send_interface_toast = {
+					title = hd_court_welcome_army_toast
+					left_icon = root
+					custom_tooltip = hd_court_welcome_army_toast_desc
+				}
+			}
+		}
+	}
+}
+
+on_war_started = {
+	on_actions = { hd_court_on_war_started }
+}
+
+# D6：权臣随天子参战（写法同朋党"尊王武官自动参战"，hd_party_on_actions.txt）。
+# - 天子为防守方：权臣一律加入防守方；
+# - 天子为进攻方：仅 AI 天子（即权臣经傀儡行动以天子名义宣战）时加入进攻方；玩家天子自行宣战时权臣不随。
+hd_court_on_war_started = {
+	trigger = {
+		hd_court_has_regent_trigger = yes
+	}
+	# 原版注释：本 on_action 的作用域同 CB 的 on_declaration，有 scope:attacker、scope:defender、scope:war
+	effect = {
+		title:h_china.var:hd_court_regent = { save_scope_as = hd_court_war_regent }
+		if = {
+			limit = {
+				exists = scope:war
+				scope:defender ?= { hd_court_defender_is_held_emperor_trigger = yes }
+				scope:war = { NOT = { is_participant = scope:hd_court_war_regent } }
+			}
+			scope:war = { add_defender = scope:hd_court_war_regent }
+		}
+		else_if = {
+			limit = {
+				exists = scope:war
+				scope:attacker ?= {
+					hd_court_defender_is_held_emperor_trigger = yes
+					is_ai = yes
+				}
+				scope:war = { NOT = { is_participant = scope:hd_court_war_regent } }
+			}
+			scope:war = { add_attacker = scope:hd_court_war_regent }
+		}
+	}
+}

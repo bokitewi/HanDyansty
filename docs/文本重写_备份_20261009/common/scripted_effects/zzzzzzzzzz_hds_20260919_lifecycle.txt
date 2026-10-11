@@ -1,0 +1,244 @@
+﻿# HanDyansty southern-story patch. Base: 9230e81ef7ee657daab8b85b2b61633da76c7814
+# Additive late-loaded override; no GitHub writes.
+
+hds_nr_housekeeping_effect = {
+    character:sun_jian ?= {
+        if = {
+            limit = { is_alive = yes }
+            # Snapshot before the coup/death, not only when Yuan Shu's coup happens.
+            hds_ensure_estate_effect = yes
+            hds_sun_snapshot_living_effect = yes
+            hds_nr_sun_jian_risk_effect = yes
+        }
+    }
+    character:yuan_shu ?= {
+        if = { limit = { is_alive = yes } hds_nr_watch_yuan_effect = yes }
+    }
+    hds_nr_recover_sun_cache_effect = yes
+}
+hds_nr_sun_jian_risk_effect = {
+    if = {
+        limit = {
+            is_alive = yes this = character:sun_jian
+            exists = global_var:hds_coalition_ended
+            NOT = { has_character_modifier = hds_nr_sun_jian_mortal_risk }
+        }
+        hidden_effect = { add_character_modifier = { modifier = hds_nr_sun_jian_mortal_risk } }
+    }
+}
+# Preserve the existing title-scoped 60-day heartbeat and unrelated Liu Biao/Yuan Shu logic.
+hds_tick_effect = {
+    hds_nr_housekeeping_effect = yes
+    hds_best_friend_setup_effect = yes
+    hds_sun_snapshot_living_effect = yes
+    hds_sun_succession_effect = yes
+    character:liu_biao ?= { if = { limit = { is_alive = yes } hds_liu_tick_effect = yes } }
+    character:yuan_shu ?= { if = { limit = { is_alive = yes } hds_yuan_tick_effect = yes } }
+    character:sun_jian ?= { if = { limit = { is_alive = yes } hds_sun_tick_effect = yes } }
+    global_var:wj_hchar_sun_ce ?= { if = { limit = { is_alive = yes } hds_sc_tick_effect = yes } }
+}
+hds_coalition_dissolved_effect = {
+    if = {
+        limit = { NOT = { exists = global_var:hds_coalition_ended } }
+        set_global_variable = hds_coalition_ended
+        set_global_variable = hds_dong_entered
+        title:h_china = { set_variable = { name = hds_integration_grace value = yes days = 61 } }
+    }
+    character:sun_jian ?= {
+        if = { limit = { is_alive = yes } hds_nr_sun_jian_risk_effect = yes }
+    }
+    hds_bootstrap_effect = yes
+}
+hds_best_friend_setup_effect = {
+    if = {
+        limit = {
+            NOT = { exists = global_var:hds_sc_zhou_friendship_done }
+            has_global_variable = wj_hchar_sun_ce
+            has_global_variable = wj_hchar_zhou_yu
+            AND = { trigger_if = { limit = { has_global_variable = wj_hchar_sun_ce } global_var:wj_hchar_sun_ce = { is_alive = yes } } trigger_else = { always = no } }
+            AND = { trigger_if = { limit = { has_global_variable = wj_hchar_zhou_yu } global_var:wj_hchar_zhou_yu = { is_alive = yes } } trigger_else = { always = no } }
+        }
+        global_var:wj_hchar_sun_ce ?= {
+            if = {
+                limit = { is_alive = yes NOT = { AND = { trigger_if = { limit = { has_global_variable = wj_hchar_zhou_yu } has_relation_best_friend = global_var:wj_hchar_zhou_yu } trigger_else = { always = no } } } }
+                set_relation_best_friend = global_var:wj_hchar_zhou_yu
+            }
+            if = {
+                limit = { is_alive = yes AND = { trigger_if = { limit = { has_global_variable = wj_hchar_zhou_yu } has_relation_best_friend = global_var:wj_hchar_zhou_yu } trigger_else = { always = no } } }
+                set_global_variable = hds_sc_zhou_friendship_done
+            }
+        }
+    }
+}
+hds_sun_snapshot_living_effect = {
+    character:sun_jian ?= {
+        if = {
+            limit = { is_alive = yes exists = domicile any_held_title = { is_noble_family_title = yes } }
+            random_held_title = {
+                limit = { is_noble_family_title = yes }
+                save_scope_as = hds_original_family
+                set_destroy_if_invalid_heir = no
+                set_destroy_on_succession = no
+            }
+            domicile = { save_scope_as = hds_original_estate }
+            title:h_china = {
+                if = {
+                    limit = { NOT = { has_variable = hds_sun_family_title } }
+                    set_variable = { name = hds_sun_family_title value = scope:hds_original_family }
+                }
+                if = {
+                    limit = { NOT = { has_variable = hds_sun_original_estate } }
+                    set_variable = { name = hds_sun_original_estate value = scope:hds_original_estate }
+                }
+            }
+        }
+    }
+}
+# Repair missing old-save cache from Sun Ce's actual family/estate, never from an adventurer camp.
+# Only before inheritance: after hds_sc_estate_to_camp_effect the family title is gone on purpose.
+hds_nr_recover_sun_cache_effect = {
+    if = {
+        limit = {
+            exists = character:sun_jian
+            character:sun_jian ?= { is_alive = no }
+            NOT = { exists = global_var:hds_sun_camp_line }
+            has_global_variable = wj_hchar_sun_ce
+            AND = { trigger_if = { limit = { has_global_variable = wj_hchar_sun_ce } global_var:wj_hchar_sun_ce = { is_alive = yes exists = house NOT = { has_character_flag = hds_sc_inherited } } } trigger_else = { always = no } }
+            OR = {
+                NOT = { exists = title:h_china.var:hds_sun_family_title }
+                NOT = { exists = title:h_china.var:hds_sun_original_estate }
+            }
+        }
+        global_var:wj_hchar_sun_ce ?= {
+            if = {
+                limit = {
+                    is_alive = yes
+                    NOT = { exists = title:h_china.var:hds_sun_family_title }
+                    NOT = { exists = title:h_china.var:hds_sun_original_estate }
+                }
+                hds_ensure_estate_effect = yes
+            }
+            if = {
+                limit = { is_alive = yes exists = domicile any_held_title = { is_noble_family_title = yes } }
+                random_held_title = {
+                    limit = { is_noble_family_title = yes }
+                    save_scope_as = hds_nr_recovered_family
+                }
+                domicile = { save_scope_as = hds_nr_recovered_estate }
+                title:h_china = {
+                    if = {
+                        limit = { NOT = { exists = var:hds_sun_family_title } }
+                        set_variable = { name = hds_sun_family_title value = scope:hds_nr_recovered_family }
+                    }
+                    if = {
+                        limit = {
+                            NOT = { exists = var:hds_sun_original_estate }
+                            var:hds_sun_family_title = scope:hds_nr_recovered_family
+                        }
+                        set_variable = { name = hds_sun_original_estate value = scope:hds_nr_recovered_estate }
+                    }
+                }
+            }
+        }
+    }
+}
+hds_sun_succession_effect = {
+    hds_nr_recover_sun_cache_effect = yes
+    if = {
+        limit = {
+            exists = character:sun_jian
+            character:sun_jian ?= { is_alive = no }
+            has_global_variable = wj_hchar_sun_ce
+            AND = { trigger_if = { limit = { has_global_variable = wj_hchar_sun_ce } global_var:wj_hchar_sun_ce = { is_alive = yes NOT = { has_character_flag = hds_sc_inherited } } } trigger_else = { always = no } }
+            exists = title:h_china.var:hds_sun_family_title
+            exists = title:h_china.var:hds_sun_original_estate
+        }
+        global_var:wj_hchar_sun_ce ?= {
+            if = {
+                limit = { is_alive = yes }
+                # Monotonic title receipt: estate attachment retries must not grant titles again.
+                if = {
+                    limit = { NOT = { has_character_flag = hds_sc_titles_inherited } }
+                    if = {
+                        limit = { exists = title:h_china.var:hds_sun_house }
+                        title:h_china.var:hds_sun_house = { set_house_head = global_var:wj_hchar_sun_ce }
+                    }
+                    create_title_and_vassal_change = {
+                        type = granted save_scope_as = hds_sun_inheritance_change add_claim_on_loss = no
+                    }
+                    title:h_china = {
+                        if = {
+                            limit = { has_variable_list = hds_sun_death_titles }
+                            every_in_list = {
+                                variable = hds_sun_death_titles
+                                limit = { NOT = { AND = { trigger_if = { limit = { has_global_variable = wj_hchar_sun_ce } holder = global_var:wj_hchar_sun_ce } trigger_else = { always = no } } } }
+                                change_title_holder = {
+                                    holder = global_var:wj_hchar_sun_ce change = scope:hds_sun_inheritance_change take_baronies = yes
+                                }
+                            }
+                        }
+                        var:hds_sun_family_title = {
+                            if = {
+                                limit = { NOT = { AND = { trigger_if = { limit = { has_global_variable = wj_hchar_sun_ce } holder = global_var:wj_hchar_sun_ce } trigger_else = { always = no } } } }
+                                change_title_holder = { holder = global_var:wj_hchar_sun_ce change = scope:hds_sun_inheritance_change }
+                            }
+                        }
+                    }
+                    resolve_title_and_vassal_change = scope:hds_sun_inheritance_change
+                    if = {
+                        limit = {
+                            title:h_china.var:hds_sun_family_title = { AND = { trigger_if = { limit = { has_global_variable = wj_hchar_sun_ce } holder = global_var:wj_hchar_sun_ce } trigger_else = { always = no } } }
+                            title:h_china = {
+                                NOT = {
+                                    any_in_list = {
+                                        variable = hds_sun_death_titles
+                                        NOT = { AND = { trigger_if = { limit = { has_global_variable = wj_hchar_sun_ce } holder = global_var:wj_hchar_sun_ce } trigger_else = { always = no } } }
+                                    }
+                                }
+                            }
+                        }
+                        add_character_flag = hds_sc_titles_inherited
+                    }
+                }
+                if = {
+                    limit = {
+                        exists = title:h_china.var:hds_sun_inheritance_seal
+                        title:h_china.var:hds_sun_inheritance_seal = { NOT = { AND = { trigger_if = { limit = { has_global_variable = wj_hchar_sun_ce } owner = global_var:wj_hchar_sun_ce } trigger_else = { always = no } } } }
+                    }
+                    title:h_china.var:hds_sun_inheritance_seal = { set_owner = global_var:wj_hchar_sun_ce }
+                }
+                # The seal is optional: losing/destroying an artifact cannot block the estate story.
+                if = {
+                    limit = {
+                        hds_sun_estate_inherited_trigger = yes
+                        has_character_flag = hds_sc_titles_inherited
+                    }
+                    add_character_flag = hds_sc_inherited
+                    title:h_china.var:hds_sun_family_title = { set_destroy_if_invalid_heir = yes }
+                    hds_retire_legacy_controller_effect = yes
+                    if = {
+                        limit = { NOT = { has_character_flag = hds_sc_inheritance_notice } }
+                        hds_queue_event_effect = { EVENT = hds.4000 LEASE = hds_lease_4000 }
+                    }
+                }
+            }
+        }
+    }
+}
+
+# ROOT remains the existing persistent h_china controller title.
+hds_schedule_effect = {
+    if = {
+        limit = {
+            NOT = { has_variable = hds_tick_queued }
+            OR = {
+                AND = { exists = character:liu_biao character:liu_biao ?= { is_alive = yes } }
+                AND = { exists = character:yuan_shu character:yuan_shu ?= { is_alive = yes } }
+                AND = { exists = character:sun_jian character:sun_jian ?= { is_alive = yes } }
+                AND = { has_global_variable = wj_hchar_sun_ce AND = { trigger_if = { limit = { has_global_variable = wj_hchar_sun_ce } global_var:wj_hchar_sun_ce = { is_alive = yes } } trigger_else = { always = no } } }
+            }
+        }
+        set_variable = { name = hds_tick_queued value = yes days = 61 }
+        trigger_event = { on_action = hds_heartbeat days = 60 }
+    }
+}

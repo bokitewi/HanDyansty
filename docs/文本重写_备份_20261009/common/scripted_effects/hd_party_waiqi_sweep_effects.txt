@@ -1,0 +1,54 @@
+﻿# 天朝循环·朋党：外戚扫描（2026-10-08 用户指定；手工维护，由生成的 hd_party_refresh_waiqi_list_effect 末尾调用）
+# 外戚 = 朝廷君主的配偶、母亲、侧室、子女配偶所属宗族（dynasty）的全部成员。
+# 刷新时机随后族列表：开局第 3 天、每年、婚姻发生时。
+#
+# 1. 入组：后族宗族的成员，只要 成年、最高领主是本朝廷君主、非天子、非独立统治者、非宦官、非他党现任领袖，
+#    还不是局势参与者的加为手动参与者，并一律改为外戚（覆盖原有的组别锁定 movement_member）。
+# 2. 失势：本朝廷内已是外戚、但宗族已不在后族列表的人，清除组别锁定，由引擎按身份重新归组；外戚党现任领袖不动。
+
+# Scope：朝廷君主
+hd_party_waiqi_sweep_effect = {
+	save_scope_as = hd_party_wq_court
+
+	# 1. 后族宗族成员入外戚
+	every_in_list = {
+		variable = hd_party_waiqi_dynasties
+		every_dynasty_member = {
+			limit = {
+				is_alive = yes
+				is_adult = yes
+				NOT = { this = scope:hd_party_wq_court }
+				NOT = { has_title = title:h_china }
+				is_independent_ruler = no
+				top_liege ?= scope:hd_party_wq_court
+				hd_party_is_huanguan_trigger = no
+				NOT = { var:movement_member ?= flag:pro_hegemon }
+				# 他党现任领袖不动（避免把正在领导别党的人拉走）
+				NOT = { hd_party_is_any_leader_of_court_trigger = { COURT = scope:hd_party_wq_court } }
+				NOT = { top_participant_group:dynastic_cycle.var:movement_leader ?= this }
+			}
+			if = {
+				limit = { NOT = { any_character_situation = { situation_type = dynastic_cycle } } }
+				set_variable = hd_party_manual
+				situation:dynastic_cycle ?= { add_manual_participant = prev }
+			}
+			set_variable = { name = movement_member value = flag:pro_hegemon }
+		}
+	}
+
+	# 2. 失势外戚解除
+	situation:dynastic_cycle ?= {
+		situation_participant_group:pro_hegemon_movement ?= {
+			every_situation_group_participant = {
+				limit = {
+					var:movement_member ?= flag:pro_hegemon
+					top_liege ?= scope:hd_party_wq_court
+					hd_party_is_waiqi_trigger = no
+					NOT = { scope:hd_party_wq_court.var:hd_party_waiqi_leader ?= this }
+					NOT = { top_participant_group:dynastic_cycle.var:movement_leader ?= this }
+				}
+				remove_variable = movement_member
+			}
+		}
+	}
+}

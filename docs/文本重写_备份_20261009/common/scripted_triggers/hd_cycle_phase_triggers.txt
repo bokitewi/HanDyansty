@@ -1,0 +1,130 @@
+﻿# 天朝循环大修：阶段判定封装。
+# 治世 = 恢复/扩张/进取/紧张/新朝征服；乱世 = 崩溃/斗争(chaos)/对峙。
+# 这些 trigger 可在任意 scope 使用（内部通过 situation:dynastic_cycle 取局势）。
+
+hd_cycle_phase_is_recovery_trigger = {
+	situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_hd_recovery }
+}
+
+hd_cycle_phase_is_collapse_trigger = {
+	situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_hd_collapse }
+}
+
+hd_cycle_phase_is_struggle_trigger = {
+	situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_chaos }
+}
+
+hd_cycle_phase_is_standoff_trigger = {
+	situation:dynastic_cycle ?= { situation_current_phase = situation_dynastic_cycle_phase_hd_standoff }
+}
+
+# 天下分裂（无共主的群雄时代）：斗争或对峙
+hd_cycle_is_divided_trigger = {
+	situation:dynastic_cycle ?= {
+		OR = {
+			situation_current_phase = situation_dynastic_cycle_phase_chaos
+			situation_current_phase = situation_dynastic_cycle_phase_hd_standoff
+		}
+	}
+}
+
+# 乱世：崩溃、斗争、对峙
+hd_cycle_is_luanshi_trigger = {
+	situation:dynastic_cycle ?= {
+		OR = {
+			situation_current_phase = situation_dynastic_cycle_phase_hd_collapse
+			situation_current_phase = situation_dynastic_cycle_phase_chaos
+			situation_current_phase = situation_dynastic_cycle_phase_hd_standoff
+		}
+	}
+}
+
+# 治世：局势存在且不在乱世
+hd_cycle_is_zhishi_trigger = {
+	exists = situation:dynastic_cycle
+	hd_cycle_is_luanshi_trigger = no
+}
+
+# 禁建王国/帝国的阶段：治世各阶段 + 崩溃期
+hd_cycle_title_creation_locked_trigger = {
+	exists = situation:dynastic_cycle
+	hd_cycle_is_divided_trigger = no
+}
+
+# Scope：创建者角色；$TITLE$：要创建的头衔。
+# 汉地（h_china 法理内）帝国：只有乱世（斗争/对峙）中的独立统治者可创建；天朝封臣与天子（持有 h_china）任何时候都不可创建。
+# 汉地王国：治世与崩溃期只有霸权持有者可创建。其他头衔不受限。
+hd_cycle_title_creation_allowed_trigger = {
+	trigger_if = {
+		limit = {
+			$TITLE$ = {
+				tier = tier_empire
+				target_is_de_jure_liege_or_above = title:h_china
+			}
+		}
+		exists = situation:dynastic_cycle
+		hd_cycle_is_divided_trigger = yes
+		is_independent_ruler = yes
+		NOT = { has_title = title:h_china }
+	}
+	trigger_else = {
+		OR = {
+			hd_cycle_title_creation_locked_trigger = no
+			has_title = title:h_china
+			$TITLE$ = {
+				NOR = {
+					tier = tier_kingdom
+					tier = tier_empire
+				}
+			}
+			$TITLE$ = {
+				NOT = { target_is_de_jure_liege_or_above = title:h_china }
+			}
+		}
+	}
+}
+
+# 角色（统治者）领地在汉霸权法理内
+hd_cycle_in_china_trigger = {
+	hd_unification_realm_in_china_trigger = yes
+}
+
+# 四夷：非汉文化传承
+hd_cycle_non_han_trigger = {
+	exists = culture
+	NOT = { culture = { has_cultural_pillar = heritage_chinese } }
+}
+
+# 四夷统治者：非汉、独立、领地在汉霸权法理内
+hd_cycle_siyi_ruler_trigger = {
+	is_independent_ruler = yes
+	hd_cycle_non_han_trigger = yes
+	hd_cycle_in_china_trigger = yes
+}
+
+# Scope：war。派系/民变类内战
+hd_cycle_faction_war_trigger = {
+	OR = {
+		using_cb = independence_faction_war
+		using_cb = nation_fracturing_faction_war
+		using_cb = claimant_faction_war
+		using_cb = liberty_faction_war
+		using_cb = peasant_war
+		using_cb = populist_war
+	}
+}
+
+# Scope：war。战时占领、胜利后结算的入侵类战争
+hd_occupation_war_trigger = {
+	OR = {
+		using_cb = hd_siyi_raid_cb
+		using_cb = hd_historical_war_cb
+	}
+}
+
+# 统计口径：王国级及以上、独立、持有 h_china 法理伯爵领
+hd_cycle_major_power_trigger = {
+	highest_held_title_tier >= tier_kingdom
+	is_independent_ruler = yes
+	hd_cycle_in_china_trigger = yes
+}

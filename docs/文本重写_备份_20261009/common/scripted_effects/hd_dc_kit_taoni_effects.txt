@@ -1,0 +1,94 @@
+﻿# 天朝循环·时代特色：乱世「要求独立」+ 讨逆（2026-10-08 用户指定）
+# 2026-10-08 改：删去进入群雄割据时不忠顺直属封臣自动自立的脚本（hd_dc_kit_chaos_secession_effect），
+# 改为乱世中封臣主动发起的互动 hd_dc_demand_independence_interaction（hd_dc_kit_independence_interactions.txt）。
+# 剧情专用的自立脚本（董卓、吕布、刘备等）不受影响。
+
+# 「要求独立」获准：和平自立，双方停战 5 年，原主君无讨逆 CB。
+# Scope：互动 on_accept（scope:actor = 封臣，scope:recipient = 原主君）
+hd_dc_kit_demand_independence_accepted_effect = {
+	scope:actor = {
+		if = {
+			limit = { exists = joined_faction }
+			leave_faction = joined_faction
+		}
+		add_truce_both_ways = {
+			character = scope:recipient
+			days = 1825
+			name = HD_DC_TRUCE_DEMAND_INDEPENDENCE
+		}
+	}
+	create_title_and_vassal_change = {
+		type = independency
+		save_scope_as = hd_dc_indep_change
+		add_claim_on_loss = no
+	}
+	scope:actor = {
+		becomes_independent = { change = scope:hd_dc_indep_change }
+	}
+	resolve_title_and_vassal_change = scope:hd_dc_indep_change
+}
+
+# 「要求独立」被拒：照样自立（不设停战），但其主头衔记上叛离标记 10 年，
+# 标记值为原主君当时的主头衔，该头衔的现任持有者可用「讨逆」CB 征讨。
+# Scope：互动 on_decline（scope:actor = 封臣，scope:recipient = 原主君）
+hd_dc_kit_demand_independence_declined_effect = {
+	scope:actor = {
+		if = {
+			limit = { exists = joined_faction }
+			leave_faction = joined_faction
+		}
+		# 须在 becomes_independent 之前写入，此时主头衔尚未变化
+		primary_title = {
+			set_variable = {
+				name = hd_dc_taoni_rebel
+				value = scope:recipient.primary_title
+				years = 10
+			}
+		}
+	}
+	create_title_and_vassal_change = {
+		type = independency
+		save_scope_as = hd_dc_indep_change
+		add_claim_on_loss = no
+	}
+	scope:actor = {
+		becomes_independent = { change = scope:hd_dc_indep_change }
+	}
+	resolve_title_and_vassal_change = scope:hd_dc_indep_change
+}
+
+# 讨逆 CB 胜利。Scope：CB on_victory（scope:attacker = 原主君头衔持有者，scope:defender = 叛离者）
+hd_dc_kit_taoni_victory_effect = {
+	scope:attacker = { show_pow_release_message_effect = yes }
+	# 重新臣服（原版 vassalization_cb 写法）
+	create_title_and_vassal_change = {
+		type = swear_fealty
+		save_scope_as = change
+		add_claim_on_loss = no
+	}
+	scope:defender = {
+		primary_title = { remove_variable = hd_dc_taoni_rebel }
+		change_liege = {
+			liege = scope:attacker
+			change = scope:change
+		}
+		resolve_title_and_vassal_change = scope:change
+	}
+	# 囚禁叛首
+	scope:attacker = {
+		imprison = {
+			target = scope:defender
+			type = dungeon
+		}
+		add_prestige_experience = medium_prestige_value
+	}
+	# 停战：原版内战 CB 1825 天
+	scope:attacker = {
+		add_truce_both_ways = {
+			character = scope:defender
+			days = 1825
+			war = root.war
+			result = victory
+		}
+	}
+}

@@ -1,0 +1,182 @@
+﻿WJ_capital_grant_actor_valid = {
+ is_alive = yes
+ government_has_flag = government_is_celestial
+ government_has_mechanic = administrative
+ top_liege = this
+ highest_held_title_tier >= tier_empire
+ exists = capital_province
+ exists = capital_county
+}
+WJ_capital_grant_recipient_valid = {
+ scope:actor != scope:recipient
+ scope:recipient = {
+  OR = { target_is_liege_or_above = scope:actor is_pool_guest_of = scope:actor }
+ }
+scope:recipient = {
+			is_adult = yes
+			NOT = { is_at_war_with = scope:actor }
+			bp2_valid_for_standard_interactions_trigger = yes
+			trigger_if = {
+				limit = { is_ruler = no }
+				is_imprisoned = no
+			}
+			government_has_mechanic = administrative
+			# Only the preferred gender can be appointed unless they hold titles already
+			trigger_if = {
+				limit = {
+					scope:actor = {
+						OR = {
+							has_realm_law = male_only_law
+							has_realm_law = male_preference_law
+						}
+					}
+					is_landed = no
+				}
+				custom_tooltip = {
+					text = recipient_cannot_be_appointed_gender_laws_tt
+					is_female = no
+				}
+			}
+			trigger_if = {
+				limit = {
+					scope:actor = {
+						OR = {
+							has_realm_law = female_only_law
+							has_realm_law = female_preference_law
+						}
+					}
+					is_landed = no
+				}
+				custom_tooltip = {
+					text = recipient_cannot_be_appointed_gender_laws_tt
+					is_female = yes
+				}
+			}
+			# DON'T TAKE OTHER PLAYERS' ACCLAIMED KNIGHTS
+			custom_description = {
+				text = grant_title_stealing_acclaimed_knight
+				subject = scope:recipient
+				NOR = {
+					AND = {
+						is_acclaimed = yes
+						liege ?= {
+							is_ai = no
+							this != scope:actor
+						}
+					}
+					AND = {
+						is_acclaimed = yes
+						scope:actor = { is_ai = yes }
+					}
+				}
+			}
+			is_clergy = no
+			# Gallivanters won't accept additional responsibilities.
+			NOT = { has_trait = gallivanter }
+			# TGP JAPAN
+			tgp_japan_grant_titles_restriction_trigger = {
+				GRANTER = scope:actor
+				GRANTEE = scope:recipient
+			}
+			# Cannot be a minister
+			custom_tooltip = {
+				text = recipient_is_a_minister_desc
+				tgp_is_any_minister = no
+			}
+		}
+}
+# Bind native appointment checks to this upper title, not to counties.
+WJ_capital_title_grantable = {
+ trigger_if = {
+  limit = { exists = $TITLE$ }
+  $TITLE$ = {
+   tier = $TIER$
+   holder = scope:actor
+   this != scope:actor.primary_title
+   is_leased_out = no
+   is_noble_family_title = no
+   is_landless_type_title = no
+   save_temporary_scope_as = target
+  }
+scope:recipient = {
+			custom_tooltip = {
+				text = promote_candidate_interaction_existing_holder_tt
+				this != scope:target.holder
+			}
+
+			trigger_if = { # Governors can only be appointed to certain titles
+				limit = {
+					is_governor = yes
+					scope:target = { is_noble_family_title = no } # For tooltip reasons, so we don't show more than necessary
+				}
+				custom_tooltip = { # Only one province of highest rank
+					text = only_one_province_of_highest_rank_tt
+					NAND = {
+						highest_held_title_tier = scope:target.tier
+						scope:target.tier >= tier_duchy
+						scope:target = { # We make an exception if recipient controls at least one de jure county
+							any_de_jure_county = {
+								count < 1
+								OR = {
+									holder = scope:recipient
+									holder = { is_vassal_or_below_of = scope:recipient }
+								}
+							}
+						}
+					}
+				}
+				custom_tooltip = {
+					text = admin_must_be_de_jure_or_neighboring
+					any_held_title = {
+						OR = {
+							# The target title is part of your de jure structure
+							is_de_jure_liege_or_above_target = scope:target
+							target_is_de_jure_liege_or_above = scope:target
+							# Or is a neighboring county which de jure duchy is not part of your realm
+							AND = {
+								NOT = { tier = tier_barony }
+								any_title_to_title_neighboring_county = { this = scope:target }
+								scope:target = {
+									tier = tier_county
+									duchy = {
+										OR = {
+											NOT = { exists = holder }
+											holder = {
+												NOR = {
+													is_vassal_or_below_of = scope:actor
+													this = scope:actor
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			trigger_if = { # If recipient is landless and only have a family title, target title must be a duchy or above
+				limit = {
+					is_landless_ruler = yes
+					any_held_title = { is_noble_family_title = yes }
+					scope:target.tier < min_appointment_tier
+				}
+				primary_title.tier <= scope:target.tier
+			}
+			trigger_if = { # If recipient is a count, they can get only get counties within the same duchy
+				limit = {
+					highest_held_title_tier = tier_county
+					main_administrative_tier > tier_county
+					is_landed = yes
+					scope:target.tier = tier_county
+				}
+				custom_tooltip = {
+					text = admin_count_grant_only_counties
+					any_held_title = { duchy = scope:target.duchy }
+				}
+			}
+			tgp_is_ceremonial_liege_trigger = no
+		}
+ }
+ trigger_else = { always = no }
+}

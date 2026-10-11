@@ -296,7 +296,7 @@ def main():
 
     # 门槛常量（takeover_points 不认 script value 名，必须用文件内 @ 常量）
     if not re.search(r'^@hd_dc_era_threshold\s*=', text, re.M):
-        text = '@hd_dc_era_threshold = 5000\t# 时代特色：所有出口门槛（与 hd_dc_era_values.txt 同步）\n' + text
+        text = '@hd_dc_era_threshold = 10000\t# 时代特色：所有出口门槛（与 hd_dc_era_values.txt 同步）\n' + text
     with open(SIT, 'w', encoding='utf-8-sig', newline='\n') as f:
         f.write(text)
 

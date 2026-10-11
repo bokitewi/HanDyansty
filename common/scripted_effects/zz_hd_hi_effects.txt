@@ -1,0 +1,704 @@
+﻿# 历史入侵（见 docs/历史入侵_设计草案.md）。
+# 只由史实人物本人推进：本人死亡、被俘或放弃，这场入侵就到此为止，绝不生成替身。
+# 流程：每年检查本人 → 建故事、评估环境 → 起兵（环境合适）或蛰伏为带宣称的冒险者（盛世或目标过强）
+#       → 分阶段宣战，第一阶段完成后取王冠、定国号 → 最后阶段完成后结束。
+# 数据存在故事上：hd_hi_key、hd_hi_home、hd_hi_gov、hd_hi_army、hd_hi_size、hd_hi_army_est、
+#   hd_hi_stage、hd_hi_stage_count、hd_hi_crown、hd_hi_name、hd_hi_phase、hd_hi_env，阶段公爵领列表 hd_hi_stage_1..3。
+
+############################
+# 开始（Character = 本人）
+############################
+hd_hi_begin_effect = {
+	save_scope_as = hd_hi_leader
+	set_global_variable = { name = hd_hi_done_$KEY$ value = yes }
+	set_variable = { name = hd_hi_key value = flag:$KEY$ }
+	create_story = {
+		type = story_hd_hi_invasion
+		save_scope_as = hd_hi_story
+	}
+	scope:hd_hi_story = {
+		hd_hi_data_$KEY$_effect = yes
+		set_variable = { name = hd_hi_phase value = flag:pending }
+	}
+	# 后续一律在以本人为 ROOT 的事件里执行
+	trigger_event = hd_hi.0100
+}
+
+### Character（本人）：取得自己的入侵故事
+hd_hi_save_story_effect = {
+	save_scope_as = hd_hi_leader
+	random_owned_story = {
+		limit = { story_type = story_hd_hi_invasion }
+		save_scope_as = hd_hi_story
+	}
+}
+
+### Story：把当前阶段的公爵领装入 hd_hi_cur
+hd_hi_load_stage_effect = {
+	clear_variable_list = hd_hi_cur
+	if = {
+		limit = { var:hd_hi_stage = 1 }
+		every_in_list = {
+			variable = hd_hi_stage_1
+			scope:hd_hi_story = { add_to_variable_list = { name = hd_hi_cur target = prev } }
+		}
+	}
+	else_if = {
+		limit = { var:hd_hi_stage = 2 }
+		every_in_list = {
+			variable = hd_hi_stage_2
+			scope:hd_hi_story = { add_to_variable_list = { name = hd_hi_cur target = prev } }
+		}
+	}
+	else = {
+		every_in_list = {
+			variable = hd_hi_stage_3
+			scope:hd_hi_story = { add_to_variable_list = { name = hd_hi_cur target = prev } }
+		}
+	}
+}
+
+############################
+# 环境评估（Character = 本人，需 scope:hd_hi_story）
+# 不合适 = 盛世且目标在汉地；或治世中目标由天子直辖；或目标七成以上归一家、且其兵力超过本人（含起事兵马）两倍。
+############################
+hd_hi_eval_env_effect = {
+	scope:hd_hi_story = {
+		hd_hi_load_stage_effect = yes
+		set_variable = { name = hd_hi_total value = 0 }
+		every_in_list = {
+			variable = hd_hi_cur
+			every_de_jure_county = {
+				limit = { exists = holder }
+				scope:hd_hi_story = { change_variable = { name = hd_hi_total add = 1 } }
+				holder.top_liege = {
+					if = {
+						limit = { NOT = { is_in_list = hd_hi_env_lieges } }
+						add_to_temporary_list = hd_hi_env_lieges
+						set_variable = { name = hd_hi_cnt value = 0 }
+					}
+					change_variable = { name = hd_hi_cnt add = 1 }
+				}
+			}
+		}
+	}
+	ordered_in_list = {
+		list = hd_hi_env_lieges
+		limit = { NOT = { this = scope:hd_hi_leader } }
+		order_by = var:hd_hi_cnt
+		save_scope_as = hd_hi_strongest
+	}
+	scope:hd_hi_story = {
+		set_variable = { name = hd_hi_env value = flag:ok }
+		if = {
+			limit = { exists = scope:hd_hi_strongest }
+			# 份额 = 最强者所占伯爵领 / 总数
+			set_variable = { name = hd_hi_share value = scope:hd_hi_strongest.var:hd_hi_cnt }
+			if = {
+				limit = { var:hd_hi_total > 0 }
+				change_variable = { name = hd_hi_share divide = var:hd_hi_total }
+			}
+			set_variable = { name = hd_hi_enemy value = scope:hd_hi_strongest.max_military_strength }
+			set_variable = { name = hd_hi_power value = scope:hd_hi_leader.max_military_strength }
+			change_variable = { name = hd_hi_power add = var:hd_hi_army_est }
+			change_variable = { name = hd_hi_power multiply = 2 }
+			if = {
+				limit = {
+					OR = {
+						AND = {
+							hd_hi_shengshi_trigger = yes
+							any_in_list = {
+								variable = hd_hi_cur
+								target_is_de_jure_liege_or_above = title:h_china
+							}
+						}
+						AND = {
+							hd_cycle_is_zhishi_trigger = yes
+							scope:hd_hi_strongest = { has_title = title:h_china }
+						}
+						AND = {
+							var:hd_hi_share >= 0.7
+							var:hd_hi_enemy > var:hd_hi_power
+						}
+					}
+				}
+				set_variable = { name = hd_hi_env value = flag:bad }
+			}
+			remove_variable = hd_hi_share
+			remove_variable = hd_hi_enemy
+			remove_variable = hd_hi_power
+		}
+		remove_variable = hd_hi_total
+	}
+	every_in_list = {
+		list = hd_hi_env_lieges
+		remove_variable = hd_hi_cnt
+	}
+}
+
+############################
+# 分流（Character = 本人）
+# 玩家本人、或有地的本人：事件里自己选（电脑：公爵及以下选起事，王以上选安守）。
+# 无地的电脑本人：主上是玩家时先问主上放不放人；否则直接起兵或蛰伏。
+############################
+hd_hi_route_effect = {
+	if = {
+		limit = {
+			OR = {
+				is_ai = no
+				is_landed = yes
+			}
+		}
+		trigger_event = hd_hi.0200
+	}
+	else_if = {
+		limit = {
+			liege ?= {
+				is_ai = no
+				NOT = { this = scope:hd_hi_leader }
+			}
+		}
+		liege = { trigger_event = hd_hi.0300 }
+	}
+	else = {
+		hd_hi_go_effect = yes
+	}
+}
+
+### Character（本人）：按评估结果起兵或蛰伏
+hd_hi_go_effect = {
+	if = {
+		limit = { scope:hd_hi_story.var:hd_hi_env = flag:ok }
+		hd_hi_rise_effect = yes
+	}
+	else = {
+		hd_hi_dormant_effect = yes
+	}
+}
+
+### Character（本人）：放弃这场入侵
+hd_hi_abandon_effect = {
+	scope:hd_hi_story ?= { end_story = yes }
+}
+
+############################
+# 起兵（Character = 本人）
+############################
+hd_hi_rise_effect = {
+	save_scope_as = hd_hi_leader
+	scope:hd_hi_story = { set_variable = { name = hd_hi_phase value = flag:rising } }
+	# 封臣：就此脱离主上
+	if = {
+		limit = {
+			is_landed = yes
+			is_independent_ruler = no
+		}
+		create_title_and_vassal_change = {
+			type = independency
+			save_scope_as = hd_hi_independence
+			add_claim_on_loss = no
+		}
+		becomes_independent = { change = scope:hd_hi_independence }
+		resolve_title_and_vassal_change = scope:hd_hi_independence
+	}
+	# 无地：在故地立营
+	if = {
+		limit = { is_landed = no }
+		save_scope_as = hd_revolt_leader
+		hd_historical_revolt_ensure_adventurer_effect = { LOCATION = scope:hd_hi_story.var:hd_hi_home }
+	}
+	hd_hi_strengthen_effect = yes
+	# 通知其他玩家
+	every_player = {
+		limit = { NOT = { this = scope:hd_hi_leader } }
+		trigger_event = hd_hi.1001
+	}
+	if = {
+		limit = { is_ai = yes }
+		hd_hi_declare_effect = yes
+	}
+}
+
+############################
+# 蛰伏（Character = 本人）：舍下领地，以带宣称的冒险者身份在故地等待
+############################
+hd_hi_dormant_effect = {
+	save_scope_as = hd_hi_leader
+	scope:hd_hi_story = { set_variable = { name = hd_hi_phase value = flag:dormant } }
+	if = {
+		limit = { is_landed = yes }
+		hd_wuhu_chief_abandon_lands_effect = yes
+	}
+	save_scope_as = hd_revolt_leader
+	hd_historical_revolt_ensure_adventurer_effect = { LOCATION = scope:hd_hi_story.var:hd_hi_home }
+	# 对第一阶段的公爵领与王冠取得宣称
+	scope:hd_hi_story = {
+		every_in_list = {
+			variable = hd_hi_stage_1
+			scope:hd_hi_leader = { add_pressed_claim = prev }
+			every_de_jure_county = {
+				limit = {
+					exists = holder
+					holder.top_liege = { is_ai = no }
+				}
+				holder.top_liege = {
+					if = {
+						limit = { NOT = { is_in_list = hd_hi_warned } }
+						add_to_temporary_list = hd_hi_warned
+					}
+				}
+			}
+		}
+		if = {
+			limit = { exists = var:hd_hi_crown }
+			scope:hd_hi_leader = { add_pressed_claim = scope:hd_hi_story.var:hd_hi_crown }
+		}
+	}
+	hd_hi_strengthen_effect = yes
+	every_in_list = {
+		list = hd_hi_warned
+		limit = { NOT = { this = scope:hd_hi_leader } }
+		trigger_event = hd_hi.1002
+	}
+}
+
+### Character（本人）：入侵者加成、财富与常备部众（起兵与蛰伏共用，同一场入侵只给一次）
+hd_hi_strengthen_effect = {
+	if = {
+		limit = { NOT = { scope:hd_hi_story = { has_variable = hd_hi_strengthened } } }
+		scope:hd_hi_story = { set_variable = { name = hd_hi_strengthened value = yes } }
+		add_character_modifier = {
+			modifier = hd_hi_invader_modifier
+			years = 25
+		}
+		add_gold = {
+			value = 150
+			multiply = scope:hd_hi_story.var:hd_hi_size
+		}
+		add_prestige = {
+			value = 300
+			multiply = scope:hd_hi_story.var:hd_hi_size
+		}
+		hd_hi_save_army_location_effect = yes
+		hd_hi_spawn_army_effect = { WAR = no NAME = hd_hi_hold_army_name SCALE = 0.5 }
+	}
+}
+
+### Character（本人）：兵马出现的位置（有地 = 都城，无地 = 所在地）
+hd_hi_save_army_location_effect = {
+	if = {
+		limit = { exists = capital_province }
+		capital_province = { save_scope_as = hd_hi_army_location }
+	}
+	else = {
+		location = { save_scope_as = hd_hi_army_location }
+	}
+}
+
+### Character（本人）：按骑步与规模生成兵马。SCALE = 1（事件军）或 0.5（常备部众）；WAR = yes 时绑定 scope:hd_hi_war
+hd_hi_spawn_army_effect = {
+	if = {
+		limit = { scope:hd_hi_story.var:hd_hi_army = flag:horse }
+		if = {
+			limit = { always = $WAR$ }
+			spawn_army = {
+				name = $NAME$
+				levies = {
+					value = 2000
+					multiply = scope:hd_hi_story.var:hd_hi_size
+					multiply = $SCALE$
+				}
+				men_at_arms = {
+					type = horse_archers
+					stacks = {
+						value = 5
+						multiply = scope:hd_hi_story.var:hd_hi_size
+						multiply = $SCALE$
+					}
+				}
+				men_at_arms = {
+					type = light_horsemen
+					stacks = {
+						value = 3
+						multiply = scope:hd_hi_story.var:hd_hi_size
+						multiply = $SCALE$
+					}
+				}
+				location = scope:hd_hi_army_location
+				uses_supply = no
+				inheritable = no
+				war = scope:hd_hi_war
+				save_scope_as = hd_hi_army
+			}
+		}
+		else = {
+			spawn_army = {
+				name = $NAME$
+				levies = {
+					value = 2000
+					multiply = scope:hd_hi_story.var:hd_hi_size
+					multiply = $SCALE$
+				}
+				men_at_arms = {
+					type = horse_archers
+					stacks = {
+						value = 5
+						multiply = scope:hd_hi_story.var:hd_hi_size
+						multiply = $SCALE$
+					}
+				}
+				men_at_arms = {
+					type = light_horsemen
+					stacks = {
+						value = 3
+						multiply = scope:hd_hi_story.var:hd_hi_size
+						multiply = $SCALE$
+					}
+				}
+				location = scope:hd_hi_army_location
+				uses_supply = no
+				inheritable = no
+				save_scope_as = hd_hi_army
+			}
+		}
+	}
+	else = {
+		if = {
+			limit = { always = $WAR$ }
+			spawn_army = {
+				name = $NAME$
+				levies = {
+					value = 3000
+					multiply = scope:hd_hi_story.var:hd_hi_size
+					multiply = $SCALE$
+				}
+				men_at_arms = {
+					type = armored_footmen
+					stacks = {
+						value = 4
+						multiply = scope:hd_hi_story.var:hd_hi_size
+						multiply = $SCALE$
+					}
+				}
+				men_at_arms = {
+					type = bowmen
+					stacks = {
+						value = 4
+						multiply = scope:hd_hi_story.var:hd_hi_size
+						multiply = $SCALE$
+					}
+				}
+				location = scope:hd_hi_army_location
+				uses_supply = no
+				inheritable = no
+				war = scope:hd_hi_war
+				save_scope_as = hd_hi_army
+			}
+		}
+		else = {
+			spawn_army = {
+				name = $NAME$
+				levies = {
+					value = 3000
+					multiply = scope:hd_hi_story.var:hd_hi_size
+					multiply = $SCALE$
+				}
+				men_at_arms = {
+					type = armored_footmen
+					stacks = {
+						value = 4
+						multiply = scope:hd_hi_story.var:hd_hi_size
+						multiply = $SCALE$
+					}
+				}
+				men_at_arms = {
+					type = bowmen
+					stacks = {
+						value = 4
+						multiply = scope:hd_hi_story.var:hd_hi_size
+						multiply = $SCALE$
+					}
+				}
+				location = scope:hd_hi_army_location
+				uses_supply = no
+				inheritable = no
+				save_scope_as = hd_hi_army
+			}
+		}
+	}
+}
+
+############################
+# 宣战（Character = 本人，需 scope:hd_hi_story）
+# 守方：当前阶段中占伯爵领最多的独立统治者（排除自己、停战对象和已在交战的对象）。
+############################
+hd_hi_declare_effect = {
+	save_scope_as = hd_hi_leader
+	scope:hd_hi_story = {
+		hd_hi_load_stage_effect = yes
+		every_in_list = {
+			variable = hd_hi_cur
+			every_de_jure_county = {
+				limit = {
+					exists = holder
+					NOT = { holder.top_liege = scope:hd_hi_leader }
+				}
+				holder.top_liege = {
+					if = {
+						limit = { NOT = { is_in_list = hd_hi_defenders } }
+						add_to_temporary_list = hd_hi_defenders
+						set_variable = { name = hd_hi_cnt value = 0 }
+					}
+					change_variable = { name = hd_hi_cnt add = 1 }
+				}
+			}
+		}
+	}
+	ordered_in_list = {
+		list = hd_hi_defenders
+		limit = {
+			NOT = { this = scope:hd_hi_leader }
+			NOT = { has_truce = scope:hd_hi_leader }
+			NOT = { is_at_war_with = scope:hd_hi_leader }
+		}
+		order_by = var:hd_hi_cnt
+		save_scope_as = hd_hi_defender
+	}
+	every_in_list = {
+		list = hd_hi_defenders
+		remove_variable = hd_hi_cnt
+	}
+	if = {
+		limit = { exists = scope:hd_hi_defender }
+		scope:hd_hi_story = {
+			ordered_in_list = {
+				variable = hd_hi_cur
+				limit = {
+					any_de_jure_county = { holder.top_liege ?= scope:hd_hi_defender }
+				}
+				order_by = {
+					value = 0
+					every_de_jure_county = {
+						limit = { holder.top_liege ?= scope:hd_hi_defender }
+						add = 1
+					}
+				}
+				save_scope_as = hd_hi_target
+			}
+		}
+		start_war = {
+			cb = hd_hi_invasion_cb
+			target = scope:hd_hi_defender
+			target_title = scope:hd_hi_target
+		}
+		random_character_war = {
+			limit = {
+				primary_attacker = scope:hd_hi_leader
+				using_cb = hd_hi_invasion_cb
+			}
+			save_scope_as = hd_hi_war
+		}
+		if = {
+			limit = { exists = scope:hd_hi_war }
+			hd_hi_save_army_location_effect = yes
+			hd_hi_spawn_army_effect = { WAR = yes NAME = hd_hi_war_army_name SCALE = 1 }
+			scope:hd_hi_army ?= { assign_commander = scope:hd_hi_leader }
+		}
+	}
+}
+
+############################
+# 阶段检查（Character = 本人，需 scope:hd_hi_story；在隐藏事件 hd_hi.2001 中执行，ROOT = 本人）
+# 当前阶段八成伯爵领已归本人 → 第一阶段后取王冠，最后阶段后结束；否则电脑继续宣战。
+############################
+hd_hi_stage_check_effect = {
+	# 冒险者得地后改为本场设定的政体
+	if = {
+		limit = {
+			is_landed = yes
+			has_government = landless_adventurer_government
+		}
+		hd_hi_apply_government_effect = yes
+	}
+	scope:hd_hi_story = {
+		hd_hi_load_stage_effect = yes
+		set_variable = { name = hd_hi_total value = 0 }
+		set_variable = { name = hd_hi_own value = 0 }
+		every_in_list = {
+			variable = hd_hi_cur
+			every_de_jure_county = {
+				scope:hd_hi_story = { change_variable = { name = hd_hi_total add = 4 } }
+				if = {
+					limit = { holder.top_liege ?= scope:hd_hi_leader }
+					scope:hd_hi_story = { change_variable = { name = hd_hi_own add = 5 } }
+				}
+			}
+		}
+	}
+	if = {
+		limit = { scope:hd_hi_story.var:hd_hi_own >= scope:hd_hi_story.var:hd_hi_total }
+		if = {
+			limit = { scope:hd_hi_story.var:hd_hi_stage = 1 }
+			hd_hi_crown_effect = yes
+		}
+		if = {
+			limit = { scope:hd_hi_story.var:hd_hi_stage >= scope:hd_hi_story.var:hd_hi_stage_count }
+			scope:hd_hi_story = { end_story = yes }
+		}
+		else = {
+			scope:hd_hi_story = { change_variable = { name = hd_hi_stage add = 1 } }
+		}
+	}
+	else_if = {
+		limit = {
+			is_ai = yes
+			scope:hd_hi_story.var:hd_hi_phase = flag:rising
+			hd_hi_in_invasion_war_trigger = no
+		}
+		hd_hi_declare_effect = yes
+	}
+	scope:hd_hi_story ?= {
+		remove_variable = hd_hi_total
+		remove_variable = hd_hi_own
+	}
+}
+
+### Character（本人）：按本场设定改政体
+hd_hi_apply_government_effect = {
+	if = {
+		limit = { scope:hd_hi_story.var:hd_hi_gov = flag:celestial }
+		hd_force_celestial_effect = yes
+	}
+	else_if = {
+		limit = { scope:hd_hi_story.var:hd_hi_gov = flag:nomad }
+		change_government = nomad_government
+		if = {
+			limit = { NOT = { any_held_title = { is_nomad_title = yes } } }
+			save_scope_as = hd_hi_nomad_holder
+			create_nomad_title = {
+				name = nomad_title_name
+				holder = scope:hd_hi_nomad_holder
+				government = nomad_government
+				save_scope_as = hd_hi_new_nomad_title
+			}
+		}
+	}
+	else_if = {
+		limit = { scope:hd_hi_story.var:hd_hi_gov = flag:feudal }
+		change_government = feudal_government
+	}
+	else = {
+		change_government = tribal_government
+	}
+}
+
+############################
+# 王冠与国号（Character = 本人，ROOT 必须是本人；照 hd_wuhu_chanyu_crown_effect）
+############################
+hd_hi_crown_effect = {
+	if = {
+		limit = { exists = scope:hd_hi_story.var:hd_hi_crown }
+		scope:hd_hi_story.var:hd_hi_crown = { save_scope_as = hd_hi_crown }
+		if = {
+			limit = {
+				hd_cycle_title_creation_allowed_trigger = { TITLE = scope:hd_hi_crown }
+			}
+			if = {
+				limit = { scope:hd_hi_crown = { is_title_created = no } }
+				create_title_and_vassal_change = {
+					type = created
+					save_scope_as = hd_hi_crown_change
+					add_claim_on_loss = no
+				}
+				scope:hd_hi_crown = {
+					change_title_holder = {
+						holder = root
+						change = scope:hd_hi_crown_change
+					}
+				}
+				resolve_title_and_vassal_change = scope:hd_hi_crown_change
+			}
+			else_if = {
+				limit = {
+					NOT = { scope:hd_hi_crown.holder ?= root }
+					scope:hd_hi_crown.holder ?= {
+						is_ai = yes
+						NOT = { has_title = title:h_china }
+					}
+				}
+				create_title_and_vassal_change = {
+					type = usurped
+					save_scope_as = hd_hi_crown_change
+					add_claim_on_loss = yes
+				}
+				scope:hd_hi_crown = {
+					change_title_holder = {
+						holder = root
+						change = scope:hd_hi_crown_change
+					}
+				}
+				resolve_title_and_vassal_change = scope:hd_hi_crown_change
+			}
+		}
+		if = {
+			limit = { has_title = scope:hd_hi_crown }
+			if = {
+				limit = { highest_held_title_tier <= tier_kingdom }
+				set_primary_title_to = scope:hd_hi_crown
+			}
+			if = {
+				limit = { exists = scope:hd_hi_story.var:hd_hi_name }
+				set_variable = {
+					name = new_realm_title_name
+					value = scope:hd_hi_story.var:hd_hi_name
+				}
+				scope:hd_hi_crown = {
+					set_title_name_dynamic = new_realm_title_name_from_var
+				}
+				dynasty ?= {
+					remove_variable = hd_fixed_realm_title
+					set_variable = {
+						name = hd_fixed_realm_name
+						value = scope:hd_hi_story.var:hd_hi_name
+					}
+				}
+				remove_variable = new_realm_title_name
+			}
+		}
+	}
+}
+
+### Title（公爵领，在 hd_hi_invasion_cb 胜利中执行）：夺取守方及其电脑封臣在此公爵领内的头衔
+hd_hi_take_duchy_effect = {
+	if = {
+		limit = {
+			holder ?= {
+				top_liege = scope:defender
+				OR = {
+					this = scope:defender
+					is_ai = yes
+				}
+			}
+		}
+		change_title_holder = {
+			holder = scope:attacker
+			change = scope:change
+		}
+	}
+	every_de_jure_county = {
+		limit = {
+			holder ?= {
+				top_liege = scope:defender
+				OR = {
+					this = scope:defender
+					is_ai = yes
+				}
+			}
+		}
+		change_title_holder = {
+			holder = scope:attacker
+			change = scope:change
+			take_baronies = yes
+		}
+	}
+}

@@ -1,0 +1,112 @@
+﻿# Character scope. Result is synchronous only; never persisted as membership.
+WJ_dd_resolve_member_head_effect = {
+ if = {
+  limit = { WJ_dd_direct_member_trigger = yes }
+  primary_title.var:wj_dd_core.holder = { save_scope_as = wj_dd_member_head }
+ }
+ else_if = {
+  limit = { WJ_dd_member_trigger = yes }
+  random_liege_or_above = {
+   limit = { WJ_dd_direct_member_trigger = yes }
+   primary_title.var:wj_dd_core.holder = { save_scope_as = wj_dd_member_head }
+  }
+ }
+}
+# All callers bind commander, beneficiary and target; commit rechecks current offices.
+WJ_dd_join_aid_wars_effect = {
+ if = {
+  limit = {
+   WJ_dd_aid_pair_trigger = { HEAD = scope:wj_dd_commander BENEFICIARY = scope:wj_dd_beneficiary }
+   scope:wj_dd_target = {
+    OR = {
+     AND = {
+      this = scope:wj_dd_commander
+      WJ_dd_aid_joiner_trigger = { BENEFICIARY = scope:wj_dd_beneficiary }
+     }
+     WJ_dd_aid_officer_trigger = { HEAD = scope:wj_dd_commander BENEFICIARY = scope:wj_dd_beneficiary }
+    }
+   }
+  }
+  WJ_dd_join_leader_wars_effect = yes
+ }
+}
+# Native leader-war loop, reused after each caller's own authority validation.
+WJ_dd_join_leader_wars_effect = {
+  scope:wj_dd_beneficiary = {
+   every_character_war = {
+    limit = { scope:wj_dd_beneficiary = { is_leader_in_war = prev } is_attacker = scope:wj_dd_beneficiary NOT = { is_participant = scope:wj_dd_target } }
+    add_attacker = scope:wj_dd_target
+   }
+   every_character_war = {
+    limit = { scope:wj_dd_beneficiary = { is_leader_in_war = prev } is_defender = scope:wj_dd_beneficiary NOT = { is_participant = scope:wj_dd_target } }
+    add_defender = scope:wj_dd_target
+   }
+   if = { limit = { this != scope:wj_dd_commander } trigger_event = WJ_district.201 }
+  }
+  scope:wj_dd_target = { trigger_event = WJ_district.202 }
+}
+# A failed personal request still deploys aid. No rejection, punishment or saved war.
+WJ_dd_dispatch_request_effect = {
+ if = {
+  limit = { WJ_dd_aid_pair_trigger = { HEAD = scope:wj_dd_commander BENEFICIARY = scope:wj_dd_beneficiary } }
+  if = {
+   limit = {
+    scope:wj_dd_commander.top_liege = {
+     any_vassal_or_below = { WJ_dd_aid_officer_trigger = { HEAD = scope:wj_dd_commander BENEFICIARY = scope:wj_dd_beneficiary } }
+    }
+   }
+   if = {
+    limit = { scope:wj_dd_commander = { is_ai = no } }
+    scope:wj_dd_commander = {
+     open_interaction_window = {
+      interaction = wj_dd_deploy_aid_interaction
+      actor = scope:wj_dd_commander
+      recipient = scope:wj_dd_beneficiary
+     }
+    }
+   }
+   else = {
+    scope:wj_dd_commander.top_liege = {
+     random_vassal_or_below = {
+      limit = { WJ_dd_aid_officer_trigger = { HEAD = scope:wj_dd_commander BENEFICIARY = scope:wj_dd_beneficiary } }
+      save_scope_as = wj_dd_target
+     }
+    }
+    WJ_dd_join_aid_wars_effect = yes
+   }
+  }
+  else = {
+   scope:wj_dd_commander = { save_scope_as = wj_dd_target }
+   WJ_dd_join_aid_wars_effect = yes
+  }
+ }
+}
+WJ_dd_answer_aid_effect = {
+ scope:actor = { save_scope_as = wj_dd_beneficiary }
+ scope:recipient = { save_scope_as = wj_dd_commander }
+ if = {
+  limit = { WJ_dd_request_available_trigger = yes }
+  if = {
+   limit = { scope:recipient = { is_ai = no } }
+   scope:recipient = { trigger_event = WJ_district.200 }
+  }
+  else_if = {
+   limit = { scope:wj_dd_personal = yes scope:recipient = { WJ_dd_aid_joiner_trigger = { BENEFICIARY = scope:actor } } }
+   scope:recipient = { save_scope_as = wj_dd_target }
+   WJ_dd_join_aid_wars_effect = yes
+  }
+  else = { WJ_dd_dispatch_request_effect = yes }
+ }
+}
+WJ_dd_notify_defence_effect = {
+ scope:defender = {
+  save_scope_as = wj_dd_beneficiary
+  WJ_dd_resolve_member_head_effect = yes
+ }
+ scope:wj_dd_member_head = {
+  send_interface_message = {
+   type = event_generic_bad title = WJ_dd_defence_notice_title
+   desc = WJ_dd_defence_notice_desc left_icon = scope:wj_dd_beneficiary right_icon = scope:attacker
+  }
+ }
+}

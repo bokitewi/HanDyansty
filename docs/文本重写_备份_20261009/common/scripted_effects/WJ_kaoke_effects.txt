@@ -1,0 +1,296 @@
+﻿# 与冒险者完成合同计数相同：奖励中的完成者人物域直接累加。
+# 不绑定 origin、接单时官职或临时任期scope，不从XP反推公务。
+WJ_kaoke_clear_effect = {
+ WJ_ai_kaoke_clear_period = yes
+ remove_variable ?= wj_kaoke_superior_points
+ remove_variable ?= wj_kaoke_last_superior_points
+ remove_variable ?= wj_kaoke_central_points
+ remove_variable ?= wj_kaoke_central_request_used
+ remove_variable ?= wj_kaoke_last_central_points
+ WJ_kaoke_clear_penalty_effect = yes
+ remove_variable ?= wj_kaoke_schema_version
+ remove_variable ?= wj_kaoke_reward_pending
+ remove_variable ?= wj_kaoke_reward_choice
+ remove_variable ?= wj_kaoke_last_legacy
+ # 只留活人的窗口废止编号，防同日失而复得重用旧选项；不是功绩或任期履历。
+ if = { limit = { is_alive = no } remove_variable ?= wj_kaoke_window_epoch }
+ remove_variable ?= wj_kaoke_start
+ remove_variable ?= wj_kaoke_realm
+ remove_variable ?= wj_kaoke_civil_count
+ remove_variable ?= wj_kaoke_civil_good
+ remove_variable ?= wj_kaoke_civil_bad
+ remove_variable ?= wj_kaoke_civil_points
+ remove_variable ?= wj_kaoke_battles
+ remove_variable ?= wj_kaoke_wins
+ remove_variable ?= wj_kaoke_losses
+ remove_variable ?= wj_kaoke_military_points
+ remove_variable ?= wj_kaoke_choice_count
+ remove_variable ?= wj_kaoke_choice_points
+ remove_variable ?= wj_kaoke_last_civil_count
+ remove_variable ?= wj_kaoke_last_civil_good
+ remove_variable ?= wj_kaoke_last_civil_bad
+ remove_variable ?= wj_kaoke_last_civil_points
+ remove_variable ?= wj_kaoke_last_battles
+ remove_variable ?= wj_kaoke_last_wins
+ remove_variable ?= wj_kaoke_last_losses
+ remove_variable ?= wj_kaoke_last_military_points
+ remove_variable ?= wj_kaoke_last_choice_count
+ remove_variable ?= wj_kaoke_last_choice_points
+ remove_variable ?= wj_kaoke_last_score
+ remove_variable ?= wj_kaoke_last_grade
+ remove_variable ?= wj_kaoke_last_date
+ remove_variable ?= wj_kaoke_last_trial
+ remove_variable ?= wj_kaoke_last_military_award
+}
+WJ_kaoke_begin_effect = {
+ WJ_ai_kaoke_clear_period = yes
+ remove_variable ?= wj_kaoke_superior_points
+ remove_variable ?= wj_kaoke_central_points
+ remove_variable ?= wj_kaoke_central_request_used
+ set_variable = { name = wj_kaoke_schema_version value = 2 }
+ if = {
+  limit = { has_variable = wj_kaoke_window_epoch }
+  change_variable = { name = wj_kaoke_window_epoch add = 1 }
+ }
+ else = { set_variable = { name = wj_kaoke_window_epoch value = 1 } }
+ set_variable = { name = wj_kaoke_start value = current_date }
+ set_variable = { name = wj_kaoke_realm value = top_liege.primary_title }
+ set_variable = { name = wj_kaoke_civil_count value = 0 }
+ set_variable = { name = wj_kaoke_civil_points value = 0 }
+ set_variable = { name = wj_kaoke_battles value = 0 }
+ set_variable = { name = wj_kaoke_wins value = 0 }
+ set_variable = { name = wj_kaoke_losses value = 0 }
+ set_variable = { name = wj_kaoke_military_points value = 0 }
+ set_variable = { name = wj_kaoke_choice_count value = 0 }
+ set_variable = { name = wj_kaoke_choice_points value = 0 }
+ # 不在隐藏延迟事件的trigger中要求已满五年。
+ trigger_event = { id = wj_kaoke.0100 years = 5 }
+}
+WJ_kaoke_reconcile_effect = {
+ if = {
+  limit = { WJ_kaoke_eligible_trigger = no }
+  if = {
+   limit = {
+    is_alive = yes
+    has_variable = wj_kaoke_start
+    has_character_modifier = WJ_temp_official_modifier
+   }
+   if = {
+    limit = { WJ_is_valid_temp_official_trigger = no }
+    WJ_temp_official_clear_effect = yes
+    WJ_clear_owned_appointment_timeout_effect = yes
+   }
+   else_if = {
+    limit = {
+     NOT = { has_character_flag = wj_temp_official_timer }
+     NOT = { has_character_flag = wj_temp_official_kaoke_ready }
+    }
+    # 转为仍有实职的中央试守，从此时接回原有一年考核；timer保证不重复重排。
+    WJ_temp_official_retry_effect = yes
+   }
+  }
+  WJ_kaoke_clear_effect = yes
+ }
+ else = {
+  WJ_kaoke_migrate_effect = yes
+  if = {
+   limit = {
+    has_variable = wj_kaoke_realm
+    NOT = { var:wj_kaoke_realm = top_liege.primary_title }
+   }
+   WJ_kaoke_clear_effect = yes
+  }
+  if = {
+   limit = { NOT = { has_variable = wj_kaoke_start } }
+   WJ_kaoke_begin_effect = yes
+  }
+  if = {
+   limit = {
+    WJ_has_entry_road_trigger = no
+    NOT = { has_character_modifier = WJ_temp_official_modifier }
+   }
+   WJ_temp_official_apply_effect = yes
+  }
+ }
+}
+# 单次旧存档换算，不补发旧考赏、不重开五年。
+WJ_kaoke_migrate_effect = {
+ if = {
+  limit = { has_variable = wj_kaoke_start NOT = { has_variable = wj_kaoke_schema_version } }
+  if = {
+   limit = { has_variable = wj_kaoke_civil_points }
+   set_variable = { name = wj_kaoke_civil_points value = { value = var:wj_kaoke_civil_points multiply = 10 } }
+  }
+  if = {
+   limit = { has_variable = wj_kaoke_military_points }
+   set_variable = { name = wj_kaoke_military_points value = { value = var:wj_kaoke_military_points multiply = 10 } }
+  }
+  if = {
+   limit = { has_variable = wj_kaoke_choice_points }
+   set_variable = { name = wj_kaoke_choice_points value = { value = var:wj_kaoke_choice_points multiply = 10 } }
+  }
+  if = {
+   limit = { has_variable = wj_kaoke_last_civil_points }
+   set_variable = { name = wj_kaoke_last_civil_points value = { value = var:wj_kaoke_last_civil_points multiply = 10 } }
+  }
+  if = {
+   limit = { has_variable = wj_kaoke_last_military_points }
+   set_variable = { name = wj_kaoke_last_military_points value = { value = var:wj_kaoke_last_military_points multiply = 10 } }
+  }
+  if = {
+   limit = { has_variable = wj_kaoke_last_choice_points }
+   set_variable = { name = wj_kaoke_last_choice_points value = { value = var:wj_kaoke_last_choice_points multiply = 10 } }
+  }
+  if = {
+   limit = { has_variable = wj_kaoke_last_score }
+   set_variable = { name = wj_kaoke_last_score value = { value = var:wj_kaoke_last_score multiply = 10 add = 50 } }
+  }
+  if = {
+   limit = { has_variable = wj_kaoke_last_grade }
+   if = { limit = { var:wj_kaoke_last_grade >= 2 } change_variable = { name = wj_kaoke_last_grade add = 1 } }
+   set_variable = { name = wj_kaoke_last_legacy value = 1 }
+   # 旧奖励已发放，只保留候选分，不再发奖。
+   if = { limit = { var:wj_kaoke_last_grade >= 4 } set_variable = { name = wj_kaoke_reward_choice value = 1 } }
+  }
+  remove_variable ?= wj_kaoke_civil_good
+  remove_variable ?= wj_kaoke_civil_bad
+  remove_variable ?= wj_kaoke_last_civil_good
+  remove_variable ?= wj_kaoke_last_civil_bad
+  set_variable = { name = wj_kaoke_schema_version value = 2 }
+ }
+}
+WJ_kaoke_clear_penalty_effect = {
+ if = {
+  limit = { is_alive = yes }
+  if = { limit = { has_character_modifier = WJ_kaoke_poor_modifier } remove_character_modifier = WJ_kaoke_poor_modifier }
+  if = { limit = { has_character_modifier = WJ_kaoke_bad_modifier } remove_character_modifier = WJ_kaoke_bad_modifier }
+ }
+}
+WJ_kaoke_civil_effect = {
+ WJ_kaoke_reconcile_effect = yes
+ if = {
+  limit = { WJ_kaoke_eligible_trigger = yes }
+  change_variable = { name = wj_kaoke_civil_count add = 1 }
+  change_variable = { name = wj_kaoke_civil_points add = $POINTS$ }
+  if = { limit = { $POINTS$ > 0 } custom_tooltip = WJ_kaoke_civil_gain_tt }
+  else_if = { limit = { $POINTS$ < 0 } custom_tooltip = WJ_kaoke_civil_loss_tt }
+  else = { custom_tooltip = WJ_kaoke_civil_unscored_tt }
+ }
+}
+WJ_kaoke_battle_effect = {
+ WJ_kaoke_reconcile_effect = yes
+ if = {
+  limit = { WJ_kaoke_eligible_trigger = yes }
+  change_variable = { name = wj_kaoke_battles add = 1 }
+  change_variable = { name = wj_kaoke_military_points add = $POINTS$ }
+  if = { limit = { $WON$ = 1 } change_variable = { name = wj_kaoke_wins add = 1 } }
+  else = { change_variable = { name = wj_kaoke_losses add = 1 } }
+ }
+}
+WJ_kaoke_choice_effect = {
+ WJ_kaoke_reconcile_effect = yes
+ if = {
+  limit = { WJ_kaoke_eligible_trigger = yes }
+  change_variable = { name = wj_kaoke_choice_count add = 1 }
+  change_variable = { name = wj_kaoke_choice_points add = $POINTS$ }
+ }
+}
+# 定第与清零在正式弹窗 immediate 完成；奖项由选项领取一次。
+WJ_kaoke_finish_effect = {
+ if = {
+  limit = { WJ_kaoke_due_trigger = yes }
+  WJ_kaoke_migrate_effect = yes
+  set_variable = { name = wj_kaoke_last_civil_count value = var:wj_kaoke_civil_count }
+  set_variable = { name = wj_kaoke_last_civil_points value = var:wj_kaoke_civil_points }
+  set_variable = { name = wj_kaoke_last_battles value = var:wj_kaoke_battles }
+  set_variable = { name = wj_kaoke_last_wins value = var:wj_kaoke_wins }
+  set_variable = { name = wj_kaoke_last_losses value = var:wj_kaoke_losses }
+  set_variable = { name = wj_kaoke_last_military_points value = var:wj_kaoke_military_points }
+  set_variable = { name = wj_kaoke_last_choice_count value = var:wj_kaoke_choice_count }
+  set_variable = { name = wj_kaoke_last_choice_points value = var:wj_kaoke_choice_points }
+  set_variable = { name = wj_kaoke_last_central_points value = 0 }
+  set_variable = { name = wj_kaoke_last_superior_points value = 0 }
+  if = { limit = { has_variable = wj_kaoke_superior_points } set_variable = { name = wj_kaoke_last_superior_points value = var:wj_kaoke_superior_points } }
+  if = { limit = { has_variable = wj_kaoke_central_points } set_variable = { name = wj_kaoke_last_central_points value = var:wj_kaoke_central_points } }
+  set_variable = { name = wj_kaoke_last_score value = WJ_kaoke_score_value }
+  set_variable = { name = wj_kaoke_last_grade value = WJ_kaoke_grade_value }
+  set_variable = { name = wj_kaoke_last_date value = current_date }
+  set_variable = { name = wj_kaoke_last_trial value = 0 }
+  set_variable = { name = wj_kaoke_last_military_award value = 0 }
+  set_variable = { name = wj_kaoke_reward_choice value = 0 }
+  remove_variable ?= wj_kaoke_last_legacy
+  remove_variable ?= wj_kaoke_reward_pending
+  if = {
+   limit = { WJ_has_entry_road_trigger = no }
+   set_variable = { name = wj_kaoke_last_trial value = 1 }
+  }
+  if = {
+   limit = { vassal_contract_has_flag = celestial_military_appointment }
+   set_variable = { name = wj_kaoke_last_military_award value = 1 }
+  }
+  WJ_kaoke_clear_penalty_effect = yes
+  # 只改变直接领主对受考官员的好感，不遍历朝廷。
+  save_scope_as = wj_kaoke_official
+  if = {
+   limit = { var:wj_kaoke_last_grade = 1 }
+   add_character_modifier = { modifier = WJ_kaoke_bad_modifier years = 5 }
+   liege ?= { add_opinion = { target = scope:wj_kaoke_official modifier = WJ_kaoke_bad_opinion } }
+  }
+  else_if = {
+   limit = { var:wj_kaoke_last_grade = 2 }
+   add_character_modifier = { modifier = WJ_kaoke_poor_modifier years = 5 }
+   liege ?= { add_opinion = { target = scope:wj_kaoke_official modifier = WJ_kaoke_poor_opinion } }
+  }
+  else_if = {
+   limit = { var:wj_kaoke_last_grade >= 4 }
+   set_variable = { name = wj_kaoke_reward_pending value = 1 }
+  }
+  # 转正不占自选奖励；试守期不补发宦海经验。
+  if = {
+   limit = { var:wj_kaoke_last_trial = 1 }
+   if = { limit = { var:wj_kaoke_last_grade = 5 } WJ_grant_road_maocai_effect = yes }
+   else_if = { limit = { var:wj_kaoke_last_grade = 4 } WJ_grant_road_xiaolian_effect = yes }
+   if = {
+    limit = { var:wj_kaoke_last_grade >= 4 is_ai = no }
+    save_scope_value_as = { name = wj_kaoke_trial_notification_grade value = var:wj_kaoke_last_grade }
+    trigger_event = { id = wj_kaoke.1001 }
+   }
+  }
+  WJ_kaoke_begin_effect = yes
+ }
+}
+WJ_kaoke_claim_reward_effect = {
+ if = {
+  limit = {
+   WJ_kaoke_reward_claimable_trigger = yes
+   OR = {
+    $CHOICE$ = 1
+    AND = { $CHOICE$ = 2 has_treasury = yes }
+    $CHOICE$ = 3
+    AND = { $CHOICE$ = 4 WJ_kaoke_xp_reward_available_trigger = yes }
+   }
+  }
+  remove_variable = wj_kaoke_reward_pending
+  set_variable = { name = wj_kaoke_reward_choice value = $CHOICE$ }
+  if = { limit = { $CHOICE$ = 1 } custom_tooltip = WJ_kaoke_chosen_candidate_tt }
+  else_if = { limit = { $CHOICE$ = 2 } add_treasury = WJ_kaoke_reward_treasury_value }
+  else_if = { limit = { $CHOICE$ = 3 } change_merit = WJ_kaoke_reward_merit_value }
+  else_if = {
+   limit = { $CHOICE$ = 4 }
+   if = {
+    limit = { var:wj_kaoke_last_military_award = 1 }
+    WJ_ziwang_wuxun_xp_effect = { VALUE = WJ_kaoke_reward_xp_input_value }
+   }
+   else = { WJ_ziwang_zhiji_xp_effect = { VALUE = WJ_kaoke_reward_xp_input_value } }
+  }
+ }
+}
+WJ_kaoke_due_effect = {
+ WJ_kaoke_reconcile_effect = yes
+ if = {
+  limit = { WJ_kaoke_due_trigger = yes }
+  # AI 直接定第并领取一次奖励，不进结算弹窗。
+  if = { limit = { is_ai = yes } WJ_kaoke_ai_finish_effect = yes }
+  else = { trigger_event = { id = wj_kaoke.1000 } }
+ }
+}

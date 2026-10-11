@@ -1,0 +1,146 @@
+﻿# This file changes scripted war selection, NOT NAI defines or real army strength.
+
+# 天朝循环大修：统一 AI 并入战略区 AI 派发器。此 effect 现在只负责发放 hd_strategic_ai_story。
+hd_unification_ai_ensure_story_effect = {
+	if = {
+		limit = {
+			hd_strat_eligible_trigger = yes
+			NOT = { owns_story_of_type = hd_strategic_ai_story }
+		}
+		create_story = hd_strategic_ai_story
+	}
+}
+
+hd_unification_ai_set_cooldown_effect = {
+	if = {
+		limit = {
+			is_ai = yes
+			hd_unification_celestial_attacker_trigger = yes
+		}
+		add_character_flag = {
+			flag = hd_unification_ai_cooldown
+			days = 30
+		}
+	}
+}
+
+# Character scope. Both CBs apply pair restrictions in native valid_to_start
+# using scope:attacker / scope:defender. Do not pass caller-saved scopes into
+# ai_start_best_war callbacks: candidate evaluation has its own context.
+hd_unification_ai_attempt_effect = {
+	# 天朝循环大修：持有战略 AI story 的角色走战略区派发器
+	if = {
+		limit = { owns_story_of_type = hd_strategic_ai_story }
+		hd_strat_pulse_effect = yes
+	}
+	else_if = {
+		limit = { NOT = { AND = { this = character:tao_qian has_character_flag = hd4_tao_activated } } hd_unification_ai_ready_trigger = yes
+            NOT = { hds_managed_war_actor_trigger = yes } }
+		if = {
+			limit = { highest_held_title_tier >= tier_empire }
+			ai_start_best_war = {
+				cb = { hd_unification_cb }
+			}
+		}
+		# A successful declaration sets the existing 30-day cooldown in
+		# on_declaration. The guarded helper then skips the regional search.
+		# On failure, an eligible actor gets exactly one regional attempt.
+		hd_unification_ai_try_regional_effect = yes
+	}
+}
+
+# Re-check readiness in the calling CHARACTER scope, never in a callback.
+# ai_start_best_war retains native valid-war/cost checks; do not replace it
+# with unconditional start_war or add peace/war-chest/treasury requirements.
+hd_unification_ai_try_regional_effect = {
+	if = {
+		limit = { NOT = { AND = { this = character:tao_qian has_character_flag = hd4_tao_activated } } hd_unification_ai_ready_trigger = yes
+            NOT = { hds_managed_war_actor_trigger = yes } }
+		ai_start_best_war = {
+			cb = { chinese_reunification_cb }
+		}
+	}
+}
+
+# War/CB scope. Freeze two typed lists BEFORE changing any title or liege.
+# All directly held political titles are taken, not just the primary title or
+# Chinese de jure titles. Noble-family estate titles are explicitly preserved.
+# All direct vassals follow with their existing subtrees, including those equal
+# to the attacker's OLD tier when a higher defender title is being acquired.
+# Allies, tributaries and unrelated rulers are not traversed or annexed.
+hd_unification_full_annex_effect = {
+	scope:defender = {
+		every_held_title = {
+			limit = { is_noble_family_title = no }
+			add_to_list = hd_unification_titles
+		}
+		every_vassal = {
+			add_to_list = hd_unification_vassals
+		}
+	}
+	create_title_and_vassal_change = {
+		type = conquest
+		save_scope_as = hd_unification_change
+		add_claim_on_loss = yes
+	}
+	every_in_list = {
+		list = hd_unification_titles
+		change_title_holder_include_vassals = {
+			holder = scope:attacker
+			change = scope:hd_unification_change
+			take_baronies = no
+		}
+	}
+	every_in_list = {
+		list = hd_unification_vassals
+		change_liege = {
+			liege = scope:attacker
+			change = scope:hd_unification_change
+		}
+	}
+	# One transaction: evaluate the final title tiers and liege relationships.
+	resolve_title_and_vassal_change = scope:hd_unification_change
+}
+
+# Shared ordinary peace/failure callbacks. Neither can transfer land.
+hd_unification_white_peace_effect = {
+	scope:attacker = { show_pow_release_message_effect = yes }
+	scope:defender = { accolade_defender_war_end_glory_gain_low_effect = yes }
+	scope:attacker = {
+		add_prestige = { value = minor_prestige_value multiply = -1 }
+	}
+	modify_allies_of_participants_fame_values = {
+		WINNER = scope:attacker
+		FAME_BASE = medium_prestige_value
+		IS_RELIGIOUS_WAR = no
+		WINNER_ALLY_FAME_SCALE = 1
+		LOSER_ALLY_FAME_SCALE = 1
+	}
+	add_truce_white_peace_effect = yes
+	laamp_as_mercenary_payout_tooltip_effect = yes
+}
+
+hd_unification_defeat_effect = {
+	scope:attacker = { show_pow_release_message_effect = yes }
+	add_legitimacy_attacker_defeat_effect = yes
+	scope:defender = {
+		mandala_peacemaker_perk_serenity_effect = yes
+		accolade_defender_war_end_glory_gain_high_effect = yes
+		add_prestige_war_defender_effect = { PRESTIGE_VALUE = medium_prestige_value }
+	}
+	scope:attacker = {
+		pay_short_term_gold_reparations_effect = { GOLD_VALUE = 3 }
+		add_prestige = { value = major_prestige_value multiply = -1 }
+	}
+	modify_allies_of_participants_fame_values = {
+		WINNER = scope:defender
+		FAME_BASE = medium_prestige_value
+		IS_RELIGIOUS_WAR = no
+		WINNER_ALLY_FAME_SCALE = 1
+		LOSER_ALLY_FAME_SCALE = 1
+	}
+	add_truce_attacker_defeat_effect = yes
+	scope:attacker = { save_temporary_scope_as = loser }
+	on_lost_aggression_war_discontent_loss = yes
+	laamp_as_mercenary_payout_tooltip_effect = yes
+}

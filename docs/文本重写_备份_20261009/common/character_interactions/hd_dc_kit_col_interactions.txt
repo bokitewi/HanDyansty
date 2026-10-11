@@ -1,0 +1,310 @@
+﻿# 天朝循环·时代特色：崩溃期（天下大乱 + 大厦将倾）套件互动（见 docs/天朝循环_时代特色重制计划.md §3.4）
+
+############################################################
+# 招安（C 方案）：主君（天子或任一主君）对以叛乱 / 民变 / 危机战争进攻自己的首领使用。
+# 封官：付对方年收入 ×2，无地者入朝为臣并授官身；封地：割直辖一县给对方为封臣。
+# 对方接受后该战争以白和结束；AI 是否接受看战局与好感。
+############################################################
+hd_dc_col_amnesty_rebels_interaction = {
+	category = interaction_category_diplomacy
+	icon = scroll_scales
+	interface_priority = 70
+	desc = hd_dc_col_amnesty_rebels_interaction_desc
+	greeting = positive
+	notification_text = hd_dc_col_amnesty_rebels_notification
+	ai_maybe = no
+	popup_on_receive = yes
+	pause_on_receive = yes
+	ai_min_reply_days = 1
+	ai_max_reply_days = 3
+	cooldown_against_recipient = { years = 1 }
+
+	is_shown = {
+		hd_cycle_phase_is_collapse_trigger = yes
+		scope:actor = {
+			is_ruler = yes
+			is_landed = yes
+			hd_dc_in_china_trigger = yes
+			hd_dc_col_is_rebel_war_target_trigger = { RECIPIENT = scope:recipient }
+		}
+		scope:recipient = {
+			NOT = { this = scope:actor }
+		}
+	}
+
+	is_valid_showing_failures_only = {
+		scope:actor = { is_imprisoned = no }
+		scope:recipient = { is_imprisoned = no }
+	}
+
+	can_send = {
+		custom_tooltip = {
+			text = hd_dc_col_amnesty_must_select_tt
+			OR = {
+				scope:actor = { is_ai = yes }
+				scope:hd_dc_col_office = yes
+				scope:hd_dc_col_fief = yes
+			}
+		}
+	}
+
+	# 封官
+	send_option = {
+		flag = hd_dc_col_office
+		localization = hd_dc_col_amnesty_option_office
+		current_description = hd_dc_col_amnesty_option_office_desc
+		starts_enabled = { always = yes }
+		is_valid = {
+			scope:actor = {
+				custom_tooltip = {
+					text = hd_dc_col_amnesty_office_gold_tt
+					treasury_or_gold >= hd_dc_col_amnesty_office_cost_value
+				}
+			}
+		}
+	}
+
+	# 封地
+	send_option = {
+		flag = hd_dc_col_fief
+		localization = hd_dc_col_amnesty_option_fief
+		current_description = hd_dc_col_amnesty_option_fief_desc
+		is_valid = {
+			scope:actor = {
+				custom_tooltip = {
+					text = hd_dc_col_amnesty_no_fief_tt
+					any_held_county = {
+						NOT = { this = scope:actor.capital_county }
+					}
+				}
+			}
+		}
+	}
+
+	send_options_exclusive = yes
+
+	on_accept = {
+		# 先以白和结束叛乱战争（并保全民变首领），再授官或封地（派系解散会清空首领钱财，故赏金须在战争结束后支付）
+		hd_dc_col_amnesty_end_war_effect = yes
+		# 回复期间战争若已结束，则不再授官封地、不计诱因
+		if = {
+			limit = { exists = scope:hd_dc_col_amnesty_war_found }
+			if = {
+				limit = { scope:hd_dc_col_fief = yes }
+				hd_dc_col_amnesty_fief_effect = yes
+			}
+			else_if = {
+				limit = { scope:hd_dc_col_office = yes }
+				hd_dc_col_amnesty_office_effect = yes
+			}
+			# AI 发送时可能未选项：付得起封官就封官，否则封地
+			else_if = {
+				limit = {
+					scope:actor = { treasury_or_gold >= hd_dc_col_amnesty_office_cost_value }
+				}
+				hd_dc_col_amnesty_office_effect = yes
+			}
+			else = {
+				hd_dc_col_amnesty_fief_effect = yes
+			}
+			scope:recipient = {
+				add_opinion = {
+					target = scope:actor
+					modifier = hd_dc_col_amnesty_accepted_opinion
+				}
+			}
+			hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_amnesty_rebels ACTOR = scope:actor }
+		}
+	}
+
+	on_decline = {
+		scope:actor = {
+			send_interface_message = {
+				type = event_generic_bad
+				title = hd_dc_col_amnesty_declined_msg
+				right_icon = scope:recipient
+			}
+		}
+	}
+
+	ai_accept = {
+		base = -10
+		# 战局：主君战分越高，叛首越愿受招安
+		modifier = {
+			desc = hd_dc_col_amnesty_ai_warscore_reason
+			add = hd_dc_col_amnesty_ai_warscore_value
+		}
+		opinion_modifier = {
+			who = scope:recipient
+			opinion_target = scope:actor
+			multiplier = 0.5
+			desc = AI_OPINION_REASON
+		}
+		modifier = {
+			desc = hd_dc_col_amnesty_ai_fief_reason
+			trigger = { scope:hd_dc_col_fief = yes }
+			add = 15
+		}
+		modifier = {
+			desc = hd_dc_col_amnesty_ai_greedy_reason
+			trigger = {
+				scope:hd_dc_col_office = yes
+				scope:recipient = { has_trait = greedy }
+			}
+			add = 15
+		}
+		modifier = {
+			desc = hd_dc_col_amnesty_ai_content_reason
+			trigger = { scope:recipient = { has_trait = content } }
+			add = 20
+		}
+		modifier = {
+			desc = hd_dc_col_amnesty_ai_craven_reason
+			trigger = { scope:recipient = { has_trait = craven } }
+			add = 15
+		}
+		modifier = {
+			desc = hd_dc_col_amnesty_ai_ambitious_reason
+			trigger = { scope:recipient = { has_trait = ambitious } }
+			add = -25
+		}
+		modifier = {
+			desc = hd_dc_col_amnesty_ai_arrogant_reason
+			trigger = { scope:recipient = { has_trait = arrogant } }
+			add = -15
+		}
+	}
+
+	ai_targets = {
+		ai_recipients = primary_war_enemies
+	}
+	ai_frequency = 6
+
+	ai_potential = {
+		is_at_war = yes
+	}
+
+	ai_will_do = {
+		base = 30
+		# 战局不利时更急于招安
+		modifier = {
+			add = 40
+			hd_dc_col_amnesty_defender_score_value < -20
+		}
+		modifier = {
+			add = 15
+			scope:actor = { has_trait = compassionate }
+		}
+		modifier = {
+			add = 10
+			scope:actor = { has_trait = forgiving }
+		}
+		modifier = {
+			add = -20
+			scope:actor = { has_trait = vengeful }
+		}
+	}
+}
+
+############################################################
+# 授权募兵（C 方案·天子互动）：天子授权直属封臣募兵自保。
+# 被授权封臣：兵种上限 +2、征兵 +20%（20 年），对天子好感 +20；代价：天子从该封臣所收的税 −50%（以年度返还实现）。冷却 5 年。
+############################################################
+hd_dc_col_authorize_militia_interaction = {
+	category = interaction_category_vassal
+	icon = icon_combat
+	interface_priority = 60
+	desc = hd_dc_col_authorize_militia_interaction_desc
+	greeting = positive
+	notification_text = hd_dc_col_authorize_militia_notification
+	auto_accept = yes
+	cooldown = { years = 5 }
+
+	is_shown = {
+		hd_cycle_phase_is_collapse_trigger = yes
+		scope:actor = { has_title = title:h_china }
+		scope:recipient = {
+			liege ?= scope:actor
+			is_ruler = yes
+			is_landed = yes
+		}
+	}
+
+	is_valid_showing_failures_only = {
+		scope:actor = { is_imprisoned = no }
+		scope:recipient = {
+			is_imprisoned = no
+			NOT = { is_at_war_with = scope:actor }
+			custom_tooltip = {
+				text = hd_dc_col_militia_active_tt
+				NOR = {
+					has_character_modifier = hd_dc_col_selfstrengthen_modifier
+					has_character_modifier = hd_dc_col_authorized_militia_modifier
+				}
+			}
+		}
+	}
+
+	on_accept = {
+		scope:recipient = {
+			add_character_modifier = {
+				modifier = hd_dc_col_authorized_militia_modifier
+				years = 20
+			}
+			add_opinion = {
+				target = scope:actor
+				modifier = hd_dc_col_authorized_militia_opinion
+			}
+		}
+		scope:actor = {
+			custom_tooltip = hd_dc_col_authorize_militia_tax_tt
+		}
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_authorized_militia ACTOR = scope:actor }
+	}
+
+	ai_targets = {
+		ai_recipients = vassals
+	}
+	ai_frequency = 24
+
+	ai_potential = {
+		has_title = title:h_china
+		is_at_war = yes
+	}
+
+	ai_will_do = {
+		base = 0
+		modifier = {
+			add = 40
+			scope:actor = {
+				any_character_war = { primary_defender = scope:actor }
+			}
+		}
+		modifier = {
+			add = 20
+			scope:recipient = {
+				opinion = {
+					target = scope:actor
+					value >= 20
+				}
+			}
+		}
+		modifier = {
+			add = 10
+			scope:recipient = { has_trait = loyal }
+		}
+		modifier = {
+			factor = 0
+			scope:recipient = {
+				opinion = {
+					target = scope:actor
+					value < 0
+				}
+			}
+		}
+		modifier = {
+			factor = 0
+			scope:recipient = { has_trait = disloyal }
+		}
+	}
+}

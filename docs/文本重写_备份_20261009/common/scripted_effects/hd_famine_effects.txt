@@ -1,0 +1,74 @@
+﻿# 天朝循环大修：饥荒生成与冲击。
+
+# 在一个王国内生成饥荒。$KINGDOM$：王国头衔。同一王国已有饥荒则跳过。
+spawn_famine_in_kingdom_effect = {
+	$KINGDOM$ = { save_scope_as = hd_famine_kingdom }
+	if = {
+		limit = {
+			NOT = {
+				any_in_global_list = {
+					variable = hd_ongoing_famines
+					var:hd_famine_kingdom ?= scope:hd_famine_kingdom
+				}
+			}
+		}
+		random_in_de_jure_hierarchy = {
+			limit = {
+				tier = tier_county
+				development_level >= 2
+			}
+			save_scope_as = hd_famine_center
+		}
+		if = {
+			limit = { exists = scope:hd_famine_center }
+			start_situation = {
+				type = natural_disaster_hd_famine
+				save_scope_as = situation
+			}
+			scope:situation ?= {
+				set_situation_center_province = scope:hd_famine_center.title_province
+				add_to_global_variable_list = {
+					name = hd_ongoing_famines
+					target = this
+				}
+				set_variable = { name = hd_famine_kingdom value = scope:hd_famine_kingdom }
+				set_variable = { name = fatalities value = 0 }
+				set_variable = {
+					name = severity
+					value = { integer_range = { min = 1 max = 3 } }
+				}
+				situation_sub_region:disaster_area = {
+					add_dejure_title_to_sub_region = scope:hd_famine_kingdom
+				}
+			}
+		}
+	}
+}
+
+# 冲击期开始。Scope：饥荒 situation。
+# 王国内 30%-60% 的县受灾（县 modifier 开销极小，一次加完）；
+# 受灾的独立统治者在 60 天内的随机时间收到抉择事件。
+hd_famine_impact_effect = {
+	save_scope_as = hd_famine_situation
+	set_variable = {
+		name = hd_famine_hit_chance
+		value = { integer_range = { min = 30 max = 60 } }
+	}
+	every_situation_county = {
+		random = {
+			chance = scope:hd_famine_situation.var:hd_famine_hit_chance
+			add_county_modifier = {
+				modifier = hd_famine_county_modifier
+				years = 5
+			}
+		}
+	}
+	situation_participant_group:affected_ruler = {
+		every_situation_group_participant = {
+			limit = {
+				any_realm_county = { has_county_modifier = hd_famine_county_modifier }
+			}
+			trigger_event = { id = hd_famine.0001 days = { 1 60 } }
+		}
+	}
+}

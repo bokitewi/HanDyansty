@@ -1,0 +1,296 @@
+﻿# 天朝循环大修·朋党：通用判定（由 docs/tools/gen_party.py 生成，勿手改）
+# Scope 约定：除注明外，均在"朝廷君主"（court ruler）角色 scope 下使用。
+# 朋党数据统一存放在君主身上：var:hd_party_<组>_*（组 = huanguan/waiqi/wuxun/shizu/hanmen）
+
+# Scope：君主。该朝廷已初始化朋党数据
+hd_party_court_initialized_trigger = {
+	has_variable = hd_party_court
+}
+
+# Scope：君主。$G$ 党势力衰微（占比低于阈值）
+hd_party_is_weak_trigger = {
+	exists = var:hd_party_$G$_share
+	var:hd_party_$G$_share < hd_party_weak_share_value
+}
+# Scope：君主。$A$ 党与 $B$ 党立场对立
+# 对立：进取–守旧、开拓–守旧、尊王–对抗君主的朋党
+hd_party_hostile_trigger = {
+	OR = {
+		AND = { var:hd_party_$A$_stance ?= flag:jinqu var:hd_party_$B$_stance ?= flag:shoujiu }
+		AND = { var:hd_party_$A$_stance ?= flag:shoujiu var:hd_party_$B$_stance ?= flag:jinqu }
+		AND = { var:hd_party_$A$_stance ?= flag:kaituo var:hd_party_$B$_stance ?= flag:shoujiu }
+		AND = { var:hd_party_$A$_stance ?= flag:shoujiu var:hd_party_$B$_stance ?= flag:kaituo }
+		AND = { var:hd_party_$A$_stance ?= flag:zunwang var:hd_party_$B$_attitude ?= flag:oppose }
+		AND = { var:hd_party_$B$_stance ?= flag:zunwang var:hd_party_$A$_attitude ?= flag:oppose }
+	}
+}
+
+# Scope：君主。$A$ 党与 $B$ 党立场合作
+# 合作：进取–开拓、中立–守旧、尊王–拥护君主的朋党
+hd_party_coop_trigger = {
+	OR = {
+		AND = { var:hd_party_$A$_stance ?= flag:jinqu var:hd_party_$B$_stance ?= flag:kaituo }
+		AND = { var:hd_party_$A$_stance ?= flag:kaituo var:hd_party_$B$_stance ?= flag:jinqu }
+		AND = { var:hd_party_$A$_stance ?= flag:zhongli var:hd_party_$B$_stance ?= flag:shoujiu }
+		AND = { var:hd_party_$A$_stance ?= flag:shoujiu var:hd_party_$B$_stance ?= flag:zhongli }
+		AND = { var:hd_party_$A$_stance ?= flag:zunwang var:hd_party_$B$_attitude ?= flag:support }
+		AND = { var:hd_party_$B$_stance ?= flag:zunwang var:hd_party_$A$_attitude ?= flag:support }
+	}
+}
+
+# Scope：君主。被青睐的朋党立场与 $G$ 党对立
+hd_party_favored_hostile_to_trigger = {
+	OR = {
+		AND = { var:hd_party_favored ?= flag:huanguan hd_party_hostile_trigger = { A = huanguan B = $G$ } }
+		AND = { var:hd_party_favored ?= flag:waiqi hd_party_hostile_trigger = { A = waiqi B = $G$ } }
+		AND = { var:hd_party_favored ?= flag:wuxun hd_party_hostile_trigger = { A = wuxun B = $G$ } }
+		AND = { var:hd_party_favored ?= flag:shizu hd_party_hostile_trigger = { A = shizu B = $G$ } }
+		AND = { var:hd_party_favored ?= flag:hanmen hd_party_hostile_trigger = { A = hanmen B = $G$ } }
+	}
+}
+
+# Scope：君主。被青睐的朋党立场为 $STANCE$
+hd_party_favored_stance_is_trigger = {
+	OR = {
+		AND = { var:hd_party_favored ?= flag:huanguan var:hd_party_huanguan_stance ?= flag:$STANCE$ }
+		AND = { var:hd_party_favored ?= flag:waiqi var:hd_party_waiqi_stance ?= flag:$STANCE$ }
+		AND = { var:hd_party_favored ?= flag:wuxun var:hd_party_wuxun_stance ?= flag:$STANCE$ }
+		AND = { var:hd_party_favored ?= flag:shizu var:hd_party_shizu_stance ?= flag:$STANCE$ }
+		AND = { var:hd_party_favored ?= flag:hanmen var:hd_party_hanmen_stance ?= flag:$STANCE$ }
+	}
+}
+
+# Scope：角色。本人是某朝廷朋党的成员，且所属朋党立场为 $STANCE$（成员变量每年刷新，400 天过期）
+hd_party_member_stance_is_trigger = {
+	var:hd_party_my_stance ?= flag:$STANCE$
+}
+
+# Scope：角色。本人所属朋党为 $G$
+hd_party_member_group_is_trigger = {
+	var:hd_party_my_group ?= flag:$G$
+}
+
+# Scope：角色。文官：持实职官位且不持武官军衔
+hd_party_is_civil_official_trigger = {
+	WJ_has_substantive_office_trigger = yes
+	WJ_mt_military_person = no
+	WJ_mr_has_rank = no
+}
+
+# Scope：角色。武官：持武官军衔或为军事人员
+hd_party_is_military_official_trigger = {
+	OR = {
+		WJ_mt_military_person = yes
+		WJ_mr_has_rank = yes
+	}
+}
+
+# Scope：角色。是本朝廷 $G$ 党的领袖或前三名
+hd_party_is_top_of_trigger = {
+	exists = var:hd_party_my_court
+	var:hd_party_my_group ?= flag:$G$
+	var:hd_party_my_court = {
+		is_target_in_variable_list = { name = hd_party_$G$_top target = prev }
+	}
+}
+
+# Scope：角色。可以发起立场辩论（领袖或前三名，未被禁）
+hd_party_can_start_debate_trigger = {
+	is_adult = yes
+	is_imprisoned = no
+	NOT = { has_variable = hd_party_debate_cd }
+	exists = var:hd_party_my_court
+	OR = {
+		AND = {
+			var:hd_party_my_group ?= flag:huanguan
+			var:hd_party_my_court = {
+				is_target_in_variable_list = { name = hd_party_huanguan_top target = prev }
+				NOT = { has_variable = hd_party_huanguan_debate_lock }
+				NOT = { has_variable = hd_party_huanguan_loyalty_lock }
+				NOT = { has_variable = hd_party_huanguan_debating }
+				NOT = { hd_party_is_weak_trigger = { G = huanguan } }
+			}
+		}
+		AND = {
+			var:hd_party_my_group ?= flag:waiqi
+			var:hd_party_my_court = {
+				is_target_in_variable_list = { name = hd_party_waiqi_top target = prev }
+				NOT = { has_variable = hd_party_waiqi_debate_lock }
+				NOT = { has_variable = hd_party_waiqi_loyalty_lock }
+				NOT = { has_variable = hd_party_waiqi_debating }
+				NOT = { hd_party_is_weak_trigger = { G = waiqi } }
+			}
+		}
+		AND = {
+			var:hd_party_my_group ?= flag:wuxun
+			var:hd_party_my_court = {
+				is_target_in_variable_list = { name = hd_party_wuxun_top target = prev }
+				NOT = { has_variable = hd_party_wuxun_debate_lock }
+				NOT = { has_variable = hd_party_wuxun_loyalty_lock }
+				NOT = { has_variable = hd_party_wuxun_debating }
+				NOT = { hd_party_is_weak_trigger = { G = wuxun } }
+			}
+		}
+		AND = {
+			var:hd_party_my_group ?= flag:shizu
+			var:hd_party_my_court = {
+				is_target_in_variable_list = { name = hd_party_shizu_top target = prev }
+				NOT = { has_variable = hd_party_shizu_debate_lock }
+				NOT = { has_variable = hd_party_shizu_loyalty_lock }
+				NOT = { has_variable = hd_party_shizu_debating }
+				NOT = { hd_party_is_weak_trigger = { G = shizu } }
+			}
+		}
+		AND = {
+			var:hd_party_my_group ?= flag:hanmen
+			var:hd_party_my_court = {
+				is_target_in_variable_list = { name = hd_party_hanmen_top target = prev }
+				NOT = { has_variable = hd_party_hanmen_debate_lock }
+				NOT = { has_variable = hd_party_hanmen_loyalty_lock }
+				NOT = { has_variable = hd_party_hanmen_debating }
+				NOT = { hd_party_is_weak_trigger = { G = hanmen } }
+			}
+		}
+	}
+}
+
+# Scope：角色。玩家担任朋党领袖
+hd_party_is_player_leader_trigger = {
+	is_ai = no
+	exists = var:hd_party_my_court
+	OR = {
+		AND = { var:hd_party_my_group ?= flag:huanguan var:hd_party_my_court.var:hd_party_huanguan_leader ?= this }
+		AND = { var:hd_party_my_group ?= flag:waiqi var:hd_party_my_court.var:hd_party_waiqi_leader ?= this }
+		AND = { var:hd_party_my_group ?= flag:wuxun var:hd_party_my_court.var:hd_party_wuxun_leader ?= this }
+		AND = { var:hd_party_my_group ?= flag:shizu var:hd_party_my_court.var:hd_party_shizu_leader ?= this }
+		AND = { var:hd_party_my_group ?= flag:hanmen var:hd_party_my_court.var:hd_party_hanmen_leader ?= this }
+	}
+}
+
+# Scope：角色。可以使用"投身乱世"（斗争期，外戚/武勋/寒门/世族的无地成年人）
+hd_party_can_join_chaos_trigger = {
+	hd_cycle_phase_is_struggle_trigger = yes
+	is_landed = no
+	is_adult = yes
+	is_imprisoned = no
+	OR = {
+		hd_party_member_group_is_trigger = { G = waiqi }
+		hd_party_member_group_is_trigger = { G = wuxun }
+		hd_party_member_group_is_trigger = { G = hanmen }
+		hd_party_member_group_is_trigger = { G = shizu }
+	}
+}
+
+# Scope：角色。是 $COURT$ 朝廷中被"查禁"的朋党成员
+hd_party_banned_member_of_trigger = {
+	var:hd_party_my_court ?= $COURT$
+	OR = {
+		AND = { var:hd_party_my_group ?= flag:huanguan var:hd_party_my_court.var:hd_party_huanguan_policy ?= flag:ban }
+		AND = { var:hd_party_my_group ?= flag:waiqi var:hd_party_my_court.var:hd_party_waiqi_policy ?= flag:ban }
+		AND = { var:hd_party_my_group ?= flag:wuxun var:hd_party_my_court.var:hd_party_wuxun_policy ?= flag:ban }
+		AND = { var:hd_party_my_group ?= flag:shizu var:hd_party_my_court.var:hd_party_shizu_policy ?= flag:ban }
+		AND = { var:hd_party_my_group ?= flag:hanmen var:hd_party_my_court.var:hd_party_hanmen_policy ?= flag:ban }
+	}
+}
+
+# Scope：角色。是 $COURT$ 朝廷中尊王立场的朋党成员
+hd_party_zunwang_member_of_trigger = {
+	var:hd_party_my_court ?= $COURT$
+	var:hd_party_my_stance ?= flag:zunwang
+}
+
+# Scope：角色。所在朝廷君主身上有 $MODIFIER$（用于拥护/对抗的钩子；独立统治者看自己）
+hd_party_court_has_modifier_trigger = {
+	OR = {
+		has_character_modifier = $MODIFIER$
+		var:hd_party_my_court ?= { has_character_modifier = $MODIFIER$ }
+		top_liege ?= { has_character_modifier = $MODIFIER$ }
+	}
+}
+
+# Scope：角色。本人所属朋党正被所在朝廷青睐
+hd_party_member_favored_trigger = {
+	OR = {
+		AND = { var:hd_party_my_group ?= flag:huanguan var:hd_party_my_court.var:hd_party_favored ?= flag:huanguan }
+		AND = { var:hd_party_my_group ?= flag:waiqi var:hd_party_my_court.var:hd_party_favored ?= flag:waiqi }
+		AND = { var:hd_party_my_group ?= flag:wuxun var:hd_party_my_court.var:hd_party_favored ?= flag:wuxun }
+		AND = { var:hd_party_my_group ?= flag:shizu var:hd_party_my_court.var:hd_party_favored ?= flag:shizu }
+		AND = { var:hd_party_my_group ?= flag:hanmen var:hd_party_my_court.var:hd_party_favored ?= flag:hanmen }
+	}
+}
+
+# Scope：角色。本人所属朋党在所在朝廷的政策为 $POLICY$
+hd_party_member_policy_is_trigger = {
+	OR = {
+		AND = { var:hd_party_my_group ?= flag:huanguan var:hd_party_my_court.var:hd_party_huanguan_policy ?= flag:$POLICY$ }
+		AND = { var:hd_party_my_group ?= flag:waiqi var:hd_party_my_court.var:hd_party_waiqi_policy ?= flag:$POLICY$ }
+		AND = { var:hd_party_my_group ?= flag:wuxun var:hd_party_my_court.var:hd_party_wuxun_policy ?= flag:$POLICY$ }
+		AND = { var:hd_party_my_group ?= flag:shizu var:hd_party_my_court.var:hd_party_shizu_policy ?= flag:$POLICY$ }
+		AND = { var:hd_party_my_group ?= flag:hanmen var:hd_party_my_court.var:hd_party_hanmen_policy ?= flag:$POLICY$ }
+	}
+}
+
+# Scope：角色。是 $COURT$ 朝廷任一朋党的领袖
+hd_party_is_any_leader_of_court_trigger = {
+	OR = {
+		$COURT$.var:hd_party_huanguan_leader ?= this
+		$COURT$.var:hd_party_waiqi_leader ?= this
+		$COURT$.var:hd_party_wuxun_leader ?= this
+		$COURT$.var:hd_party_shizu_leader ?= this
+		$COURT$.var:hd_party_hanmen_leader ?= this
+	}
+}
+
+# Scope：任意。天子朝廷中两个参与者组（$FIRST$、$SECOND$）的朋党立场对立（供 PAR 党争危机使用）
+hd_party_groups_hostile_trigger = {
+	exists = title:h_china.holder
+	OR = {
+		AND = { $FIRST$ = { participant_group_type = undecided_movement } $SECOND$ = { participant_group_type = pro_hegemon_movement } title:h_china.holder = { hd_party_hostile_trigger = { A = huanguan B = waiqi } } }
+		AND = { $FIRST$ = { participant_group_type = undecided_movement } $SECOND$ = { participant_group_type = expansion_movement } title:h_china.holder = { hd_party_hostile_trigger = { A = huanguan B = wuxun } } }
+		AND = { $FIRST$ = { participant_group_type = undecided_movement } $SECOND$ = { participant_group_type = conservative_movement } title:h_china.holder = { hd_party_hostile_trigger = { A = huanguan B = shizu } } }
+		AND = { $FIRST$ = { participant_group_type = undecided_movement } $SECOND$ = { participant_group_type = advancement_movement } title:h_china.holder = { hd_party_hostile_trigger = { A = huanguan B = hanmen } } }
+		AND = { $FIRST$ = { participant_group_type = pro_hegemon_movement } $SECOND$ = { participant_group_type = undecided_movement } title:h_china.holder = { hd_party_hostile_trigger = { A = waiqi B = huanguan } } }
+		AND = { $FIRST$ = { participant_group_type = pro_hegemon_movement } $SECOND$ = { participant_group_type = expansion_movement } title:h_china.holder = { hd_party_hostile_trigger = { A = waiqi B = wuxun } } }
+		AND = { $FIRST$ = { participant_group_type = pro_hegemon_movement } $SECOND$ = { participant_group_type = conservative_movement } title:h_china.holder = { hd_party_hostile_trigger = { A = waiqi B = shizu } } }
+		AND = { $FIRST$ = { participant_group_type = pro_hegemon_movement } $SECOND$ = { participant_group_type = advancement_movement } title:h_china.holder = { hd_party_hostile_trigger = { A = waiqi B = hanmen } } }
+		AND = { $FIRST$ = { participant_group_type = expansion_movement } $SECOND$ = { participant_group_type = undecided_movement } title:h_china.holder = { hd_party_hostile_trigger = { A = wuxun B = huanguan } } }
+		AND = { $FIRST$ = { participant_group_type = expansion_movement } $SECOND$ = { participant_group_type = pro_hegemon_movement } title:h_china.holder = { hd_party_hostile_trigger = { A = wuxun B = waiqi } } }
+		AND = { $FIRST$ = { participant_group_type = expansion_movement } $SECOND$ = { participant_group_type = conservative_movement } title:h_china.holder = { hd_party_hostile_trigger = { A = wuxun B = shizu } } }
+		AND = { $FIRST$ = { participant_group_type = expansion_movement } $SECOND$ = { participant_group_type = advancement_movement } title:h_china.holder = { hd_party_hostile_trigger = { A = wuxun B = hanmen } } }
+		AND = { $FIRST$ = { participant_group_type = conservative_movement } $SECOND$ = { participant_group_type = undecided_movement } title:h_china.holder = { hd_party_hostile_trigger = { A = shizu B = huanguan } } }
+		AND = { $FIRST$ = { participant_group_type = conservative_movement } $SECOND$ = { participant_group_type = pro_hegemon_movement } title:h_china.holder = { hd_party_hostile_trigger = { A = shizu B = waiqi } } }
+		AND = { $FIRST$ = { participant_group_type = conservative_movement } $SECOND$ = { participant_group_type = expansion_movement } title:h_china.holder = { hd_party_hostile_trigger = { A = shizu B = wuxun } } }
+		AND = { $FIRST$ = { participant_group_type = conservative_movement } $SECOND$ = { participant_group_type = advancement_movement } title:h_china.holder = { hd_party_hostile_trigger = { A = shizu B = hanmen } } }
+		AND = { $FIRST$ = { participant_group_type = advancement_movement } $SECOND$ = { participant_group_type = undecided_movement } title:h_china.holder = { hd_party_hostile_trigger = { A = hanmen B = huanguan } } }
+		AND = { $FIRST$ = { participant_group_type = advancement_movement } $SECOND$ = { participant_group_type = pro_hegemon_movement } title:h_china.holder = { hd_party_hostile_trigger = { A = hanmen B = waiqi } } }
+		AND = { $FIRST$ = { participant_group_type = advancement_movement } $SECOND$ = { participant_group_type = expansion_movement } title:h_china.holder = { hd_party_hostile_trigger = { A = hanmen B = wuxun } } }
+		AND = { $FIRST$ = { participant_group_type = advancement_movement } $SECOND$ = { participant_group_type = conservative_movement } title:h_china.holder = { hd_party_hostile_trigger = { A = hanmen B = shizu } } }
+	}
+}
+
+# Scope：无地角色。有政治分量、应作为局势手动参与者
+# 持世族头衔 / 宫廷职位 / 议政 / 辅政 / WJ 官职 / 武官军衔 / 后族（外戚）
+hd_party_manual_participant_valid_trigger = {
+	is_alive = yes
+	is_adult = yes
+	OR = {
+		is_councillor = yes
+		has_any_court_position = yes
+		is_diarch = yes
+		any_held_title = { is_noble_family_title = yes }
+		WJ_has_official_position_trigger = yes
+		WJ_mr_has_rank = yes
+		hd_party_is_waiqi_trigger = yes	# 2026-10-08：后族成员无官职也保留为参与者
+	}
+}
+
+# Scope：角色。斗争期，本身份可免除"成为冒险者"的文化/信仰门槛
+hd_party_adventurer_identity_trigger = {
+	hd_cycle_phase_is_struggle_trigger = yes
+	OR = {
+		var:movement_member ?= flag:pro_hegemon
+		var:movement_member ?= flag:expansion
+		var:movement_member ?= flag:advancement
+		var:movement_member ?= flag:conservative
+	}
+}

@@ -1,0 +1,772 @@
+﻿# 天朝循环·时代特色：新朝征服期套件效果（见 docs/天朝循环_时代特色重制计划.md §3.8）
+# 诱因一律经 hd_dc_kit_fire_effect / hd_dc_kit_fire_global_effect 发射；ACTOR 只传 root 或已保存的 scope
+# 胡汉联姻、完成汉化已由核心实现（hd_dc_kit_hook_effects.txt），此处不重复
+
+# ===========================================================================
+# 钩子
+# ===========================================================================
+
+# 头衔获得。Scope：新持有者（root），scope:title / scope:previous_holder / scope:transfer_type
+hd_dc_con_title_gain_effect = {
+	# 1. 记录前朝：h_china 易姓时记下旧朝王朝（任何阶段都记录，供前朝遗民/前朝复辟使用）
+	if = {
+		limit = {
+			scope:title = title:h_china
+			scope:previous_holder ?= {
+				exists = dynasty
+				NOT = { dynasty ?= root.dynasty }
+			}
+		}
+		set_global_variable = {
+			name = hd_dc_con_former_dynasty
+			value = scope:previous_holder.dynasty
+		}
+	}
+	# 2. 任用本地士族：新朝期天子把头衔或大臣职位授予中华传承人物
+	else_if = {
+		limit = {
+			exists = title:h_china.holder
+			hd_dc_phase_is_trigger = { PHASE = instability_conquest }
+			current_date_is_start_date_trigger = no
+			NOT = { this = title:h_china.holder }
+			hd_dc_is_chinese_heritage_trigger = yes
+			NOT = { has_character_flag = hd_dc_con_suppress_gentry }
+			OR = {
+				# 天子封授（前持有者为天子）
+				AND = {
+					scope:transfer_type ?= flag:granted
+					scope:previous_holder ?= title:h_china.holder
+				}
+				# 天朝任命（总督等）
+				AND = {
+					scope:transfer_type ?= flag:appointment
+					top_liege ?= title:h_china.holder
+				}
+				# 天朝大臣（前任为旧大臣而非天子，单独判定）
+				AND = {
+					scope:title = { tgp_is_minister_title = yes }
+					top_liege ?= title:h_china.holder
+					NOR = {
+						scope:transfer_type ?= flag:inheritance
+						scope:transfer_type ?= flag:usurped
+						scope:transfer_type ?= flag:conquest
+					}
+				}
+			}
+		}
+		title:h_china.holder = { save_scope_as = hd_dc_con_gentry_employer }
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_local_gentry_employed ACTOR = scope:hd_dc_con_gentry_employer }
+	}
+}
+
+# 强制改俗（信仰）。Scope：县（root），scope:old_faith
+# 天下之内的县改信为天子的非礼教/道教/佛教信仰 → 行为人 = 该县持有者的最高领主
+hd_dc_con_county_faith_change_effect = {
+	if = {
+		limit = {
+			exists = holder
+			exists = title:h_china.holder
+			target_is_de_jure_liege_or_above = title:h_china
+			title:h_china.holder = { hd_dc_is_chinese_faith_family_trigger = no }
+			faith = title:h_china.holder.faith
+		}
+		holder.top_liege = { save_scope_as = hd_dc_con_assim_actor }
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_forced_assimilation ACTOR = scope:hd_dc_con_assim_actor }
+	}
+}
+
+# 强制改俗（文化）。Scope：县（root），scope:old_culture
+# 天下之内的县改为天子的非中华传承文化 → 行为人 = 该县持有者的最高领主
+hd_dc_con_county_culture_change_effect = {
+	if = {
+		limit = {
+			exists = holder
+			exists = title:h_china.holder
+			target_is_de_jure_liege_or_above = title:h_china
+			title:h_china.holder = { hd_dc_is_chinese_heritage_trigger = no }
+			culture = title:h_china.holder.culture
+		}
+		holder.top_liege = { save_scope_as = hd_dc_con_assim_actor }
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_forced_assimilation ACTOR = scope:hd_dc_con_assim_actor }
+	}
+}
+
+# 前朝复辟（通用判定）。Scope：on_war_started（scope:attacker / scope:defender）
+# 前朝王朝成员向新朝天子开战即计"前朝复辟"（覆盖境外宗室自行起兵的情形）
+hd_dc_con_war_started_effect = {
+	if = {
+		limit = {
+			exists = title:h_china.holder
+			scope:defender = title:h_china.holder
+			has_global_variable = hd_dc_con_former_dynasty
+			scope:attacker = {
+				dynasty ?= global_var:hd_dc_con_former_dynasty
+				NOT = { dynasty ?= title:h_china.holder.dynasty }
+			}
+		}
+		hd_dc_con_fire_restoration_effect = yes
+	}
+}
+
+# 前朝复辟诱因（去重：同一场起兵可能同时被脚本起兵和通用判定捕获）
+hd_dc_con_fire_restoration_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_dc_con_restoration_fired } }
+		set_global_variable = {
+			name = hd_dc_con_restoration_fired
+			value = yes
+			days = 30
+		}
+		hd_dc_kit_fire_global_effect = { CATALYST = catalyst_hd_restorationist_revolt }
+	}
+}
+
+# ===========================================================================
+# 年度：前朝遗民（每 5 年）与前朝复辟。Scope：dynastic_cycle 局势（新朝征服期）
+# ===========================================================================
+hd_dc_con_yearly_effect = {
+	if = {
+		limit = {
+			exists = title:h_china.holder
+			has_global_variable = hd_dc_con_former_dynasty
+		}
+		title:h_china.holder = { save_scope_as = hd_dc_con_ruler }
+		# 前朝遗民
+		if = {
+			limit = { NOT = { has_global_variable = hd_dc_con_remnant_cd } }
+			global_var:hd_dc_con_former_dynasty = {
+				ordered_dynasty_member = {
+					limit = { hd_dc_con_remnant_candidate_trigger = { RULER = scope:hd_dc_con_ruler } }
+					order_by = hd_dc_con_remnant_score_value
+					save_scope_as = hd_dc_con_remnant
+				}
+			}
+			if = {
+				limit = { exists = scope:hd_dc_con_remnant }
+				set_global_variable = {
+					name = hd_dc_con_remnant_cd
+					value = yes
+					years = 5
+				}
+				scope:hd_dc_con_ruler = {
+					trigger_event = {
+						id = hd_dc_con.0300
+						days = { 7 90 }
+					}
+				}
+			}
+		}
+		# 前朝复辟：前朝宗室在世、有地、在天子境内且对天子好感 < 0 → 每年 10%（被监视者 5%）起兵；成功起兵后 10 年内不再判定
+		if = {
+			limit = { NOT = { has_global_variable = hd_dc_con_restoration_cd } }
+			global_var:hd_dc_con_former_dynasty = {
+				ordered_dynasty_member = {
+					limit = { hd_dc_con_restoration_candidate_trigger = { RULER = scope:hd_dc_con_ruler } }
+					order_by = max_military_strength
+					save_scope_as = hd_dc_con_claimant
+				}
+			}
+			if = {
+				limit = { exists = scope:hd_dc_con_claimant }
+				if = {
+					limit = { scope:hd_dc_con_claimant = { has_character_flag = hd_dc_con_watched } }
+					random = {
+						chance = 5
+						scope:hd_dc_con_ruler = { hd_dc_con_restoration_revolt_effect = yes }
+					}
+				}
+				else = {
+					random = {
+						chance = 10
+						scope:hd_dc_con_ruler = { hd_dc_con_restoration_revolt_effect = yes }
+					}
+				}
+			}
+		}
+	}
+}
+
+# 前朝复辟起兵。Scope：天子；scope:hd_dc_con_claimant = 前朝宗室
+# 发起者：宗室本人（若为天子直属封臣），否则最强的不满汉人直属封臣；以原版 claimant_faction 争夺 h_china
+hd_dc_con_restoration_revolt_effect = {
+	save_scope_as = hd_dc_con_ruler
+	clear_saved_scope = hd_dc_con_restore_creator
+	clear_saved_scope = hd_dc_con_restore_faction
+	if = {
+		limit = { scope:hd_dc_con_claimant = { liege ?= scope:hd_dc_con_ruler } }
+		scope:hd_dc_con_claimant = { save_scope_as = hd_dc_con_restore_creator }
+	}
+	else = {
+		ordered_vassal = {
+			limit = {
+				hd_dc_is_chinese_heritage_trigger = yes
+				is_adult = yes
+				is_imprisoned = no
+				is_at_war = no
+				opinion = {
+					target = scope:hd_dc_con_ruler
+					value < 0
+				}
+			}
+			order_by = max_military_strength
+			save_scope_as = hd_dc_con_restore_creator
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_dc_con_restore_creator }
+		scope:hd_dc_con_claimant = {
+			if = {
+				limit = { NOT = { has_claim_on = title:h_china } }
+				add_pressed_claim = title:h_china
+			}
+		}
+		scope:hd_dc_con_restore_creator = {
+			if = {
+				limit = { exists = joined_faction }
+				leave_faction = joined_faction
+			}
+			# 本 mod 的 claimant_faction 要求发起者带 claiming_title 变量（同原版"拥立"互动写法）
+			set_variable = {
+				name = claiming_title
+				value = title:h_china
+			}
+			if = {
+				limit = {
+					can_create_faction = {
+						type = claimant_faction
+						target = scope:hd_dc_con_ruler
+					}
+				}
+				create_faction = {
+					type = claimant_faction
+					target = scope:hd_dc_con_ruler
+				}
+				joined_faction ?= {
+					set_special_character = scope:hd_dc_con_claimant
+					set_special_title = title:h_china
+					save_scope_as = hd_dc_con_restore_faction
+				}
+			}
+			remove_variable = claiming_title
+		}
+		if = {
+			limit = { exists = scope:hd_dc_con_restore_faction }
+			set_global_variable = {
+				name = hd_dc_con_restoration_cd
+				value = yes
+				years = 10
+			}
+			scope:hd_dc_con_claimant = {
+				add_to_variable_list = {
+					name = claimant_factions
+					target = scope:hd_dc_con_restore_faction
+				}
+			}
+			# 不满的汉人直属封臣附从
+			scope:hd_dc_con_ruler = {
+				every_vassal = {
+					limit = {
+						NOT = { this = scope:hd_dc_con_restore_creator }
+						hd_dc_is_chinese_heritage_trigger = yes
+						is_imprisoned = no
+						is_at_war = no
+						opinion = {
+							target = scope:hd_dc_con_ruler
+							value < 0
+						}
+						NOT = { joined_faction ?= scope:hd_dc_con_restore_faction }
+					}
+					if = {
+						limit = { exists = joined_faction }
+						leave_faction = joined_faction
+					}
+					join_faction_skip_check = scope:hd_dc_con_restore_faction
+				}
+			}
+			scope:hd_dc_con_restore_faction = {
+				faction_start_war = { title = title:h_china }
+			}
+			# 次日确认已开战再计分
+			trigger_event = {
+				id = hd_dc_con.0901
+				days = 1
+			}
+		}
+	}
+}
+
+# ===========================================================================
+# 本族叛乱。Scope：天子（汉化改制推进时 20% 触发）
+# 由最强的不满本族直属封臣发起独立派系并立即起兵，不满的本族封臣附从
+# ===========================================================================
+hd_dc_con_native_revolt_effect = {
+	save_scope_as = hd_dc_con_ruler
+	clear_saved_scope = hd_dc_con_revolt_leader
+	clear_saved_scope = hd_dc_con_revolt_faction
+	ordered_vassal = {
+		limit = {
+			hd_dc_con_native_trigger = { CULTURE = scope:hd_dc_con_ruler.var:hd_dc_con_native_culture }
+			is_adult = yes
+			is_imprisoned = no
+			is_at_war = no
+			opinion = {
+				target = scope:hd_dc_con_ruler
+				value < 0
+			}
+		}
+		order_by = max_military_strength
+		save_scope_as = hd_dc_con_revolt_leader
+	}
+	if = {
+		limit = { exists = scope:hd_dc_con_revolt_leader }
+		scope:hd_dc_con_revolt_leader = {
+			if = {
+				limit = { exists = joined_faction }
+				leave_faction = joined_faction
+			}
+			if = {
+				limit = {
+					can_create_faction = {
+						type = independence_faction
+						target = scope:hd_dc_con_ruler
+					}
+				}
+				create_faction = {
+					type = independence_faction
+					target = scope:hd_dc_con_ruler
+				}
+				joined_faction ?= { save_scope_as = hd_dc_con_revolt_faction }
+			}
+		}
+		if = {
+			limit = { exists = scope:hd_dc_con_revolt_faction }
+			every_vassal = {
+				limit = {
+					NOT = { this = scope:hd_dc_con_revolt_leader }
+					hd_dc_con_native_trigger = { CULTURE = scope:hd_dc_con_ruler.var:hd_dc_con_native_culture }
+					is_imprisoned = no
+					is_at_war = no
+					opinion = {
+						target = scope:hd_dc_con_ruler
+						value < 0
+					}
+					NOT = { joined_faction ?= scope:hd_dc_con_revolt_faction }
+				}
+				if = {
+					limit = { exists = joined_faction }
+					leave_faction = joined_faction
+				}
+				join_faction_skip_check = scope:hd_dc_con_revolt_faction
+			}
+			scope:hd_dc_con_revolt_faction = { faction_start_war = {} }
+			# 次日确认已开战再计分
+			trigger_event = {
+				id = hd_dc_con.0900
+				days = 1
+			}
+		}
+	}
+}
+
+# ===========================================================================
+# 圈地（打压汉人）。Scope：天子
+# ===========================================================================
+# 选出至多 4 个州（王国级），按其中可圈之县数排序，存为 scope:hd_dc_con_slot_1~4；并寻找受封功臣
+hd_dc_con_collect_quandi_effect = {
+	save_scope_as = hd_dc_con_ruler
+	every_held_county = {
+		limit = { hd_dc_con_quandi_county_trigger = { RULER = scope:hd_dc_con_ruler } }
+		kingdom ?= {
+			if = {
+				limit = { NOT = { is_in_list = hd_dc_con_quandi_kingdoms } }
+				add_to_list = hd_dc_con_quandi_kingdoms
+			}
+		}
+	}
+	ordered_in_list = {
+		list = hd_dc_con_quandi_kingdoms
+		order_by = hd_dc_con_quandi_kingdom_value
+		position = 0
+		check_range_bounds = no
+		save_scope_as = hd_dc_con_slot_1
+	}
+	ordered_in_list = {
+		list = hd_dc_con_quandi_kingdoms
+		order_by = hd_dc_con_quandi_kingdom_value
+		position = 1
+		check_range_bounds = no
+		save_scope_as = hd_dc_con_slot_2
+	}
+	ordered_in_list = {
+		list = hd_dc_con_quandi_kingdoms
+		order_by = hd_dc_con_quandi_kingdom_value
+		position = 2
+		check_range_bounds = no
+		save_scope_as = hd_dc_con_slot_3
+	}
+	ordered_in_list = {
+		list = hd_dc_con_quandi_kingdoms
+		order_by = hd_dc_con_quandi_kingdom_value
+		position = 3
+		check_range_bounds = no
+		save_scope_as = hd_dc_con_slot_4
+	}
+	# 受封功臣：同族廷臣中军事最高者；没有则在选项中新建
+	ordered_courtier = {
+		limit = { hd_dc_con_favorite_candidate_trigger = { RULER = scope:hd_dc_con_ruler } }
+		order_by = martial
+		save_scope_as = hd_dc_con_favorite
+	}
+}
+
+# 圈 $KINGDOM$ 之地赐予本族功臣
+hd_dc_con_quandi_effect = {
+	save_scope_as = hd_dc_con_ruler
+	if = {
+		limit = { NOT = { exists = scope:hd_dc_con_favorite } }
+		create_character = {
+			template = new_commander_character
+			culture = scope:hd_dc_con_ruler.culture
+			faith = scope:hd_dc_con_ruler.faith
+			gender_female_chance = 0
+			dynasty = generate
+			employer = scope:hd_dc_con_ruler
+			save_scope_as = hd_dc_con_favorite
+		}
+	}
+	create_title_and_vassal_change = {
+		type = granted
+		save_scope_as = change
+		add_claim_on_loss = no
+	}
+	$KINGDOM$ = {
+		every_de_jure_county = {
+			limit = { hd_dc_con_quandi_county_trigger = { RULER = scope:hd_dc_con_ruler } }
+			add_to_list = hd_dc_con_quandi_counties
+			change_title_holder = {
+				holder = scope:hd_dc_con_favorite
+				change = scope:change
+				take_baronies = yes
+			}
+		}
+	}
+	resolve_title_and_vassal_change = scope:change
+	# 汉人县：控制 -30，好感 -30（10 年）
+	every_in_list = {
+		list = hd_dc_con_quandi_counties
+		change_county_control = -30
+		add_county_modifier = {
+			modifier = hd_dc_con_quandi_county_modifier
+			years = 10
+		}
+	}
+	# 本族封臣好感 +15（10 年），受封功臣 +40
+	every_vassal = {
+		limit = {
+			NOT = { this = scope:hd_dc_con_favorite }
+			culture = scope:hd_dc_con_ruler.culture
+		}
+		add_opinion = {
+			target = scope:hd_dc_con_ruler
+			modifier = hd_dc_con_quandi_native_opinion
+		}
+	}
+	scope:hd_dc_con_favorite = {
+		add_opinion = {
+			target = scope:hd_dc_con_ruler
+			modifier = hd_dc_con_quandi_grantee_opinion
+		}
+	}
+	hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_forced_assimilation ACTOR = scope:hd_dc_con_ruler }
+}
+
+# ===========================================================================
+# 天子改文化：创建胡汉混合文化（原版 create_hybrid_culture），传承改为中华传承。Scope：天子
+# ===========================================================================
+hd_dc_con_adopt_hybrid_culture_effect = {
+	save_scope_as = hd_dc_con_ruler
+	culture = { save_scope_as = hd_dc_con_old_culture }
+	capital_county.culture = { save_scope_as = hd_dc_con_han_culture }
+	# 记下原本族文化（汉化改制、本族叛乱判定用）
+	if = {
+		limit = { NOT = { has_variable = hd_dc_con_native_culture } }
+		set_variable = {
+			name = hd_dc_con_native_culture
+			value = scope:hd_dc_con_old_culture
+		}
+	}
+	create_hybrid_culture = scope:hd_dc_con_han_culture
+	custom_tooltip = hd_dc_con_hybrid_heritage_tt
+	hidden_effect = {
+		culture = {
+			if = {
+				limit = { NOT = { has_cultural_pillar = heritage_chinese } }
+				set_heritage_from = scope:hd_dc_con_han_culture
+			}
+		}
+		# 天子直辖、原本族文化的县随之改为新文化
+		every_held_county = {
+			limit = { culture = scope:hd_dc_con_old_culture }
+			set_county_culture = scope:hd_dc_con_ruler.culture
+		}
+		# 同宫的配偶、子女随之改文化
+		every_spouse = {
+			limit = {
+				is_courtier_of = scope:hd_dc_con_ruler
+				culture = scope:hd_dc_con_old_culture
+			}
+			set_culture = scope:hd_dc_con_ruler.culture
+		}
+		every_child = {
+			limit = {
+				is_courtier_of = scope:hd_dc_con_ruler
+				culture = scope:hd_dc_con_old_culture
+			}
+			set_culture = scope:hd_dc_con_ruler.culture
+		}
+		set_variable = hd_dc_con_hybridized
+	}
+	hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_hybrid_culture ACTOR = scope:hd_dc_con_ruler }
+}
+
+# ===========================================================================
+# 汉化改制（孝文帝式）事件链。Scope：天子
+# ===========================================================================
+# 推进一步：$STAGE$ = 1~4（迁都 / 易服 / 改姓 / 禁胡语）
+hd_dc_con_sinicization_step_effect = {
+	save_scope_as = hd_dc_con_ruler
+	set_variable = {
+		name = hd_dc_con_sinicization_stage
+		value = $STAGE$
+	}
+	# 本族封臣不满（每步 -10，可叠加）
+	every_vassal = {
+		limit = { hd_dc_con_native_trigger = { CULTURE = scope:hd_dc_con_ruler.var:hd_dc_con_native_culture } }
+		add_opinion = {
+			target = scope:hd_dc_con_ruler
+			modifier = hd_dc_con_sinicization_native_opinion
+		}
+	}
+	# 汉人封臣欣然（每步 +5，可叠加）
+	every_vassal = {
+		limit = { hd_dc_is_chinese_heritage_trigger = yes }
+		add_opinion = {
+			target = scope:hd_dc_con_ruler
+			modifier = hd_dc_con_sinicization_han_opinion
+		}
+	}
+	# 每一步都是一次性里程碑：走全局发射（避开行为人 3 年冷却，步间隔仅 2~3 年）
+	hd_dc_kit_fire_global_effect = { CATALYST = catalyst_hd_sinicization_step }
+	# 本族反弹：20% 引发本族叛乱
+	random = {
+		chance = 20
+		custom_tooltip = hd_dc_con_native_revolt_risk_tt
+		hidden_effect = { hd_dc_con_native_revolt_effect = yes }
+	}
+	# 下一步（2~3 年后自动推进）或完成
+	if = {
+		limit = { var:hd_dc_con_sinicization_stage = 1 }
+		trigger_event = {
+			id = hd_dc_con.0202
+			days = { 730 1095 }
+		}
+	}
+	else_if = {
+		limit = { var:hd_dc_con_sinicization_stage = 2 }
+		trigger_event = {
+			id = hd_dc_con.0203
+			days = { 730 1095 }
+		}
+	}
+	else_if = {
+		limit = { var:hd_dc_con_sinicization_stage = 3 }
+		trigger_event = {
+			id = hd_dc_con.0204
+			days = { 730 1095 }
+		}
+	}
+	else = {
+		hd_dc_con_complete_sinicization_effect = yes
+	}
+}
+
+# 完成：天子改用胡汉混合文化（若尚未改）
+hd_dc_con_complete_sinicization_effect = {
+	remove_variable = hd_dc_con_sinicization_stage
+	set_variable = hd_dc_con_sinicization_done
+	if = {
+		limit = { hd_dc_is_chinese_heritage_trigger = no }
+		if = {
+			limit = { hd_dc_con_can_hybridize_trigger = yes }
+			hd_dc_con_adopt_hybrid_culture_effect = yes
+		}
+		# 无法创建混合文化（未开相关 DLC/规则或都城非汉地）：直接改用都城的汉文化
+		else_if = {
+			limit = { capital_county.culture ?= { has_cultural_pillar = heritage_chinese } }
+			capital_county.culture = { save_scope_as = hd_dc_con_han_culture }
+			set_culture = scope:hd_dc_con_han_culture
+		}
+	}
+	add_prestige = major_prestige_value
+}
+
+# 放弃改制：10 年内不得重启，失威望
+hd_dc_con_abandon_sinicization_effect = {
+	remove_variable = hd_dc_con_sinicization_stage
+	add_character_flag = {
+		flag = hd_dc_con_sinicization_abandoned
+		years = 10
+	}
+	add_prestige = hd_dc_con_abandon_prestige
+}
+
+# 第一步·迁都：都城若非汉地，迁往天子直辖汉人县中发展度最高者
+hd_dc_con_relocate_capital_effect = {
+	if = {
+		limit = {
+			capital_county.culture ?= { NOT = { has_cultural_pillar = heritage_chinese } }
+			any_held_county = { culture ?= { has_cultural_pillar = heritage_chinese } }
+		}
+		ordered_held_county = {
+			limit = { culture ?= { has_cultural_pillar = heritage_chinese } }
+			order_by = development_level
+			save_scope_as = hd_dc_con_new_capital
+		}
+		set_realm_capital = scope:hd_dc_con_new_capital
+	}
+	else = {
+		custom_tooltip = hd_dc_con_capital_already_han_tt
+	}
+}
+
+# 第四步·禁胡语：天子与同宫配偶、子女习汉语（都城文化之语言）
+hd_dc_con_learn_han_language_effect = {
+	save_scope_as = hd_dc_con_ruler
+	if = {
+		limit = { capital_county.culture ?= { has_cultural_pillar = heritage_chinese } }
+		capital_county.culture = { save_scope_as = hd_dc_con_han_culture }
+		learn_language_of_culture = scope:hd_dc_con_han_culture
+		hidden_effect = {
+			every_spouse = {
+				limit = { is_courtier_of = scope:hd_dc_con_ruler }
+				learn_language_of_culture = scope:hd_dc_con_han_culture
+			}
+			every_child = {
+				limit = { is_courtier_of = scope:hd_dc_con_ruler }
+				learn_language_of_culture = scope:hd_dc_con_han_culture
+			}
+		}
+	}
+}
+
+# ===========================================================================
+# 保俗。Scope：天子
+# ===========================================================================
+hd_dc_con_baosu_effect = {
+	save_scope_as = hd_dc_con_ruler
+	add_character_flag = {
+		flag = hd_dc_con_baosu
+		years = 20
+	}
+	every_vassal = {
+		limit = { culture = scope:hd_dc_con_ruler.culture }
+		add_character_modifier = {
+			modifier = hd_dc_con_baosu_levy_modifier
+			years = 20
+		}
+	}
+	every_vassal = {
+		limit = { hd_dc_is_chinese_heritage_trigger = yes }
+		add_opinion = {
+			target = scope:hd_dc_con_ruler
+			modifier = hd_dc_con_baosu_han_opinion
+		}
+	}
+}
+
+# ===========================================================================
+# 前朝遗民。Scope：天子；scope:hd_dc_con_remnant = 前朝宗室
+# ===========================================================================
+# 优待：封县（无地且在天子境内时，取天子直辖中发展度最低的非都城县）并加威望；汉人封臣好感 +10
+hd_dc_con_honor_remnant_effect = {
+	save_scope_as = hd_dc_con_ruler
+	scope:hd_dc_con_remnant = {
+		add_character_flag = {
+			flag = hd_dc_con_suppress_gentry
+			days = 1
+		}
+		if = {
+			limit = { is_imprisoned_by = scope:hd_dc_con_ruler }
+			release_from_prison = yes
+		}
+		add_prestige = hd_dc_con_remnant_honor_prestige
+		add_opinion = {
+			target = scope:hd_dc_con_ruler
+			modifier = hd_dc_con_remnant_honored_opinion
+		}
+	}
+	if = {
+		limit = {
+			exists = scope:hd_dc_con_honor_county
+			scope:hd_dc_con_remnant = {
+				is_landed = no
+				top_liege ?= scope:hd_dc_con_ruler
+				can_be_granted_titles_by = { RULER = scope:hd_dc_con_ruler }
+			}
+		}
+		create_title_and_vassal_change = {
+			type = granted
+			save_scope_as = change
+			add_claim_on_loss = no
+		}
+		scope:hd_dc_con_honor_county = {
+			change_title_holder = {
+				holder = scope:hd_dc_con_remnant
+				change = scope:change
+				take_baronies = yes
+			}
+		}
+		resolve_title_and_vassal_change = scope:change
+	}
+	else_if = {
+		limit = { gold >= hd_dc_con_remnant_gift_gold }
+		remove_short_term_gold = hd_dc_con_remnant_gift_gold
+		scope:hd_dc_con_remnant = { add_gold = hd_dc_con_remnant_gift_gold }
+	}
+	every_vassal = {
+		limit = { hd_dc_is_chinese_heritage_trigger = yes }
+		add_opinion = {
+			target = scope:hd_dc_con_ruler
+			modifier = hd_dc_con_remnant_honored_han_opinion
+		}
+	}
+	hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_former_dynasty_honored ACTOR = scope:hd_dc_con_ruler }
+}
+
+# 诛杀：先发射"诛戮大臣"，再收押处斩；汉人封臣好感 -10
+# 先收押：核心死亡钩子对"狱中被天子处死"计诛戮大臣（此时因 3 年冷却不再重复），避免按"重臣遇刺"另计一次
+hd_dc_con_kill_remnant_effect = {
+	save_scope_as = hd_dc_con_ruler
+	hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_purge_vip ACTOR = scope:hd_dc_con_ruler }
+	if = {
+		limit = { scope:hd_dc_con_remnant = { is_imprisoned = no } }
+		imprison = {
+			target = scope:hd_dc_con_remnant
+			type = dungeon
+		}
+	}
+	scope:hd_dc_con_remnant = {
+		death = {
+			death_reason = death_execution
+			killer = scope:hd_dc_con_ruler
+		}
+	}
+	add_dread = 10
+	every_vassal = {
+		limit = { hd_dc_is_chinese_heritage_trigger = yes }
+		add_opinion = {
+			target = scope:hd_dc_con_ruler
+			modifier = hd_dc_con_remnant_killed_han_opinion
+		}
+	}
+}

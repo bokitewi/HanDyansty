@@ -1,0 +1,166 @@
+﻿# 请求归附（弱者主动投靠）。独立的 flag/变量，不复用“劝其归附”的锁。
+
+# 投靠者 scope。每年由 yearly_playable_pulse 调用一次。
+hd_petition_try_effect = {
+    if = {
+        limit = { hd_petition_actor_trigger = yes }
+        random = {
+            chance = 50
+            save_scope_as = hd_petition_actor
+            every_neighboring_top_liege_realm_owner = {
+                limit = { hd_petition_candidate_trigger = { ACTOR = scope:hd_petition_actor } }
+                save_temporary_scope_as = hd_petition_cand
+                # 合法性与否决必须以已保存的 scope 作为 LIEGE 传入
+                if = {
+                    limit = {
+                        scope:hd_petition_actor = {
+                            hd_submission_recipient_legal_trigger = { LIEGE = scope:hd_petition_cand }
+                            NOT = { hd_submission_ai_refuses_trigger = { LIEGE = scope:hd_petition_cand } }
+                        }
+                    }
+                    add_to_list = hd_petition_candidates
+                }
+            }
+            if = {
+                limit = { any_in_list = { list = hd_petition_candidates always = yes } }
+                ordered_in_list = {
+                    list = hd_petition_candidates
+                    # 2026-10-10 乱世霸权（D4）：尊汉者先投天子，再投尊汉同道
+                    order_by = {
+                        value = current_military_strength
+                        if = {
+                            limit = {
+                                scope:hd_petition_actor = { hd_court_stance_zunhan_trigger = yes }
+                                has_title = title:h_china
+                            }
+                            add = 1000000
+                        }
+                        else_if = {
+                            limit = {
+                                scope:hd_petition_actor = { hd_court_stance_zunhan_trigger = yes }
+                                hd_court_stance_zunhan_trigger = yes
+                            }
+                            add = 500000
+                        }
+                    }
+                    max = 3
+                    check_range_bounds = no
+                    # 至多发出一份
+                    if = {
+                        limit = { scope:hd_petition_actor = { NOT = { has_character_flag = hd_petition_request_issued } } }
+                        if = {
+                            limit = { is_ai = no }
+                            run_interaction = {
+                                interaction = hd_petition_vassalage_interaction
+                                actor = scope:hd_petition_actor
+                                recipient = this
+                                send_threshold = decline
+                            }
+                        }
+                        else = {
+                            run_interaction = {
+                                interaction = hd_petition_vassalage_interaction
+                                actor = scope:hd_petition_actor
+                                recipient = this
+                                send_threshold = accept
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+# Interaction scope。
+hd_petition_request_sent_effect = {
+    scope:actor = {
+        add_character_flag = { flag = hd_petition_outgoing_pending days = 120 }
+        add_character_flag = { flag = hd_petition_request_issued days = 1 }
+        set_variable = { name = hd_petition_outgoing_target value = scope:recipient days = 120 }
+    }
+    scope:recipient = {
+        if = {
+            limit = { is_ai = no }
+            add_character_flag = { flag = hd_petition_player_inbox_cooldown days = 365 }
+        }
+    }
+}
+
+hd_petition_clear_request_effect = {
+    if = {
+        limit = { exists = scope:actor }
+        scope:actor = {
+            if = {
+                limit = {
+                    exists = var:hd_petition_outgoing_target
+                    var:hd_petition_outgoing_target = scope:recipient
+                }
+                remove_variable = hd_petition_outgoing_target
+                remove_character_flag = hd_petition_outgoing_pending
+            }
+        }
+    }
+}
+
+hd_petition_request_accepted_effect = {
+    if = {
+        limit = {
+            exists = scope:actor
+            exists = scope:recipient
+            scope:actor = {
+                hd_submission_recipient_legal_trigger = { LIEGE = scope:recipient }
+                exists = var:hd_petition_outgoing_target
+                var:hd_petition_outgoing_target = scope:recipient
+            }
+        }
+        offer_fealty_interaction_effect = yes
+        if = {
+            limit = { scope:actor = { exists = liege liege = scope:recipient } }
+            scope:actor = {
+                add_character_modifier = { modifier = hd_submission_recently_submitted years = 5 }
+                if = { limit = { is_ai = yes } add_faction_cooldown_effect = { YEARS = 5 } }
+            }
+            scope:recipient = {
+                add_prestige = 50
+                if = {
+                    limit = { is_ai = no }
+                    send_interface_toast = {
+                        type = event_toast_effect_good
+                        title = hd_petition_success_title
+                        left_icon = scope:actor
+                        right_icon = scope:recipient
+                    }
+                }
+            }
+        }
+    }
+    else = {
+        if = {
+            limit = { exists = scope:recipient }
+            scope:recipient = {
+                if = {
+                    limit = { is_alive = yes is_ai = no }
+                    send_interface_toast = {
+                        type = event_toast_effect_neutral
+                        title = hd_petition_cancelled_title
+                        desc = hd_petition_cancelled_desc
+                        left_icon = scope:recipient
+                    }
+                }
+            }
+        }
+    }
+    hd_petition_clear_request_effect = yes
+}
+
+hd_petition_request_declined_effect = {
+    if = {
+        limit = { exists = scope:actor exists = scope:recipient }
+        scope:actor = {
+            set_variable = { name = hd_petition_declined_liege value = scope:recipient years = 2 }
+            add_character_flag = { flag = hd_petition_cooldown years = 1 }
+        }
+    }
+    hd_petition_clear_request_effect = yes
+}

@@ -1,0 +1,168 @@
+﻿# 历史人物按年出场：手写核心。逐人出场块由 tools/hd_hbirth/gen_hbirth.py 生成到
+# zz_hd_hbirth_generated_effects.txt；调用前已存好 hd_hb_father / hd_hb_mother / hd_hb_house。
+
+# 年份游标：每年元旦推进到今年。当年的人各排一个 1-364 天的随机延迟事件，全年分散出场；
+# 游标落后（读旧档等）的过去年份直接立即出场。每人出场后留标记，
+# 次年元旦再对上一年名单补跑一次，补出因载体死亡、延迟事件丢失的人。
+hd_hb_yearly_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_hb_cursor } }
+		# 184 年出生即夭折的人在 184 桶，所以从 183 起步。
+		set_global_variable = { name = hd_hb_cursor value = 183 }
+	}
+	set_global_variable = { name = hd_hb_now value = current_year }
+	while = {
+		limit = { global_var:hd_hb_cursor < global_var:hd_hb_now }
+		change_global_variable = { name = hd_hb_cursor add = 1 }
+		if = {
+			limit = { global_var:hd_hb_cursor < global_var:hd_hb_now }
+			set_global_variable = { name = hd_hb_sweep value = global_var:hd_hb_cursor }
+			hd_hb_dispatch_now_effect = yes
+		}
+		else = {
+			# 先补上一年漏掉的人，再给今年的人排期。
+			set_global_variable = { name = hd_hb_sweep value = global_var:hd_hb_cursor }
+			change_global_variable = { name = hd_hb_sweep add = -1 }
+			hd_hb_dispatch_now_effect = yes
+			hd_hb_pick_carrier_effect = yes
+			hd_hb_dispatch_schedule_effect = yes
+			clear_saved_scope = hd_hb_carrier
+		}
+	}
+}
+
+# 延迟事件的载体：优先选青壮年 AI 独立统治者，降低一年内死亡导致事件丢失的概率（丢失者次年补出）。
+hd_hb_pick_carrier_effect = {
+	random_independent_ruler = {
+		limit = { is_ai = yes age >= 18 age <= 45 }
+		save_scope_as = hd_hb_carrier
+	}
+	if = {
+		limit = { NOT = { exists = scope:hd_hb_carrier } }
+		random_independent_ruler = { save_scope_as = hd_hb_carrier }
+	}
+}
+
+# 只有王朝没有指定家族：父亲同王朝用父亲家族，否则用该王朝任一成员的家族；都没有则无家族。
+hd_hb_dynasty_house_effect = {
+	scope:hd_hb_father ?= {
+		if = {
+			limit = { exists = house exists = dynasty dynasty = dynasty:$DYN$ }
+			house = { save_scope_as = hd_hb_house }
+		}
+	}
+	if = {
+		limit = { NOT = { exists = scope:hd_hb_house } }
+		dynasty:$DYN$ ?= {
+			random_dynasty_member = {
+				limit = { exists = house }
+				house = { save_scope_as = hd_hb_house }
+			}
+		}
+	}
+}
+
+# 雇主取父亲、母亲、家族族长的宫廷；都没有就进父亲/母亲/族长所在地，最后洛阳的流浪池。
+hd_hb_save_court_effect = {
+	court_owner ?= {
+		if = {
+			limit = { is_alive = yes is_ruler = yes exists = court_owner court_owner = this }
+			save_scope_as = hd_hb_employer
+		}
+	}
+}
+
+hd_hb_spawn_effect = {
+	scope:hd_hb_father ?= {
+		if = { limit = { is_alive = yes } hd_hb_save_court_effect = yes }
+	}
+	if = {
+		limit = { NOT = { exists = scope:hd_hb_employer } }
+		scope:hd_hb_mother ?= {
+			if = { limit = { is_alive = yes } hd_hb_save_court_effect = yes }
+		}
+	}
+	if = {
+		limit = { NOT = { exists = scope:hd_hb_employer } }
+		scope:hd_hb_house.house_head ?= {
+			if = { limit = { is_alive = yes } hd_hb_save_court_effect = yes }
+		}
+	}
+	if = {
+		limit = { NOT = { exists = scope:hd_hb_employer } }
+		scope:hd_hb_father ?= {
+			if = { limit = { is_alive = yes exists = location } location = { save_scope_as = hd_hb_province } }
+		}
+		if = {
+			limit = { NOT = { exists = scope:hd_hb_province } }
+			scope:hd_hb_mother ?= {
+				if = { limit = { is_alive = yes exists = location } location = { save_scope_as = hd_hb_province } }
+			}
+		}
+		if = {
+			limit = { NOT = { exists = scope:hd_hb_province } }
+			scope:hd_hb_house.house_head ?= {
+				if = { limit = { is_alive = yes exists = location } location = { save_scope_as = hd_hb_province } }
+			}
+		}
+		if = {
+			limit = { NOT = { exists = scope:hd_hb_province } }
+			title:c_luoyang.title_province ?= { save_scope_as = hd_hb_province }
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_hb_employer }
+		scope:hd_hb_employer = {
+			create_character = {
+				template = hd_hb_t_$ID$
+				dynasty = none
+				employer = this
+				save_scope_as = hd_hb_person
+			}
+		}
+	}
+	else = {
+		scope:hd_hb_province ?= {
+			create_character = {
+				template = hd_hb_t_$ID$
+				dynasty = none
+				location = this
+				save_scope_as = hd_hb_person
+			}
+		}
+	}
+	scope:hd_hb_person ?= {
+		scope:hd_hb_father ?= { scope:hd_hb_person = { set_father = scope:hd_hb_father } }
+		scope:hd_hb_mother ?= { scope:hd_hb_person = { set_mother = scope:hd_hb_mother } }
+		scope:hd_hb_house ?= { scope:hd_hb_person = { set_house = scope:hd_hb_house } }
+		if = { limit = { exists = scope:hd_hb_employer } set_employer = scope:hd_hb_employer }
+		else_if = { limit = { exists = scope:hd_hb_province } move_to_pool_at = scope:hd_hb_province }
+	}
+}
+
+# history 配偶：双方在世、成年、异性且都未婚才结婚。
+hd_hb_try_marry_effect = {
+	if = {
+		limit = {
+			exists = scope:hd_hb_spouse
+			scope:hd_hb_spouse = { is_alive = yes is_adult = yes is_married = no }
+			is_alive = yes
+			is_adult = yes
+			is_married = no
+			NOT = { sex_same_as = scope:hd_hb_spouse }
+		}
+		marry = scope:hd_hb_spouse
+	}
+	clear_saved_scope = hd_hb_spouse
+}
+
+# 每人出场后清空，避免把上一人的父母／家族／雇主带给下一人。
+hd_hb_clear_effect = {
+	clear_saved_scope = hd_hb_father
+	clear_saved_scope = hd_hb_mother
+	clear_saved_scope = hd_hb_house
+	clear_saved_scope = hd_hb_employer
+	clear_saved_scope = hd_hb_province
+	clear_saved_scope = hd_hb_person
+	clear_saved_scope = hd_hb_spouse
+}

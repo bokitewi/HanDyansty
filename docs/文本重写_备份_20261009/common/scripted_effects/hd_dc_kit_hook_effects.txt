@@ -1,0 +1,570 @@
+﻿# 天朝循环·时代特色重制：通用行为钩子与年度统计（Step 3/4）
+# 所有发射都经 hd_dc_kit_fire_effect（VIP+冷却+年上限）或 hd_dc_kit_fire_global_effect（年度统计）
+
+# ---------------------------------------------------------------------------
+# 战争开始。Scope：on_war_started（scope:attacker / scope:defender / scope:war）
+# ---------------------------------------------------------------------------
+hd_dc_kit_war_started_effect = {
+	# 四夷寇边（进取 → 扩张）：天下之外的势力进攻天子
+	if = {
+		limit = {
+			exists = title:h_china.holder
+			scope:defender = title:h_china.holder
+			scope:attacker = { hd_dc_is_outsider_trigger = yes }
+		}
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_barbarian_raid ACTOR = scope:defender }
+	}
+	# D7：游牧入侵（按防守方最高头衔级区分大小，见实施日志）
+	if = {
+		limit = {
+			scope:attacker = { government_has_flag = government_is_nomadic }
+			scope:defender = { hd_dc_in_china_trigger = yes }
+		}
+		if = {
+			limit = { scope:defender = { highest_held_title_tier >= tier_kingdom } }
+			hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_nomad_invasion_major ACTOR = scope:attacker }
+		}
+		else = {
+			hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_nomad_invasion_minor ACTOR = scope:attacker }
+		}
+	}
+}
+
+# ---------------------------------------------------------------------------
+# 战争结束（胜方 $WINNER$，败方 $LOSER$）。Scope：on_war_won_* 的 root
+# ---------------------------------------------------------------------------
+hd_dc_kit_war_ended_effect = {
+	# 重臣兵败（天子由原版 hegemon_lost_war 覆盖）
+	if = {
+		limit = {
+			$LOSER$ = { hd_dc_in_china_trigger = yes }
+			NOT = { title:h_china.holder ?= $LOSER$ }
+		}
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_lost_war_vip ACTOR = $LOSER$ }
+		# 作为防守方战败 → 丧师失地
+		if = {
+			limit = { $LOSER$ = scope:defender }
+			hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_lost_land_vip ACTOR = $LOSER$ }
+		}
+	}
+	# 克敌四夷：天下之内的胜方击败天下之外的败方
+	if = {
+		limit = {
+			$WINNER$ = { hd_dc_in_china_trigger = yes }
+			$LOSER$ = { hd_dc_is_outsider_trigger = yes }
+		}
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_won_external_war ACTOR = $WINNER$ }
+	}
+	# 败于四夷：天子输给天下之外的势力
+	if = {
+		limit = {
+			exists = title:h_china.holder
+			$LOSER$ = title:h_china.holder
+			$WINNER$ = { hd_dc_is_outsider_trigger = yes }
+		}
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_lost_to_barbarians ACTOR = $LOSER$ }
+	}
+	# 对峙期四夷寇边：外部进攻方战胜天下之内的防守方（修 D3：不再依赖斗争期专属 CB）
+	if = {
+		limit = {
+			$WINNER$ = scope:attacker
+			scope:defender = { hd_dc_in_china_trigger = yes }
+			OR = {
+				scope:attacker = { hd_dc_is_outsider_trigger = yes }
+				scope:war = { using_cb = hd_siyi_raid_cb }	# 入寇 CB 的四夷可能位于天下之内
+			}
+		}
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_siyi_raid_won ACTOR = scope:attacker }
+	}
+	# 割据自立：独立战争中进攻方获胜
+	if = {
+		limit = {
+			$WINNER$ = scope:attacker
+			scope:war = {
+				OR = {
+					using_cb = independence_war
+					using_cb = independence_faction_war
+				}
+			}
+		}
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_secession ACTOR = scope:attacker }
+	}
+	# D4：崩溃期危机战争中叛方（进攻方）获胜 → 危机得逞
+	if = {
+		limit = {
+			$WINNER$ = scope:attacker
+			scope:war = { hd_collapse_crisis_war_trigger = yes }
+		}
+		hd_collapse_crisis_succeeded_effect = yes
+	}
+	# 兼并群雄：天下之内的独立防守方战后不再独立
+	if = {
+		limit = {
+			$WINNER$ = scope:attacker
+			scope:defender = {
+				hd_dc_in_china_trigger = yes
+				OR = {
+					is_landed = no
+					is_independent_ruler = no
+				}
+			}
+		}
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_independent_eliminated ACTOR = scope:attacker }
+	}
+}
+
+# 白和。Scope：on_war_white_peace
+hd_dc_kit_war_white_peace_effect = {
+	# 议和罢兵：天子与天下之外的势力白和
+	if = {
+		limit = {
+			exists = title:h_china.holder
+			OR = {
+				AND = {
+					scope:attacker = title:h_china.holder
+					scope:defender = { hd_dc_is_outsider_trigger = yes }
+				}
+				AND = {
+					scope:defender = title:h_china.holder
+					scope:attacker = { hd_dc_is_outsider_trigger = yes }
+				}
+			}
+		}
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_peace_with_foreign ACTOR = title:h_china.holder }
+	}
+}
+
+# 背盟：撕毁停战宣战。Scope：on_declared_war（scope:attacker / scope:defender）
+hd_dc_kit_declared_war_effect = {
+	if = {
+		limit = { scope:attacker = { has_truce = scope:defender } }
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_broke_truce ACTOR = scope:attacker }
+	}
+}
+
+# ---------------------------------------------------------------------------
+# 人物：囚禁 / 释放 / 死亡
+# ---------------------------------------------------------------------------
+# Scope：被囚者（root），scope:imprisoner
+hd_dc_kit_imprison_effect = {
+	if = {
+		limit = {
+			exists = title:h_china.holder
+			scope:imprisoner = title:h_china.holder
+			hd_dc_is_vip_trigger = yes
+		}
+		# 诛戮大臣
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_purge_vip ACTOR = scope:imprisoner }
+		# 打压朋党：囚禁天子朝廷的党魁
+		if = {
+			limit = { hd_party_is_any_leader_of_court_trigger = { COURT = title:h_china.holder } }
+			hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_suppress_party ACTOR = scope:imprisoner }
+		}
+	}
+	# 党争：朋党成员下狱
+	if = {
+		limit = {
+			exists = var:hd_party_my_group
+			scope:imprisoner = { is_ruler = yes }
+		}
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_party_strife ACTOR = scope:imprisoner }
+	}
+}
+
+# Scope：被释放者（root），scope:imprisoner
+hd_dc_kit_release_effect = {
+	if = {
+		limit = {
+			exists = title:h_china.holder
+			scope:imprisoner ?= title:h_china.holder
+			hd_dc_is_vip_trigger = yes
+		}
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_reconciliation ACTOR = scope:imprisoner }
+	}
+}
+
+# Scope：死者（root）。处决（死时在狱中且凶手为天子）计诛戮大臣；其余有凶手计重臣遇刺
+hd_dc_kit_death_effect = {
+	if = {
+		limit = {
+			exists = scope:killer
+			hd_dc_is_vip_trigger = yes
+			NOT = { title:h_china.holder ?= this }	# 天子被弑由原版 hegemon_murdered 覆盖
+		}
+		if = {
+			limit = {
+				is_imprisoned = yes
+				exists = title:h_china.holder
+				scope:killer = title:h_china.holder
+			}
+			hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_purge_vip ACTOR = scope:killer }
+		}
+		else = {
+			hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_vip_murdered ACTOR = root }
+		}
+	}
+}
+
+# ---------------------------------------------------------------------------
+# 建筑 / 头衔 / 劫掠 / 关系 / 派系
+# ---------------------------------------------------------------------------
+# Scope：省份（root），scope:character = 出资者
+hd_dc_kit_building_effect = {
+	if = {
+		limit = { exists = scope:character }
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_building_completed ACTOR = scope:character }
+	}
+}
+
+# Scope：新持有者（root），scope:title，scope:transfer_type
+hd_dc_kit_title_gain_effect = {
+	if = {
+		limit = {
+			scope:transfer_type = flag:created
+			scope:title = {
+				tier >= tier_kingdom
+				target_is_de_jure_liege_or_above = title:h_china
+			}
+		}
+		if = {
+			limit = { is_independent_ruler = no }
+			# 封臣自封王号 → 割据自立
+			hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_secession ACTOR = root }
+		}
+		else_if = {
+			limit = { scope:title = { tier = tier_empire } }
+			hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_proclaim_emperor ACTOR = root }
+		}
+		else = {
+			hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_proclaim_king ACTOR = root }
+		}
+	}
+}
+
+# Scope：篡夺者（root）
+hd_dc_kit_usurp_effect = {
+	if = {
+		limit = { hd_dc_in_china_trigger = yes }
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_secession ACTOR = root }
+	}
+}
+
+# Scope：劫掠（scope:raider / scope:county）
+hd_dc_kit_raid_effect = {
+	if = {
+		limit = {
+			exists = title:h_china.holder
+			scope:raider = { hd_dc_is_outsider_trigger = yes }
+			scope:county.holder.top_liege ?= title:h_china.holder
+		}
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_lost_to_barbarians ACTOR = title:h_china.holder }
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_barbarian_raid ACTOR = title:h_china.holder }
+	}
+	if = {
+		limit = {
+			scope:raider = { hd_dc_is_outsider_trigger = yes }
+			scope:county = { target_is_de_jure_liege_or_above = title:h_china }
+		}
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_siyi_raid_won ACTOR = scope:raider }
+	}
+}
+
+# Scope：派系目标（root），scope:faction
+hd_dc_kit_faction_demand_effect = {
+	if = {
+		limit = {
+			exists = title:h_china.holder
+			this = title:h_china.holder
+		}
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_reconciliation ACTOR = root }
+	}
+}
+
+# Scope：root 与 scope:target 结为挚友：党魁之间 → 赦免和解；党魁互为死敌 → 党争
+hd_dc_kit_best_friend_effect = {
+	if = {
+		limit = {
+			exists = var:hd_party_my_court
+			hd_party_is_any_leader_of_court_trigger = { COURT = var:hd_party_my_court }
+			scope:target = {
+				exists = var:hd_party_my_court
+				hd_party_is_any_leader_of_court_trigger = { COURT = var:hd_party_my_court }
+			}
+		}
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_reconciliation ACTOR = root }
+	}
+}
+hd_dc_kit_nemesis_effect = {
+	if = {
+		limit = {
+			exists = var:hd_party_my_court
+			hd_party_is_any_leader_of_court_trigger = { COURT = var:hd_party_my_court }
+			scope:target = {
+				exists = var:hd_party_my_court
+				hd_party_is_any_leader_of_court_trigger = { COURT = var:hd_party_my_court }
+			}
+		}
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_party_strife ACTOR = root }
+	}
+}
+
+# Scope：root 与 scope:spouse 成婚。胡汉联姻：一方非中华传承的 VIP，另一方中华传承
+hd_dc_kit_marriage_effect = {
+	if = {
+		limit = {
+			OR = {
+				AND = {
+					hd_dc_is_chinese_heritage_trigger = no
+					scope:spouse = { hd_dc_is_chinese_heritage_trigger = yes }
+				}
+				AND = {
+					hd_dc_is_chinese_heritage_trigger = yes
+					scope:spouse = { hd_dc_is_chinese_heritage_trigger = no }
+				}
+			}
+		}
+		if = {
+			limit = { hd_dc_is_vip_trigger = yes }
+			hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_intermarriage ACTOR = root }
+		}
+		else = {
+			hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_intermarriage ACTOR = scope:spouse }
+		}
+	}
+}
+
+# ---------------------------------------------------------------------------
+# 年度统计。Scope：dynastic_cycle 局势（dynastic_cycle_yearly_pulse）
+# ---------------------------------------------------------------------------
+hd_dc_kit_yearly_effect = {
+	save_scope_as = hd_dc_kit_situation
+	if = {
+		limit = { exists = title:h_china.holder }
+		title:h_china.holder = { save_scope_as = hd_dc_kit_hegemon }
+
+		# 天朝大臣：高位 / 庸才（文职按职位技能，武职 = 大将军与兵部，军事）
+		hd_dc_kit_minister_check_effect = { TITLE = e_minister_chancellor SKILL = diplomacy MIL = no }
+		hd_dc_kit_minister_check_effect = { TITLE = e_minister_of_personnel SKILL = diplomacy MIL = no }
+		hd_dc_kit_minister_check_effect = { TITLE = e_minister_censor SKILL = intrigue MIL = no }
+		hd_dc_kit_minister_check_effect = { TITLE = e_minister_of_revenue SKILL = stewardship MIL = no }
+		hd_dc_kit_minister_check_effect = { TITLE = e_minister_of_works SKILL = stewardship MIL = no }
+		hd_dc_kit_minister_check_effect = { TITLE = e_minister_of_rites SKILL = learning MIL = no }
+		hd_dc_kit_minister_check_effect = { TITLE = e_minister_of_justice SKILL = learning MIL = no }
+		hd_dc_kit_minister_check_effect = { TITLE = e_minister_grand_marshal SKILL = martial MIL = yes }
+		hd_dc_kit_minister_check_effect = { TITLE = e_minister_of_war SKILL = martial MIL = yes }
+
+		scope:hd_dc_kit_hegemon = {
+			# 穷兵黩武：在战且国库为负
+			if = {
+				limit = {
+					is_at_war = yes
+					treasury < 0
+				}
+				hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_endless_war ACTOR = this }
+			}
+			# 兵甲充实 / 裁军
+			if = {
+				limit = { maa_regiments_count >= maa_regiments_max_count }
+				hd_dc_kit_fire_global_effect = { CATALYST = catalyst_hd_maa_full_yearly }
+			}
+			else_if = {
+				limit = {
+					maa_regiments_max_count > 0
+					maa_regiments_count < hd_dc_kit_half_maa_cap_value
+				}
+				hd_dc_kit_fire_global_effect = { CATALYST = catalyst_hd_demilitarized }
+			}
+			# 奢靡：天子贪食 / 好色 / 挥霍
+			if = {
+				limit = {
+					OR = {
+						has_trait = gluttonous
+						has_trait = lustful
+						has_trait = profligate
+					}
+				}
+				hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_extravagance ACTOR = this }
+			}
+			# 边将坐大：封臣兵力达到天子的一半（每人一次）
+			every_vassal = {
+				limit = { max_military_strength >= scope:hd_dc_kit_hegemon.hd_dc_kit_half_strength_value }
+				hd_dc_kit_fire_global_effect = { CATALYST = catalyst_hd_overmighty_vassal }
+			}
+			# 朋党格局
+			if = {
+				limit = { hd_party_court_initialized_trigger = yes }
+				if = {
+					limit = { hd_dc_strongest_party_is_trigger = { G = shizu } }
+					hd_dc_kit_fire_global_effect = { CATALYST = catalyst_hd_land_annexation }
+				}
+				if = {
+					limit = { hd_dc_strongest_party_is_trigger = { G = wuxun } }
+					hd_dc_kit_fire_global_effect = { CATALYST = catalyst_hd_wuxun_dominant }
+				}
+				hd_dc_kit_hostile_pairs_effect = yes
+			}
+			# 完成汉化（新朝征服期，一朝一次）
+			if = {
+				limit = {
+					hd_dc_phase_is_trigger = { PHASE = instability_conquest }
+					hd_dc_is_chinese_heritage_trigger = yes
+					hd_dc_is_chinese_faith_family_trigger = yes
+					dynasty ?= { NOT = { has_variable = hd_dc_sinicized } }
+				}
+				dynasty ?= { set_variable = hd_dc_sinicized }
+				hd_dc_kit_fire_global_effect = { CATALYST = catalyst_hd_sinicization_complete }
+			}
+		}
+	}
+
+	# 家族统计（波斯式）：VIP 家主所在家族的团结度阶段
+	hd_dc_kit_house_count_effect = yes
+
+	# 斗争：县数 >300 的独立势力 ≥2
+	set_variable = { name = hd_dc_kit_great_powers value = 0 }
+	every_independent_ruler = {
+		limit = {
+			hd_dc_in_china_trigger = yes
+			realm_size > hd_dc_great_power_counties
+		}
+		scope:hd_dc_kit_situation = { change_variable = { name = hd_dc_kit_great_powers add = 1 } }
+	}
+	if = {
+		limit = { var:hd_dc_kit_great_powers >= hd_dc_great_power_count }
+		hd_dc_kit_fire_global_effect = { CATALYST = catalyst_hd_two_great_powers_yearly }
+	}
+
+	# D7：草原强权崛起（王国级以上游牧、权威 ≥3 级，每人一次）
+	every_independent_ruler = {
+		limit = {
+			government_has_flag = government_is_nomadic
+			highest_held_title_tier >= tier_kingdom
+			NOT = { has_character_flag = hd_dc_nomad_rise_counted }
+			OR = {
+				has_realm_law = nomadic_authority_3
+				has_realm_law = nomadic_authority_4
+				has_realm_law = nomadic_authority_5
+			}
+		}
+		add_character_flag = hd_dc_nomad_rise_counted
+		hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_nomad_power_rises ACTOR = this }
+	}
+
+	# 劝课农桑：VIP 首府发展度较去年提升
+	every_ruler = {
+		limit = {
+			hd_dc_in_china_trigger = yes
+			OR = {
+				highest_held_title_tier >= tier_kingdom
+				AND = {
+					is_independent_ruler = yes
+					highest_held_title_tier >= tier_duchy
+				}
+			}
+		}
+		if = {
+			limit = {
+				exists = var:hd_dc_last_dev
+				capital_county.development_level > var:hd_dc_last_dev
+			}
+			hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_development ACTOR = this }
+		}
+		set_variable = { name = hd_dc_last_dev value = capital_county.development_level }
+	}
+}
+
+# Scope：天子。$TITLE$ 持有者的 $SKILL$ 判定高位 / 庸才；$MIL$ = 是否武职
+hd_dc_kit_minister_check_effect = {
+	if = {
+		limit = { exists = title:$TITLE$.holder }
+		title:$TITLE$.holder = {
+			if = {
+				limit = { $SKILL$ >= hd_dc_able_minister_skill }
+				if = {
+					limit = { always = $MIL$ }
+					hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_able_military_minister ACTOR = this }
+				}
+				else = {
+					hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_able_civil_minister ACTOR = this }
+				}
+			}
+			else_if = {
+				limit = { $SKILL$ < hd_dc_incompetent_minister_skill }
+				hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_incompetent_minister ACTOR = this }
+			}
+		}
+	}
+}
+
+# Scope：天子。每对对立朋党计一次党争（E9b）
+hd_dc_kit_hostile_pairs_effect = {
+	hd_dc_kit_hostile_pair_effect = { A = huanguan B = waiqi }
+	hd_dc_kit_hostile_pair_effect = { A = huanguan B = wuxun }
+	hd_dc_kit_hostile_pair_effect = { A = huanguan B = shizu }
+	hd_dc_kit_hostile_pair_effect = { A = huanguan B = hanmen }
+	hd_dc_kit_hostile_pair_effect = { A = waiqi B = wuxun }
+	hd_dc_kit_hostile_pair_effect = { A = waiqi B = shizu }
+	hd_dc_kit_hostile_pair_effect = { A = waiqi B = hanmen }
+	hd_dc_kit_hostile_pair_effect = { A = wuxun B = shizu }
+	hd_dc_kit_hostile_pair_effect = { A = wuxun B = hanmen }
+	hd_dc_kit_hostile_pair_effect = { A = shizu B = hanmen }
+}
+hd_dc_kit_hostile_pair_effect = {
+	if = {
+		limit = { hd_party_hostile_trigger = { A = $A$ B = $B$ } }
+		hd_dc_kit_fire_global_effect = { CATALYST = catalyst_hd_party_strife }
+	}
+}
+
+# Scope：dynastic_cycle 局势。家族和睦 / 敌对档位
+hd_dc_kit_house_count_effect = {
+	set_variable = { name = hd_dc_kit_har value = 0 }
+	set_variable = { name = hd_dc_kit_ant value = 0 }
+	every_ruler = {
+		limit = {
+			hd_dc_in_china_trigger = yes
+			hd_dc_is_vip_trigger = yes
+			house ?= { house_head = prev }
+		}
+		if = {
+			limit = { house = { has_house_unity_stage = harmonious } }
+			scope:hd_dc_kit_situation = { change_variable = { name = hd_dc_kit_har add = 1 } }
+		}
+		else_if = {
+			limit = { house = { has_house_unity_stage = antagonistic } }
+			scope:hd_dc_kit_situation = { change_variable = { name = hd_dc_kit_ant add = 1 } }
+		}
+	}
+	if = {
+		limit = { var:hd_dc_kit_har >= hd_dc_houses_h }
+		hd_dc_kit_fire_global_effect = { CATALYST = catalyst_hd_houses_harmonious_h }
+	}
+	else_if = {
+		limit = { var:hd_dc_kit_har >= hd_dc_houses_l }
+		hd_dc_kit_fire_global_effect = { CATALYST = catalyst_hd_houses_harmonious_l }
+	}
+	else_if = {
+		limit = { var:hd_dc_kit_har >= hd_dc_houses_m }
+		hd_dc_kit_fire_global_effect = { CATALYST = catalyst_hd_houses_harmonious_m }
+	}
+	else_if = {
+		limit = { var:hd_dc_kit_har >= hd_dc_houses_s }
+		hd_dc_kit_fire_global_effect = { CATALYST = catalyst_hd_houses_harmonious_s }
+	}
+	if = {
+		limit = { var:hd_dc_kit_ant >= hd_dc_houses_h }
+		hd_dc_kit_fire_global_effect = { CATALYST = catalyst_hd_houses_antagonistic_h }
+	}
+	else_if = {
+		limit = { var:hd_dc_kit_ant >= hd_dc_houses_l }
+		hd_dc_kit_fire_global_effect = { CATALYST = catalyst_hd_houses_antagonistic_l }
+	}
+	else_if = {
+		limit = { var:hd_dc_kit_ant >= hd_dc_houses_m }
+		hd_dc_kit_fire_global_effect = { CATALYST = catalyst_hd_houses_antagonistic_m }
+	}
+	else_if = {
+		limit = { var:hd_dc_kit_ant >= hd_dc_houses_s }
+		hd_dc_kit_fire_global_effect = { CATALYST = catalyst_hd_houses_antagonistic_s }
+	}
+}

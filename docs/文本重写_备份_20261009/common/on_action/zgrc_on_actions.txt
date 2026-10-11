@@ -1,0 +1,289 @@
+﻿# ============================================================
+# 烛广 Regional Customs —— on_action 挂钩
+# ============================================================
+
+# ---------- 真正钩子 ----------
+
+# 厚生慎死·极端爆发（非常时期人物响应）—— 战争开始总入口
+# 作用域：War（scope:war / scope:attacker / scope:defender）
+on_war_started = {
+	on_actions = {
+		# 厚生慎死，死则举大名耳
+		zgrc_si_ze_ju_da_ming
+	}
+}
+
+
+# 开局：统一初始化入口（内容分发细项由各自游戏规则控制）
+# on_game_start = {
+# 	on_actions = {
+# 		zgrc_game_start_init
+# 	}
+# }
+on_game_start_after_lobby = {
+	on_actions = {
+		zgrc_setup_load_flag
+		zgrc_game_start_init
+	}
+}
+
+on_birth_child = {
+	on_actions = {
+		zgrc_hanjia_children_on_birth
+	}
+}
+
+# on_16th_birthday = {
+# 	on_actions = {
+# 		zgrc_hanjia_guandai_on_adult
+# 	}
+# } 似乎与文化转换重复
+
+on_character_culture_change = {
+	on_actions = {
+		zgrc_hanjia_guandai_on_culture_change
+	}
+}
+
+five_year_playable_pulse = {
+	on_actions = {
+		zgrc_ruxiang_pulse
+	}
+}
+# 革新同步：每年全局计数 + 每年文化同步
+yearly_global_pulse = {
+	on_actions = {
+		zgrc_innovation_sync_count_pulse
+	}
+}
+
+yearly_culture_pulse = {
+	on_actions = {
+		zgrc_innovation_sync_pulse
+	}
+}
+
+on_travel_plan_movement = {
+	on_actions = {
+		zgrc_wenyan_travel_check
+	}
+}
+
+# 大复仇 —— 亲人被害（凶手已知时）→ 直系亲属复仇抉择
+# 作用域（依据 game/common/on_action/death.txt:1-3）：
+#   root               = 死者
+#   scope:killer       = 凶手（仅在凶手已知时存在）
+#   scope:death_reason = 死因
+# 秘密谋杀未揭发时 scope:killer 不存在 → 家人无从复仇（引擎级实现「不知凶手则无从复仇」）
+on_death = {
+	on_actions = {
+		zgrc_dachou_on_death
+	}
+}
+
+# ---------- 本地提炼 ----------
+
+# 大复仇 · on_death 适配层（on_action 形态 → 转调 scripted_effect）
+# 依据：game/common/on_action/_on_actions.info 末尾「MODDING INFO」官方模式 ——
+#   挂在「on_actions = {}」列表中的必须是一个 on_action（须带 effect = {} 包裹），
+#   裸 scripted_effect 名不会被识别（会静默不执行）。
+zgrc_dachou_on_death = {
+	effect = {
+		zgrc_dachou_on_death_effect = yes
+	}
+}
+
+# ============================================================
+# 安装标记 —— 跨 mod 软依赖识别（联动）
+#   本 mod 加载 → 全局变量 HUNT_ZGRC_LOAD = yes（随存档保存）
+#   联动方判定（任一句等价）：
+#       has_global_variable = HUNT_ZGRC_LOAD
+#       exists = global_var:HUNT_ZGRC_LOAD
+#   设置点：on_game_start_after_lobby（退大厅后开局，单人 / 多人同经此）
+# ============================================================
+zgrc_setup_load_flag = {
+	effect = {
+		if = {
+			limit = { NOT = { exists = global_var:HUNT_ZGRC_LOAD } }
+			set_global_variable = { name = HUNT_ZGRC_LOAD value = yes }
+		}
+	}
+}
+
+# ============================================================
+# 开局初始化（总管）—— 本 mod 全部内容的分发与初始化
+#   入口：on_game_start_after_lobby
+#     ├ zgrc_setup_load_flag  跨 mod 软依赖标记（无规则）
+#     └ zgrc_game_start_init  A 革新对齐 + B 内容分发
+#   B 组三项各有独立规则：zgrc_init_regional_customs / _hanjia_guandai / _gongyang_rite
+# ============================================================
+
+zgrc_game_start_init = {
+	effect = {
+		# A. 革新对齐（开局必经）
+		zgrc_innovation_init_effect = yes
+		# 主模组已配置汉文化革新，不追加原版时代初始化。
+		# B. 内容分发（细项各有规则开关，见 zgrc_distribute_all_effect）
+		zgrc_distribute_all_effect = yes
+	}
+}
+
+# 出生：① 子嗣文化绑定出生地（汉家认同内改从当地）② 汉家冠带授予
+zgrc_hanjia_children_on_birth = {
+	effect = {
+		# ① 子嗣文化绑定出生地：新生儿文化有华夏礼乐、出生地文化亦有华夏礼乐且不一致 → 改为当地文化
+		if = {
+			limit = {
+				# 空安全：新生儿无 location（出生即夭等）时下钻 location.county 会刷 Script system error
+				exists = location
+				culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue }
+				location.county = {
+					culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue }
+					NOT = { culture = root.culture }
+				}
+			}
+			# 祖风 · 先记录祖上（继承）大区（须在改文化之前）
+			zgrc_zufeng_set_origin_effect = yes
+			set_culture = location.county.culture
+			# 祖风 · 跨大区迁居者挂「某祖风」；同大区跨风俗则不计
+			zgrc_zufeng_apply_effect = yes
+		}
+		# ② 汉家冠带：文化有华夏礼乐 → 添加
+		if = {
+			limit = {
+				culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue }
+				NOT = { has_trait = zgrc_hanjia_guandai }
+			}
+			add_trait = zgrc_hanjia_guandai
+		}
+	}
+}
+
+# # 成年16岁：失格清理（该特质者，文化无华夏礼乐则移除）
+# zgrc_hanjia_guandai_on_adult = {
+# 	effect = {
+# 		if = {
+# 			limit = {
+# 				age = 16
+# 				has_trait = zgrc_hanjia_guandai
+# 				NOT = { culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue } }
+# 			}
+# 			remove_trait = zgrc_hanjia_guandai
+# 		}
+# 	}
+# }
+
+# 转文化：仅清理（离开华夏礼乐文化则移除）
+zgrc_hanjia_guandai_on_culture_change = {
+	effect = {
+		if = {
+			limit = {
+				has_trait = zgrc_hanjia_guandai
+				NOT = { culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue } }
+			}
+			remove_trait = zgrc_hanjia_guandai
+		}
+	}
+}
+
+# 入乡随俗：五年度检测（当场判定，直接触发选择事件）
+zgrc_ruxiang_pulse = {
+	trigger = {
+		# 我是汉家风俗
+		culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue }
+		# 空安全：无首都角色（领地尽失 / 行政制尚未就任等）无 capital_county → 直接不合格；
+		exists = capital_county
+		# 首都 county 头衔久居达标（5/10/30年，可配置）
+		capital_county ?= {
+			title_held_years >= zgrc_ruxiang_required_years
+			# 当地亦为汉家风俗且与我不相同
+			culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue }
+			NOT = { culture = root.culture }
+		}
+		# 冷却中不弹
+		NOT = { has_character_flag = zgrc_ruxiang_cooldown }
+	}
+	effect = {
+		trigger_event = { id = zgrc_common.0002 days = { 0 10 } }
+	}
+}
+
+
+# 革新同步 —— 全局计数（yearly_global_pulse 每年调用一次）
+zgrc_innovation_sync_count_pulse = {
+	effect = {
+		# 计数 +1
+		if = {
+			limit = { exists = global_var:g_zgrc_sync_count }
+			set_global_variable = { name = g_zgrc_sync_count value = { value = global_var:g_zgrc_sync_count add = 1 } }
+		}
+		else = {
+			set_global_variable = { name = g_zgrc_sync_count value = 1 }
+		}
+		# 达阈值 → 归零（culture 侧据此同步）
+		if = {
+			limit = { global_var:g_zgrc_sync_count >= zgrc_innovation_sync_threshold }
+			set_global_variable = { name = g_zgrc_sync_count value = 0 }
+		}
+	}
+}
+
+# 革新同步 —— 文化侧（yearly_culture_pulse 每年调用一次，计数为 0 才同步）
+zgrc_innovation_sync_pulse = {
+	trigger = {
+		has_cultural_tradition = tradition_zgrc_hua_xia_li_yue
+		exists = culture_head
+		culture_head = { top_liege = { highest_held_title_tier >= tier_empire } }
+		NOT = { has_game_rule = zgrc_innovation_sync_disabled }
+	}
+	effect = {
+		if = {
+			limit = { global_var:g_zgrc_sync_count == 0 }
+			zgrc_innovation_sync_effect = yes
+		}
+	}
+}
+
+# 死则举大名耳
+zgrc_si_ze_ju_da_ming = {
+	effect = {
+		# 极端爆发 · 义军响应（直接来投）
+		zgrc_jiduan_baofa_effect = yes
+		# 天下响应 · 非常时期封臣表态（文化体验事件 1010）
+		if = {
+			limit = { NOT = { has_game_rule = zgrc_luanshi_xiangying_disabled } }
+			zgrc_tianxia_xiangying_effect = yes
+		}
+	}
+}
+
+# ============================================================
+# 传言系统 —— 旅行听闻（美名/恶名传闻）
+# 旅行途经的当前伯爵领有传闻时，概率触发 → 事件 3001-3004（严格脚下县）
+# ============================================================
+zgrc_wenyan_travel_check = {
+	trigger = {
+		NOT = { has_character_flag = zgrc_wen_cooldown }
+		current_travel_plan = {
+			# 空安全：启程首步 / 海上 / 无伯爵领时 current_location.county 未设，直接下钻会刷 Script system error
+			exists = current_location
+			current_location = {
+				exists = county
+				county = {
+					OR = {
+						has_variable = zgrc_wen_zhongyi
+						has_variable = zgrc_wen_rende
+						has_variable = zgrc_wen_yexin
+						has_variable = zgrc_wen_funi
+					}
+				}
+			}
+		}
+	}
+	effect = {
+		random = {
+			chance = zgrc_wen_travel_weight
+			zgrc_wenyan_try_hear_effect = yes
+		}
+	}
+}

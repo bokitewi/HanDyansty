@@ -1,0 +1,94 @@
+﻿# Han Dynasty - coalition dissolution: withdraw only secondary war participants.
+# Called synchronously from hd_anti_regent_cleanup_effect, never from a pulse.
+# Snapshot before membership data is cleared; apply AFTER native disband.
+# The invitation list is deliberately excluded. Failed pre-founding cleanup
+# must not remove anybody from unrelated wars.
+
+hd_anti_regent_snapshot_war_exit_members_effect = {
+	clear_global_variable_list = hd_anti_regent_war_exit_members
+	if = {
+		limit = {
+			OR = {
+				exists = global_var:hd_anti_regent_founded
+				exists = global_var:hd_anti_regent_first_war_confirmed
+				AND = {
+					exists = global_var:hd_anti_regent_active_confederation
+					global_var:hd_anti_regent_active_confederation = {
+						confederation_type = confederation_type:hd_anti_regent_league_type
+					}
+				}
+			}
+		}
+		every_in_global_list = {
+			variable = hd_anti_regent_confirmed_members
+			limit = { is_alive = yes }
+			add_to_global_variable_list = { name = hd_anti_regent_war_exit_members target = this }
+		}
+		global_var:hd_anti_regent_active_confederation ?= {
+			if = {
+				limit = { confederation_type = confederation_type:hd_anti_regent_league_type }
+				every_confederation_member = {
+					limit = { is_alive = yes }
+					add_to_global_variable_list = { name = hd_anti_regent_war_exit_members target = this }
+				}
+			}
+		}
+		global_var:hd_anti_regent_league_leader ?= {
+			if = {
+				limit = { is_alive = yes }
+				add_to_global_variable_list = { name = hd_anti_regent_war_exit_members target = this }
+			}
+		}
+	}
+}
+
+hd_anti_regent_apply_war_exit_effect = {
+	every_in_global_list = {
+		variable = hd_anti_regent_war_exit_members
+		limit = { is_alive = yes }
+		hd_anti_regent_exit_auxiliary_wars_effect = yes
+	}
+	clear_global_variable_list = hd_anti_regent_war_exit_members
+}
+
+# Current scope: one former coalition member, NOT the cleanup event root.
+# CK3's current primary attacker is the initiating side's war leader. Do not
+# invent an original_attacker scope or substitute the event root for this actor.
+# A separate per-character war snapshot avoids mutating every_character_war
+# while enumerating it. Both primary roles are checked again before removal.
+hd_anti_regent_exit_auxiliary_wars_effect = {
+	if = {
+		limit = { is_alive = yes }
+		save_scope_as = hd_anti_regent_war_exit_actor
+		clear_variable_list = hd_anti_regent_war_exit_wars
+		every_character_war = {
+			limit = {
+				exists = primary_attacker
+				exists = primary_defender
+				NOT = { primary_attacker = scope:hd_anti_regent_war_exit_actor }
+				NOT = { primary_defender = scope:hd_anti_regent_war_exit_actor }
+			}
+			scope:hd_anti_regent_war_exit_actor = {
+				add_to_variable_list = { name = hd_anti_regent_war_exit_wars target = prev }
+			}
+		}
+		every_in_list = {
+			variable = hd_anti_regent_war_exit_wars
+			limit = {
+				exists = primary_attacker
+				exists = primary_defender
+				NOT = { primary_attacker = scope:hd_anti_regent_war_exit_actor }
+				NOT = { primary_defender = scope:hd_anti_regent_war_exit_actor }
+				scope:hd_anti_regent_war_exit_actor = {
+					OR = {
+						is_attacker_in_war = prev
+						is_defender_in_war = prev
+					}
+				}
+			}
+			remove_participant = scope:hd_anti_regent_war_exit_actor
+		}
+		clear_variable_list = hd_anti_regent_war_exit_wars
+		clear_saved_scope = hd_anti_regent_war_exit_actor
+	}
+}

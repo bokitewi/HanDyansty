@@ -1,0 +1,463 @@
+﻿# 天朝循环大修·朋党：立场辩论 effect（Scope 约定：host = 发起人；scope:activity = 辩论活动）
+
+# 活动开始：标记朝廷"辩论中"，发起人进入 10 年冷却，记录目标立场
+hd_party_debate_start_effect = {
+	scope:host = {
+		set_variable = { name = hd_party_debate_cd days = hd_party_debate_cd_days }
+		remove_variable = hd_party_ai_debate_wish
+		var:hd_party_my_court ?= { save_scope_as = hd_party_court }
+	}
+	scope:activity = {
+		set_variable = { name = hd_debate_progress value = 0 }
+		if = { limit = { has_activity_option = { category = hd_debate_target option = hd_target_zunwang } } set_variable = { name = hd_debate_target value = flag:zunwang } }
+		if = { limit = { has_activity_option = { category = hd_debate_target option = hd_target_kaituo } } set_variable = { name = hd_debate_target value = flag:kaituo } }
+		if = { limit = { has_activity_option = { category = hd_debate_target option = hd_target_jinqu } } set_variable = { name = hd_debate_target value = flag:jinqu } }
+		if = { limit = { has_activity_option = { category = hd_debate_target option = hd_target_shoujiu } } set_variable = { name = hd_debate_target value = flag:shoujiu } }
+		if = { limit = { has_activity_option = { category = hd_debate_target option = hd_target_zhongli } } set_variable = { name = hd_debate_target value = flag:zhongli } }
+	}
+	scope:hd_party_court ?= {
+		if = { limit = { scope:host.var:hd_party_my_group ?= flag:huanguan } set_variable = hd_party_huanguan_debating }
+		if = { limit = { scope:host.var:hd_party_my_group ?= flag:waiqi } set_variable = hd_party_waiqi_debating }
+		if = { limit = { scope:host.var:hd_party_my_group ?= flag:wuxun } set_variable = hd_party_wuxun_debating }
+		if = { limit = { scope:host.var:hd_party_my_group ?= flag:shizu } set_variable = hd_party_shizu_debating }
+		if = { limit = { scope:host.var:hd_party_my_group ?= flag:hanmen } set_variable = hd_party_hanmen_debating }
+	}
+}
+
+# 收尾：解除朝廷"辩论中"标记（Scope：发起人）
+hd_party_debate_cleanup_effect = {
+	var:hd_party_my_court ?= {
+		remove_variable = hd_party_huanguan_debating
+		remove_variable = hd_party_waiqi_debating
+		remove_variable = hd_party_wuxun_debating
+		remove_variable = hd_party_shizu_debating
+		remove_variable = hd_party_hanmen_debating
+	}
+}
+
+# 把嘉宾分入 拥护/中立/反对。首次按意图记录阵营（var:hd_debate_side，120 天过期），之后按记录（事件可改变阵营）
+hd_party_debate_sort_guests_effect = {
+	scope:activity = {
+		every_attending_character = {
+			if = {
+				limit = { NOT = { has_variable = hd_debate_side } }
+				if = {
+					limit = {
+						OR = {
+							this = scope:host
+							has_activity_intent = hd_debate_support_intent
+						}
+					}
+					set_variable = { name = hd_debate_side value = flag:support days = 120 }
+				}
+				else_if = {
+					limit = { has_activity_intent = hd_debate_oppose_intent }
+					set_variable = { name = hd_debate_side value = flag:oppose days = 120 }
+				}
+				else = {
+					set_variable = { name = hd_debate_side value = flag:neutral days = 120 }
+				}
+			}
+		}
+		hd_party_debate_apply_sides_effect = yes
+	}
+}
+
+# Scope：辩论活动。按 var:hd_debate_side 重新分组
+hd_party_debate_apply_sides_effect = {
+	every_attending_character = {
+		scope:activity = {
+			remove_from_guest_subset = { name = hd_debate_support target = prev }
+			remove_from_guest_subset = { name = hd_debate_neutral target = prev }
+			remove_from_guest_subset = { name = hd_debate_oppose target = prev }
+		}
+		if = {
+			limit = { var:hd_debate_side ?= flag:support }
+			scope:activity = { add_to_guest_subset = { name = hd_debate_support target = prev } }
+		}
+		else_if = {
+			limit = { var:hd_debate_side ?= flag:oppose }
+			scope:activity = { add_to_guest_subset = { name = hd_debate_oppose target = prev } }
+		}
+		else = {
+			scope:activity = { add_to_guest_subset = { name = hd_debate_neutral target = prev } }
+		}
+	}
+}
+
+# Scope：嘉宾。改换阵营为 $SIDE$ 并立即刷新分组
+hd_party_debate_set_side_effect = {
+	set_variable = { name = hd_debate_side value = flag:$SIDE$ days = 120 }
+	scope:activity = { hd_party_debate_apply_sides_effect = yes }
+}
+
+# 改变辩论进度 $VALUE$（Scope：任意，需 scope:activity）
+hd_party_debate_progress_effect = {
+	scope:activity = {
+		hd_party_add_var_effect = { NAME = hd_debate_progress VALUE = $VALUE$ }
+		clamp_variable = { name = hd_debate_progress min = -100 max = 100 }
+	}
+}
+
+# 玩家嘉宾（拥护/反对方）每阶段的小事件（Scope：嘉宾）
+hd_party_debate_guest_event_effect = {
+	if = {
+		limit = {
+			is_ai = no
+			OR = {
+				has_activity_intent = hd_debate_support_intent
+				has_activity_intent = hd_debate_oppose_intent
+			}
+		}
+		trigger_event = { id = hd_party_debate.0040 days = { 2 8 } }
+	}
+}
+
+# 初期：从 6 个事件中随机抽 2 个（Scope：发起人）
+hd_party_debate_early_events_effect = {
+	random_list = {
+		1 = { trigger_event = { id = hd_party_debate.0020 days = 2 } }
+		1 = { trigger_event = { id = hd_party_debate.0021 days = 2 } }
+		1 = { trigger_event = { id = hd_party_debate.0022 days = 2 } }
+	}
+	random_list = {
+		1 = { trigger_event = { id = hd_party_debate.0023 days = 8 } }
+		1 = { trigger_event = { id = hd_party_debate.0024 days = 8 } }
+		1 = { trigger_event = { id = hd_party_debate.0025 days = 8 } }
+	}
+}
+
+# 后期：从 4 个事件中随机抽 2 个（Scope：发起人）
+hd_party_debate_late_events_effect = {
+	random_list = {
+		1 = { trigger_event = { id = hd_party_debate.0030 days = 2 } }
+		1 = { trigger_event = { id = hd_party_debate.0031 days = 2 } }
+	}
+	random_list = {
+		1 = { trigger_event = { id = hd_party_debate.0032 days = 8 } }
+		1 = { trigger_event = { id = hd_party_debate.0033 days = 8 } }
+	}
+}
+
+# 结局（Scope：发起人）
+hd_party_debate_resolve_effect = {
+	save_scope_as = hd_party_debate_host
+	var:hd_party_my_court ?= { save_scope_as = hd_party_court }
+	scope:activity = {
+		save_scope_value_as = { name = hd_party_debate_final value = { value = var:hd_debate_progress add = hd_party_debate_power_mod_value } }
+	}
+	if = {
+		limit = {
+			exists = scope:hd_party_court
+			scope:hd_party_debate_final >= hd_party_debate_success_threshold
+		}
+		scope:activity = { set_variable = { name = hd_debate_result value = flag:success } }
+		hd_party_debate_success_effect = yes
+		trigger_event = hd_party_debate.0090
+	}
+	else = {
+		scope:activity = { set_variable = { name = hd_debate_result value = flag:fail } }
+		hd_party_debate_fail_effect = yes
+		trigger_event = hd_party_debate.0091
+	}
+	hd_party_debate_cleanup_effect = yes
+}
+
+hd_party_debate_success_effect = {
+	add_prestige = 200
+	scope:activity = {
+		every_guest_subset = {
+			name = hd_debate_support
+			limit = { NOT = { this = scope:hd_party_debate_host } }
+			add_prestige = 50
+			add_opinion = { target = scope:hd_party_debate_host modifier = hd_party_debate_support_opinion }
+		}
+	}
+	scope:hd_party_court = {
+		if = {
+			limit = { scope:hd_party_debate_host.var:hd_party_my_group ?= flag:huanguan }
+			if = { limit = { scope:activity.var:hd_debate_target ?= flag:zunwang } hd_party_set_stance_effect = { G = huanguan STANCE = zunwang } }
+			if = { limit = { scope:activity.var:hd_debate_target ?= flag:kaituo } hd_party_set_stance_effect = { G = huanguan STANCE = kaituo } }
+			if = { limit = { scope:activity.var:hd_debate_target ?= flag:jinqu } hd_party_set_stance_effect = { G = huanguan STANCE = jinqu } }
+			if = { limit = { scope:activity.var:hd_debate_target ?= flag:shoujiu } hd_party_set_stance_effect = { G = huanguan STANCE = shoujiu } }
+			if = { limit = { scope:activity.var:hd_debate_target ?= flag:zhongli } hd_party_set_stance_effect = { G = huanguan STANCE = zhongli } }
+			if = {
+				limit = { NOT = { var:hd_party_huanguan_leader ?= scope:hd_party_debate_host } }
+				set_variable = { name = hd_party_huanguan_leader value = scope:hd_party_debate_host }
+				if = {
+					limit = { has_title = title:h_china }
+					situation:dynastic_cycle.situation_participant_group:undecided_movement = {
+						set_variable = { name = movement_leader value = scope:hd_party_debate_host }
+					}
+				}
+			}
+		}
+		if = {
+			limit = { scope:hd_party_debate_host.var:hd_party_my_group ?= flag:waiqi }
+			if = { limit = { scope:activity.var:hd_debate_target ?= flag:zunwang } hd_party_set_stance_effect = { G = waiqi STANCE = zunwang } }
+			if = { limit = { scope:activity.var:hd_debate_target ?= flag:kaituo } hd_party_set_stance_effect = { G = waiqi STANCE = kaituo } }
+			if = { limit = { scope:activity.var:hd_debate_target ?= flag:jinqu } hd_party_set_stance_effect = { G = waiqi STANCE = jinqu } }
+			if = { limit = { scope:activity.var:hd_debate_target ?= flag:shoujiu } hd_party_set_stance_effect = { G = waiqi STANCE = shoujiu } }
+			if = { limit = { scope:activity.var:hd_debate_target ?= flag:zhongli } hd_party_set_stance_effect = { G = waiqi STANCE = zhongli } }
+			if = {
+				limit = { NOT = { var:hd_party_waiqi_leader ?= scope:hd_party_debate_host } }
+				set_variable = { name = hd_party_waiqi_leader value = scope:hd_party_debate_host }
+				if = {
+					limit = { has_title = title:h_china }
+					situation:dynastic_cycle.situation_participant_group:pro_hegemon_movement = {
+						set_variable = { name = movement_leader value = scope:hd_party_debate_host }
+					}
+				}
+			}
+		}
+		if = {
+			limit = { scope:hd_party_debate_host.var:hd_party_my_group ?= flag:wuxun }
+			if = { limit = { scope:activity.var:hd_debate_target ?= flag:zunwang } hd_party_set_stance_effect = { G = wuxun STANCE = zunwang } }
+			if = { limit = { scope:activity.var:hd_debate_target ?= flag:kaituo } hd_party_set_stance_effect = { G = wuxun STANCE = kaituo } }
+			if = { limit = { scope:activity.var:hd_debate_target ?= flag:jinqu } hd_party_set_stance_effect = { G = wuxun STANCE = jinqu } }
+			if = { limit = { scope:activity.var:hd_debate_target ?= flag:shoujiu } hd_party_set_stance_effect = { G = wuxun STANCE = shoujiu } }
+			if = { limit = { scope:activity.var:hd_debate_target ?= flag:zhongli } hd_party_set_stance_effect = { G = wuxun STANCE = zhongli } }
+			if = {
+				limit = { NOT = { var:hd_party_wuxun_leader ?= scope:hd_party_debate_host } }
+				set_variable = { name = hd_party_wuxun_leader value = scope:hd_party_debate_host }
+				if = {
+					limit = { has_title = title:h_china }
+					situation:dynastic_cycle.situation_participant_group:expansion_movement = {
+						set_variable = { name = movement_leader value = scope:hd_party_debate_host }
+					}
+				}
+			}
+		}
+		if = {
+			limit = { scope:hd_party_debate_host.var:hd_party_my_group ?= flag:shizu }
+			if = { limit = { scope:activity.var:hd_debate_target ?= flag:zunwang } hd_party_set_stance_effect = { G = shizu STANCE = zunwang } }
+			if = { limit = { scope:activity.var:hd_debate_target ?= flag:kaituo } hd_party_set_stance_effect = { G = shizu STANCE = kaituo } }
+			if = { limit = { scope:activity.var:hd_debate_target ?= flag:jinqu } hd_party_set_stance_effect = { G = shizu STANCE = jinqu } }
+			if = { limit = { scope:activity.var:hd_debate_target ?= flag:shoujiu } hd_party_set_stance_effect = { G = shizu STANCE = shoujiu } }
+			if = { limit = { scope:activity.var:hd_debate_target ?= flag:zhongli } hd_party_set_stance_effect = { G = shizu STANCE = zhongli } }
+			if = {
+				limit = { NOT = { var:hd_party_shizu_leader ?= scope:hd_party_debate_host } }
+				set_variable = { name = hd_party_shizu_leader value = scope:hd_party_debate_host }
+				if = {
+					limit = { has_title = title:h_china }
+					situation:dynastic_cycle.situation_participant_group:conservative_movement = {
+						set_variable = { name = movement_leader value = scope:hd_party_debate_host }
+					}
+				}
+			}
+		}
+		if = {
+			limit = { scope:hd_party_debate_host.var:hd_party_my_group ?= flag:hanmen }
+			if = { limit = { scope:activity.var:hd_debate_target ?= flag:zunwang } hd_party_set_stance_effect = { G = hanmen STANCE = zunwang } }
+			if = { limit = { scope:activity.var:hd_debate_target ?= flag:kaituo } hd_party_set_stance_effect = { G = hanmen STANCE = kaituo } }
+			if = { limit = { scope:activity.var:hd_debate_target ?= flag:jinqu } hd_party_set_stance_effect = { G = hanmen STANCE = jinqu } }
+			if = { limit = { scope:activity.var:hd_debate_target ?= flag:shoujiu } hd_party_set_stance_effect = { G = hanmen STANCE = shoujiu } }
+			if = { limit = { scope:activity.var:hd_debate_target ?= flag:zhongli } hd_party_set_stance_effect = { G = hanmen STANCE = zhongli } }
+			if = {
+				limit = { NOT = { var:hd_party_hanmen_leader ?= scope:hd_party_debate_host } }
+				set_variable = { name = hd_party_hanmen_leader value = scope:hd_party_debate_host }
+				if = {
+					limit = { has_title = title:h_china }
+					situation:dynastic_cycle.situation_participant_group:advancement_movement = {
+						set_variable = { name = movement_leader value = scope:hd_party_debate_host }
+					}
+				}
+			}
+		}
+	}
+}
+
+hd_party_debate_fail_effect = {
+	add_prestige = -300
+	set_variable = { name = hd_party_leader_ban days = hd_party_debate_lock_days }
+	scope:activity = {
+		every_guest_subset = {
+			name = hd_debate_oppose
+			add_prestige = 50
+		}
+		every_guest_subset = {
+			name = hd_debate_support
+			limit = { NOT = { this = scope:hd_party_debate_host } }
+			add_character_modifier = { modifier = hd_party_debate_disgrace_modifier years = 5 }
+			add_to_list = hd_party_debate_disgraced
+		}
+	}
+	scope:hd_party_court = {
+		if = {
+			limit = { scope:hd_party_debate_host.var:hd_party_my_group ?= flag:huanguan }
+			hd_party_add_var_effect = { NAME = hd_party_huanguan_power_mod VALUE = -100 }
+			set_variable = { name = hd_party_huanguan_debate_lock days = hd_party_debate_lock_days }
+			if = {
+				limit = { var:hd_party_huanguan_leader ?= scope:hd_party_debate_host }
+				remove_variable = hd_party_huanguan_leader
+			}
+			every_in_list = {
+				variable = hd_party_huanguan_top
+				limit = { is_alive = yes }
+				save_temporary_scope_as = hd_party_judge
+				every_in_list = {
+					list = hd_party_debate_disgraced
+					scope:hd_party_judge = { add_opinion = { target = prev modifier = hd_party_debate_disgrace_opinion } }
+				}
+			}
+		}
+		if = {
+			limit = { scope:hd_party_debate_host.var:hd_party_my_group ?= flag:waiqi }
+			hd_party_add_var_effect = { NAME = hd_party_waiqi_power_mod VALUE = -100 }
+			set_variable = { name = hd_party_waiqi_debate_lock days = hd_party_debate_lock_days }
+			if = {
+				limit = { var:hd_party_waiqi_leader ?= scope:hd_party_debate_host }
+				remove_variable = hd_party_waiqi_leader
+			}
+			every_in_list = {
+				variable = hd_party_waiqi_top
+				limit = { is_alive = yes }
+				save_temporary_scope_as = hd_party_judge
+				every_in_list = {
+					list = hd_party_debate_disgraced
+					scope:hd_party_judge = { add_opinion = { target = prev modifier = hd_party_debate_disgrace_opinion } }
+				}
+			}
+		}
+		if = {
+			limit = { scope:hd_party_debate_host.var:hd_party_my_group ?= flag:wuxun }
+			hd_party_add_var_effect = { NAME = hd_party_wuxun_power_mod VALUE = -100 }
+			set_variable = { name = hd_party_wuxun_debate_lock days = hd_party_debate_lock_days }
+			if = {
+				limit = { var:hd_party_wuxun_leader ?= scope:hd_party_debate_host }
+				remove_variable = hd_party_wuxun_leader
+			}
+			every_in_list = {
+				variable = hd_party_wuxun_top
+				limit = { is_alive = yes }
+				save_temporary_scope_as = hd_party_judge
+				every_in_list = {
+					list = hd_party_debate_disgraced
+					scope:hd_party_judge = { add_opinion = { target = prev modifier = hd_party_debate_disgrace_opinion } }
+				}
+			}
+		}
+		if = {
+			limit = { scope:hd_party_debate_host.var:hd_party_my_group ?= flag:shizu }
+			hd_party_add_var_effect = { NAME = hd_party_shizu_power_mod VALUE = -100 }
+			set_variable = { name = hd_party_shizu_debate_lock days = hd_party_debate_lock_days }
+			if = {
+				limit = { var:hd_party_shizu_leader ?= scope:hd_party_debate_host }
+				remove_variable = hd_party_shizu_leader
+			}
+			every_in_list = {
+				variable = hd_party_shizu_top
+				limit = { is_alive = yes }
+				save_temporary_scope_as = hd_party_judge
+				every_in_list = {
+					list = hd_party_debate_disgraced
+					scope:hd_party_judge = { add_opinion = { target = prev modifier = hd_party_debate_disgrace_opinion } }
+				}
+			}
+		}
+		if = {
+			limit = { scope:hd_party_debate_host.var:hd_party_my_group ?= flag:hanmen }
+			hd_party_add_var_effect = { NAME = hd_party_hanmen_power_mod VALUE = -100 }
+			set_variable = { name = hd_party_hanmen_debate_lock days = hd_party_debate_lock_days }
+			if = {
+				limit = { var:hd_party_hanmen_leader ?= scope:hd_party_debate_host }
+				remove_variable = hd_party_hanmen_leader
+			}
+			every_in_list = {
+				variable = hd_party_hanmen_top
+				limit = { is_alive = yes }
+				save_temporary_scope_as = hd_party_judge
+				every_in_list = {
+					list = hd_party_debate_disgraced
+					scope:hd_party_judge = { add_opinion = { target = prev modifier = hd_party_debate_disgrace_opinion } }
+				}
+			}
+		}
+	}
+}
+
+# Scope：发起人。在发起人事件中取得活动与反对方领头人
+hd_party_debate_event_setup_effect = {
+	involved_activity ?= { save_scope_as = activity }
+	scope:activity ?= {
+		activity_host = { save_scope_as = host }
+		ordered_guest_subset = {
+			name = hd_debate_oppose
+			limit = { NOT = { this = scope:host } }
+			order_by = hd_party_debate_sort_value
+			save_scope_as = hd_party_debate_rival
+		}
+	}
+}
+
+
+# 请圣裁的代价（Scope：君主，scope:hd_party_court）
+# 支持发起人：与目标立场对立的朋党满意度 −10；支持反对方：发起辩论的朋党满意度 −10
+hd_party_debate_arbitrate_effect = {
+	save_temporary_scope_value_as = { name = hd_party_arb_side value = flag:$SIDE$ }
+	if = {
+		limit = { scope:hd_party_arb_side = flag:support }
+		if = {
+			limit = {
+				OR = {
+					AND = { scope:activity.var:hd_debate_target ?= flag:jinqu var:hd_party_huanguan_stance ?= flag:shoujiu }
+					AND = { scope:activity.var:hd_debate_target ?= flag:kaituo var:hd_party_huanguan_stance ?= flag:shoujiu }
+					AND = { scope:activity.var:hd_debate_target ?= flag:shoujiu var:hd_party_huanguan_stance ?= flag:jinqu }
+					AND = { scope:activity.var:hd_debate_target ?= flag:shoujiu var:hd_party_huanguan_stance ?= flag:kaituo }
+				}
+			}
+			hd_party_add_var_effect = { NAME = hd_party_huanguan_sat_mod VALUE = -10 }
+		}
+		if = {
+			limit = {
+				OR = {
+					AND = { scope:activity.var:hd_debate_target ?= flag:jinqu var:hd_party_waiqi_stance ?= flag:shoujiu }
+					AND = { scope:activity.var:hd_debate_target ?= flag:kaituo var:hd_party_waiqi_stance ?= flag:shoujiu }
+					AND = { scope:activity.var:hd_debate_target ?= flag:shoujiu var:hd_party_waiqi_stance ?= flag:jinqu }
+					AND = { scope:activity.var:hd_debate_target ?= flag:shoujiu var:hd_party_waiqi_stance ?= flag:kaituo }
+				}
+			}
+			hd_party_add_var_effect = { NAME = hd_party_waiqi_sat_mod VALUE = -10 }
+		}
+		if = {
+			limit = {
+				OR = {
+					AND = { scope:activity.var:hd_debate_target ?= flag:jinqu var:hd_party_wuxun_stance ?= flag:shoujiu }
+					AND = { scope:activity.var:hd_debate_target ?= flag:kaituo var:hd_party_wuxun_stance ?= flag:shoujiu }
+					AND = { scope:activity.var:hd_debate_target ?= flag:shoujiu var:hd_party_wuxun_stance ?= flag:jinqu }
+					AND = { scope:activity.var:hd_debate_target ?= flag:shoujiu var:hd_party_wuxun_stance ?= flag:kaituo }
+				}
+			}
+			hd_party_add_var_effect = { NAME = hd_party_wuxun_sat_mod VALUE = -10 }
+		}
+		if = {
+			limit = {
+				OR = {
+					AND = { scope:activity.var:hd_debate_target ?= flag:jinqu var:hd_party_shizu_stance ?= flag:shoujiu }
+					AND = { scope:activity.var:hd_debate_target ?= flag:kaituo var:hd_party_shizu_stance ?= flag:shoujiu }
+					AND = { scope:activity.var:hd_debate_target ?= flag:shoujiu var:hd_party_shizu_stance ?= flag:jinqu }
+					AND = { scope:activity.var:hd_debate_target ?= flag:shoujiu var:hd_party_shizu_stance ?= flag:kaituo }
+				}
+			}
+			hd_party_add_var_effect = { NAME = hd_party_shizu_sat_mod VALUE = -10 }
+		}
+		if = {
+			limit = {
+				OR = {
+					AND = { scope:activity.var:hd_debate_target ?= flag:jinqu var:hd_party_hanmen_stance ?= flag:shoujiu }
+					AND = { scope:activity.var:hd_debate_target ?= flag:kaituo var:hd_party_hanmen_stance ?= flag:shoujiu }
+					AND = { scope:activity.var:hd_debate_target ?= flag:shoujiu var:hd_party_hanmen_stance ?= flag:jinqu }
+					AND = { scope:activity.var:hd_debate_target ?= flag:shoujiu var:hd_party_hanmen_stance ?= flag:kaituo }
+				}
+			}
+			hd_party_add_var_effect = { NAME = hd_party_hanmen_sat_mod VALUE = -10 }
+		}
+	}
+	else = {
+		if = { limit = { scope:host.var:hd_party_my_group ?= flag:huanguan } hd_party_add_var_effect = { NAME = hd_party_huanguan_sat_mod VALUE = -10 } }
+		if = { limit = { scope:host.var:hd_party_my_group ?= flag:waiqi } hd_party_add_var_effect = { NAME = hd_party_waiqi_sat_mod VALUE = -10 } }
+		if = { limit = { scope:host.var:hd_party_my_group ?= flag:wuxun } hd_party_add_var_effect = { NAME = hd_party_wuxun_sat_mod VALUE = -10 } }
+		if = { limit = { scope:host.var:hd_party_my_group ?= flag:shizu } hd_party_add_var_effect = { NAME = hd_party_shizu_sat_mod VALUE = -10 } }
+		if = { limit = { scope:host.var:hd_party_my_group ?= flag:hanmen } hd_party_add_var_effect = { NAME = hd_party_hanmen_sat_mod VALUE = -10 } }
+	}
+}

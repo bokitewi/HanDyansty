@@ -90,9 +90,10 @@ E.append('''	}
 		}
 		hd_party_loyalty_by_code_effect = yes
 	}
-	option = { # 威望 1000
+	option = { # 威望 1000（仅限有影响力的政体；无影响力政体走 c 的威望 300）
 		name = hd_party.0020.d
 		trigger = {
+			government_has_flag = government_has_influence
 			prestige >= hd_party_loyalty_prestige_cost
 		}
 		add_prestige = {
@@ -144,6 +145,7 @@ hd_party.0101 = {
 	}
 	option = {
 		name = hd_party.0101.a
+		custom_tooltip = hd_party.0101.a.tt
 		hd_party_set_policy_effect = { G = hanmen POLICY = neutral }
 	}
 }
@@ -152,29 +154,54 @@ namespace = hd_party_chain
 ''')
 
 # ---------------------------------------------------------- chain events
-COMMON_ACCEPT = '''		hd_party_add_var_effect = { NAME = hd_party_%(g)s_sat_mod VALUE = 15 }
+# 2026-10-09 文本重写（U11）：满意度/势力变量变化在界面上不可见，各选项加一句叙事提示（hd_party_tt_*，见 gen_party_loc.py）
+def resent(x):
+    return '\t\tcustom_tooltip = hd_party_tt_%s_resent\n' % x
+COMMON_ACCEPT = '''		custom_tooltip = hd_party_tt_%(g)s_pleased
+		hd_party_add_var_effect = { NAME = hd_party_%(g)s_sat_mod VALUE = 15 }
 		hd_party_add_var_effect = { NAME = hd_party_%(g)s_power_mod VALUE = %(pw)d }
 		set_variable = { name = hd_party_%(g)s_chain_stage value = %(s)d }
 '''
-COMMON_COMP = '''		hd_party_add_var_effect = { NAME = hd_party_%(g)s_sat_mod VALUE = 5 }
+COMMON_COMP = '''		custom_tooltip = hd_party_tt_%(g)s_soothed
+		hd_party_add_var_effect = { NAME = hd_party_%(g)s_sat_mod VALUE = 5 }
 		set_variable = { name = hd_party_%(g)s_chain_stage value = %(s)d }
 '''
-COMMON_REFUSE = '''		hd_party_add_var_effect = { NAME = hd_party_%(g)s_sat_mod VALUE = -15 }
+COMMON_REFUSE = '''		custom_tooltip = hd_party_tt_%(g)s_resent
+		hd_party_add_var_effect = { NAME = hd_party_%(g)s_sat_mod VALUE = -15 }
 		set_variable = hd_party_%(g)s_chain_paused
 		var:hd_party_%(g)s_leader ?= { add_opinion = { target = root modifier = hd_party_chain_refused_opinion } }
 '''
 def others(g, val, skip=()):
     return ''.join('\t\thd_party_add_var_effect = { NAME = hd_party_%s_sat_mod VALUE = %d }\n' % (x, val) for x in G if x != g and x not in skip)
-STAGE3_ACCEPT = '''		hd_party_add_var_effect = { NAME = hd_party_%(g)s_power_mod VALUE = 150 }
+STAGE3_ACCEPT = '''		custom_tooltip = hd_party_tt_%(g)s_dominant
+		custom_tooltip = hd_party_tt_others_resent
+		hd_party_add_var_effect = { NAME = hd_party_%(g)s_power_mod VALUE = 150 }
 		set_variable = { name = hd_party_%(g)s_chain_stage value = 3 }
 		add_character_modifier = { modifier = hd_party_dominant_modifier years = 10 }
 '''
-STAGE3_REFUSE = '''		hd_party_add_var_effect = { NAME = hd_party_%(g)s_sat_mod VALUE = -25 }
+STAGE3_REFUSE = '''		custom_tooltip = hd_party_tt_%(g)s_resent
+		hd_party_add_var_effect = { NAME = hd_party_%(g)s_sat_mod VALUE = -25 }
 		set_variable = hd_party_%(g)s_chain_paused
 		hd_party_refresh_party_effect = { G = %(g)s }
 '''
 # helpers
-GIVE_COUNTY = '''		random_held_title = {
+GIVE_COUNTY = '''		trigger = {	# 2026-10-09 C2：无县可赐时改付 200 金，须有足额金钱
+			trigger_if = {
+				limit = {
+					NOT = {
+						AND = {
+							domain_size >= 3
+							any_held_title = {
+								tier = tier_county
+								NOT = { this = root.capital_county }
+							}
+						}
+					}
+				}
+				gold >= 200
+			}
+		}
+		random_held_title = {
 			limit = {
 				tier = tier_county
 				NOT = { this = root.capital_county }
@@ -231,7 +258,8 @@ def temp_office(g, n):
 			add_character_modifier = { modifier = WJ_temp_official_modifier years = 3 }
 		}
 ''' % (g, n)
-COMP_GOLD = '''		scope:hd_party_chain_leader ?= { save_scope_as = hd_party_chain_target }
+COMP_GOLD = '''		trigger = { gold >= 100 }	# 2026-10-09 C2：付 100 金须有足额金钱
+		scope:hd_party_chain_leader ?= { save_scope_as = hd_party_chain_target }
 		if = {
 			limit = { exists = scope:hd_party_chain_target }
 			pay_short_term_gold = { target = scope:hd_party_chain_target gold = 100 }
@@ -242,7 +270,7 @@ COMP_PRESTIGE = '''		add_prestige = -100
 '''
 SPEC = {
  ('waiqi', 1): (GIVE_COUNTY, COMP_GOLD),
- ('waiqi', 2): (rank('WJ_mr_jiangjun_qian') + '\t\thd_party_add_var_effect = { NAME = hd_party_wuxun_sat_mod VALUE = -10 }\n', COMP_PRESTIGE),
+ ('waiqi', 2): (rank('WJ_mr_jiangjun_qian') + resent('wuxun') + '\t\thd_party_add_var_effect = { NAME = hd_party_wuxun_sat_mod VALUE = -10 }\n', COMP_PRESTIGE),
  ('waiqi', 3): ('\t\tdesignate_diarch = scope:hd_party_chain_leader\n' + others('waiqi', -15), None),
  ('huanguan', 1): ('''		if = {
 			limit = {
@@ -255,25 +283,25 @@ SPEC = {
 			}
 		}
 ''', COMP_GOLD),
- ('huanguan', 2): (rank('WJ_mr_xiaowei_huben') + '\t\thd_party_add_var_effect = { NAME = hd_party_wuxun_sat_mod VALUE = -15 }\n', COMP_PRESTIGE),
+ ('huanguan', 2): (rank('WJ_mr_xiaowei_huben') + resent('wuxun') + '\t\thd_party_add_var_effect = { NAME = hd_party_wuxun_sat_mod VALUE = -15 }\n', COMP_PRESTIGE),
  ('huanguan', 3): ('\t\tadd_character_modifier = { modifier = hd_party_chain_huanguan_power_modifier years = 10 }\n'
                    '\t\thd_party_add_var_effect = { NAME = hd_party_hanmen_sat_mod VALUE = -20 }\n\t\thd_party_add_var_effect = { NAME = hd_party_waiqi_sat_mod VALUE = -20 }\n'
                    + others('huanguan', -15, ('hanmen', 'waiqi')), None),
- ('hanmen', 1): ('\t\tremove_short_term_gold = 100\n' + temp_office('hanmen', 2), temp_office('hanmen', 1)),
- ('hanmen', 2): ('\t\tadd_prestige = 200\n\t\thd_party_add_var_effect = { NAME = hd_party_huanguan_sat_mod VALUE = -15 }\n', COMP_PRESTIGE),
+ ('hanmen', 1): ('\t\ttrigger = { gold >= 100 }\n\t\tremove_short_term_gold = 100\n' + temp_office('hanmen', 2), temp_office('hanmen', 1)),  # 2026-10-09 C2：51.a 付 100 金须有足额金钱
+ ('hanmen', 2): ('\t\tadd_prestige = 200\n' + resent('huanguan') + '\t\thd_party_add_var_effect = { NAME = hd_party_huanguan_sat_mod VALUE = -15 }\n', COMP_PRESTIGE),
  ('hanmen', 3): ('''		scope:hd_party_chain_leader ?= {
 			add_character_modifier = { modifier = WJ_temp_official_modifier years = 5 }
 		}
 		hd_party_add_var_effect = { NAME = hd_party_shizu_sat_mod VALUE = -20 }
 ''' + others('hanmen', -15, ('shizu',)), None),
- ('shizu', 1): (temp_office('shizu', 2) + '\t\thd_party_add_var_effect = { NAME = hd_party_hanmen_sat_mod VALUE = -10 }\n', temp_office('shizu', 1)),
+ ('shizu', 1): (temp_office('shizu', 2) + resent('hanmen') + '\t\thd_party_add_var_effect = { NAME = hd_party_hanmen_sat_mod VALUE = -10 }\n', temp_office('shizu', 1)),
  ('shizu', 2): ('''		every_in_list = {
 			variable = hd_party_shizu_members
 			limit = { is_alive = yes }
 			add_character_modifier = { modifier = hd_party_chain_shizu_land_member_modifier years = 10 }
 		}
 		add_character_modifier = { modifier = hd_party_chain_shizu_land_ruler_modifier years = 10 }
-''', COMP_GOLD),
+''', ''),  # 2026-10-09 U11："略加约束"不再付给世族领袖 100 金（文案为约束，非赏赐）
  ('shizu', 3): ('\t\thd_party_add_var_effect = { NAME = hd_party_hanmen_sat_mod VALUE = -30 }\n' + others('shizu', -15, ('hanmen',)), None),
  ('wuxun', 1): (rank('WJ_mr_jiangjun_qian'), COMP_GOLD),
  ('wuxun', 2): ('''		every_in_list = {
@@ -282,7 +310,7 @@ SPEC = {
 			add_character_modifier = { modifier = hd_party_chain_wuxun_border_member_modifier years = 10 }
 		}
 		add_character_modifier = { modifier = hd_party_chain_wuxun_border_ruler_modifier years = 10 }
-''', COMP_PRESTIGE),
+''', COMP_GOLD),  # 2026-10-09 U11："赐以钱粮"改为付金（原为威望转移）
  ('wuxun', 3): ('\t\tadd_character_modifier = { modifier = hd_party_chain_wuxun_arrogant_modifier years = 10 }\n'
                 '\t\thd_party_add_var_effect = { NAME = hd_party_huanguan_sat_mod VALUE = -15 }\n\t\thd_party_add_var_effect = { NAME = hd_party_hanmen_sat_mod VALUE = -15 }\n'
                 + others('wuxun', -15, ('huanguan', 'hanmen')), None),

@@ -1,0 +1,1537 @@
+﻿# Original definitions preserved; only the district acceptance modifier is inserted.
+
+enforce_truce_interaction = {
+	category = interaction_category_diplomacy
+	interface_priority = 30
+	common_interaction = yes
+	interface = interfere_in_war
+	special_interaction = interfere_in_war_interaction
+	popup_on_receive = yes
+	desc = enforce_truce_interaction_desc
+	icon = icon_retreat
+
+	greeting = positive
+	notification_text = enforce_truce_interaction_notification
+
+	cooldown = { years = 5 }
+
+	is_shown = {
+		OR = {
+			# 天朝循环·时代特色：对峙期开放强制停战（双方均在天下之内）
+			AND = {
+				scope:actor = {
+					hd_dc_kit_sta_tools_trigger = yes
+					primary_title.tier >= tier_duchy
+				}
+				scope:recipient = {
+					hd_dc_kit_sta_tools_trigger = yes
+					tier_difference = {
+						target = scope:actor
+						value <= 0
+					}
+				}
+			}
+			# During the Struggle
+			AND = {
+				scope:actor = {
+					any_character_struggle = {
+						involvement = involved
+						has_struggle_phase_parameter = unlocks_enforce_truces_interaction
+
+					}
+					primary_title.tier >= tier_duchy
+				}
+				scope:recipient = {
+					any_character_struggle = {
+						involvement = involved
+						has_struggle_phase_parameter = unlocks_enforce_truces_interaction
+
+					}
+					tier_difference = {
+						target = scope:actor
+						value <= 0
+					}
+				}
+			}
+			# Comrpomise ending
+			AND = {
+				scope:actor = {
+					primary_title.tier >= tier_duchy
+					exists = house
+					house = {
+						has_house_modifier = fp2_struggle_compromise_house_reward_modifier
+					}
+				}
+				scope:recipient = { # Primary title in Iberia
+					exists = house
+					house = {
+						has_house_modifier = fp2_struggle_compromise_house_reward_modifier
+					}
+					tier_difference = {
+						target = scope:actor
+						value <= 0
+					}
+				}
+			}
+		}
+	}
+
+	is_valid_showing_failures_only = {
+		scope:recipient = {
+			is_at_war = yes
+			trigger_if = {	# 天朝循环·时代特色：对峙期
+				limit = {
+					scope:actor = { hd_dc_kit_sta_tools_trigger = yes }
+				}
+				hd_dc_kit_sta_tools_trigger = yes
+			}
+			trigger_else_if = {
+				limit = {
+					scope:actor = {
+						any_character_struggle = {
+							involvement = involved
+							has_struggle_phase_parameter = unlocks_enforce_truces_interaction
+							is_secondary_character_involvement_involved_trigger = { CHAR = scope:recipient }
+						}
+					}
+				}
+				any_character_struggle = {
+					involvement = involved
+					has_struggle_phase_parameter = unlocks_enforce_truces_interaction
+				}
+			}
+			trigger_else = {
+				exists = house
+				house = {
+					has_house_modifier = fp2_struggle_compromise_house_reward_modifier
+				}
+			}
+
+			custom_tooltip = {
+				text = fp2_enforce_truce_liege_or_independent_tt
+				OR = {
+					top_liege = this
+					top_liege = scope:actor.top_liege
+					any_character_war = {
+						primary_attacker = {
+							NOR = {
+								this = scope:recipient
+								this = scope:actor
+							}
+							OR = {
+								top_liege = this
+								top_liege = scope:actor.top_liege
+							}
+						}
+					}
+					any_character_war = {
+						primary_defender = {
+							NOR = {
+								this = scope:recipient
+								this = scope:actor
+							}
+							OR = {
+								top_liege = this
+								top_liege = scope:actor.top_liege
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	can_be_picked = {
+		# Recipient is war leader in chosen war
+		exists = scope:target
+		scope:target = {
+			is_war_leader = scope:recipient
+			is_civil_war = no
+			NOT = { using_cb = fp2_border_raid }
+			trigger_if = {	# 天朝循环·时代特色：对峙期，交战双方首领均须在天下之内
+				limit = {
+					scope:recipient = { hd_dc_kit_sta_tools_trigger = yes }
+				}
+				primary_attacker = { hd_dc_in_china_trigger = yes }
+				primary_defender = { hd_dc_in_china_trigger = yes }
+			}
+			trigger_else_if = {
+				limit = {
+					scope:recipient = {
+						any_character_struggle = {
+							involvement = involved
+						}
+					}
+				}
+				trigger_if = {
+					limit = { primary_attacker = scope:recipient }
+					primary_defender = { fp2_struggle_enforce_truce_war_leader_trigger = yes }
+				}
+				trigger_else = {
+					primary_attacker = { fp2_struggle_enforce_truce_war_leader_trigger = yes }
+				}
+			}
+			trigger_else = {
+				scope:recipient = {
+					capital_county.title_province = { geographical_region = world_europe_west_iberia }
+				}
+			}
+
+		}
+	}
+
+	on_accept = {
+		# End war and apply opinion/stress
+		if = {
+			limit = { exists = scope:target }
+			scope:target = {
+				primary_attacker = { save_scope_as = truce_1 }
+				primary_defender = { save_scope_as = truce_2 }
+			}
+			show_as_tooltip = {
+				scope:truce_1 = { add_prestige = minor_prestige_loss }
+				scope:truce_2 = { add_prestige = minor_prestige_loss }
+			}
+			scope:actor = {
+				fp2_enforce_truce_opinion_effect = yes
+				# Best format for interaction interface
+				show_as_tooltip = {
+					scope:truce_1 = {
+						add_truce_one_way = {
+							character = scope:truce_2
+							years = fp2_enforce_truce_duration_value
+							name = TRUCE_ENFORCE_TRUCE
+						}
+					}
+					scope:truce_2 = {
+						add_truce_one_way = {
+							character = scope:truce_1
+							years = fp2_enforce_truce_duration_value
+							name = TRUCE_ENFORCE_TRUCE
+						}
+					}
+				}
+				custom_tooltip = fp2_enforce_truce_peacemaker_tt
+				hidden_effect = {
+					add_truce_one_way = {
+						character = scope:target.primary_attacker
+						years = fp2_enforce_truce_duration_value
+						name = TRUCE_ENFORCE_TRUCE
+					}
+					add_truce_one_way = {
+						character = scope:target.primary_defender
+						years = fp2_enforce_truce_duration_value
+						name = TRUCE_ENFORCE_TRUCE
+					}
+					# Best format for toast
+					send_interface_message = {
+						type = event_truce_neutral
+						title = enforce_truce_interaction_actor_toast
+						left_icon = scope:truce_1
+						right_icon = scope:truce_2
+						show_as_tooltip = { fp2_enforce_truce_opinion_effect = yes }
+						custom_tooltip = fp2_enforce_truce_other_tt
+						custom_tooltip = fp2_enforce_truce_peacemaker_tt
+					}
+				}
+			}
+			hidden_effect = {
+				scope:truce_1 = {
+					send_interface_message = {
+						type = event_truce_neutral
+						title = enforce_truce_interaction_toast
+						left_icon = scope:actor
+						right_icon = scope:truce_2
+						add_prestige = minor_prestige_loss
+						show_as_tooltip = {
+							scope:target = { end_war = white_peace }
+							add_truce_both_ways = {
+								character = scope:truce_2
+								years = fp2_enforce_truce_duration_value
+								name = TRUCE_ENFORCE_TRUCE
+							}
+							scope:actor = {
+								add_truce_one_way = {
+									character = scope:truce_1
+									years = fp2_enforce_truce_duration_value
+									name = TRUCE_ENFORCE_TRUCE
+								}
+							}
+						}
+						stress_impact = {
+							wrathful = minor_stress_impact_gain
+							brave = minor_stress_impact_gain
+							ambitious = minor_stress_impact_gain
+						}
+					}
+				}
+				scope:truce_2 = {
+					send_interface_message = {
+						type = event_truce_neutral
+						title = enforce_truce_interaction_toast
+						left_icon = scope:actor
+						right_icon = scope:truce_1
+						add_prestige = minor_prestige_loss
+						show_as_tooltip = {
+							scope:target = { end_war = white_peace }
+							add_truce_both_ways = {
+								character = scope:truce_1
+								years = fp2_enforce_truce_duration_value
+								name = TRUCE_ENFORCE_TRUCE
+							}
+							scope:actor = {
+								add_truce_one_way = {
+									character = scope:truce_2
+									years = fp2_enforce_truce_duration_value
+									name = TRUCE_ENFORCE_TRUCE
+								}
+							}
+						}
+						stress_impact = {
+							wrathful = minor_stress_impact_gain
+							brave = minor_stress_impact_gain
+							ambitious = minor_stress_impact_gain
+						}
+					}
+				}
+			}
+			scope:target = { end_war = white_peace }
+			# 天朝循环·时代特色：强制停战计入“盟约”（对峙期诱因，缓和 → 延长对峙）
+			hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_truce_bought ACTOR = scope:actor }
+			if = {
+				limit = {
+					scope:actor = {
+						any_character_struggle = {
+							involvement = involved
+							activate_struggle_catalyst_secondary_character_involvement_involved_trigger = {
+								CATALYST = catalyst_truce_was_enforced
+								CHAR = scope:target
+							}
+						}
+					}
+				}
+				every_character_struggle = {
+					involvement = involved
+					activate_struggle_catalyst = {
+						catalyst = catalyst_truce_was_enforced
+						character = scope:actor
+					}
+				}
+
+			}
+		}
+
+		# If we're a clan this interaction affects unity
+		add_clan_unity_interaction_effect = {
+			CHARACTER = scope:actor
+			TARGET = scope:recipient
+			VALUE = medium_unity_gain
+			DESC = clan_unity_enforce_truce.desc
+			REVERSE_NON_HOUSE_TARGET = no
+		}
+	}
+
+	on_decline = {
+		# Refusal notification
+		scope:actor = { trigger_event = char_interaction.0236 }
+
+		# If we're a clan this interaction affects unity
+		add_clan_unity_interaction_effect = {
+			CHARACTER = scope:recipient
+			TARGET = scope:actor
+			VALUE = medium_unity_loss
+			DESC = clan_unity_enforce_truce_decline.desc
+			REVERSE_NON_HOUSE_TARGET = no
+		}
+	}
+
+	ai_accept = {
+		WJ_dd_jie_acceptance_modifier = yes
+		base = -50 # Reluctant to end war without reason
+		# Recipient only just begun
+		modifier = {
+			add = -25
+			trigger_if = {
+				limit = { exists = scope:target }
+				scope:target.war_days < 180
+			}
+			trigger_else = { always = no }
+			desc = ET_AI_WAR_NEW_REASON
+		}
+		# Recipient drags on
+		modifier = {
+			add = 25
+			trigger_if = {
+				limit = { exists = scope:target }
+				scope:target.war_days > 1095
+			}
+			trigger_else = { always = no }
+			desc = ET_AI_WAR_OLD_REASON
+		}
+		# Recipient is defender
+		modifier = {
+			add = 25
+			trigger_if = {
+				limit = { exists = scope:target }
+				scope:recipient = scope:target.primary_defender
+			}
+			trigger_else = { always = no }
+			desc = OA_AI_DEFENSIVE_WAR_REASON
+		}
+		# Recipient drags on
+		modifier = {
+			add = 25
+			scope:recipient = { is_allied_to = scope:actor }
+			desc = ET_AI_ALLY_REASON
+		}
+		# Recipient is vassal
+		modifier = {
+			add = 25
+			scope:recipient = { target_is_liege_or_above = scope:actor }
+			desc = ET_AI_LIEGE_REASON
+		}
+		# Recipient is losing
+		modifier = {
+			add = 25
+			trigger_if = {
+				limit = { exists = scope:target }
+				trigger_if = {
+					limit = { scope:recipient = scope:target.primary_defender }
+					scope:target = { attacker_war_score >= fp2_enforce_truce_war_score_value }
+				}
+				trigger_else = {
+					scope:target = { defender_war_score >= fp2_enforce_truce_war_score_value }
+				}
+			}
+			trigger_else = { always = no }
+			desc = OA_AI_LOSING_WAR_REASON
+		}
+		# Recipient is very outnumbered
+		modifier = {
+			add = 25
+			trigger_if = {
+				limit = { exists = scope:target }
+				scope:target = { fp2_struggle_contract_assistance_war_outnumbered_trigger = yes }
+			}
+			trigger_else = {
+				any_character_war = { fp2_struggle_contract_assistance_war_outnumbered_trigger = yes }
+			}
+			desc = OA_AI_OUTNUMBERED_REASON
+		}
+		# Recipient is very outnumbered
+		modifier = {
+			add = -25
+			trigger_if = {
+				limit = { exists = scope:target }
+				scope:target = { fp2_struggle_contract_assistance_war_outnumbering_trigger = yes }
+			}
+			trigger_else = {
+				any_character_war = { fp2_struggle_contract_assistance_war_outnumbering_trigger = yes }
+			}
+			desc = OA_AI_OUTNUMBER_ENEMY_REASON
+		}
+		# Actor cannot enforce truce
+		modifier = {
+			add = -50
+			trigger_if = {
+				limit = { exists = scope:target }
+				OR = {
+					scope:target.war_attacker_total_strength_halved_value > scope:actor.max_military_strength
+					scope:target.war_defender_total_strength_halved_value > scope:actor.max_military_strength
+				}
+			}
+			trigger_else = { always = no }
+			desc = ET_AI_SMALL_ARMY_REASON
+		}
+		# Recipient holy war
+		modifier = {
+			add = -25
+			trigger_if = {
+				limit = { exists = scope:target }
+				scope:recipient = {
+					NOT = { has_trait = cynical }
+				}
+				scope:target = {
+					OR = {
+						using_cb = minor_religious_war
+						using_cb = religious_war
+						using_cb = major_religious_war
+					}
+				}
+			}
+			trigger_else = { always = no }
+			desc = ET_AI_HOLY_WAR_REASON
+		}
+		# Actor is religious head
+		modifier = {
+			add = 25
+			scope:recipient.faith.religious_head = scope:actor
+			desc = ET_AI_HOF_REASON
+		}
+		# Dynasty head
+		modifier = {
+			add = 50
+			scope:recipient.dynasty.dynast = scope:actor
+			desc = ET_AI_DYNAST_REASON
+		}
+		# House head
+		modifier = {
+			add = 25
+			scope:recipient.dynasty.dynast != scope:actor
+			scope:recipient.house.house_head = scope:actor
+			desc = ET_AI_HOUSE_HEAD_REASON
+		}
+		# Opinion Factor
+		opinion_modifier = {
+			who = scope:recipient
+			opinion_target = scope:actor
+			multiplier = 1
+			desc = AI_OPINION_REASON
+		}
+		# Honor factor
+		ai_value_modifier = {
+			ai_boldness = -0.5
+			max = 0
+		}
+	}
+
+	ai_potential = {
+		is_imprisoned = no
+	}
+	ai_target_quick_trigger = { adult = yes }
+	ai_targets = {
+		ai_recipients = neighboring_rulers
+		ai_recipients = peer_vassals
+		max = 15
+	}
+	ai_frequency_by_tier = {
+		barony = 0
+		county = 72
+		duchy = 36
+		kingdom = 24
+		empire = 24
+		hegemony = 24
+	}
+}
+
+propose_best_friendship_interaction = {
+	interface_priority = 30
+	icon = icon_personal
+	category = interaction_category_friendly
+	common_interaction = yes
+	desc = propose_best_friendship_interaction_desc
+
+	greeting = positive
+	notification_text = PROPOSE_BEST_FRIENDSHIP_NOTIFICATION
+	popup_on_receive = yes
+	ai_maybe = yes
+
+	cooldown = { years = 5 }
+	cooldown_against_recipient = { years = 10 }
+
+	is_shown = {
+		# Scope:actor needs to have a suitable CulTrad.
+		scope:actor = {
+			culture = { has_cultural_parameter = may_propose_best_friendship }
+		}
+		# Scope:actor needs to have scope:recipient as a friend.
+		scope:actor = { has_relation_friend = scope:recipient }
+	}
+
+	is_valid_showing_failures_only = {
+		# Both characters must be available adults.
+		scope:actor = { is_available_adult = yes }
+		scope:recipient = { is_available_adult = yes }
+		# We can't do most of the standard checks for can_set_relation_best_friend_trigger, but we do the relevant ones individually.
+		custom_tooltip = {
+			text = propose_best_friendship_interaction.tt.already_best_friends
+			scope:actor = {
+				NOT = { has_relation_best_friend = scope:recipient }
+			}
+		}
+		trigger_if = {
+			limit = {
+				NOT = {
+					scope:actor = { has_relation_best_friend = scope:recipient }
+				}
+			}
+			custom_tooltip = {
+				text = propose_best_friendship_interaction.tt.actor_has_best_friend
+				scope:actor = { num_of_relation_best_friend = 0 }
+			}
+		}
+		trigger_if = {
+			limit = {
+				NOT = {
+					scope:recipient = { has_relation_best_friend = scope:actor }
+				}
+			}
+			custom_tooltip = {
+				text = propose_best_friendship_interaction.tt.recipient_has_best_friend
+				scope:recipient = { num_of_relation_best_friend = 0 }
+			}
+		}
+	}
+	
+	on_accept = {
+		# Notifications with most effects.
+		scope:actor = {
+			send_interface_toast = {
+				type = event_toast_effect_good
+				title = propose_best_friendship_interaction.accept.actor.tt
+				left_icon = scope:recipient
+				# Become best friends.
+				show_as_tooltip = { set_relation_best_friend = scope:recipient }
+				# Gain some strong opinion bonuses as a result.
+				reverse_add_opinion = {
+					target = scope:recipient
+					modifier = friendliness_opinion
+					opinion = 50
+				}
+				# The hookening.
+				## Due to some weird order-of-operations stuff, we enclose this in an if statement.
+				if = {
+					limit = {
+						NOT = {
+							has_hook_of_type = {
+								target = scope:recipient
+								type = ritual_best_friend_hook
+							}
+						}
+						can_add_hook = {
+							target = scope:recipient
+							type = ritual_best_friend_hook
+						}
+					}
+					add_hook = {
+						type = ritual_best_friend_hook
+						target = scope:recipient
+					}
+				}
+			}
+		}
+		scope:recipient = {
+			send_interface_toast = {
+				type = event_toast_effect_neutral
+				title = propose_best_friendship_interaction.accept.recipient.tt
+				left_icon = scope:actor
+				# Become best friends.
+				show_as_tooltip = { set_relation_best_friend = scope:actor }
+				# Gain some strong opinion bonuses as a result.
+				reverse_add_opinion = {
+					target = scope:actor
+					modifier = friendliness_opinion
+					opinion = 50
+				}
+				# The hookening part #2.
+				## Due to some weird order-of-operations stuff, we enclose this in an if statement.
+				if = {
+					limit = {
+						NOT = {
+							has_hook_of_type = {
+								target = scope:actor
+								type = ritual_best_friend_hook
+							}
+						}
+						can_add_hook = {
+							target = scope:actor
+							type = ritual_best_friend_hook
+						}
+					}
+					add_hook = {
+						type = ritual_best_friend_hook
+						target = scope:actor
+					}
+				}
+			}
+		}
+		# Then we apply the actual friendship.
+		hidden_effect = {
+			scope:actor = {
+				if = {
+					limit = {
+						NOT = { has_relation_best_friend = scope:recipient }
+					}
+					set_relation_best_friend = { reason = best_friend_sworn copy_reason = friend target = scope:recipient }
+				}
+			}
+		}
+
+		# If we're a clan this interaction affects unity
+		add_clan_unity_interaction_effect = {
+			CHARACTER = scope:actor
+			TARGET = scope:recipient
+			VALUE = minor_unity_gain
+			DESC = clan_unity_oath_of_true_friendship.desc
+			REVERSE_NON_HOUSE_TARGET = no
+		}
+	}
+	
+	on_decline = {
+		# Scope:actor gains some stress over the whole ordeal.
+		scope:actor = {
+			send_interface_toast = {
+				type = event_toast_effect_bad
+				title = propose_best_friendship_interaction.decline.actor.tt
+				left_icon = scope:recipient
+				add_stress = medium_stress_gain
+			}
+		}
+		# Scope:actor loses opinion of scope:recipient.
+		scope:recipient = {
+			send_interface_toast = {
+				type = event_toast_effect_neutral
+				title = propose_best_friendship_interaction.decline.recipient.tt
+				left_icon = scope:actor
+				scope:actor = {
+					add_opinion = {
+						target = scope:recipient
+						modifier = hurt_opinion
+						opinion = -50
+					}
+				}
+			}
+		}
+		# And set up a little hidden drama for later...
+		hidden_effect = {
+			scope:recipient = {
+				if = {
+					limit = {
+						# We don't use the standard check for this, since they'll already be friends by definition, so the trigger would always return as false.
+						# Instead, we just check to make sure they're not *already* potential rivals; this can happen regardless, so really we're just setting them up for drama if the friendship ever falters.
+						NOT = { has_relation_potential_rival = scope:actor }
+					}
+					set_relation_potential_rival = scope:actor
+				}
+			}
+		}
+
+		# If we're a clan this interaction affects unity
+		add_clan_unity_interaction_effect = {
+			CHARACTER = scope:actor
+			TARGET = scope:recipient
+			VALUE = minor_unity_loss
+			DESC = clan_unity_declined_true_friendship.desc
+			REVERSE_NON_HOUSE_TARGET = no
+		}
+	}
+
+	# AI
+	## Standard Acceptance stuff
+	ai_accept = {
+		WJ_dd_jie_acceptance_modifier = yes
+		# Try to make it 0 for most interactions
+		base = 0
+
+		fp2_ritual_best_friendship_interactions_ai_accept_modifier = yes
+
+		# People without the appropriate CulTrad don't quite *get* it.
+		modifier = {
+			add = -75
+			NOT = {
+				culture = { has_cultural_parameter = may_propose_best_friendship }
+			}
+			desc = PROPOSE_BEST_FRIEND_OPINION_LACKING_CULTURAL_PARAMETER
+		}
+	}
+	## Performance-enhancement	
+	ai_potential = { is_imprisoned = no }
+	ai_target_quick_trigger = { adult = yes }
+	ai_targets = { ai_recipients = scripted_relations }
+	## Frequency
+	ai_frequency_by_tier = {
+		barony = 0
+		county = 72
+		duchy = 36
+		kingdom = 36
+		empire = 36
+		hegemony = 36
+	}
+	ai_will_do = {
+		base = -50
+		
+		fp2_ritual_best_friendship_interactions_ai_chance_modifier = yes
+	}
+}
+
+reaffirm_best_friendship_interaction = {
+	interface_priority = 30
+	icon = icon_personal
+	category = interaction_category_friendly
+	common_interaction = yes
+	desc = reaffirm_best_friendship_interaction_desc
+
+	greeting = positive
+	notification_text = REAFFIRM_BEST_FRIENDSHIP_NOTIFICATION
+	popup_on_receive = yes
+	ai_maybe = yes
+
+	cooldown = { years = 5 }
+	cooldown_against_recipient = { years = 10 }
+
+	is_shown = {
+		# Scope:actor needs to have a suitable CulTrad.
+		scope:actor = {
+			culture = { has_cultural_parameter = may_propose_best_friendship }
+		}
+		# Scope:actor needs to have scope:recipient for their best friend.
+		scope:actor = { has_relation_best_friend = scope:recipient }
+		# Either friend lacks a strong hook on the other.
+		NOR = {
+			scope:actor = { has_strong_hook = scope:recipient }
+			scope:recipient = { has_strong_hook = scope:actor }
+		}
+	}
+
+	is_valid_showing_failures_only = {
+		# Both characters must be available adults.
+		scope:actor = { is_available_adult = yes }
+		scope:recipient = { is_available_adult = yes }
+	}
+
+	on_accept = {
+		scope:actor = {
+			send_interface_toast = {
+				type = event_toast_effect_good
+				title = reaffirm_best_friendship_interaction.accept.actor.tt
+				left_icon = scope:recipient
+				# Pretty happy about the reaffirmation.
+				reverse_add_opinion = {
+					target = scope:recipient
+					modifier = friendliness_opinion
+					opinion = 25
+				}
+				# The hookening.
+				if = {
+					limit = {
+						NOT = { has_strong_hook = scope:recipient }
+					}
+					add_hook = {
+						type = ritual_best_friend_hook
+						target = scope:recipient
+					}
+				}
+			}
+		}
+		scope:recipient = {
+			send_interface_toast = {
+				type = event_toast_effect_neutral
+				title = reaffirm_best_friendship_interaction.accept.recipient.tt
+				left_icon = scope:actor
+				# Pretty happy about the reaffirmation.
+				reverse_add_opinion = {
+					target = scope:actor
+					modifier = friendliness_opinion
+					opinion = 25
+				}
+				# The hookening part #2.
+				if = {
+					limit = {
+						NOT = { has_strong_hook = scope:actor }
+					}
+					add_hook = {
+						type = ritual_best_friend_hook
+						target = scope:actor
+					}
+				}
+			}
+		}
+
+		# If we're a clan this interaction affects unity
+		add_clan_unity_interaction_effect = {
+			CHARACTER = scope:actor
+			TARGET = scope:recipient
+			VALUE = minor_unity_gain
+			DESC = clan_unity_friendship_is_magic.desc
+			REVERSE_NON_HOUSE_TARGET = no
+		}
+	}
+	
+	on_decline = {
+		# Scope:actor gains some stress over the whole ordeal.
+		scope:actor = {
+			send_interface_toast = {
+				type = event_toast_effect_bad
+				title = reaffirm_best_friendship_interaction.decline.actor.tt
+				left_icon = scope:recipient
+				# Actual effects handled in scope:recipient's toast.
+				show_as_tooltip = { remove_relation_best_friend = scope:recipient }
+			}
+		}
+		# Scope:actor loses opinion of scope:recipient.
+		scope:recipient = {
+			send_interface_toast = {
+				type = event_toast_effect_neutral
+				title = reaffirm_best_friendship_interaction.decline.recipient.tt
+				left_icon = scope:actor
+				remove_relation_best_friend = scope:actor
+			}
+		}
+		# And set up a little hidden drama for later...
+		hidden_effect = {
+			scope:recipient = {
+				if = {
+					limit = {
+						# We don't use the standard check for this, since they'll already be friends by definition, so the trigger would always return as false.
+						# Instead, we just check to make sure they're not *already* potential rivals; this can happen regardless, so really we're just setting them up for drama if the friendship ever falters.
+						NOT = { has_relation_potential_rival = scope:actor }
+					}
+					set_relation_potential_rival = scope:actor
+				}
+			}
+		}
+
+		# If we're a clan this interaction affects unity
+		add_clan_unity_interaction_effect = {
+			CHARACTER = scope:actor
+			TARGET = scope:recipient
+			VALUE = minor_unity_loss
+			DESC = clan_unity_friendship_is_not_magic.desc
+			REVERSE_NON_HOUSE_TARGET = no
+		}
+	}
+
+	# AI
+	## Standard Acceptance stuff
+	ai_accept = {
+		WJ_dd_jie_acceptance_modifier = yes
+		# Try to make it 0 for most interactions
+		base = 0
+
+		fp2_ritual_best_friendship_interactions_ai_accept_modifier = yes
+
+		# People with the appropriate CulTrad understand that this is essentially required of them.
+		modifier = {
+			add = 50
+			culture = { has_cultural_parameter = may_propose_best_friendship }
+			desc = REAFFIRM_BEST_FRIEND_OPINION_HAS_CULTURAL_PARAMETER
+		}
+	}
+	## Performance-enhancement	
+	ai_potential = { is_imprisoned = no }
+	ai_target_quick_trigger = { adult = yes }
+	ai_targets = { ai_recipients = scripted_relations }
+	## Frequency
+	ai_frequency_by_tier = {
+		barony = 0
+		county = 72
+		duchy = 36
+		kingdom = 36
+		empire = 36
+		hegemony = 36
+	}
+	ai_will_do = {
+		base = -50
+		
+		fp2_ritual_best_friendship_interactions_ai_chance_modifier = yes
+	}
+}
+
+share_known_secrets_interaction = {
+	icon = secret
+	category = interaction_category_friendly
+	common_interaction = yes
+
+	send_name = SEND_PROPOSAL
+
+	interface_priority = 120
+
+	ai_targets = {
+		ai_recipients = dynasty
+	}
+
+	ai_frequency_by_tier = {
+		barony = 0
+		county = 240
+		duchy = 180
+		kingdom = 180
+		empire = 180
+		hegemony = 180
+	}
+
+	is_shown = {
+		scope:actor = {
+			# Standard check
+			# Has access to the appropriate legacy perk.
+			dynasty = { has_dynasty_perk = fp2_coterie_legacy_4 }
+
+			# they are from the same house
+			house = scope:recipient.house
+		}
+	}
+
+	is_valid_showing_failures_only = {
+		custom_tooltip = {
+			text = share_known_secrets_interaction.tt.no_secrets_to_share
+			# We try to keep the criteria vague to obfuscate things.
+			scope:actor = { any_known_secret = { } } # Must have a secret to share
+			OR = {
+				scope:actor = {
+					# At least one secret is unknown from recipient
+					any_known_secret = {
+						NOT = { is_known_by = scope:recipient }
+					}
+				}
+				scope:recipient = {
+					# At least one secret is unknown from actor
+					any_known_secret = {
+						NOT = { is_known_by = scope:actor }
+					}
+				}
+			}
+		}
+	}
+
+	desc = share_known_secrets_interaction_desc
+
+	on_accept = {
+		scope:actor = {
+			if = {
+				limit = {
+					scope:recipient = {
+						any_known_secret = {
+							count >= 7
+							NOT = { is_known_by = scope:actor }
+						}
+					}
+				}
+				add_prestige = major_prestige_loss
+
+				custom_description = {
+					text = many_secrets_exchanged
+				}
+			}
+			else_if = {
+				limit = {
+					scope:recipient = {
+						any_known_secret = {
+							count >= 3
+							NOT = { is_known_by = scope:actor }
+						}
+					}
+				}
+				add_prestige = medium_prestige_loss
+				custom_description = {
+					text = several_secrets_exchanged
+				}
+			}
+			else = {
+				add_prestige = minor_prestige_loss
+				custom_description = {
+					text = few_secrets_exchanged
+				}
+			}
+
+			# Stress impact
+			stress_impact = {
+				honest = minor_stress_impact_gain
+				just = minor_stress_impact_gain
+				compassionate = minor_stress_impact_gain
+			}
+		}
+
+		scope:recipient = {
+			if = {
+				limit = {
+					scope:actor = {
+						any_known_secret = {
+							count >= 7
+							NOT = { is_known_by = scope:recipient }
+							OR = {
+								NOR = {
+									secret_owner = scope:recipient
+									AND = {
+										exists = secret_target
+										secret_target = scope:recipient
+									}
+								}
+								scope:recipient = {
+									OR = {
+										has_trait = dull
+										has_trait = intellect_bad
+										has_trait = contrite
+									}
+								}
+							}
+						}
+					}
+				}
+				add_prestige = major_prestige_loss
+
+				custom_description = {
+					text = many_secrets_exchanged
+				}
+			}
+			else_if = {
+				limit = {
+					scope:actor = {
+						any_known_secret = {
+							count >= 3
+							NOT = { is_known_by = scope:recipient }
+							OR = {
+								NOR = {
+									secret_owner = scope:actor
+									AND = {
+										exists = secret_target
+										secret_target = scope:actor
+									}
+								}
+								scope:actor = {
+									OR = {
+										has_trait = dull
+										has_trait = intellect_bad
+										has_trait = contrite
+									}
+								}
+							}
+						}
+					}
+				}
+				add_prestige = medium_prestige_loss
+
+				custom_description = {
+					text = several_secrets_exchanged
+				}
+			}
+			else = {
+				add_prestige = minor_prestige_loss
+
+				custom_description = {
+					text = few_secrets_exchanged
+				}
+			}
+
+			# Stress impact
+			stress_impact = {
+				honest = minor_stress_impact_gain
+				just = minor_stress_impact_gain
+				compassionate = minor_stress_impact_gain
+			}
+		}
+
+		hidden_effect = {
+			scope:recipient = { save_scope_as = END_TARGET } # This should make the loc work 2-ways, as notifs do not update themselves
+			scope:actor = {
+				if = { # Recipient has no secrets to share
+					limit = {
+						scope:recipient = {
+							any_known_secret = {
+								NOT = { is_known_by = scope:actor }
+								OR = {
+									NOR = {
+										secret_owner = scope:recipient
+										AND = {
+											exists = secret_target
+											secret_target = scope:recipient
+										}
+									}
+									scope:recipient = {
+										OR = {
+											has_trait = dull
+											has_trait = intellect_bad
+											has_trait = contrite
+										}
+									}
+								}
+								count = 0 
+							}
+						}
+					}
+					send_interface_message = {
+						type = event_intrigue_bad_with_text
+						title = share_known_secrets_interaction_outcome_notif_title
+						desc = share_known_secrets_interaction_recipient_had_no_secrets
+						left_icon = scope:recipient
+					}
+				}
+				else = { # They had secrets to share
+					send_interface_message = {
+						type = event_intrigue_good_with_text
+						title = share_known_secrets_interaction_outcome_notif_title
+						desc = share_known_secrets_interaction_desc_intro
+						left_icon = scope:recipient
+
+						scope:recipient = {
+							every_known_secret = {
+								limit = {
+									NOT = { is_known_by = scope:actor }
+									OR = {
+										NOR = {
+											secret_owner = scope:recipient
+											AND = {
+												exists = secret_target
+												secret_target = scope:recipient
+											}
+										}
+										scope:recipient = {
+											OR = {
+												has_trait = dull
+												has_trait = intellect_bad
+												has_trait = contrite
+											}
+										}
+									}
+								}
+								reveal_to = scope:actor
+							}
+						}
+					}
+				}
+			}
+
+			scope:actor = { save_scope_as = END_TARGET }
+			scope:recipient = {
+				if = { # actor has no secrets to share
+					limit = { 
+						scope:actor = { 
+							any_known_secret = {
+								NOT = { is_known_by = scope:recipient }
+								OR = {
+									NOR = {
+										secret_owner = scope:actor
+										AND = {
+											exists = secret_target
+											secret_target = scope:actor
+										}
+									}
+									scope:actor = {
+										OR = {
+											has_trait = dull
+											has_trait = intellect_bad
+											has_trait = contrite
+										}
+									}
+								}
+								count = 0 
+							} 
+						}
+					}
+					send_interface_message = {
+						type = event_intrigue_bad_with_text
+						title = share_known_secrets_interaction_outcome_notif_title
+						desc = share_known_secrets_interaction_recipient_had_no_secrets
+						left_icon = scope:actor
+					}
+				}
+				else = { # They had secrets to share
+					send_interface_message = {
+						type = event_intrigue_good_with_text
+						title = share_known_secrets_interaction_outcome_notif_title
+						desc = share_known_secrets_interaction_desc_intro
+						left_icon = scope:actor
+
+						scope:actor = {
+							every_known_secret = {
+								limit = {
+									NOT = { is_known_by = scope:recipient }
+									OR = {
+										NOR = {
+											secret_owner = scope:actor
+											AND = {
+												exists = secret_target
+												secret_target = scope:actor
+											}
+										}
+										scope:actor = {
+											OR = {
+												has_trait = dull
+												has_trait = intellect_bad
+												has_trait = contrite
+											}
+										}
+									}
+								}
+								reveal_to = scope:recipient
+							}
+							hidden_effect = { add_prestige = major_prestige_loss }
+						}
+					}
+				}
+			}
+		}
+
+		# If we're a clan this interaction affects unity
+		add_clan_unity_interaction_effect = {
+			CHARACTER = scope:actor
+			TARGET = scope:recipient
+			VALUE = minor_unity_loss
+			DESC = clan_unity_secret_sharing.desc
+			REVERSE_NON_HOUSE_TARGET = no
+		}
+	}
+
+	auto_accept = {
+		custom_description = {
+			text = "spending_hook"
+			subject = scope:actor
+			object = scope:recipient
+			AND = {
+				always = scope:hook
+				scope:actor = { has_strong_hook = scope:recipient }
+			}
+		}
+	}
+
+	send_option = {
+		is_valid = {
+			scope:actor = { has_strong_hook = scope:recipient }
+		}
+		flag = hook
+		localization = SCHEME_HOOK
+	}
+	should_use_extra_icon = {
+		scope:actor = { has_strong_hook = scope:recipient }
+	}
+	extra_icon = "gfx/interface/icons/character_interactions/hook_icon.dds"
+	
+	send_options_exclusive = no
+
+	ai_potential = {
+		#Has access to the appropriate cultural parameter.
+		AND = {
+			exists = dynasty
+			dynasty = { has_dynasty_perk = fp2_coterie_legacy_4 }
+		}
+		prestige > major_prestige_value
+	}
+	
+	auto_accept = no
+
+	ai_accept = {
+		WJ_dd_jie_acceptance_modifier = yes
+		# AI should accept by default
+		base = 10
+
+		modifier = {
+			trigger = {
+				always = scope:hook
+			}
+			add = 100
+			desc = SCHEME_WEAK_HOOK_USED
+		}
+
+		modifier = {
+			trigger = {
+				has_education_intrigue_trigger = yes
+			}
+			add = 20
+			desc = INTERACTION_INTRIGUE_EDUCATION
+		}
+		
+		modifier = {
+			add = -100
+			has_trait = honest
+			desc = INTERACTION_HONEST
+		}
+		
+		modifier = {
+			add = -50
+			has_trait = just
+			desc = INTERACTION_JUST
+		}
+
+		modifier = {
+			add = -50
+			has_trait = paranoid
+			desc = INTERACTION_PARANOID
+		}
+
+		modifier = {
+			add = 100
+			has_trait = fickle
+			desc = INTERACTION_FICKLE
+		}
+		
+		modifier = {
+			add = 100
+			has_trait = deceitful
+			desc = INTERACTION_DECEITFUL
+		}
+
+		modifier = {
+			add = 25
+			has_trait = ambitious
+			desc = INTERACTION_AMBITIOUS
+		}
+
+	}
+	
+	ai_will_do = {
+		base = 100
+	}
+}
+
+synergise_friendship_interaction = {
+	interface_priority = 30
+	icon = icon_personal
+	category = interaction_category_friendly
+	common_interaction = yes
+	desc = synergise_friendship_interaction_desc
+
+	greeting = positive
+	notification_text = SYNERGISE_FRIENDSHIP_NOTIFICATION
+	popup_on_receive = yes
+	ai_maybe = yes
+
+	cooldown = { years = 5 }
+	cooldown_against_recipient = { years = 10 }
+
+	is_shown = {
+		# Scope:actor needs to have a suitable CulTrad.
+		scope:actor = {
+			culture = { has_cultural_parameter = may_select_friendship_synergy_bonus }
+		}
+		# Scope:actor needs to have scope:recipient for their best friend.
+		scope:actor = { has_relation_best_friend = scope:recipient }
+	}
+
+	is_valid_showing_failures_only = {
+		# Both characters must be available adults.
+		scope:actor = { is_available_adult = yes }
+		scope:recipient = { is_available_adult = yes }
+	}
+
+	on_accept = {
+		# First, we send out some notifications.
+		scope:actor = {
+			send_interface_toast = {
+				type = event_toast_effect_good
+				title = synergise_friendship_interaction.accept.actor.tt
+				left_icon = scope:recipient
+				# Pretty happy about the reaffirmation.
+				reverse_add_opinion = {
+					target = scope:recipient
+					modifier = friendliness_opinion
+					opinion = 10
+				}
+				# Show the bonuses.
+				## Hidden effect so that the modifiers don't show twice in the UI.
+				hidden_effect = {
+					show_as_tooltip = { synergise_friendship_interaction_actual_effect = yes }
+				}
+			}
+		}
+		scope:recipient = {
+			send_interface_toast = {
+				type = event_toast_effect_neutral
+				title = synergise_friendship_interaction.accept.recipient.tt
+				left_icon = scope:actor
+				# Pretty happy about the reaffirmation.
+				reverse_add_opinion = {
+					target = scope:actor
+					modifier = friendliness_opinion
+					opinion = 10
+				}
+				# Show the bonuses.
+				## Hidden effect so that the modifiers don't show twice in the UI.
+				hidden_effect = {
+					show_as_tooltip = { synergise_friendship_interaction_actual_effect = yes }
+				}
+			}
+		}
+		# Then remove any existing synergy modifiers they've got.
+		scope:actor = { remove_every_best_friend_synergy_bonus_modifier_effect = yes }
+		scope:recipient = { remove_every_best_friend_synergy_bonus_modifier_effect = yes }
+		# Finally, calc the actual modifiers received.
+		synergise_friendship_interaction_actual_effect = yes
+
+		# If we're a clan this interaction affects unity
+		add_clan_unity_interaction_effect = {
+			CHARACTER = scope:actor
+			TARGET = scope:recipient
+			VALUE = minor_unity_gain
+			DESC = clan_unity_synergized_friendship.desc
+			REVERSE_NON_HOUSE_TARGET = no
+		}
+	}
+	
+	on_decline = {
+		# Scope:actor gains some stress over the whole ordeal.
+		scope:actor = {
+			send_interface_toast = {
+				type = event_toast_effect_bad
+				title = synergise_friendship_interaction.decline.actor.tt
+				left_icon = scope:recipient
+				add_stress = minor_stress_gain
+			}
+		}
+		# Scope:actor loses opinion of scope:recipient.
+		scope:recipient = {
+			send_interface_toast = {
+				type = event_toast_effect_neutral
+				title = synergise_friendship_interaction.decline.recipient.tt
+				left_icon = scope:actor
+				reverse_add_opinion = {
+					target = scope:actor
+					modifier = hurt_opinion
+					opinion = -20
+				}
+			}
+		}
+
+		# If we're a clan this interaction affects unity
+		add_clan_unity_interaction_effect = {
+			CHARACTER = scope:actor
+			TARGET = scope:recipient
+			VALUE = minor_unity_loss
+			DESC = clan_unity_synergized_friendship_declined.desc
+			REVERSE_NON_HOUSE_TARGET = no
+		}
+	}
+
+	# Synergy Types
+	## Scope:actor's education
+	send_option = {
+		flag = synergy_bonus_actor
+		localization = "SYNERGY_BONUS_ACTOR"
+	}
+	## Scope:recipient's education
+	send_option = {
+		flag = synergy_bonus_recipient
+		is_valid = {
+			custom_description = {
+				text = synergise_friendship_interaction_cannot_share_education
+				NOT = {
+					characters_have_same_education_group_trigger = {
+						CHARACTER_1 = scope:actor
+						CHARACTER_2 = scope:recipient
+					}
+				}
+			}
+		}
+		localization = "SYNERGY_BONUS_RECIPIENT"
+	}
+	## Scope:a mix of both educations
+	send_option = {
+		flag = synergy_bonus_mixed
+		localization = "SYNERGY_BONUS_MIXED"
+	}
+
+	# AI
+	## Standard Acceptance stuff
+	ai_accept = {
+		WJ_dd_jie_acceptance_modifier = yes
+		# Try to make it 0 for most interactions
+		base = 0
+
+		fp2_ritual_best_friendship_interactions_ai_accept_modifier = yes
+	}
+	## Performance-enhancement	
+	ai_potential = { is_imprisoned = no }
+	ai_target_quick_trigger = { adult = yes }
+	ai_targets = { ai_recipients = scripted_relations }
+	## Frequency
+	ai_frequency_by_tier = {
+		barony = 0
+		county = 72
+		duchy = 36
+		kingdom = 36
+		empire = 36
+		hegemony = 36
+	}
+	ai_will_do = {
+		base = -50
+		
+		fp2_ritual_best_friendship_interactions_ai_chance_modifier = yes
+	}
+}

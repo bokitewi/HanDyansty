@@ -142,6 +142,11 @@ hd_party_save_member_court_effect = {
 		}
 		top_liege = { save_scope_as = hd_party_mc }
 	}
+	# 2026-10-10：离宫在野的后族成员仍归原朝廷
+	else_if = {
+		limit = { hd_party_is_wandering_waiqi_trigger = yes }
+		var:hd_party_waiqi_court = { save_scope_as = hd_party_mc }
+	}
 }
 
 # Scope：君主（scope:hd_party_court）。把有政治分量的无地廷臣加入局势
@@ -155,6 +160,7 @@ hd_party_add_manual_participants_effect = {
 		}
 		set_variable = hd_party_manual
 		situation:dynastic_cycle = { add_manual_participant = prev }
+		recalculate_participant_group = situation:dynastic_cycle
 	}
 }
 
@@ -215,8 +221,10 @@ E.append('}\n\n')
 
 # waiqi list
 E.append('''# Scope：君主。重建后族宗族列表（母亲、正妻与嫔妃、子女配偶的宗族；不含本宗族）
+# 2026-10-10：另建后妃兄弟姐妹列表 hd_party_waiqi_kin（母亲、正妻、嫔妃的兄弟姐妹，含同父异母/同母异父；不含本宗族）
 hd_party_refresh_waiqi_list_effect = {
 	clear_variable_list = hd_party_waiqi_dynasties
+	clear_variable_list = hd_party_waiqi_kin
 	save_temporary_scope_as = hd_party_wq_ruler
 	mother ?= {
 		if = {
@@ -238,8 +246,35 @@ hd_party_refresh_waiqi_list_effect = {
 			scope:hd_party_wq_ruler = { add_to_variable_list = { name = hd_party_waiqi_dynasties target = prev.dynasty } }
 		}
 	}
+	mother ?= { hd_party_add_waiqi_kin_effect = yes }
+	every_spouse = { hd_party_add_waiqi_kin_effect = yes }
+	every_consort = { hd_party_add_waiqi_kin_effect = yes }
 	# 2026-10-08：后族全宗族强制入外戚、失势外戚解除（手工维护：hd_party_waiqi_sweep_effects.txt）
 	hd_party_waiqi_sweep_effect = yes
+}
+
+# Scope：后妃或君主母亲；scope:hd_party_wq_ruler = 君主。把其兄弟姐妹加入 hd_party_waiqi_kin
+# 用父亲、母亲各自的子女来找，同父异母、同母异父都能找到（2026-10-10）
+hd_party_add_waiqi_kin_effect = {
+	save_temporary_scope_as = hd_party_wq_consort
+	father ?= {
+		every_child = {
+			limit = {
+				NOT = { this = scope:hd_party_wq_consort }
+				hd_party_waiqi_kin_valid_trigger = { RULER = scope:hd_party_wq_ruler }
+			}
+			scope:hd_party_wq_ruler = { add_to_variable_list = { name = hd_party_waiqi_kin target = prev } }
+		}
+	}
+	mother ?= {
+		every_child = {
+			limit = {
+				NOT = { this = scope:hd_party_wq_consort }
+				hd_party_waiqi_kin_valid_trigger = { RULER = scope:hd_party_wq_ruler }
+			}
+			scope:hd_party_wq_ruler = { add_to_variable_list = { name = hd_party_waiqi_kin target = prev } }
+		}
+	}
 }
 
 ############################################################
@@ -867,22 +902,38 @@ hd_party_set_policy_effect = {
 }
 
 # Scope：君主（scope:hd_party_court）。对 $G$ 党要求效忠的结算（花费已扣）
+# 2026-10-09 U11：改为 random_list，选项提示同时显示成败两种结果及几率（原 random + if 在预览时只显示失败一支），结果以 toast 告知
 hd_party_loyalty_resolve_effect = {
 	set_variable = { name = hd_party_$G$_loyalty_cd days = hd_party_loyalty_cd_days }
-	random = {
-		chance = hd_party_loyalty_chance_$G$_value
-		save_scope_value_as = { name = hd_party_loyalty_success value = flag:yes }
+	random_list = {
+		0 = {
+			modifier = { add = hd_party_loyalty_chance_$G$_value }
+			desc = hd_party_loyalty_success_tt
+			set_local_variable = hd_party_loyalty_ok
+		}
+		0 = {
+			modifier = {
+				add = {
+					value = 100
+					subtract = hd_party_loyalty_chance_$G$_value
+				}
+			}
+			desc = hd_party_loyalty_fail_tt
+		}
 	}
+	hidden_effect = {	# 实际结算（预览时不显示，以免只列出失败一支）
 	if = {
-		limit = { exists = scope:hd_party_loyalty_success }
+		limit = { has_local_variable = hd_party_loyalty_ok }
 		hd_party_set_stance_effect = { G = $G$ STANCE = zunwang }
 		set_variable = { name = hd_party_$G$_loyalty_lock value = var:hd_party_$G$_leader }
-		custom_tooltip = hd_party_loyalty_success_tt
+		send_interface_toast = { type = event_toast_effect_good title = hd_party_loyalty_success_tt }
 	}
 	else = {
 		hd_party_set_attitude_effect = { G = $G$ ATTITUDE = oppose }
 		set_variable = { name = hd_party_$G$_oppose_lock days = hd_party_loyalty_fail_lock_days }
-		custom_tooltip = hd_party_loyalty_fail_tt
+		send_interface_toast = { type = event_toast_effect_bad title = hd_party_loyalty_fail_tt }
+	}
+	remove_local_variable = hd_party_loyalty_ok	# AI 一次结算可能连续处理多党，用后即清
 	}
 }
 

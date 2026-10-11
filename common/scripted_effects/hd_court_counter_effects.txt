@@ -1,0 +1,208 @@
+﻿# 乱世霸权·天子反击（第 4 期，2026-10-10，L4）
+# 设计见 docs/乱世霸权_天子与权臣_设计草案.md 第 9 节"第 4 期"。
+# 政变同党记在天子的变量列表 hd_court_coup_supporters 上。
+
+# 还政：胜者把京城县与汉帝国头衔交还天子，旧权臣罢官后带其余领地独立，天子获释。
+# Scope：还政者；需 scope:hd_court_restore_emperor（天子）
+hd_court_restore_emperor_effect = {
+	save_scope_as = hd_court_restorer
+	hd_court_save_capital_effect = yes
+	if = {
+		limit = { hd_court_has_regent_trigger = yes }
+		title:h_china.var:hd_court_regent = { save_scope_as = hd_court_restore_old_regent }
+	}
+	hd_court_release_effect = yes
+	if = {
+		limit = { exists = scope:hd_court_restore_old_regent }
+		scope:hd_court_restore_old_regent = { hd_court_strip_office_effect = yes }
+		create_title_and_vassal_change = {
+			type = granted
+			save_scope_as = hd_court_restore_change
+			add_claim_on_loss = no
+		}
+		if = {
+			limit = {
+				scope:hd_court_capital.holder ?= {
+					OR = {
+						this = scope:hd_court_restore_old_regent
+						is_vassal_or_below_of = scope:hd_court_restore_old_regent
+					}
+				}
+			}
+			scope:hd_court_capital = {
+				change_title_holder = {
+					holder = scope:hd_court_restore_emperor
+					change = scope:hd_court_restore_change
+					take_baronies = yes
+				}
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_court_restore_change
+		if = {
+			limit = {
+				title:e_han.holder ?= scope:hd_court_restore_old_regent
+				scope:hd_court_restore_emperor = { any_held_title = { tier = tier_county } }
+			}
+			create_title_and_vassal_change = {
+				type = granted
+				save_scope_as = hd_court_restore_empire_change
+				add_claim_on_loss = no
+			}
+			title:e_han = {
+				change_title_holder = {
+					holder = scope:hd_court_restore_emperor
+					change = scope:hd_court_restore_empire_change
+				}
+			}
+			resolve_title_and_vassal_change = scope:hd_court_restore_empire_change
+		}
+		if = {
+			limit = { scope:hd_court_restore_old_regent = { liege ?= scope:hd_court_restore_emperor } }
+			create_title_and_vassal_change = {
+				type = independency
+				save_scope_as = hd_court_restore_indep_change
+				add_claim_on_loss = no
+			}
+			scope:hd_court_restore_old_regent = {
+				becomes_independent = { change = scope:hd_court_restore_indep_change }
+				hd_court_set_stance_effect = { STANCE = moni }
+			}
+			resolve_title_and_vassal_change = scope:hd_court_restore_indep_change
+		}
+	}
+	scope:hd_court_restore_emperor = {
+		add_opinion = { target = scope:hd_court_restorer modifier = hd_court_restored_emperor_opinion }
+	}
+	add_prestige = 500
+	hd_court_set_stance_effect = { STANCE = zunhan }
+}
+
+# 政变成功：权臣伏诛，天子亲政；权臣继承人仍是天子封臣，不再辅政。Scope：天子
+hd_court_coup_success_effect = {
+	save_scope_as = hd_court_coup_emperor
+	title:h_china.var:hd_court_regent = { save_scope_as = hd_court_coup_victim }
+	title:h_china = { set_variable = { name = hd_court_coup_done value = yes days = 30 } }
+	hd_court_release_effect = yes
+	scope:hd_court_coup_victim = {
+		hd_court_strip_office_effect = yes
+		death = {
+			death_reason = death_murder
+			killer = scope:hd_court_coup_emperor
+		}
+	}
+	clear_variable_list = hd_court_coup_supporters
+	add_prestige = 300
+}
+
+# 政变失败：同党尽数被诛，天子从此被严加看管。Scope：天子
+hd_court_coup_failure_effect = {
+	save_scope_as = hd_court_coup_emperor
+	title:h_china.var:hd_court_regent ?= { save_scope_as = hd_court_coup_regent }
+	every_in_list = {
+		variable = hd_court_coup_supporters
+		limit = { is_alive = yes }
+		if = {
+			limit = { exists = scope:hd_court_coup_regent }
+			death = {
+				death_reason = death_execution
+				killer = scope:hd_court_coup_regent
+			}
+		}
+		else = {
+			death = { death_reason = death_execution }
+		}
+	}
+	clear_variable_list = hd_court_coup_supporters
+	add_character_modifier = { modifier = hd_court_closely_watched_modifier years = 10 }
+	if = {
+		limit = { exists = scope:hd_court_coup_regent }
+		scope:hd_court_coup_regent = {
+			add_opinion = { target = scope:hd_court_coup_emperor modifier = hd_court_plotted_against_opinion }
+		}
+	}
+}
+
+# 出奔成功：投奔之主接任辅政（不转领地），旧权臣带全部领地独立并转为谋逆；
+# 霸权行在迁往投奔之主的首都；双方互得奉诏讨伐 CB；投奔之主沿途"喜迎王师"。
+# Scope：投奔之主；需 scope:hd_court_flee_emperor（天子）
+hd_court_flee_success_effect = {
+	save_scope_as = hd_court_flee_host
+	if = {
+		limit = { hd_court_has_regent_trigger = yes }
+		title:h_china.var:hd_court_regent = { save_scope_as = hd_court_flee_old_regent }
+	}
+	hd_court_release_effect = yes
+	if = {
+		limit = { exists = scope:hd_court_flee_old_regent }
+		scope:hd_court_flee_old_regent = { hd_court_strip_office_effect = yes }
+		if = {
+			limit = { scope:hd_court_flee_old_regent = { liege ?= scope:hd_court_flee_emperor } }
+			create_title_and_vassal_change = {
+				type = independency
+				save_scope_as = hd_court_flee_indep_change
+				add_claim_on_loss = no
+			}
+			scope:hd_court_flee_old_regent = {
+				becomes_independent = { change = scope:hd_court_flee_indep_change }
+			}
+			resolve_title_and_vassal_change = scope:hd_court_flee_indep_change
+		}
+		scope:hd_court_flee_old_regent = { hd_court_set_stance_effect = { STANCE = moni } }
+		hd_court_authorize_campaign_effect = { ATTACKER = scope:hd_court_flee_host TARGET = scope:hd_court_flee_old_regent }
+		hd_court_authorize_campaign_effect = { ATTACKER = scope:hd_court_flee_old_regent TARGET = scope:hd_court_flee_host }
+	}
+	# 投奔之主成为天子的封臣兼辅政
+	create_title_and_vassal_change = {
+		type = granted
+		save_scope_as = hd_court_flee_host_change
+		add_claim_on_loss = no
+	}
+	change_liege = {
+		liege = scope:hd_court_flee_emperor
+		change = scope:hd_court_flee_host_change
+	}
+	resolve_title_and_vassal_change = scope:hd_court_flee_host_change
+	capital_county = { save_scope_as = hd_court_flee_capital }
+	title:h_china = {
+		set_capital_county = scope:hd_court_flee_capital
+		set_variable = { name = hd_court_capital_county value = scope:hd_court_flee_capital }
+	}
+	hd_court_install_regency_effect = yes
+	set_variable = { name = hd_court_qinwang_host value = yes years = 5 }
+	hd_court_set_stance_effect = { STANCE = zunhan }
+	scope:hd_court_flee_emperor = {
+		domicile ?= { move_domicile = scope:hd_court_flee_capital.title_province }
+		set_location = {
+			location = scope:hd_court_flee_capital.title_province
+			stick_to_location = yes
+		}
+	}
+}
+
+# 募亲兵近卫：两名勇武之士入宫宿卫，并计入政变同党。Scope：天子
+hd_court_raise_guards_effect = {
+	save_scope_as = hd_court_guard_lord
+	create_character = {
+		template = hd_court_guard_template
+		location = root.location
+		employer = root
+		save_scope_as = hd_court_new_guard
+	}
+	scope:hd_court_new_guard = { set_variable = { name = hd_court_coup_for value = scope:hd_court_guard_lord years = 10 } }
+	add_to_variable_list = { name = hd_court_coup_supporters target = scope:hd_court_new_guard }
+	create_character = {
+		template = hd_court_guard_template
+		location = root.location
+		employer = root
+		save_scope_as = hd_court_new_guard_2
+	}
+	scope:hd_court_new_guard_2 = { set_variable = { name = hd_court_coup_for value = scope:hd_court_guard_lord years = 10 } }
+	add_to_variable_list = { name = hd_court_coup_supporters target = scope:hd_court_new_guard_2 }
+}
+
+# 喜迎王师：勤王之师攻下城邑时，父老箪食壶浆。Scope：占领者；需 scope:county
+hd_court_welcome_army_effect = {
+	add_gold = 30
+	add_prestige = 25
+	scope:county = { change_county_control = 10 }
+}

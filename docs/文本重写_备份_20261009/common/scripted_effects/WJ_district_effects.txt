@@ -1,0 +1,370 @@
+﻿# Staged core implementation. No title transactions, army edits or treasury changes.
+# All public mutations recheck authority. Lists live on a core kingdom, not a ruler.
+WJ_dd_ensure_kaifu_effect = {
+ if = {
+  limit = { WJ_dd_head_trigger = yes NOT = { vassal_contract_obligation_level:WJ_kaifu = 1 } }
+  vassal_contract_set_obligation_level = { type = WJ_kaifu level = 1 }
+ }
+}
+WJ_dd_create_effect = {
+ if = {
+  limit = { WJ_dd_create_trigger = yes }
+  scope:recipient.primary_title = {
+   save_scope_as = wj_dd_core
+   set_variable = { name = wj_dd_core value = this }
+   set_variable = { name = wj_dd_realm value = scope:actor.top_liege.primary_title }
+   set_variable = { name = wj_dd_last_holder value = scope:recipient }
+   set_variable = { name = wj_dd_jie value = $JIE$ }
+   add_to_variable_list = { name = wj_dd_members target = this }
+  }
+  scope:actor.top_liege.primary_title = { add_to_variable_list = { name = wj_dd_realm_cores target = scope:wj_dd_core } }
+  scope:recipient = {
+   # This reverse reference is for handover/cleanup only, never the authority gate.
+   set_variable = { name = wj_dd_held_core value = scope:wj_dd_core }
+   vassal_contract_set_obligation_level = { type = WJ_sanjie level = $JIE$ }
+  }
+  # Never leave a new district without a jie if native contract validation refuses.
+  if = {
+   limit = { scope:recipient = { NOT = { vassal_contract_obligation_level:WJ_sanjie = $JIE$ } } }
+   scope:wj_dd_core = { WJ_dd_dissolve_core_effect = yes }
+   scope:actor = {
+    send_interface_message = {
+     type = event_generic_bad
+     title = WJ_dd_create_failed
+     desc = WJ_dd_create_failed_desc
+     right_icon = scope:recipient
+    }
+   }
+  }
+  else = { scope:recipient = { WJ_dd_ensure_kaifu_effect = yes } }
+ }
+}
+WJ_dd_add_effect = {
+ if = {
+  limit = { WJ_dd_add_trigger = yes }
+  scope:recipient.primary_title = { save_scope_as = wj_dd_core }
+  scope:secondary_recipient.primary_title = {
+   save_scope_as = wj_dd_member
+   set_variable = { name = wj_dd_core value = scope:wj_dd_core }
+  }
+  scope:wj_dd_core = { add_to_variable_list = { name = wj_dd_members target = scope:wj_dd_member } }
+ }
+}
+# Core scope; flood fill without modifying membership. Optional exclusion is a
+# synchronous scratch variable on this core, not an inherited event scope.
+# ponytail: O(V*E) repeated passes on one district per edit, not a world pulse.
+# Upgrade only if measured large-district editing latency warrants a frontier list.
+WJ_dd_check_connectivity_effect = {
+ save_scope_as = wj_dd_graph_core
+ every_in_list = { variable = wj_dd_members remove_variable = wj_dd_visited }
+ set_variable = { name = wj_dd_visited value = yes }
+ set_variable = { name = wj_dd_graph_progress value = yes }
+ while = {
+  limit = { has_variable = wj_dd_graph_progress }
+  remove_variable = wj_dd_graph_progress
+  every_in_list = {
+   variable = wj_dd_members
+   limit = {
+    NOT = { has_variable = wj_dd_visited }
+    trigger_if = {
+     limit = { exists = scope:wj_dd_graph_core.var:wj_dd_excluded }
+     this != scope:wj_dd_graph_core.var:wj_dd_excluded
+    }
+    any_in_de_jure_hierarchy = {
+     tier = tier_county
+     any_neighboring_county = {
+      kingdom = {
+       trigger_if = {
+        limit = { exists = var:wj_dd_core }
+        var:wj_dd_core = scope:wj_dd_graph_core
+        has_variable = wj_dd_visited
+       }
+       trigger_else = { always = no }
+      }
+     }
+    }
+   }
+   set_variable = { name = wj_dd_visited value = yes }
+   scope:wj_dd_graph_core = { set_variable = { name = wj_dd_graph_progress value = yes } }
+  }
+ }
+ remove_variable = wj_dd_graph_disconnected
+ clear_variable_list = wj_dd_unreachable
+ every_in_list = {
+  variable = wj_dd_members
+  limit = { NOT = { has_variable = wj_dd_visited } }
+  save_scope_as = wj_dd_unreachable_member
+  scope:wj_dd_graph_core = { add_to_variable_list = { name = wj_dd_unreachable target = scope:wj_dd_unreachable_member } }
+ }
+ if = {
+  limit = {
+   any_in_list = {
+    variable = wj_dd_members
+    NOT = { has_variable = wj_dd_visited }
+    trigger_if = {
+     limit = { exists = scope:wj_dd_graph_core.var:wj_dd_excluded }
+     this != scope:wj_dd_graph_core.var:wj_dd_excluded
+    }
+   }
+  }
+  set_variable = { name = wj_dd_graph_disconnected value = yes }
+ }
+ every_in_list = { variable = wj_dd_members remove_variable = wj_dd_visited }
+}
+WJ_dd_remove_effect = {
+ if = {
+  limit = { WJ_dd_remove_candidate_trigger = yes }
+  scope:secondary_recipient.primary_title = { save_scope_as = wj_dd_excluded }
+  scope:recipient.primary_title = {
+   set_variable = { name = wj_dd_excluded value = scope:wj_dd_excluded }
+   WJ_dd_check_connectivity_effect = yes
+   if = {
+    limit = { NOT = { has_variable = wj_dd_graph_disconnected } }
+    remove_list_variable = { name = wj_dd_members target = scope:wj_dd_excluded }
+    scope:wj_dd_excluded = { remove_variable = wj_dd_core }
+   }
+   else = {
+    scope:actor = {
+     send_interface_message = {
+      type = event_generic_bad
+      title = WJ_dd_remove_disconnected
+      desc = WJ_dd_remove_disconnected_desc
+      right_icon = scope:secondary_recipient
+     }
+    }
+   }
+   remove_variable = wj_dd_graph_disconnected
+   remove_variable = wj_dd_excluded
+   clear_variable_list = wj_dd_unreachable
+  }
+ }
+}
+# Character scope: preserve the latest native contract level before existing cleanup.
+WJ_dd_remember_jie_effect = {
+ if = {
+  limit = {
+   exists = var:wj_dd_held_core
+   var:wj_dd_held_core.var:wj_dd_last_holder = this
+   var:wj_dd_held_core = { NOT = { has_variable = wj_dd_grant_pending } }
+   vassal_contract_obligation_level:WJ_sanjie > 0
+  }
+  save_scope_value_as = { name = wj_dd_jie_level value = vassal_contract_obligation_level:WJ_sanjie }
+  var:wj_dd_held_core = { set_variable = { name = wj_dd_jie value = scope:wj_dd_jie_level } }
+ }
+}
+# Core scope. Called only after a permitted management action or invalidation.
+WJ_dd_dissolve_core_effect = {
+ save_scope_as = wj_dd_core
+ var:wj_dd_realm ?= { remove_list_variable = { name = wj_dd_realm_cores target = scope:wj_dd_core } }
+ var:wj_dd_last_holder ?= {
+  if = {
+   limit = { var:wj_dd_held_core = scope:wj_dd_core }
+   remove_variable = wj_dd_held_core
+   if = {
+    limit = { has_subject_contract_group = celestial_vassal }
+    if = {
+     limit = { vassal_contract_obligation_level:WJ_sanjie > 0 }
+     vassal_contract_set_obligation_level = { type = WJ_sanjie level = 0 }
+    }
+   }
+  }
+ }
+ every_in_list = {
+  variable = wj_dd_members
+  if = { limit = { var:wj_dd_core = scope:wj_dd_core } remove_variable = wj_dd_core }
+ }
+ clear_variable_list = wj_dd_members
+ remove_variable = wj_dd_core
+ remove_variable = wj_dd_realm
+ remove_variable = wj_dd_last_holder
+ remove_variable = wj_dd_jie
+ remove_variable = wj_dd_grant_pending
+ remove_variable = wj_dd_custom_name_slot
+ clear_variable_list = wj_dd_unreachable
+}
+WJ_dd_dissolve_effect = {
+ if = {
+  limit = { WJ_dd_manage_trigger = yes }
+  scope:recipient.primary_title = { WJ_dd_dissolve_core_effect = yes }
+ }
+}
+# Keep the old core and contract intact until the destination grant is confirmed.
+# Failed native grant restores every membership pointer; no title is transferred.
+WJ_dd_replace_effect = {
+ if = {
+  limit = {
+   WJ_dd_replace_trigger = yes
+   exists = scope:wj_dd_selected_jie
+   scope:wj_dd_selected_jie >= 1
+   scope:wj_dd_selected_jie <= 3
+  }
+  scope:recipient = { WJ_dd_remember_jie_effect = yes }
+  scope:recipient.primary_title = { save_scope_as = wj_dd_old_core }
+  scope:secondary_recipient = {
+   save_scope_value_as = { name = wj_dd_previous_jie value = vassal_contract_obligation_level:WJ_sanjie }
+  }
+  scope:secondary_recipient.primary_title = {
+   save_scope_as = wj_dd_new_core
+   set_variable = { name = wj_dd_realm value = scope:wj_dd_old_core.var:wj_dd_realm }
+   set_variable = { name = wj_dd_jie value = scope:wj_dd_selected_jie }
+   set_variable = { name = wj_dd_last_holder value = scope:secondary_recipient }
+  }
+  scope:wj_dd_old_core = {
+   every_in_list = {
+    variable = wj_dd_members
+    save_scope_as = wj_dd_member
+    set_variable = { name = wj_dd_core value = scope:wj_dd_new_core }
+    scope:wj_dd_new_core = { add_to_variable_list = { name = wj_dd_members target = scope:wj_dd_member } }
+   }
+  }
+  scope:secondary_recipient = {
+   set_variable = { name = wj_dd_held_core value = scope:wj_dd_new_core }
+   vassal_contract_set_obligation_level = { type = WJ_sanjie level = scope:wj_dd_new_core.var:wj_dd_jie }
+  }
+  if = {
+   limit = {
+    scope:secondary_recipient = { vassal_contract_obligation_level:WJ_sanjie = scope:wj_dd_new_core.var:wj_dd_jie }
+   }
+   if = { limit = { scope:wj_dd_old_core = { has_variable = wj_dd_custom_name_slot } }
+    scope:secondary_recipient = { WJ_dd_copy_custom_name = { CORE = scope:wj_dd_old_core FROM = scope:recipient } }
+    scope:wj_dd_new_core = { set_variable = { name = wj_dd_custom_name_slot value = scope:wj_dd_old_core.var:wj_dd_custom_name_slot } }
+    scope:wj_dd_old_core = { remove_variable = wj_dd_custom_name_slot }
+   }
+   scope:wj_dd_old_core = {
+    var:wj_dd_realm = {
+     remove_list_variable = { name = wj_dd_realm_cores target = scope:wj_dd_old_core }
+     add_to_variable_list = { name = wj_dd_realm_cores target = scope:wj_dd_new_core }
+    }
+    clear_variable_list = wj_dd_members
+    remove_variable = wj_dd_realm
+    remove_variable = wj_dd_jie
+    remove_variable = wj_dd_last_holder
+    remove_variable = wj_dd_grant_pending
+   }
+   scope:recipient = {
+    remove_variable = wj_dd_held_core
+    vassal_contract_set_obligation_level = { type = WJ_sanjie level = 0 }
+   }
+   scope:secondary_recipient = { WJ_dd_ensure_kaifu_effect = yes }
+  }
+  else = {
+   scope:wj_dd_old_core = {
+    every_in_list = {
+     variable = wj_dd_members
+     set_variable = { name = wj_dd_core value = scope:wj_dd_old_core }
+    }
+   }
+   scope:secondary_recipient = {
+    remove_variable = wj_dd_held_core
+    vassal_contract_set_obligation_level = { type = WJ_sanjie level = scope:wj_dd_previous_jie }
+   }
+   scope:wj_dd_new_core = {
+    clear_variable_list = wj_dd_members
+    remove_variable = wj_dd_realm
+    remove_variable = wj_dd_jie
+    remove_variable = wj_dd_last_holder
+   }
+   scope:actor = {
+    send_interface_message = {
+     type = event_generic_bad
+     title = WJ_dd_replace_failed
+     desc = WJ_dd_replace_failed_desc
+     right_icon = scope:secondary_recipient
+    }
+   }
+  }
+ }
+}
+# Core scope. Drop foreign/destroyed kingdoms, then all components disconnected
+# from the core. Iterate scratch lists, never mutate the list being enumerated.
+WJ_dd_prune_members_effect = {
+ save_scope_as = wj_dd_prune_core
+ clear_variable_list = wj_dd_drop
+ every_in_list = {
+  variable = wj_dd_members
+  limit = {
+   this != scope:wj_dd_prune_core
+   NAND = {
+    exists = holder
+    holder.top_liege.primary_title = scope:wj_dd_prune_core.var:wj_dd_realm
+    var:wj_dd_core = scope:wj_dd_prune_core
+   }
+  }
+  save_scope_as = wj_dd_member
+  scope:wj_dd_prune_core = { add_to_variable_list = { name = wj_dd_drop target = scope:wj_dd_member } }
+ }
+ every_in_list = {
+  variable = wj_dd_drop
+  save_scope_as = wj_dd_member
+  if = { limit = { var:wj_dd_core = scope:wj_dd_prune_core } remove_variable = wj_dd_core }
+  scope:wj_dd_prune_core = { remove_list_variable = { name = wj_dd_members target = scope:wj_dd_member } }
+ }
+ clear_variable_list = wj_dd_drop
+ remove_variable = wj_dd_excluded
+ WJ_dd_check_connectivity_effect = yes
+ every_in_list = {
+  variable = wj_dd_unreachable
+  save_scope_as = wj_dd_member
+  if = { limit = { var:wj_dd_core = scope:wj_dd_prune_core } remove_variable = wj_dd_core }
+  scope:wj_dd_prune_core = { remove_list_variable = { name = wj_dd_members target = scope:wj_dd_member } }
+ }
+ clear_variable_list = wj_dd_unreachable
+ remove_variable = wj_dd_graph_disconnected
+}
+# Core scope, after native title handover completes. Never grants or transfers land.
+WJ_dd_reconcile_core_effect = {
+ if = {
+  limit = { has_variable = wj_dd_core }
+ if = {
+  limit = { var:wj_dd_core = this }
+  save_scope_as = wj_dd_core
+  if = {
+   limit = { WJ_dd_core_valid_trigger = yes }
+   var:wj_dd_realm = { add_to_variable_list = { name = wj_dd_realm_cores target = scope:wj_dd_core } }
+   WJ_dd_prune_members_effect = yes
+   # Preserve legitimate native changes for an unchanged, non-pending head.
+   if = {
+    limit = { var:wj_dd_last_holder = holder }
+    holder = { WJ_dd_remember_jie_effect = yes WJ_dd_ensure_kaifu_effect = yes }
+   }
+   # Retry a failed inheritance grant on the next lifecycle reconciliation.
+   # Do not schedule an unbounded retry loop or accept an arbitrary lower jie.
+   if = {
+    limit = { has_variable = wj_dd_grant_pending var:wj_dd_last_holder = holder }
+    holder = {
+     vassal_contract_set_obligation_level = { type = WJ_sanjie level = scope:wj_dd_core.var:wj_dd_jie }
+    }
+   }
+   if = {
+    limit = { NOT = { var:wj_dd_last_holder = holder } }
+    holder = { WJ_dd_copy_custom_name = { CORE = scope:wj_dd_core FROM = scope:wj_dd_core.var:wj_dd_last_holder } }
+    var:wj_dd_last_holder ?= {
+     if = { # 已死的前任不能存取变量
+      limit = { is_alive = yes }
+      WJ_dd_remember_jie_effect = yes
+      remove_variable = wj_dd_held_core
+      if = { # 只有仍持有三节契约的才改等级
+       limit = { WJ_contract_sanjie_visible_trigger = yes }
+       vassal_contract_set_obligation_level = { type = WJ_sanjie level = 0 }
+      }
+     }
+    }
+    set_variable = { name = wj_dd_last_holder value = holder }
+    holder = {
+     set_variable = { name = wj_dd_held_core value = scope:wj_dd_core }
+     vassal_contract_set_obligation_level = { type = WJ_sanjie level = scope:wj_dd_core.var:wj_dd_jie }
+    }
+   }
+   # Natural office succession cannot be rolled back. Keep the district and its
+   # required jie snapshot, but close military commands if native grant failed.
+   if = {
+   limit = { holder = { vassal_contract_obligation_level:WJ_sanjie = scope:wj_dd_core.var:wj_dd_jie } }
+   remove_variable = wj_dd_grant_pending
+    holder = { WJ_dd_remember_jie_effect = yes WJ_dd_ensure_kaifu_effect = yes }
+   }
+   else = { set_variable = { name = wj_dd_grant_pending value = yes } }
+  }
+  else = { WJ_dd_dissolve_core_effect = yes }
+ }
+ }
+}

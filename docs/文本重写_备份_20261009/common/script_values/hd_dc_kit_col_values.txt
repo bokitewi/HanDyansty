@@ -1,0 +1,134 @@
+﻿# 天朝循环·时代特色：崩溃期套件数值（见 docs/天朝循环_时代特色重制计划.md §3.4）
+
+# ---------- 赈灾 ----------
+hd_dc_col_relief_cost_per_county = 20
+
+# Scope：天子。受灾县数
+hd_dc_col_relief_county_count_value = {
+	value = 0
+	every_sub_realm_county = {
+		limit = { hd_dc_col_county_has_disaster_trigger = yes }
+		add = 1
+	}
+}
+
+# Scope：天子。赈灾花费 = 受灾县数 × 20
+hd_dc_col_relief_cost_value = {
+	value = hd_dc_col_relief_county_count_value
+	multiply = hd_dc_col_relief_cost_per_county
+	min = 20
+}
+
+# ---------- 勤王诏 ----------
+# Scope：天子。代价：正统半级 = 当前正统等级所在档宽度 × 0.5（最高档取上一档宽度）
+# legitimacy_level 从 0 起算：等级 n 的门槛为 legitimacy_level_(n+1)（天命正统共 8 档）
+hd_dc_col_qinwang_legitimacy_cost_value = {
+	value = 0
+	if = {
+		limit = { legitimacy_level <= 0 }
+		add = legitimacy_level_2
+		subtract = legitimacy_level_1
+	}
+	else_if = {
+		limit = { legitimacy_level = 1 }
+		add = legitimacy_level_3
+		subtract = legitimacy_level_2
+	}
+	else_if = {
+		limit = { legitimacy_level = 2 }
+		add = legitimacy_level_4
+		subtract = legitimacy_level_3
+	}
+	else_if = {
+		limit = { legitimacy_level = 3 }
+		add = legitimacy_level_5
+		subtract = legitimacy_level_4
+	}
+	else_if = {
+		limit = { legitimacy_level = 4 }
+		add = legitimacy_level_6
+		subtract = legitimacy_level_5
+	}
+	else_if = {
+		limit = { legitimacy_level = 5 }
+		add = legitimacy_level_7
+		subtract = legitimacy_level_6
+	}
+	else = {
+		add = legitimacy_level_8
+		subtract = legitimacy_level_7
+	}
+	multiply = 0.5
+	round = yes
+	min = 1
+}
+
+# ---------- 招安 ----------
+
+# Scope：角色。年收入：有国库的政体（天朝 / 官僚制）收入进国库，取国库月收入 ×12；其余取个人年收入
+hd_dc_col_yearly_income_value = {
+	value = 0
+	if = {
+		limit = { has_treasury = yes }
+		add = monthly_character_treasury_income
+		multiply = 12
+	}
+	else = {
+		add = yearly_character_income
+	}
+	min = 0
+}
+
+# Scope：须有 scope:recipient。封官花费 = 叛首年收入 × 2（下限 100，防止无地民变首领零成本招安）
+hd_dc_col_amnesty_office_cost_value = {
+	value = scope:recipient.hd_dc_col_yearly_income_value
+	multiply = 2
+	min = 100
+	round = yes
+}
+
+# 须有 scope:actor / scope:recipient。招安所针对的叛乱战争中，主君（防守方）的战争分数（-100~100）
+hd_dc_col_amnesty_defender_score_value = {
+	value = 0
+	scope:actor = {
+		every_character_war = {
+			limit = {
+				primary_defender = scope:actor
+				primary_attacker = scope:recipient
+				hd_dc_col_rebel_war_trigger = yes
+			}
+			add = defender_war_score
+		}
+	}
+}
+
+# AI 接受度中的战局项：主君战分 × 0.5
+hd_dc_col_amnesty_ai_warscore_value = {
+	value = hd_dc_col_amnesty_defender_score_value
+	multiply = 0.5
+}
+
+# ---------- 地方自强 / 授权募兵 ----------
+
+# Scope：被授权募兵的封臣。天子每年返还的税额 ≈ 该封臣上缴税额估计 × 50%
+# 无脚本接口可直接读取"封臣上缴给主君的税"，故按契约比例估算（假定所取年收入为上缴后的净额）：
+#   天朝/官僚制封臣契约上缴 75% 税收 → 上缴 ≈ 自身年收入 × 3
+#   其他政体按约 20% 计 → 上缴 ≈ 自身年收入 × 0.25
+hd_dc_col_militia_refund_value = {
+	value = hd_dc_col_yearly_income_value
+	if = {
+		limit = {
+			OR = {
+				government_has_flag = government_is_celestial
+				government_has_flag = government_is_administrative
+			}
+		}
+		multiply = 3
+	}
+	else = {
+		multiply = 0.25
+	}
+	multiply = 0.5
+	min = 0
+	round = yes
+}

@@ -1,0 +1,344 @@
+﻿# 天朝循环·时代特色：扩张期套件效果（见 docs/天朝循环_时代特色重制计划.md §3.1）
+# 诱因一律经 hd_dc_kit_fire_effect / hd_dc_kit_fire_global_effect 发射；ACTOR 只传 root 或已保存的 scope
+
+# ---------------------------------------------------------------------------
+# 开边 CB 胜利。Scope：CB（scope:attacker = 天子，scope:defender = 外邦）
+# 战果：对方所有"与天子疆域接壤"的郡（公爵领）内、属于对方疆域的全部县
+# ---------------------------------------------------------------------------
+hd_dc_exp_frontier_victory_effect = {
+	create_title_and_vassal_change = {
+		type = conquest
+		save_scope_as = change
+		add_claim_on_loss = yes
+	}
+	# 计算战果郡：对方疆域内与天子疆域相邻的县所在的郡
+	scope:defender = {
+		every_sub_realm_county = {
+			limit = {
+				any_neighboring_county = { holder.top_liege ?= scope:attacker }
+			}
+			duchy ?= {
+				if = {
+					limit = { NOT = { is_in_list = hd_dc_exp_frontier_duchies } }
+					add_to_list = hd_dc_exp_frontier_duchies
+				}
+			}
+		}
+	}
+	# 复用原版/本 mod 的征服转移：可整体转投的封臣转投，其余县直接夺取
+	every_in_list = {
+		list = hd_dc_exp_frontier_duchies
+		custom_tooltip = CONQUEST_CB_TITLE
+		conquest_cb_title_transfer = {
+			RELIGIOUS_WAR = no
+		}
+	}
+	every_in_list = {
+		list = vassals_taken
+		change_liege = {
+			liege = scope:attacker
+			change = scope:change
+		}
+	}
+	every_in_list = {
+		list = titles_taken
+		change_title_holder = {
+			holder = scope:attacker
+			change = scope:change
+			take_baronies = yes
+		}
+	}
+	resolve_title_and_vassal_change = scope:change
+	scope:attacker = { add_prestige_experience = medium_prestige_value }
+	hd_dc_kit_fire_effect = { CATALYST = catalyst_hd_frontier_victory ACTOR = scope:attacker }
+}
+
+# ---------------------------------------------------------------------------
+# 朝贡国记录（册封与年度扫描共用）。Scope：朝贡国（角色）
+# 记录挂在其主头衔上，继承不会重复计数；全局名单用于清理已脱离朝贡者
+# ---------------------------------------------------------------------------
+hd_dc_exp_mark_tributary_effect = {
+	primary_title ?= {
+		if = {
+			limit = { NOT = { has_variable = hd_dc_exp_tributary_counted } }
+			set_variable = hd_dc_exp_tributary_counted
+			add_to_global_variable_list = { name = hd_dc_exp_tributary_titles target = this }
+		}
+	}
+}
+
+# Scope：dynastic_cycle 局势（年度）。四夷来朝：任何途径成为天子朝贡国者（原版无对应 on_action，改为年度扫描）
+hd_dc_exp_tributary_scan_effect = {
+	# 清理：已不再朝贡天子的记录
+	every_in_global_list = {
+		variable = hd_dc_exp_tributary_titles
+		add_to_temporary_list = hd_dc_exp_tributary_snapshot
+	}
+	every_in_list = {
+		list = hd_dc_exp_tributary_snapshot
+		if = {
+			limit = {
+				NOT = {
+					holder ?= {
+						exists = title:h_china.holder
+						is_tributary_of = title:h_china.holder
+					}
+				}
+			}
+			remove_variable = hd_dc_exp_tributary_counted
+			remove_list_global_variable = { name = hd_dc_exp_tributary_titles target = this }
+		}
+	}
+	# 新朝贡国：首次扫描只登记不计分（避免读档后把既有朝贡国全部计入）
+	if = {
+		limit = { exists = title:h_china.holder }
+		title:h_china.holder = {
+			every_tributary = {
+				limit = {
+					exists = primary_title
+					primary_title = { NOT = { has_variable = hd_dc_exp_tributary_counted } }
+				}
+				hd_dc_exp_mark_tributary_effect = yes
+				if = {
+					limit = { has_global_variable = hd_dc_exp_tributary_seeded }
+					hd_dc_kit_fire_global_effect = { CATALYST = catalyst_hd_tributary_gained }
+				}
+			}
+		}
+	}
+	if = {
+		limit = { NOT = { has_global_variable = hd_dc_exp_tributary_seeded } }
+		set_global_variable = hd_dc_exp_tributary_seeded
+	}
+}
+
+# ---------------------------------------------------------------------------
+# 屯田。Scope：天子
+# ---------------------------------------------------------------------------
+# 选出至多 4 个边州（王国级），按其中属于天子疆域的县数排序，存为 scope:hd_dc_exp_slot_1~4
+hd_dc_exp_collect_border_kingdoms_effect = {
+	save_scope_as = hd_dc_exp_ruler
+	every_sub_realm_county = {
+		limit = {
+			hd_dc_exp_border_county_trigger = { RULER = scope:hd_dc_exp_ruler }
+		}
+		kingdom ?= {
+			if = {
+				limit = { NOT = { is_in_list = hd_dc_exp_border_kingdoms } }
+				add_to_list = hd_dc_exp_border_kingdoms
+			}
+		}
+	}
+	ordered_in_list = {
+		list = hd_dc_exp_border_kingdoms
+		order_by = hd_dc_exp_kingdom_realm_counties_value
+		position = 0
+		check_range_bounds = no
+		save_scope_as = hd_dc_exp_slot_1
+	}
+	ordered_in_list = {
+		list = hd_dc_exp_border_kingdoms
+		order_by = hd_dc_exp_kingdom_realm_counties_value
+		position = 1
+		check_range_bounds = no
+		save_scope_as = hd_dc_exp_slot_2
+	}
+	ordered_in_list = {
+		list = hd_dc_exp_border_kingdoms
+		order_by = hd_dc_exp_kingdom_realm_counties_value
+		position = 2
+		check_range_bounds = no
+		save_scope_as = hd_dc_exp_slot_3
+	}
+	ordered_in_list = {
+		list = hd_dc_exp_border_kingdoms
+		order_by = hd_dc_exp_kingdom_realm_counties_value
+		position = 3
+		check_range_bounds = no
+		save_scope_as = hd_dc_exp_slot_4
+	}
+}
+
+# 对 $KINGDOM$ 内属于天子疆域的各县施加屯田修正（补给 +50%、征兵 +15%，10 年）
+hd_dc_exp_apply_tuntian_effect = {
+	save_scope_as = hd_dc_exp_ruler
+	custom_tooltip = hd_dc_exp_tuntian_apply_tt
+	hidden_effect = {
+		$KINGDOM$ = {
+			every_de_jure_county = {
+				limit = { holder.top_liege ?= scope:hd_dc_exp_ruler }
+				add_county_modifier = {
+					modifier = hd_dc_exp_tuntian_modifier
+					years = 10
+				}
+			}
+		}
+	}
+}
+
+# ---------------------------------------------------------------------------
+# 军功。将领记录与授爵
+# ---------------------------------------------------------------------------
+# Scope：交战一方（on_combat_end_winner / on_combat_end_loser 的 root）
+# 天子与天下之外的势力交战时，记下天子一方参战的将领（存于战争上）
+hd_dc_exp_record_commanders_effect = {
+	title:h_china.holder = { save_scope_as = hd_dc_exp_emperor }
+	combat.combat_war = { save_scope_as = hd_dc_exp_war }
+	if = {
+		limit = {
+			scope:hd_dc_exp_war = {
+				OR = {
+					AND = {
+						primary_attacker = scope:hd_dc_exp_emperor
+						primary_defender = { hd_dc_is_outsider_trigger = yes }
+					}
+					AND = {
+						primary_defender = scope:hd_dc_exp_emperor
+						primary_attacker = { hd_dc_is_outsider_trigger = yes }
+					}
+				}
+			}
+		}
+		every_side_commander = {
+			limit = {
+				top_liege ?= scope:hd_dc_exp_emperor
+				NOT = { this = scope:hd_dc_exp_emperor }
+			}
+			save_temporary_scope_as = hd_dc_exp_cmd
+			scope:hd_dc_exp_war = {
+				if = {
+					limit = {
+						NOT = { is_target_in_variable_list = { name = hd_dc_exp_commanders target = scope:hd_dc_exp_cmd } }
+					}
+					add_to_variable_list = { name = hd_dc_exp_commanders target = scope:hd_dc_exp_cmd }
+				}
+			}
+		}
+	}
+}
+
+# Scope：天子（on_war_won_* 中，scope:war 有效）。天子战胜外邦：开放 1 年军功窗口，参战将领成为候选
+hd_dc_exp_open_merit_window_effect = {
+	save_scope_as = hd_dc_exp_emperor
+	clear_variable_list = hd_dc_exp_merit_candidates
+	scope:war = {
+		every_in_list = {
+			variable = hd_dc_exp_commanders
+			save_temporary_scope_as = hd_dc_exp_cmd
+			scope:hd_dc_exp_emperor = {
+				add_to_variable_list = { name = hd_dc_exp_merit_candidates target = scope:hd_dc_exp_cmd }
+			}
+		}
+	}
+	if = {
+		limit = {
+			any_in_list = {
+				variable = hd_dc_exp_merit_candidates
+				hd_dc_exp_merit_candidate_trigger = { RULER = scope:hd_dc_exp_emperor }
+			}
+		}
+		add_character_flag = {
+			flag = hd_dc_exp_merit_window
+			years = 1
+		}
+		if = {
+			limit = { is_ai = no }
+			send_interface_toast = {
+				type = event_toast_effect_good
+				title = hd_dc_exp_merit_window_toast
+				left_icon = scope:hd_dc_exp_emperor
+				custom_tooltip = hd_dc_exp_merit_window_toast_desc
+			}
+		}
+	}
+}
+
+# Scope：天子（军功事件选项）。为将领 $TARGET$ 授爵
+# WJ 爵位体系没有"晋爵"通道（爵级与名号/食邑头衔绑定，已有爵者不能再授），故按最接近的可行方案：
+#   1. 有 WJ 资望特质者：武勋轨道 +25（恰好跨过一档爵位资格门槛）；无此特质者：20 年"军功"修正
+#   2. 将领威望 +150，双方好感 +30
+#   3. 玩家天子且将领尚无爵位、已符合 WJ 授爵资格：打开原生授爵互动，由原生流程选封地并绑定
+hd_dc_exp_grant_merit_effect = {
+	save_scope_as = hd_dc_exp_merit_lord
+	$TARGET$ = {
+		save_scope_as = hd_dc_exp_merit_target
+		if = {
+			limit = { has_trait = WJ_mingshi_trait }
+			add_trait_xp = {
+				trait = WJ_mingshi_trait
+				track = jungong
+				value = hd_dc_exp_merit_jungong_xp
+			}
+		}
+		else = {
+			add_character_modifier = {
+				modifier = hd_dc_exp_military_merit_modifier
+				years = 20
+			}
+		}
+		add_prestige = hd_dc_exp_merit_prestige_gain
+		add_opinion = {
+			target = scope:hd_dc_exp_merit_lord
+			modifier = hd_dc_exp_military_merit_opinion
+		}
+	}
+	add_opinion = {
+		target = scope:hd_dc_exp_merit_target
+		modifier = hd_dc_exp_military_merit_opinion
+	}
+	if = {
+		limit = {
+			is_ai = no
+			WJ_peer_authority = yes
+			NOT = { exists = var:wj_peer_target }
+			scope:hd_dc_exp_merit_target = { WJ_peer_base_candidate = { EMPEROR = scope:hd_dc_exp_merit_lord } }
+		}
+		custom_tooltip = hd_dc_exp_merit_open_peerage_tt
+		open_interaction_window = {
+			interaction = WJ_peer_grant_interaction
+			actor = scope:hd_dc_exp_merit_lord
+			recipient = scope:hd_dc_exp_merit_target
+		}
+	}
+	hidden_effect = {
+		clear_variable_list = hd_dc_exp_merit_candidates
+		remove_character_flag = hd_dc_exp_merit_window
+	}
+}
+
+# Scope：天子（军功事件 immediate）。候选按军事排序，存为 scope:hd_dc_exp_merit_1~4
+hd_dc_exp_collect_merit_candidates_effect = {
+	save_scope_as = hd_dc_exp_merit_lord
+	ordered_in_list = {
+		variable = hd_dc_exp_merit_candidates
+		limit = { hd_dc_exp_merit_candidate_trigger = { RULER = scope:hd_dc_exp_merit_lord } }
+		order_by = martial
+		position = 0
+		check_range_bounds = no
+		save_scope_as = hd_dc_exp_merit_1
+	}
+	ordered_in_list = {
+		variable = hd_dc_exp_merit_candidates
+		limit = { hd_dc_exp_merit_candidate_trigger = { RULER = scope:hd_dc_exp_merit_lord } }
+		order_by = martial
+		position = 1
+		check_range_bounds = no
+		save_scope_as = hd_dc_exp_merit_2
+	}
+	ordered_in_list = {
+		variable = hd_dc_exp_merit_candidates
+		limit = { hd_dc_exp_merit_candidate_trigger = { RULER = scope:hd_dc_exp_merit_lord } }
+		order_by = martial
+		position = 2
+		check_range_bounds = no
+		save_scope_as = hd_dc_exp_merit_3
+	}
+	ordered_in_list = {
+		variable = hd_dc_exp_merit_candidates
+		limit = { hd_dc_exp_merit_candidate_trigger = { RULER = scope:hd_dc_exp_merit_lord } }
+		order_by = martial
+		position = 3
+		check_range_bounds = no
+		save_scope_as = hd_dc_exp_merit_4
+	}
+}

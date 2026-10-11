@@ -1,0 +1,93 @@
+﻿# Situation scope. Observe actual sovereignty only; native scripts govern recovery.
+hd_dc_initialize_scope_effect = {
+	if = {
+		limit = { exists = title:h_china NOT = { has_variable = hd_dc_schema_version } }
+		save_temporary_scope_as = hd_dc_state
+		set_variable = { name = hd_dc_total_counties value = 0 }
+		clear_variable_list = hd_dc_counties
+		title:h_china = {
+			every_de_jure_county = {
+				set_variable = { name = hd_dc_core_county_v1 value = yes }
+				save_temporary_scope_as = hd_dc_county
+				scope:hd_dc_state = {
+					add_to_variable_list = { name = hd_dc_counties target = scope:hd_dc_county }
+					change_variable = { name = hd_dc_total_counties add = 1 }
+				}
+			}
+		}
+		set_variable = { name = hd_dc_schema_version value = 1 }
+		set_variable = { name = hd_dc_chaos_epoch value = 0 }
+	}
+}
+
+hd_dc_start_era_timer_effect = {
+	if = {
+		limit = { NOT = { has_variable = hd_dc_$REASON$_since } }
+		set_variable = { name = hd_dc_$REASON$_since value = current_date }
+		set_variable = { name = hd_dc_$REASON$_wait value = yes months = $MONTHS$ }
+	}
+}
+
+hd_dc_clear_era_timers_effect = {
+	remove_variable = hd_dc_absent_since
+	remove_variable = hd_dc_absent_wait
+	remove_variable = hd_dc_low_control_since
+	remove_variable = hd_dc_low_control_wait
+}
+
+hd_dc_refresh_snapshot_effect = {
+	hd_dc_initialize_scope_effect = yes
+	save_temporary_scope_as = hd_dc_state
+	set_variable = { name = hd_dc_controlled_counties value = 0 }
+	set_variable = { name = hd_dc_observed_counties value = 0 }
+	every_in_list = {
+		variable = hd_dc_counties
+		scope:hd_dc_state = { change_variable = { name = hd_dc_observed_counties add = 1 } }
+		if = {
+			limit = {
+				exists = title:h_china.holder
+				exists = holder
+				holder ?= {
+					OR = { this = title:h_china.holder any_liege_or_above = { this = title:h_china.holder } }
+				}
+			}
+			scope:hd_dc_state = { change_variable = { name = hd_dc_controlled_counties add = 1 } }
+		}
+	}
+	# 2026-10-08：进入群雄割据改为纯即时检测（见 hd_dc_can_enter_chaos_trigger），不再使用"无霸权 12 个月 / 低控制 24 个月"计时；清掉旧档残留
+	hd_dc_clear_era_timers_effect = yes
+}
+
+hd_dc_evaluate_era_effect = {
+	if = {
+		limit = { hd_dc_can_enter_chaos_trigger = yes }
+		situation_top_sub_region = { change_phase = { phase = situation_dynastic_cycle_phase_chaos } }
+		hd_dc_clear_era_timers_effect = yes
+	}
+}
+
+# Merge title transactions on the same day before reading the final holder chain.
+hd_dc_request_observation_effect = {
+	if = {
+		limit = { NOT = { has_variable = hd_dc_observation_queued } }
+		set_variable = { name = hd_dc_observation_queued value = yes }
+		trigger_event = { on_action = hd_dc_observe_political_state days = 1 }
+	}
+}
+
+# Preserve CB callbacks without a recovery timer or a phase mutation.
+hd_dc_observe_mandate_war_effect = {
+	if = {
+		limit = { exists = situation:dynastic_cycle exists = scope:war scope:war = { hd_dc_is_mandate_war_trigger = yes } }
+		situation:dynastic_cycle = { hd_dc_request_observation_effect = yes }
+	}
+}
+
+# Notification only. Entering chaos does not shatter any realm.
+hd_dc_notify_chaos_effect = {
+	change_variable = { name = hd_dc_chaos_epoch add = 1 }
+	every_player = {
+		limit = { tgp_does_this_player_care_about_the_dynastic_cycle = yes }
+		trigger_event = hd_dc_era.0001
+	}
+}

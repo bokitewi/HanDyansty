@@ -1,0 +1,111 @@
+﻿# Native scopes: title gain/loss root=character, scope:title=transferred title.
+# on_death runs before death: snapshot contract state while it still exists.
+on_death = { on_actions = { WJ_dd_before_death } }
+on_title_gain = { on_actions = { WJ_dd_realm_taken WJ_dd_title_changed } }
+on_title_lost = { on_actions = { WJ_dd_title_changed } }
+on_title_destroyed = { on_actions = { WJ_dd_realm_destroyed WJ_dd_title_destroyed } }
+on_vassal_change = { on_actions = { WJ_dd_subrealm_changed WJ_dd_person_changed } }
+on_government_change = { on_actions = { WJ_dd_person_changed } }
+on_liege_government_change = { on_actions = { WJ_dd_person_changed } }
+on_war_started = { on_actions = { WJ_dd_member_attacked } }
+WJ_dd_member_attacked = {
+ trigger = { scope:defender = { WJ_dd_member_trigger = yes NOT = { WJ_dd_head_trigger = yes } } }
+ effect = { WJ_dd_notify_defence_effect = yes }
+}
+
+WJ_dd_before_death = {
+ trigger = { exists = var:wj_dd_held_core }
+ effect = { WJ_dd_remember_jie_effect = yes }
+}
+WJ_dd_title_changed = {
+ trigger = {
+  exists = scope:title
+  OR = { exists = scope:title.var:wj_dd_core exists = var:wj_dd_held_core }
+ }
+ effect = {
+  WJ_dd_remember_jie_effect = yes
+  var:wj_dd_held_core ?= { save_scope_as = wj_dd_affected_core }
+  scope:wj_dd_affected_core.holder ?= {
+   trigger_event = { on_action = WJ_dd_after_change days = 1 }
+  }
+  scope:title.var:wj_dd_core ?= { save_scope_as = wj_dd_affected_core }
+  # Schedule on the current holder, not a possibly dead previous holder.
+  scope:wj_dd_affected_core.holder ?= {
+   trigger_event = { on_action = WJ_dd_after_change days = 1 }
+  }
+ }
+}
+WJ_dd_person_changed = {
+ trigger = { OR = { exists = primary_title.kingdom.var:wj_dd_core exists = var:wj_dd_held_core } }
+ effect = {
+  WJ_dd_remember_jie_effect = yes
+  var:wj_dd_held_core ?= { save_scope_as = wj_dd_affected_core }
+  scope:wj_dd_affected_core.holder ?= {
+   trigger_event = { on_action = WJ_dd_after_change days = 1 }
+  }
+  primary_title.kingdom.var:wj_dd_core ?= { save_scope_as = wj_dd_affected_core }
+  scope:wj_dd_affected_core.holder ?= {
+   trigger_event = { on_action = WJ_dd_after_change days = 1 }
+  }
+ }
+}
+WJ_dd_title_destroyed = {
+ trigger = { exists = scope:landed_title.var:wj_dd_core }
+ effect = {
+  scope:landed_title = {
+   save_scope_as = wj_dd_destroyed_member
+   if = {
+    limit = { var:wj_dd_core = this }
+    WJ_dd_dissolve_core_effect = yes
+   }
+   else = {
+    var:wj_dd_core = {
+     save_scope_as = wj_dd_affected_core
+     remove_list_variable = { name = wj_dd_members target = scope:wj_dd_destroyed_member }
+    }
+    remove_variable = wj_dd_core
+    scope:wj_dd_affected_core.holder ?= {
+     trigger_event = { on_action = WJ_dd_after_change days = 1 }
+    }
+   }
+  }
+ }
+}
+WJ_dd_after_change = {
+ effect = { scope:wj_dd_affected_core ?= { WJ_dd_reconcile_core_effect = yes } }
+}
+# Realm changes are event driven. No daily global scan and no title transfers.
+WJ_dd_realm_taken = {
+ trigger = {
+  scope:title = { tier = tier_hegemony }
+  OR = {
+   scope:transfer_type = flag:conquest scope:transfer_type = flag:conquest_holy_war
+   scope:transfer_type = flag:conquest_claim scope:transfer_type = flag:conquest_populist
+   scope:transfer_type = flag:usurped scope:transfer_type = flag:faction_demand
+  }
+ }
+ effect = { scope:title = { WJ_dd_clear_realm_effect = yes } }
+}
+WJ_dd_realm_destroyed = {
+ trigger = { scope:landed_title = { tier = tier_hegemony } }
+ effect = { scope:landed_title = { WJ_dd_clear_realm_effect = yes } }
+}
+WJ_dd_subrealm_changed = {
+ effect = {
+  # A former imperial realm absorbed into another court loses its own districts.
+  every_held_title = {
+   limit = { tier = tier_hegemony holder = { is_independent_ruler = no } }
+   WJ_dd_clear_realm_effect = yes
+  }
+  every_held_title = {
+   limit = { has_variable = wj_dd_core }
+   var:wj_dd_core = { WJ_dd_reconcile_core_effect = yes }
+  }
+  every_vassal_or_below = {
+   every_held_title = {
+    limit = { has_variable = wj_dd_core }
+    var:wj_dd_core = { WJ_dd_reconcile_core_effect = yes }
+   }
+  }
+ }
+}

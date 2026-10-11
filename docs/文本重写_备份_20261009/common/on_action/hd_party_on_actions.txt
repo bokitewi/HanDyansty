@@ -1,0 +1,176 @@
+﻿# 天朝循环大修·朋党：on_action 挂钩。只追加 on_actions 子项，不覆盖原 effect。
+
+on_war_started = {
+	on_actions = { hd_party_on_war_started }
+}
+on_war_won_attacker = {
+	on_actions = { hd_party_on_war_won_attacker }
+}
+on_title_gain = {
+	on_actions = { hd_party_on_title_gain }
+}
+on_death = {
+	on_actions = { hd_party_on_death }
+}
+on_title_lost = {
+	on_actions = { hd_party_on_title_lost }
+}
+on_marriage = {
+	on_actions = { hd_party_on_marriage }
+}
+
+# 开战：记录战争；尊王立场的武官直属封臣主动加入君主一方
+hd_party_on_war_started = {
+	effect = {
+		scope:attacker ?= {
+			if = {
+				limit = { has_variable = hd_party_court }
+				set_variable = { name = hd_party_recent_war days = 3650 }
+				save_scope_as = hd_party_war_leader
+				random_character_war = {
+					limit = { primary_attacker = scope:hd_party_war_leader }
+					save_scope_as = hd_party_war
+				}
+				if = {
+					limit = { exists = scope:hd_party_war }
+					every_vassal = {
+						limit = {
+							is_ai = yes
+							is_at_war = no
+							hd_party_zunwang_member_of_trigger = { COURT = scope:hd_party_war_leader }
+							hd_party_is_military_official_trigger = yes
+						}
+						scope:hd_party_war = { add_attacker = prev }
+					}
+				}
+			}
+		}
+		scope:defender ?= {
+			if = {
+				limit = { has_variable = hd_party_court }
+				set_variable = { name = hd_party_recent_war days = 3650 }
+				save_scope_as = hd_party_war_defender
+				random_character_war = {
+					limit = { primary_defender = scope:hd_party_war_defender }
+					save_scope_as = hd_party_war_d
+				}
+				if = {
+					limit = { exists = scope:hd_party_war_d }
+					every_vassal = {
+						limit = {
+							is_ai = yes
+							is_at_war = no
+							hd_party_zunwang_member_of_trigger = { COURT = scope:hd_party_war_defender }
+							hd_party_is_military_official_trigger = yes
+						}
+						scope:hd_party_war_d = { add_defender = prev }
+					}
+				}
+			}
+		}
+	}
+}
+
+# 君主赢得进攻战争：武勋满意度（5 年）
+hd_party_on_war_won_attacker = {
+	effect = {
+		scope:attacker ?= {
+			if = {
+				limit = { has_variable = hd_party_court }
+				set_variable = { name = hd_party_recent_offense_win days = 1825 }
+			}
+		}
+	}
+}
+
+# 获得帝国级以上头衔、成为朝廷君主：次日初始化朋党
+hd_party_on_title_gain = {
+	trigger = {
+		scope:title.tier >= tier_empire
+		NOT = { has_variable = hd_party_court }
+		hd_party_court_ruler_trigger = yes
+	}
+	effect = {
+		trigger_event = { id = hd_party.0001 days = 1 }
+	}
+}
+
+# 君主将死：把朋党数据交给主要继承人（此时前任仍可读写变量），成员改指向继承人
+hd_party_on_death = {
+	trigger = {
+		has_variable = hd_party_court
+	}
+	effect = {
+		save_scope_as = hd_party_old_ruler
+		primary_heir ?= {
+			if = {
+				limit = { is_alive = yes }
+				save_scope_as = hd_party_heir
+				hd_party_inherit_court_effect = { OLD = scope:hd_party_old_ruler }
+			}
+		}
+		if = {
+			limit = { exists = scope:hd_party_heir }
+			hd_party_repoint_members_effect = { NEW = scope:hd_party_heir }
+		}
+		hd_party_clear_court_effect = yes
+	}
+}
+
+# 头衔被领主收回：若原持有者为世族成员，所在朝廷记录"剥夺世族"（10 年）
+hd_party_on_title_lost = {
+	trigger = {
+		is_alive = yes
+		var:hd_party_my_group ?= flag:shizu
+		exists = scope:new_holder
+		exists = liege
+		scope:new_holder = liege
+	}
+	effect = {
+		var:hd_party_my_court ?= {
+			if = {
+				limit = { is_alive = yes }
+				set_variable = { name = hd_party_recent_revoke_shizu days = 3650 }
+			}
+		}
+	}
+}
+
+# 婚姻：朝廷君主或其子女成婚后刷新后族宗族列表
+hd_party_on_marriage = {
+	effect = {
+		if = {
+			limit = { has_variable = hd_party_court }
+			hd_party_refresh_waiqi_list_effect = yes
+		}
+		scope:spouse ?= {
+			if = {
+				limit = { has_variable = hd_party_court }
+				hd_party_refresh_waiqi_list_effect = yes
+			}
+		}
+		every_parent = {
+			limit = { has_variable = hd_party_court }
+			hd_party_refresh_waiqi_list_effect = yes
+		}
+		scope:spouse ?= {
+			every_parent = {
+				limit = { has_variable = hd_party_court }
+				hd_party_refresh_waiqi_list_effect = yes
+			}
+		}
+	}
+}
+
+# 开局：建立各朝廷朋党数据；184 年剧本做史实设定
+on_game_start_after_lobby = {
+	on_actions = { hd_party_on_game_start }
+}
+hd_party_on_game_start = {
+	effect = {
+		# 局势参与者组要等引擎下一次更新才会填人，所以延后几天再初始化
+		random_player = {
+			trigger_event = { id = hd_party.0002 days = 3 }
+		}
+	}
+}

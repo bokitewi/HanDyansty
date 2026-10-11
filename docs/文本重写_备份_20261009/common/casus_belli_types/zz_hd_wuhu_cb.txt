@@ -1,0 +1,415 @@
+﻿# 五胡内附宣战理由（见 docs/五胡内附_僚人入蜀_设计草案.md 4.2、4.3、4.6）。
+# 两者都只由脚本发起（valid_to_start = no）。
+
+############################
+# 胡帅求地（照原版 fp3_seljuk_invasion_cb）。目标为公爵领（求地被拒）或伯爵领（边疆胡首索封被拒后叛乱）。
+############################
+hd_wuhu_petition_cb = {
+	group = event
+	icon = invasion
+	interface_priority = 8
+	war_name = "HD_WUHU_PETITION_WAR_NAME"
+	war_name_base = "INVASION_WAR_NAME_BASE"
+	cb_name = "HD_WUHU_PETITION_CB_NAME"
+
+	allowed_for_character = { always = yes }
+	allowed_against_character = { is_landed = yes }
+	valid_to_start = { always = no }
+	cost = {}
+
+	target_titles = all
+	target_title_tier = all
+	target_de_jure_regions_above = yes
+
+	attacker_wargoal_percentage = 0.6
+	full_occupation_by_attacker_gives_victory = yes
+	landless_attacker_needs_armies = yes
+	attacker_capital_gives_war_score = no
+	full_occupation_by_defender_gives_victory = no
+	allow_hostages = no
+
+	on_declaration = {
+		on_declared_war = yes
+	}
+
+	on_victory = {
+		add_legitimacy_attacker_victory_effect = yes
+		scope:attacker = {
+			show_pow_release_message_effect = yes
+			add_prestige = massive_prestige_gain
+		}
+		scope:defender = { add_prestige = massive_prestige_loss }
+		add_truce_attacker_victory_effect = yes
+
+		ordered_in_list = {
+			list = target_titles
+			order_by = tier
+			save_scope_as = hd_wuhu_won_title
+		}
+		scope:attacker = {
+			create_title_and_vassal_change = {
+				type = conquest
+				save_scope_as = change
+			}
+			every_in_list = {
+				list = target_titles
+				change_title_holder = {
+					holder = scope:attacker
+					change = scope:change
+				}
+				every_in_de_jure_hierarchy = {
+					limit = {
+						tier = tier_county
+						holder ?= {
+							OR = {
+								this = scope:defender
+								target_is_liege_or_above = scope:defender
+							}
+						}
+					}
+					change_title_holder = {
+						holder = scope:attacker
+						change = scope:change
+						take_baronies = yes
+					}
+				}
+			}
+			resolve_title_and_vassal_change = scope:change
+		}
+
+		# 胜利后胡帅保持独立（照原版），安置并写入内附标记
+		scope:attacker = { save_scope_as = hd_wuhu_chief }
+		hd_wuhu_petition_settle_chief_effect = { TARGET = scope:hd_wuhu_won_title }
+
+		laamp_as_mercenary_payout_tooltip_effect = yes
+		mandala_war_victory_effects = yes
+	}
+
+	on_defeat = {
+		add_legitimacy_attacker_defeat_effect = yes
+		add_truce_attacker_defeat_effect = yes
+		scope:attacker = { add_prestige = major_prestige_loss }
+		scope:defender = {
+			mandala_peacemaker_perk_serenity_effect = yes
+			add_prestige = major_prestige_gain
+		}
+		laamp_as_mercenary_payout_tooltip_effect = yes
+		mandala_war_defeat_effects = yes
+	}
+
+	# 白和：照原版仍然给地，胡帅成为守方的封臣
+	on_white_peace = {
+		add_truce_attacker_defeat_effect = yes
+		scope:attacker = { add_prestige = major_prestige_loss }
+		ordered_in_list = {
+			list = target_titles
+			order_by = tier
+			save_scope_as = hd_wuhu_petition_target
+		}
+		scope:attacker = { save_scope_as = hd_wuhu_chief }
+		hd_wuhu_petition_accept_effect = { RECEIVER = scope:defender }
+		laamp_as_mercenary_payout_tooltip_effect = yes
+	}
+
+	on_victory_desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { scope:attacker = { is_local_player = yes } }
+				desc = hd_wuhu_petition_cb_victory_desc_attacker
+			}
+			desc = hd_wuhu_petition_cb_victory_desc
+		}
+	}
+	on_defeat_desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { scope:attacker = { is_local_player = yes } }
+				desc = hd_wuhu_petition_cb_defeat_desc_attacker
+			}
+			desc = hd_wuhu_petition_cb_defeat_desc
+		}
+	}
+	on_white_peace_desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { scope:attacker = { is_local_player = yes } }
+				desc = hd_wuhu_petition_cb_white_peace_desc_attacker
+			}
+			desc = hd_wuhu_petition_cb_white_peace_desc
+		}
+	}
+	on_invalidated_desc = msg_invalidate_war_title
+
+	on_primary_attacker_death = inherit
+	on_primary_defender_death = inherit
+	check_defender_inheritance_validity = yes
+	attacker_allies_inherit = yes
+	defender_allies_inherit = no
+	transfer_behavior = transfer
+	should_invalidate = {}
+	truce_days = 3650
+}
+
+############################
+# 史实大单于起兵（照原版 hungarian_migration_cb 的战争分）。目标为王国，夺取守方在该王国法理内的全部土地。
+############################
+hd_wuhu_chanyu_cb = {
+	icon = invasion
+	group = event
+
+	allowed_for_character = { always = yes }
+	allowed_against_character = { always = yes }
+	valid_to_start = { always = no }
+	cost = {}
+
+	target_titles = all
+	target_title_tier = kingdom
+	target_de_jure_regions_above = yes
+	ignore_effect = change_title_holder
+	use_de_jure_wargoal_only = yes
+	combine_into_one = yes
+
+	max_attacker_score_from_battles = 200
+	max_defender_score_from_battles = 200
+	max_defender_score_from_occupation = 25
+	max_attacker_score_from_occupation = 150
+	full_occupation_by_defender_gives_victory = no
+	landless_attacker_needs_armies = no
+	attacker_capital_gives_war_score = no
+
+	should_invalidate = {
+		NOT = {
+			any_in_list = {
+				list = target_titles
+				any_in_de_jure_hierarchy = {
+					tier = tier_county
+					holder = {
+						target_is_same_character_or_above = scope:defender
+					}
+				}
+			}
+		}
+	}
+
+	on_invalidated_desc = msg_invasion_war_invalidated_message
+
+	on_declaration = {
+		on_declared_war = yes
+	}
+
+	on_victory_desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { scope:attacker = { is_local_player = yes } }
+				desc = hd_wuhu_chanyu_war_victory_desc_attacker
+			}
+			desc = hd_wuhu_chanyu_war_victory_desc
+		}
+	}
+
+	on_victory = {
+		scope:attacker = { show_pow_release_message_effect = yes }
+		add_legitimacy_attacker_victory_effect = yes
+		scope:attacker = { accolade_attacker_war_end_glory_gain_high_effect = yes }
+
+		# 独立
+		if = {
+			limit = {
+				scope:attacker = { top_liege != this }
+			}
+			create_title_and_vassal_change = {
+				type = independency
+				save_scope_as = change
+				add_claim_on_loss = no
+			}
+			change_liege_or_become_independent = {
+				CHANGE = scope:change
+				VASSAL = scope:attacker
+			}
+			resolve_title_and_vassal_change = scope:change
+		}
+
+		# 夺取守方在目标王国法理内的公爵领与伯爵领（玩家封臣豁免，照原版）
+		hidden_effect = {
+			create_title_and_vassal_change = {
+				type = conquest
+				save_scope_as = change
+				add_claim_on_loss = yes
+			}
+			setup_invasion_cb = {
+				titles = target_titles
+				attacker = scope:attacker
+				defender = scope:defender
+				change = scope:change
+				take_occupied = no
+			}
+			every_in_list = {
+				list = target_titles
+				every_in_de_jure_hierarchy = {
+					limit = {
+						tier = tier_duchy
+						holder ?= {
+							top_liege ?= scope:defender
+							NAND = {
+								this != top_liege
+								is_ai = no
+							}
+						}
+					}
+					every_in_de_jure_hierarchy = {
+						limit = {
+							tier = tier_county
+							holder ?= scope:defender
+						}
+						add_to_temporary_list = county_titles_under_transfer
+					}
+					change_title_holder = {
+						holder = scope:attacker
+						change = scope:change
+						take_baronies = yes
+					}
+				}
+				every_in_de_jure_hierarchy = {
+					limit = {
+						tier = tier_county
+						holder ?= {
+							top_liege = scope:defender
+							NAND = {
+								this != top_liege
+								is_ai = no
+							}
+						}
+					}
+					if = {
+						limit = { NOT = { is_in_list = county_titles_under_transfer } }
+						add_to_temporary_list = county_titles_under_transfer
+						change_title_holder = {
+							holder = scope:attacker
+							change = scope:change
+							take_baronies = yes
+						}
+					}
+				}
+			}
+			resolve_title_and_vassal_change = scope:change
+		}
+
+		# 取得/创建王国、改国号、政体处理
+		custom_tooltip = hd_wuhu_chanyu_war_victory_crown_tt
+		scope:attacker = { trigger_event = hd_wuhu.4001 }
+
+		modify_all_participants_fame_values = {
+			WINNER = scope:attacker
+			LOSER = scope:defender
+			FAME_BASE = scope:cb_prestige_factor
+			IS_RELIGIOUS_WAR = no
+			WINNER_FAME_SCALE = 10
+			LOSER_FAME_SCALE = -10
+			WINNER_ALLY_FAME_SCALE = 10
+			LOSER_ALLY_FAME_SCALE = 10
+		}
+		add_truce_attacker_victory_effect = yes
+		scope:attacker = { fp1_remember_recent_conquest_victory_effect = yes }
+		laamp_as_mercenary_payout_tooltip_effect = yes
+		mandala_war_victory_effects = yes
+	}
+
+	on_white_peace_desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { scope:defender = { is_local_player = yes } }
+				desc = invasion_war_white_peace_desc_defender
+			}
+			desc = invasion_war_white_peace_desc
+		}
+	}
+
+	on_white_peace = {
+		scope:attacker = { show_pow_release_message_effect = yes }
+		scope:attacker = { accolade_attacker_war_end_glory_gain_low_effect = yes }
+		scope:defender = { accolade_defender_war_end_glory_gain_med_effect = yes }
+		modify_allies_of_participants_fame_values = {
+			WINNER = scope:attacker
+			FAME_BASE = major_prestige_value
+			IS_RELIGIOUS_WAR = no
+			WINNER_ALLY_FAME_SCALE = 1
+			LOSER_ALLY_FAME_SCALE = 1
+		}
+		add_truce_white_peace_effect = yes
+		scope:attacker = {
+			add_prestige = mongol_invasion_cb_prestige_white_peace
+			remove_variable = hd_wuhu_chanyu_name
+			remove_variable = hd_wuhu_chanyu_kingdom
+		}
+		laamp_as_mercenary_payout_tooltip_effect = yes
+	}
+
+	on_defeat_desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { scope:defender = { is_local_player = yes } }
+				desc = invasion_war_white_peace_desc_defender
+			}
+			desc = invasion_war_white_peace_desc
+		}
+	}
+
+	on_defeat = {
+		scope:attacker = { show_pow_release_message_effect = yes }
+		add_legitimacy_attacker_defeat_effect = yes
+		scope:defender = {
+			mandala_peacemaker_perk_serenity_effect = yes
+			accolade_defender_war_end_glory_gain_high_effect = yes
+		}
+		scope:attacker = {
+			pay_short_term_gold_reparations_effect = {
+				GOLD_VALUE = 5
+			}
+			add_prestige = {
+				value = massive_prestige_value
+				multiply = -1.0
+			}
+			remove_variable = hd_wuhu_chanyu_name
+			remove_variable = hd_wuhu_chanyu_kingdom
+		}
+		setup_invasion_cb = {
+			titles = target_titles
+			attacker = scope:attacker
+			defender = scope:defender
+			claimant = scope:claimant
+			victory = no
+		}
+		modify_all_participants_fame_values = {
+			WINNER = scope:defender
+			LOSER = scope:attacker
+			FAME_BASE = scope:cb_prestige_factor
+			IS_RELIGIOUS_WAR = no
+			WINNER_FAME_SCALE = scale_10_war_defender_win
+			LOSER_FAME_SCALE = -10
+			WINNER_ALLY_FAME_SCALE = 10
+			LOSER_ALLY_FAME_SCALE = 10
+		}
+		add_truce_attacker_defeat_effect = yes
+		scope:attacker = {
+			save_temporary_scope_as = loser
+		}
+		on_lost_aggression_war_discontent_loss = yes
+		laamp_as_mercenary_payout_tooltip_effect = yes
+		mandala_war_defeat_effects = yes
+	}
+
+	on_primary_attacker_death = inherit
+	on_primary_defender_death = inherit
+	transfer_behavior = transfer
+
+	attacker_allies_inherit = yes
+	defender_allies_inherit = yes
+
+	war_name = "HD_WUHU_CHANYU_WAR_NAME"
+	war_name_base = "HD_WUHU_CHANYU_WAR_NAME_BASE"
+	cb_name = "HD_WUHU_CHANYU_CB_NAME"
+
+	interface_priority = 100
+
+	attacker_wargoal_percentage = 0.5
+}

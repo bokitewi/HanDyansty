@@ -25,3 +25,20 @@
   - 不是他党现任领袖。
 - **失势**：宗族已不在后族列表的外戚，清除组别锁定，由引擎重新归组。外戚党现任领袖不动。
 - **保留条件**：`gen_party.py` 的 `hd_party_manual_participant_valid_trigger` 已加入 `hd_party_is_waiqi_trigger`，因此无官职的外戚不会在年度结算时被移出。
+
+## 入组修复（2026-10-10，详见维护文档 §18）
+- **无地参与者入组**：局势里四夷和五个身份组都设了 `require_realm_in_sub_region = no`。没有这一项，廷臣即使加为手动参与者也进不了任何组。
+- **宦官**：`hd_party_manual_participant_valid_trigger` 加入 `hd_party_is_huanguan_trigger`，宫中宦官无官职也入局。宦官不会自行离宫（`saas_courtier_management.txt`）。
+- **外戚定义扩充**：
+  - 在宗族列表 `hd_party_waiqi_dynasties` 之外，另有后妃兄弟姐妹列表 `hd_party_waiqi_kin`，包括母亲、正妻、嫔妃的兄弟姐妹，含同父异母和同母异父。
+  - 两个列表都由 `hd_party_refresh_waiqi_list_effect` 重建。
+  - 判定统一走 `hd_party_court_has_waiqi_prev_trigger`。
+- **离宫外戚**：
+  - 扫描时给本国外戚写 `var:hd_party_waiqi_court`。
+  - 离宫后游荡或做客（`is_pool_character` / `is_pool_guest`）仍算该朝廷外戚，判定见 `hd_party_is_wandering_waiqi_trigger`。
+  - 成为别国廷臣或封臣即不算。
+  - 君主更替时改归继承人。
+- **扫描**：
+  - 候选人判定见 `hd_party_waiqi_sweep_candidate_trigger`。
+  - 不再跳过已带外戚旗标的人。
+  - 改旗标后立即 `recalculate_participant_group`。

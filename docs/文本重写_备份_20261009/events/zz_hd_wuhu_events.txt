@@ -1,0 +1,333 @@
+﻿namespace = hd_wuhu
+
+# 五胡内附事件（见 docs/五胡内附_僚人入蜀_设计草案.md 第 4 节）。
+# 2000 边疆胡部求附（收留链起点）  2001–2007 中间事件（zz_hd_wuhu_frontier_events.txt）  2099 索封
+# 3001 胡帅带兵求地  4001 大单于胜利后取得王国、改国号（隐藏）
+
+############################
+# 2000 边疆胡部求附
+############################
+hd_wuhu.2000 = {
+	type = character_event
+	title = hd_wuhu.2000.t
+	desc = hd_wuhu.2000.desc
+	theme = realm
+	override_background = { reference = wilderness_steppe }
+	left_portrait = {
+		character = root
+		animation = thinking
+	}
+	right_portrait = {
+		character = scope:turkic_leader
+		animation = personality_honorable
+	}
+
+	trigger = {
+		hd_wuhu_frontier_receiver_trigger = yes
+		any_realm_county = {
+			hd_wuhu_frontier_border_county_trigger = { OWNER = root }
+		}
+	}
+
+	immediate = {
+		add_character_flag = {
+			flag = hd_wuhu_frontier_cd
+			years = 30
+		}
+		hd_wuhu_frontier_setup_effect = yes
+	}
+
+	# 收留
+	option = {
+		name = hd_wuhu.2000.a
+		trigger = { exists = scope:turkic_leader }
+		hd_wuhu_frontier_accept_effect = yes
+		ai_chance = {
+			base = 50
+			ai_value_modifier = {
+				ai_compassion = 0.3
+				ai_greed = 0.3
+				ai_boldness = 0.3
+			}
+		}
+	}
+
+	# 拒绝
+	option = {
+		name = hd_wuhu.2000.b
+		scope:turkic_leader ?= {
+			if = {
+				limit = { is_ai = yes }
+				move_to_pool = yes
+			}
+		}
+		ai_chance = {
+			base = 50
+			ai_value_modifier = {
+				ai_vengefulness = 0.3
+				ai_rationality = 0.3
+			}
+		}
+	}
+}
+
+############################
+# 2099 索封
+############################
+hd_wuhu.2099 = {
+	type = character_event
+	title = hd_wuhu.2099.t
+	desc = hd_wuhu.2099.desc
+	theme = realm
+	left_portrait = {
+		character = scope:turkic_leader
+		animation = personality_bold
+	}
+	right_portrait = {
+		character = root
+		animation = thinking
+	}
+
+	trigger = {
+		exists = scope:story.var:turkic_leader
+		scope:story.var:turkic_leader = {
+			is_alive = yes
+			is_landed = no
+			is_courtier_of = root
+		}
+	}
+
+	immediate = {
+		scope:story = {
+			var:turkic_leader = { save_scope_as = turkic_leader }
+			var:nomads_county = { save_scope_as = hd_wuhu_nomads_county }
+			hd_wuhu_save_tribe_from_var_effect = { VAR = var:hd_wuhu_tribe }
+		}
+		# 最多三个候选：直辖、非首都的伯爵领，优先纠纷伯爵领、该族安置区，再按发展度从低到高
+		ordered_held_title = {
+			limit = {
+				tier = tier_county
+				is_landless_type_title = no
+				NOT = { this = root.capital_county }
+			}
+			order_by = hd_wuhu_frontier_grant_score
+			position = 0
+			check_range_bounds = no
+			save_scope_as = hd_wuhu_grant_county_1
+		}
+		# 第二、三候选取"排除已选者后的第一名"，候选不足时不存，避免越界取到同一个县造成重复选项
+		ordered_held_title = {
+			limit = {
+				tier = tier_county
+				is_landless_type_title = no
+				NOT = { this = root.capital_county }
+				NOT = { scope:hd_wuhu_grant_county_1 ?= this }
+			}
+			order_by = hd_wuhu_frontier_grant_score
+			position = 0
+			check_range_bounds = no
+			save_scope_as = hd_wuhu_grant_county_2
+		}
+		ordered_held_title = {
+			limit = {
+				tier = tier_county
+				is_landless_type_title = no
+				NOT = { this = root.capital_county }
+				NOT = { scope:hd_wuhu_grant_county_1 ?= this }
+				NOT = { scope:hd_wuhu_grant_county_2 ?= this }
+			}
+			order_by = hd_wuhu_frontier_grant_score
+			position = 0
+			check_range_bounds = no
+			save_scope_as = hd_wuhu_grant_county_3
+		}
+	}
+
+	option = {
+		name = hd_wuhu.2099.a
+		trigger = { exists = scope:hd_wuhu_grant_county_1 }
+		hd_wuhu_frontier_grant_effect = { COUNTY = scope:hd_wuhu_grant_county_1 }
+		scope:story = { end_story = yes }
+		ai_chance = { base = 100 }
+	}
+	option = {
+		name = hd_wuhu.2099.b
+		trigger = { exists = scope:hd_wuhu_grant_county_2 }
+		hd_wuhu_frontier_grant_effect = { COUNTY = scope:hd_wuhu_grant_county_2 }
+		scope:story = { end_story = yes }
+		ai_chance = { base = 30 }
+	}
+	option = {
+		name = hd_wuhu.2099.c
+		trigger = { exists = scope:hd_wuhu_grant_county_3 }
+		hd_wuhu_frontier_grant_effect = { COUNTY = scope:hd_wuhu_grant_county_3 }
+		scope:story = { end_story = yes }
+		ai_chance = { base = 30 }
+	}
+
+	# 拒绝：按性格与好感加权，离去或叛乱
+	option = {
+		name = hd_wuhu.2099.d
+		custom_tooltip = hd_wuhu.2099.d.tt
+		random_list = {
+			50 = {
+				# 离去
+				modifier = {
+					add = 50
+					scope:turkic_leader = {
+						opinion = {
+							target = root
+							value > 50
+						}
+					}
+				}
+				modifier = {
+					add = 25
+					scope:turkic_leader = { has_trait = craven }
+				}
+				modifier = {
+					add = 25
+					scope:turkic_leader = { has_trait = content }
+				}
+				modifier = {
+					add = 25
+					scope:turkic_leader = { has_trait = forgiving }
+				}
+				hd_wuhu_frontier_leave_effect = yes
+			}
+			50 = {
+				# 叛乱
+				modifier = {
+					add = 50
+					scope:turkic_leader = {
+						opinion = {
+							target = root
+							value < 0
+						}
+					}
+				}
+				modifier = {
+					add = 25
+					scope:turkic_leader = { has_trait = ambitious }
+				}
+				modifier = {
+					add = 25
+					scope:turkic_leader = { has_trait = wrathful }
+				}
+				modifier = {
+					add = 25
+					scope:turkic_leader = { has_trait = vengeful }
+				}
+				modifier = {
+					add = 25
+					scope:turkic_leader = { has_trait = brave }
+				}
+				hd_wuhu_frontier_revolt_effect = yes
+			}
+		}
+		scope:story = { end_story = yes }
+		ai_chance = { base = 10 }
+	}
+}
+
+############################
+# 3001 胡帅带兵求地（照原版 fp3_story_cycle_seljuks_invasion_events.0002）
+# 需要：scope:hd_wuhu_chief、scope:hd_wuhu_petition_target（公爵领）
+############################
+hd_wuhu.3001 = {
+	type = character_event
+	title = hd_wuhu.3001.t
+	desc = {
+		desc = hd_wuhu.3001.desc
+		first_valid = {
+			triggered_desc = {
+				trigger = { highest_held_title_tier > tier_duchy }
+				desc = hd_wuhu.3001.desc_vassal
+			}
+			desc = hd_wuhu.3001.desc_independent
+		}
+	}
+	theme = realm
+	override_background = { reference = wilderness_steppe }
+	left_portrait = {
+		character = root
+		animation = thinking
+	}
+	right_portrait = {
+		character = scope:hd_wuhu_chief
+		animation = personality_honorable
+	}
+
+	immediate = {
+		save_scope_as = hd_wuhu_victim
+		scope:hd_wuhu_petition_target = {
+			random_de_jure_county = {
+				limit = {
+					NOT = { this = scope:hd_wuhu_petition_target.title_capital_county }
+				}
+				alternative_limit = { always = yes }
+				title_province = { save_scope_as = hd_wuhu_spawn_location }
+			}
+		}
+		save_scope_value_as = {
+			name = hd_wuhu_victim_strength_modifier
+			value = hd_wuhu_victim_strength_modifier_value
+		}
+		scope:hd_wuhu_chief = {
+			set_location = scope:hd_wuhu_spawn_location
+		}
+	}
+
+	# 准许内附
+	option = {
+		name = hd_wuhu.3001.a
+		hd_wuhu_petition_accept_effect = { RECEIVER = root }
+		ai_chance = {
+			base = 50
+			ai_value_modifier = {
+				ai_boldness = -0.5
+				ai_compassion = 0.2
+				ai_greed = -0.5
+				ai_energy = -0.5
+				ai_rationality = 0.3
+				ai_sociability = 0.3
+			}
+		}
+	}
+
+	# 拒绝
+	option = {
+		name = hd_wuhu.3001.b
+		hd_wuhu_petition_refuse_effect = yes
+		ai_chance = {
+			base = 50
+			ai_value_modifier = {
+				ai_boldness = 0.5
+				ai_greed = 0.5
+				ai_energy = 0.5
+				ai_vengefulness = 0.5
+			}
+		}
+	}
+}
+
+############################
+# 4001 大单于取得王国、改国号（隐藏，ROOT = 大单于）
+############################
+hd_wuhu.4001 = {
+	type = character_event
+	hidden = yes
+
+	trigger = {
+		has_variable = hd_wuhu_chanyu_kingdom
+	}
+
+	immediate = {
+		# 冒险者获得土地后改为天朝制（同史实叛乱的处理）
+		if = {
+			limit = { has_government = landless_adventurer_government }
+			hd_force_celestial_effect = yes
+		}
+		hd_wuhu_chanyu_crown_effect = yes
+	}
+}
