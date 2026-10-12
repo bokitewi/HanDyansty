@@ -78,6 +78,8 @@ for(const phase of ['stability','stability_expansion','stability_advancement','i
  assert.equal(settled.vars.wj_ab_placement,true);assert.equal(nativeTransfers,0);
 }
 const entry={...pending,vars:{}};
+assert.equal(abTriggers.WJ_ab_player_test.children[0].value,'no','release disables player exemption');
+abTriggers.WJ_ab_player_test.children[0].value='yes'; // Only the fixture tests the dormant bypass.
 assert(phaseEngine.check(abTriggers.WJ_ab_can_start.children,entry,{}),'test entry bypasses political requirements, not the real throne/fief');
 abTriggers.WJ_ab_player_test.children[0].value='no';
 assert(!phaseEngine.check(abTriggers.WJ_ab_can_start.children,entry,{}));
@@ -214,6 +216,36 @@ const crownEngine=runner({effects:{...crEffects,...miaoshiEffects},triggers:crow
 function monarch(tier=4){const primary=title(tier),ruler={vars:{hide_make_primary_title:1},titles:[primary],primary_title:primary,governmentFlags:['government_is_celestial'],is_alive:true,is_landed:true,is_independent_ruler:true,is_ai:false,is_incapable:false,is_imprisoned:false,highest_held_title_tier:tier,sub_realm_size:100,laws:['uncrowned']};ruler.top_liege=ruler;return ruler;}
 // Actual activity callbacks, before on_start has cached a title, then own phase events.
 const activityType=byName(parse(read('common/activities/activity_types/WJ_chinese_coronation.txt'))).activity_wj_coronation;
+const vanillaActivity=byName(parse(read('common/activities/activity_types/coronation.txt'))).activity_coronation;
+// Check the shared hosting gates for both player and AI; validity protects queued activities.
+for(const ai of [false,true])for(const tier of [4,5,6]){
+ const host=monarch(tier);host.is_ai=ai;
+ for(const key of ['is_shown','can_start'])assert.equal(crownEngine.check(one(activityType,key).children,host,{}),tier>=5);
+ assert.equal(crownEngine.check(one(vanillaActivity,'can_start').children,host,{}),false);
+ const guard=one(one(vanillaActivity,'is_valid'),'scope:host').children[0];
+ assert.equal(guard.key,'NOT');assert.equal(crownEngine.check([guard],host,{}),false);
+ const foreign={...host,governmentFlags:[]};
+ assert.equal(crownEngine.check(one(vanillaActivity,'can_start').children,foreign,{}),true);
+ assert.equal(crownEngine.check([guard],foreign,{}),true);
+ assert.equal(crownEngine.check(one(activityType,'can_start').children,foreign,{}),false);
+}
+for(const change of [{is_independent_ruler:false},{dlc:false},{rules:['coronation_laws_off']},{laws:['crowned_emperor']},{primary_title:title(5,{tgp_is_minister_title:true})},{primary_title:title(5,{is_noble_family_title:true})}]){
+ const host={...monarch(5),...change};
+ for(const key of ['is_shown','can_start'])assert.equal(crownEngine.check(one(activityType,key).children,host,{}),false);
+ assert.equal(crownEngine.check(one(activityType,'is_valid').children,{vars:{},phaseActive:false},{host,activity:{vars:{}}}),false);
+}
+assert.equal(one(activityType,'ai_check_interval').value,'6');
+assert.equal(one(one(activityType,'ai_will_do'),'value').value,'1000');
+for(const [category,choice]of [['special_type','WJ_cr_type_accession'],['ceremony_size','coronation_small_ceremony']])assert.equal(one(one(one(one(activityType,'options'),category),choice),'ai_will_do').children[0].value,'100');
+for(const [file,width,height]of [
+ ['gfx/interface/icons/activities/activity_wj_coronation.dds',80,80],
+ ['gfx/interface/icons/activity_types/WJ_cr_type_accession_icon.dds',78,78],
+ ['gfx/interface/illustrations/activity_types/WJ_cr_type_accession.dds',460,1100]
+]){
+ const data=fs.readFileSync(path.join(base,file));assert.equal(data.subarray(0,4).toString('ascii'),'DDS ');
+ assert.equal(data.readUInt32LE(12),height);assert.equal(data.readUInt32LE(16),width);assert.equal(data.subarray(84,88).toString('ascii'),'DXT5');
+}
+assert.ok(read('localization/simp_chinese/events/WJ_chinese_coronation_l_simp_chinese.yml').includes('activity_wj_coronation:0 "践祚大典"'));
 for(const phase of one(activityType,'phases').children){
  const icon=fs.readFileSync(path.join(base,'gfx/interface/icons/activity_phases',phase.key+'.dds'));
  assert.equal(icon.subarray(0,4).toString('ascii'),'DDS ');assert.ok(icon.length>128);
@@ -439,7 +471,9 @@ assert.equal(funeral.check(one(miaoshiActions.WJ_miaoshi_death,'trigger').childr
 const deathScopes={root:deceased};funeral.execute(one(miaoshiActions.WJ_miaoshi_death,'effect').children,deceased,deathScopes);
 assert.equal(deceased.vars.wj_rf_miaoshi_rank,2);assert.equal(deceased.vars.wj_rf_owned_title,undefined);
 assert.equal(deceased.memorialQueue[0].wj_memorial_wj_rf_miaoshi_rank,2,'actual pre-death queue must carry the king rank');
-assert.deepEqual(deceased.savedText,['WJ_rf_miaoshi_realm_name']);assert.equal(deceased.vars.Dengji_sub_realm_var,100);
+assert.equal(deceased.vars.wj_rf_miaoshi_realm_title,deceased.primary_title);
+assert.equal(deceased.memorialQueue[0].wj_memorial_wj_rf_miaoshi_realm_title,deceased.primary_title);
+assert.equal(deceased.vars.Dengji_sub_realm_var,100);
 assert.equal(deathScopes.wj_rf_shihao_heir,heir);assert.equal(deathScopes.XianDi,deceased);
 assert.deepEqual(heir.queued.map(e=>[e.id,e.days,e.deceased]),[['WJ_rf_shihao.1',3,deceased]]);assert.equal(other.queued,undefined);
 deceased.is_alive=false;

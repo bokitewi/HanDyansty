@@ -13,7 +13,10 @@ for(const file of fs.readdirSync(path.join(base,'history/characters')).filter(f=
 const courtHistory=defs('history/titles/zz_hd_han_court_184.txt');
 const courtHistoryKeys=parse(read('history/titles/zz_hd_han_court_184.txt')).children.map(n=>n.key);
 assert.equal(new Set(courtHistoryKeys).size,courtHistoryKeys.length,'duplicate title history must not be hidden by byName');
-const expectedSeats={"e_minister_censor":["zhang_ji","councillor_spymaster"],"e_minister_chancellor":["yuan_kui","councillor_chancellor"],"e_minister_grand_marshal":["he_jin","minister_grand_marshal"],"e_minister_of_justice":["cui_lie","minister_justice"],"e_minister_of_personnel":["WJ_liu_tao_184","minister_personnel"],"e_minister_of_revenue":["nanyang_zhang_002","councillor_steward"],"e_minister_of_rites":["yang_biao","councillor_court_chaplain"],"e_minister_of_war":["yang_ci","councillor_marshal"],"e_minister_of_works":["deng_sheng_2","minister_works"],"e_WJ_minister_zong_zheng":["liu_yu_3","WJ_minister_zong_zheng"],"e_WJ_minister_guang_lu_xun":["liu_kuan","WJ_minister_guang_lu_xun"]};
+const expectedSeats={"e_minister_censor":["zhang_ji","councillor_spymaster"],"e_minister_chancellor":["yuan_kui","councillor_chancellor"],"e_minister_grand_marshal":["he_jin","minister_grand_marshal"],"e_minister_of_justice":["cui_lie","minister_justice"],"e_minister_of_personnel":["WJ_liu_tao_184","minister_personnel"],"e_minister_of_revenue":["zhang_wen_2","councillor_steward"],"e_minister_of_rites":["yang_biao","councillor_court_chaplain"],"e_minister_of_war":["yang_ci","councillor_marshal"],"e_minister_of_works":["deng_sheng_2","minister_works"],"e_WJ_minister_zong_zheng":["liu_yu_3","WJ_minister_zong_zheng"],"e_WJ_minister_guang_lu_xun":["liu_kuan","WJ_minister_guang_lu_xun"]};
+for(const n of defs('common/scripted_effects/WJ_184_ministry_candidates_effects.txt').WJ_seed_184_ministry_candidates_effect.children){
+ assert.equal(historyCharacters[n.key.slice('character:'.length)]?.length,1,n.key+' missing or duplicated in latest history');
+}
 for(const [title,[holder,seat]]of Object.entries(expectedSeats)){
  const date=one(courtHistory[title],'184.1.1');assert.equal(one(date,'holder').value,holder);
  assert.equal(one(date,'liege').value,'h_china');assert.equal(one(one(date,'effect'),'set_capital_county').value,'title:c_luoyang');
@@ -189,7 +192,7 @@ const familyRuler=(id,tier=5)=>{
  const c=character();c.id=id;c.is_ruler=true;c.primary_title={tier,is_noble_family_title:false,isMinister:tier===5};c.titles=[c.primary_title];
  c.allows=['noble_families'];c.liege={allows:['noble_families']};c.house={house_head:c,members:[c]};familyPool.push(c);return c;
 };
-const missingFamilies=['cui_lie','liu_kuan','nanyang_zhang_002'].map(id=>familyRuler(id));
+const missingFamilies=['cui_lie','liu_kuan','zhang_wen_2'].map(id=>familyRuler(id));
 missingFamilies[0].house.house_head={id:'existing_ai_head'}; // Do not precondition the caller on house-head identity.
 const ordinaryOfficial=familyRuler('ordinary_count',2);
 const sharedFamily=familyRuler('yang_biao');sharedFamily.house.members.push({titles:[{tier:2,is_noble_family_title:true}]});
@@ -351,7 +354,7 @@ for(const [id,t]of Object.entries(localHistory))if(/^[cb]_/.test(id)) {
 for(const id of [2861,3771])assert.equal(one(one(localHistory['c_uuii_p_'+id],'184.1.1'),'government').value,'nomad_government');
 assert.equal(one(one(localHistory.c_uuii_p_2861,'184.1.1'),'government').value,'nomad_government','do not convert neighboring pastoral lands');
 const secondary=read('gui/window_character.gui').split('type secondary_widget =')[1];
-assert(secondary.includes("Select_CString(And(Not(CharacterWindow.ShowMarriageIcon), ObjectsEqual(Character.Self, CharacterWindow.GetCharacter.GetDiarchy.GetDiarch)), CharacterWindow.GetCharacter.Custom('WJ_DiarchRoleTitle'), CharacterWindow.GetSecondaryText)"));
+assert(secondary.includes("Select_CString(And(Not(CharacterWindow.ShowMarriageIcon), ObjectsEqual(CharacterWindow.GetSecondaryCharater, CharacterWindow.GetCharacter.GetDiarchy.GetDiarch)), CharacterWindow.GetCharacter.Custom('WJ_DiarchRoleTitle'), CharacterWindow.GetSecondaryText)"));
 const suffix=defs('common/customizable_localization/WJ_peerage_names.txt').WJ_PeerCountySuffix;
 const suffixKey=c=>one(suffix.children.find(n=>n.key==='text'&&(!n.children.some(x=>x.key==='trigger')||engine.check(one(n,'trigger').children,c))),'localization_key').value;
 const countyTitle={holder:pass,vars:{},title_capital_county:{title_province:{holdingType:'castle_holding'}}};

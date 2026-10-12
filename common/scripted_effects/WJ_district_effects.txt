@@ -52,42 +52,48 @@ WJ_dd_add_effect = {
 }
 # Core scope; flood fill without modifying membership. Optional exclusion is a
 # synchronous scratch variable on this core, not an inherited event scope.
-# ponytail: O(V*E) repeated passes on one district per edit, not a world pulse.
-# Upgrade only if measured large-district editing latency warrants a frontier list.
+# Native county adjacency is symmetric; expand each reached kingdom only once.
 WJ_dd_check_connectivity_effect = {
  save_scope_as = wj_dd_graph_core
  every_in_list = { variable = wj_dd_members remove_variable = wj_dd_visited }
+ clear_variable_list = wj_dd_frontier
+ every_in_list = { list = wj_dd_next_frontier remove_from_list = wj_dd_next_frontier }
  set_variable = { name = wj_dd_visited value = yes }
- set_variable = { name = wj_dd_graph_progress value = yes }
+ add_to_variable_list = { name = wj_dd_frontier target = this }
  while = {
-  limit = { has_variable = wj_dd_graph_progress }
-  remove_variable = wj_dd_graph_progress
+  limit = { any_in_list = { variable = wj_dd_frontier always = yes } }
   every_in_list = {
-   variable = wj_dd_members
-   limit = {
-    NOT = { has_variable = wj_dd_visited }
-    trigger_if = {
-     limit = { exists = scope:wj_dd_graph_core.var:wj_dd_excluded }
-     this != scope:wj_dd_graph_core.var:wj_dd_excluded
-    }
-    any_in_de_jure_hierarchy = {
-     tier = tier_county
-     any_neighboring_county = {
+   variable = wj_dd_frontier
+   every_in_de_jure_hierarchy = {
+    limit = { tier = tier_county }
+    every_neighboring_county = {
       kingdom = {
-       trigger_if = {
-        limit = { exists = var:wj_dd_core }
+       if = {
+        limit = {
         var:wj_dd_core = scope:wj_dd_graph_core
-        has_variable = wj_dd_visited
+        NOT = { has_variable = wj_dd_visited }
+        scope:wj_dd_graph_core = { is_target_in_variable_list = { name = wj_dd_members target = prev } }
+        trigger_if = {
+         limit = { exists = scope:wj_dd_graph_core.var:wj_dd_excluded }
+         this != scope:wj_dd_graph_core.var:wj_dd_excluded
+        }
+        }
+        set_variable = { name = wj_dd_visited value = yes }
+        add_to_list = wj_dd_next_frontier
        }
-       trigger_else = { always = no }
       }
-     }
     }
    }
-   set_variable = { name = wj_dd_visited value = yes }
-   scope:wj_dd_graph_core = { set_variable = { name = wj_dd_graph_progress value = yes } }
+  }
+  clear_variable_list = wj_dd_frontier
+  every_in_list = {
+   list = wj_dd_next_frontier
+   scope:wj_dd_graph_core = { add_to_variable_list = { name = wj_dd_frontier target = prev } }
+   remove_from_list = wj_dd_next_frontier
   }
  }
+ clear_variable_list = wj_dd_frontier
+ remove_variable = wj_dd_graph_progress
  remove_variable = wj_dd_graph_disconnected
  clear_variable_list = wj_dd_unreachable
  every_in_list = {
