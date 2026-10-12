@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { parse } = require('./ck3_source_parser');
-const mod = path.resolve(__dirname, '..');
+const mod = path.resolve(__dirname, '../..');
 function read(file) {
   try { return fs.readFileSync(path.isAbsolute(file) ? file : path.join(mod, file), 'utf8'); }
   catch (error) { if (error.code === 'ENOENT') return ''; throw error; }
@@ -17,11 +17,14 @@ function runner({ effects, triggers, values, primitives = {}, onEffect } = {}) {
   effects ||= byName(parse(read('common/scripted_effects/WJ_kaoke_effects.txt')));
   triggers ||= byName(parse(read('common/scripted_triggers/WJ_kaoke_triggers.txt')));
   values ||= byName(parse(read('common/script_values/WJ_kaoke_values.txt')));
+  const expand = (token, params) => typeof token === 'string'
+    ? token.replace(/\$([A-Z_]+)\$/g, (whole, key) => typeof params[key] === 'string' ? params[key] : whole) : token;
   function resolve(token, ctx, scopes = {}, params = {}) {
     if (token === undefined) return undefined;
     const opinion = /^"opinion\(scope:([^)]*)\)"$/.exec(token);
     if (opinion && !Object.hasOwn(values, token)) return ctx.opinions?.get(scopes[opinion[1]]) ?? 0;
     if (/^\$.*\$$/.test(token)) return params[token.slice(1, -1)];
+    token = expand(token, params);
     if (/^-?\d+(\.\d+)?$/.test(token)) return Number(token);
     if (token === 'yes' || token === 'no') return token === 'yes';
     if (token.startsWith('flag:')) return token;
@@ -103,13 +106,24 @@ function runner({ effects, triggers, values, primitives = {}, onEffect } = {}) {
     return v;
   }
   function check(nodes, ctx, scopes = {}, params = {}) {
+    let triggerBranchTaken = false;
     return nodes.every(e => {
+      e = { ...e, key: expand(e.key, params), value: expand(e.value, params) };
       const k = e.key;
+      if (['trigger_if', 'trigger_else_if', 'trigger_else'].includes(k)) {
+        if (k === 'trigger_if') triggerBranchTaken = false;
+        if (triggerBranchTaken || !check(e.children.find(n => n.key === 'limit')?.children || [], ctx, scopes, params)) return true;
+        triggerBranchTaken = true;
+        return check(e.children.filter(n => n.key !== 'limit'), ctx, scopes, params);
+      }
       if (k === 'AND') return check(e.children, ctx, scopes, params);
       if (k === 'OR') return e.children.some(n => check([n], ctx, scopes, params));
       if (k === 'NOT' || k === 'NOR') return !e.children.some(n => check([n], ctx, scopes, params));
       if (k === 'save_temporary_scope_as') { scopes[e.value] = ctx; return true; }
-      if (triggers[k]) return check(triggers[k].children, ctx, scopes, params) === resolve(e.value, ctx, scopes, params);
+      if (triggers[k]) {
+        const args = e.children ? Object.fromEntries(e.children.map(n => [n.key, resolve(n.value, ctx, scopes, params) ?? n.value])) : params;
+        return check(triggers[k].children, ctx, scopes, args) === (e.children ? true : resolve(e.value, ctx, scopes, params));
+      }
       if (Object.hasOwn(primitives, k)) return primitives[k](ctx, scopes, e, params);
       if (k === 'has_variable') return Object.hasOwn(ctx.vars || {}, e.value);
       if (k === 'exists') return resolve(e.value, ctx, scopes, params) != null;
@@ -138,7 +152,8 @@ function runner({ effects, triggers, values, primitives = {}, onEffect } = {}) {
   }
   function execute(nodes, ctx, scopes = {}, params = {}) {
     let taken = false;
-    for (const e of nodes) {
+    for (let e of nodes) {
+      e = { ...e, key: expand(e.key, params), value: expand(e.value, params) };
       const k = e.key;
       if (['if', 'else_if', 'else'].includes(k)) {
         if (k === 'if') taken = false;
@@ -152,7 +167,7 @@ function runner({ effects, triggers, values, primitives = {}, onEffect } = {}) {
       else if (k === 'save_scope_value_as') scopes[one(e, 'name').value] = number(one(e, 'value'), ctx, scopes, params);
       else if (k === 'set_variable') {
         if (!e.children) { ctx.vars[e.value] = true; continue; }
-        const name = one(e, 'name').value;
+        const name = expand(one(e, 'name').value, params);
         ctx.vars[name] = number(one(e, 'value'), ctx, scopes, params);
         const years = e.children.find(n => n.key === 'years');
         if (years) (ctx.expiry ||= {})[name] = scopes.current_date + 365 * number(years, ctx, scopes, params);
@@ -165,7 +180,7 @@ function runner({ effects, triggers, values, primitives = {}, onEffect } = {}) {
       } else if (k === 'custom_tooltip') (scopes.tooltips ||= []).push(e.value);
       else if (onEffect && onEffect(e, ctx, scopes, params) === true) {}
       else if (effects[k]) {
-        const args = e.children ? Object.fromEntries(e.children.map(n => [n.key, number(n, ctx, scopes, params)])) : params;
+        const args = e.children ? Object.fromEntries(e.children.map(n => [n.key, number(n, ctx, scopes, params) ?? n.value])) : params;
         execute(effects[k].children, ctx, scopes, args);
       } else if (e.children) {
         const target = resolve(k, ctx, scopes, params);
@@ -209,6 +224,7 @@ if (require.main === module) {
       else = { add = 0 }
     }
     eligible = { is_alive = yes }
+    string_macro = { var:$KEY$ ?= { save_scope_as = copied_$KEY$ } }
     apply = {
       if = {
         limit = { eligible = yes }
@@ -237,6 +253,10 @@ if (require.main === module) {
   engine.run('apply', a, scopes, { POINTS: 3 });
   assert.equal(a.vars.total, undefined);
   assert.equal(read('tests/__ck3_harness_missing__/missing.txt'), '');
+  assert(read('common/scripted_effects/WJ_name_memorial_storage.txt').includes('WJ_name_queue_memorial'));
+  const macroEngine=runner({effects:definitions,triggers:{},values:{}}),macroScopes={};
+  macroEngine.run('string_macro',{vars:{king_rank:2}},macroScopes,{KEY:'king_rank'});
+  assert.equal(macroScopes.copied_king_rank,2);
   assert.throws(() => runner({ effects: {}, triggers: {}, values: {} }).run('missing', a), /Missing production effect/);
   console.log('PASS: harness AST arithmetic, branches, parameters, scopes, missing-file read and strict missing-effect checks');
 }

@@ -1,0 +1,99 @@
+# Applicant scope throughout. Existing peerage picker performs the mandatory final placement.
+WJ_ab_begin = {
+ set_variable = { name = wj_ab_emperor value = top_liege }
+ set_variable = { name = wj_ab_round value = 1 }
+ set_variable = { name = wj_ab_declines value = 0 }
+ set_variable = { name = wj_ab_penalty value = 0 }
+ if = { limit = { NOT = { has_variable = wj_ab_ticket } } set_variable = { name = wj_ab_ticket value = 0 } }
+ change_variable = { name = wj_ab_ticket add = 1 }
+ save_scope_value_as = { name = wj_ab_ticket value = var:wj_ab_ticket }
+ save_scope_as = wj_ab_successor
+ clear_variable_list = wj_ab_advisors
+ var:wj_mufu_slot_1 ?= { if = { limit = { is_alive = yes WJ_mufu_member_valid = yes var:wj_mufu_owner = root } root = { add_to_variable_list = { name = wj_ab_advisors target = prev } } } }
+ var:wj_mufu_slot_2 ?= { if = { limit = { is_alive = yes WJ_mufu_member_valid = yes var:wj_mufu_owner = root } root = { add_to_variable_list = { name = wj_ab_advisors target = prev } } } }
+ var:wj_mufu_slot_3 ?= { if = { limit = { is_alive = yes WJ_mufu_member_valid = yes var:wj_mufu_owner = root } root = { add_to_variable_list = { name = wj_ab_advisors target = prev } } } }
+ var:wj_mufu_slot_4 ?= { if = { limit = { is_alive = yes WJ_mufu_member_valid = yes var:wj_mufu_owner = root } root = { add_to_variable_list = { name = wj_ab_advisors target = prev } } } }
+ var:wj_mufu_slot_5 ?= { if = { limit = { is_alive = yes WJ_mufu_member_valid = yes var:wj_mufu_owner = root } root = { add_to_variable_list = { name = wj_ab_advisors target = prev } } } }
+ random_in_list = { variable = wj_ab_advisors save_scope_as = wj_ab_advisor }
+ clear_variable_list = wj_ab_advisors
+ if = { limit = { NOT = { exists = scope:wj_ab_advisor } } top_liege = { random_councillor = { limit = { is_alive = yes tgp_is_any_minister = yes NOT = { this = root } } save_scope_as = wj_ab_advisor } } }
+ if = { limit = { exists = scope:wj_ab_advisor } set_variable = { name = wj_ab_advisor value = scope:wj_ab_advisor } }
+ var:wj_ab_emperor = {
+  set_variable = { name = wj_ab_successor value = scope:wj_ab_successor }
+  add_character_modifier = { modifier = WJ_ab_protection }
+ }
+ trigger_event = WJ_ab.1
+}
+WJ_ab_decline = {
+ change_variable = { name = wj_ab_declines add = 1 }
+ if = { limit = { var:wj_ab_round < 3 }
+  change_variable = { name = wj_ab_round add = 1 }
+  trigger_event = { id = WJ_ab.1 days = 10 }
+ }
+ else = { trigger_event = WJ_ab.3 }
+}
+WJ_ab_accept = {
+ if = { limit = { var:wj_ab_round < 3 } trigger_event = WJ_ab.2 }
+ else = { WJ_ab_transfer = yes }
+}
+WJ_ab_cleanup = {
+ var:wj_ab_emperor ?= { remove_character_modifier = WJ_ab_protection remove_variable = wj_ab_successor }
+ remove_variable = wj_ab_emperor remove_variable = wj_ab_round remove_variable = wj_ab_declines
+ remove_variable = wj_ab_penalty remove_variable = wj_ab_transferred remove_variable = wj_ab_placement
+ remove_variable = wj_ab_country_stem clear_variable_list = wj_ab_titles
+ remove_variable = wj_ab_advisor clear_variable_list = wj_ab_advisors
+}
+WJ_ab_abort = {
+ if = { limit = { exists = scope:wj_ab_ticket var:wj_ab_ticket = scope:wj_ab_ticket }
+  if = { limit = { has_variable = wj_ab_placement } WJ_peer_end_workflow = yes }
+  WJ_ab_cleanup = yes
+ }
+}
+WJ_ab_transfer = {
+ if = { limit = { WJ_ab_flow_valid = yes NOT = { has_variable = wj_ab_transferred } }
+  save_scope_as = wj_ab_successor
+  var:wj_ab_emperor = { save_scope_as = wj_ab_old_emperor primary_title = { save_scope_as = wj_ab_throne } capital_county = { save_scope_as = wj_ab_imperial_capital } }
+  # Preserve the existing fief's name before native transfer/death callbacks reconcile title mirrors.
+  every_held_title = { limit = { var:wj_rf_rank = 2 } save_scope_as = wj_ab_old_kingdom }
+  set_variable = { name = wj_ab_country_stem value = scope:wj_ab_old_kingdom }
+  clear_variable_list = wj_ab_titles
+  scope:wj_ab_old_emperor = {
+   every_held_title = {
+    limit = { is_noble_family_title = no is_landless_type_title = no tgp_is_minister_title = no NOT = { has_variable = SanGong_DongGong_title } }
+    scope:wj_ab_successor = { add_to_variable_list = { name = wj_ab_titles target = prev } }
+   }
+  }
+  create_title_and_vassal_change = { type = granted save_scope_as = wj_ab_change add_claim_on_loss = no }
+  every_in_list = { variable = wj_ab_titles change_title_holder_include_vassals = { holder = scope:wj_ab_successor change = scope:wj_ab_change } }
+  resolve_title_and_vassal_change = scope:wj_ab_change
+  clear_variable_list = wj_ab_titles
+  if = { limit = { scope:wj_ab_throne.holder = this }
+   set_variable = wj_ab_transferred
+   set_primary_title_to = scope:wj_ab_throne
+   set_realm_capital = scope:wj_ab_imperial_capital
+   scope:wj_ab_throne = { set_title_name_dynamic = WJ_ab_new_country_name set_definitive_form = no }
+   dynasty ?= { remove_variable = hd_fixed_realm_name set_variable = { name = hd_fixed_realm_title value = root.primary_title } }
+   # Restore constituent commanderies before destroying the former real-fief kingdom/empire.
+   every_held_title = { limit = { var:wj_rf_rank = 1 } save_scope_as = wj_ab_dismantled WJ_rf_restore_destroyed_fief = yes root = { destroy_title = scope:wj_ab_dismantled } }
+   destroy_title = scope:wj_ab_old_kingdom
+   add_realm_law = crowned_emperor set_variable = crowned_emperor_var remove_variable = crowned_king_var
+   add_legitimacy = { value = 1000 add = { value = var:wj_ab_declines multiply = 1000 } subtract = var:wj_ab_penalty }
+   WJ_mr_end_request = yes WJ_mr_clear_rank = yes remove_variable = WJ_mr_award_realm
+   WJ_title_style_reconcile_realm = yes
+   # The native title transaction transfers vassals, not the old emperor's courtiers.
+   create_title_and_vassal_change = { type = swear_fealty save_scope_as = wj_ab_retirement_change add_claim_on_loss = no }
+   scope:wj_ab_old_emperor = { change_liege = { liege = scope:wj_ab_successor change = scope:wj_ab_retirement_change } }
+   resolve_title_and_vassal_change = scope:wj_ab_retirement_change
+   WJ_peer_end_workflow = yes
+   set_variable = { name = wj_peer_target value = scope:wj_ab_old_emperor }
+   if = { limit = { NOT = { has_variable = wj_peer_ticket } } set_variable = { name = wj_peer_ticket value = 0 } }
+   change_variable = { name = wj_peer_ticket add = 1 }
+   save_scope_value_as = { name = wj_peer_ticket value = var:wj_peer_ticket }
+   set_variable = { name = wj_peer_flow_version value = 2 }
+   set_variable = wj_ab_placement
+   trigger_event = WJ_ab.4
+  }
+  else = { WJ_ab_cleanup = yes }
+ }
+ else = { if = { limit = { NOT = { has_variable = wj_ab_transferred } } WJ_ab_abort = yes } }
+}

@@ -29,7 +29,7 @@ WJ_yinshi_enter_effect = {
 }
 
 # 辞官：离开幕府（作为幕僚离开、作为府主解散），离开议会/部长，卸下统兵，
-# 男爵级以上非家族头衔连同附庸交还直属上级。
+# 实封公王先交合法继承者；其余非家族头衔连同附庸交还直属上级。
 # 宫廷职位由 base_court_position_validity_trigger 等的隐士条件自动失效。
 WJ_yinshi_resign_effect = {
  save_scope_as = wj_yinshi_resigner
@@ -45,6 +45,7 @@ WJ_yinshi_resign_effect = {
    WJ_yinshi_holds_office_title_trigger = yes
   }
   liege = { save_scope_as = wj_yinshi_title_receiver }
+  WJ_yinshi_handover_real_fief_effect = yes
   create_title_and_vassal_change = {
    type = returned
    save_scope_as = wj_yinshi_change
@@ -65,6 +66,75 @@ WJ_yinshi_resign_effect = {
    }
   }
   resolve_title_and_vassal_change = scope:wj_yinshi_change
+ }
+}
+
+# 活着辞爵，不模拟死亡：取现行头衔法的 current_heir，不触发死亡补授。
+# 封国首都、本人持有的封国内土地及关联直属封臣一起交接，继承者仍归原直属上级。
+WJ_yinshi_handover_real_fief_effect = {
+ clear_saved_scope = wj_yinshi_fief
+ clear_saved_scope = wj_yinshi_fief_heir
+ if = { limit = { any_held_title = { has_variable = wj_rf_rank var:wj_rf_rank = 2 } }
+  random_held_title = {
+   limit = { has_variable = wj_rf_rank var:wj_rf_rank = 2 }
+   save_scope_as = wj_yinshi_fief
+  }
+ }
+ else = {
+  random_held_title = {
+   limit = { has_variable = wj_rf_rank var:wj_rf_rank = 1 }
+   save_scope_as = wj_yinshi_fief
+  }
+ }
+ if = { limit = { exists = scope:wj_yinshi_fief }
+  scope:wj_yinshi_fief.current_heir ?= {
+   if = { limit = { is_alive = yes NOT = { this = scope:wj_yinshi_resigner } }
+    save_scope_as = wj_yinshi_fief_heir
+   }
+  }
+  if = { limit = { exists = scope:wj_yinshi_fief_heir }
+   create_title_and_vassal_change = {
+    type = granted save_scope_as = wj_yinshi_fief_change add_claim_on_loss = no
+   }
+   every_held_title = {
+    limit = {
+     is_noble_family_title = no
+     OR = {
+      has_variable = wj_rf_rank
+      scope:wj_yinshi_fief = { is_de_jure_liege_or_above_target = prev }
+     }
+    }
+    change_title_holder = {
+     holder = scope:wj_yinshi_fief_heir change = scope:wj_yinshi_fief_change take_baronies = yes
+    }
+   }
+   every_vassal = {
+    limit = {
+     OR = {
+      any_held_title = { scope:wj_yinshi_fief = { is_de_jure_liege_or_above_target = prev } }
+      any_sub_realm_county = { scope:wj_yinshi_fief = { is_de_jure_liege_or_above_target = prev } }
+     }
+    }
+    change_liege = { liege = scope:wj_yinshi_fief_heir change = scope:wj_yinshi_fief_change }
+   }
+   scope:wj_yinshi_fief_heir = {
+    if = { limit = {
+     NOT = { this = scope:wj_yinshi_title_receiver }
+     NOT = { scope:wj_yinshi_title_receiver = { is_vassal_or_below_of = prev } }
+    }
+     change_liege = { liege = scope:wj_yinshi_title_receiver change = scope:wj_yinshi_fief_change }
+    }
+   }
+   resolve_title_and_vassal_change = scope:wj_yinshi_fief_change
+  }
+  else = {
+   # 无合法继承人沿既有封国销毁回调恢复郡的法理，不把爵号授给上级。
+   every_held_title = {
+    limit = { has_variable = wj_rf_rank }
+    save_scope_as = wj_yinshi_uninherited_fief
+    scope:wj_yinshi_resigner = { destroy_title = scope:wj_yinshi_uninherited_fief }
+   }
+  }
  }
 }
 
