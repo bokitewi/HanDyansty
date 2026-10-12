@@ -84,7 +84,6 @@ hd_resolve_invalid_historical_world_chains_effect = {
 		remove_global_variable = hd_fengying_world_open
 		character:cao_cao = {
 			remove_character_flag = hd_cao_fengying_authorized
-			remove_character_flag = hd_cao_fengying_takeover_pending
 		}
 		debug_log = "HD_FENGYING ABORTED_CAO_OR_HAN_INVALID"
 	}
@@ -176,14 +175,37 @@ hd_update_liu_bei_life_story_effect = {
 	}
 }
 
+# 奉迎宣战对象存入 scope:hd_cao_fengying_target（同 hd_cao_fengying_target_trigger）。Scope：任意
+hd_cao_fengying_save_target_effect = {
+	if = {
+		limit = { hd_court_has_regent_trigger = yes }
+		title:h_china.var:hd_court_regent = { save_scope_as = hd_cao_fengying_target }
+	}
+	else_if = {
+		limit = { hd_dong_historical_regent_active_trigger = yes }
+		title:h_china.holder.var:hd_dong_fixed_regent = { save_scope_as = hd_cao_fengying_target }
+	}
+	else = {
+		title:h_china.holder ?= { save_scope_as = hd_cao_fengying_target }
+	}
+}
+
 # Shared by the player's decision and Cao's existing AI story heartbeat.
 hd_cao_fengying_start_war_effect = {
 	if = {
 		limit = { hd_cao_fengying_can_declare_trigger = yes }
-		start_war = { cb = hd_cao_fengying_cb target = title:d_jingzhao.holder }
+		hd_cao_fengying_save_target_effect = yes
+		start_war = { cb = hd_cao_fengying_cb target = scope:hd_cao_fengying_target }
 		if = {
 			limit = { any_character_war = { using_cb = hd_cao_fengying_cb primary_attacker = character:cao_cao } }
 			debug_log = "HD_FENGYING WAR_CONFIRMED"
+			# 全局通报：奉迎天子
+			character:cao_cao = {
+				save_scope_as = hd_news_a
+				capital_province ?= { save_scope_as = hd_news_place }
+			}
+			scope:hd_cao_fengying_target = { save_scope_as = hd_news_b }
+			hd_world_news_send_effect = { EVENT = hd_world_news.0011 }
 		}
 		else = { debug_log = "HD_FENGYING WAR_START_FAILED_AUTHORIZATION_RETAINED" }
 	}
@@ -253,6 +275,10 @@ hd_historical_world_war_victory_effect = {
 		set_global_variable = hd_chibi_world_resolved
 		set_global_variable = hd_chain_terminal_nonhistorical
 		remove_global_variable = hd_chibi_world_active
+		# 全局通报：江防已破
+		scope:attacker = { save_scope_as = hd_news_a }
+		scope:defender = { save_scope_as = hd_news_b }
+		hd_world_news_send_effect = { EVENT = hd_world_news.0018 }
 		scope:attacker = { trigger_event = hd_historical_world.0291 }
 	}
 }
@@ -272,6 +298,10 @@ hd_historical_world_war_defeat_effect = {
 		set_global_variable = hd_chibi_world_resolved
 		set_global_variable = hd_chain_terminal_historical
 		remove_global_variable = hd_chibi_world_active
+		# 全局通报：北军退却（a = 胜者）
+		scope:defender = { save_scope_as = hd_news_a }
+		scope:attacker = { save_scope_as = hd_news_b }
+		hd_world_news_send_effect = { EVENT = hd_world_news.0017 }
 		scope:defender = { trigger_event = hd_historical_world.0290 }
 	}
 }

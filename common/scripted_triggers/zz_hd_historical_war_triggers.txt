@@ -1,7 +1,18 @@
-﻿hd_cao_controls_xuchang_trigger = {
-	exists = title:c_uuii_p_738.holder
-	title:c_uuii_p_738.holder = {
-		OR = { this = character:cao_cao is_vassal_or_below_of = character:cao_cao }
+﻿# 2026-10-11：奉迎开启条件——曹操本人持有荣阳公国，且国境与河南公国接壤（占有河南的县也算）。
+hd_cao_fengying_territory_trigger = {
+	has_title = title:d_rongyang
+	title:d_henan = {
+		any_in_de_jure_hierarchy = {
+			tier = tier_county
+			any_county_province = {
+				OR = {
+					county.holder.top_liege ?= character:cao_cao
+					any_neighboring_province = {
+						county.holder.top_liege ?= character:cao_cao
+					}
+				}
+			}
+		}
 	}
 }
 
@@ -19,8 +30,31 @@ hd_cao_fengying_invitation_trigger = {
 	hd_cao_fengying_actor_valid_trigger = yes
 	current_date > 196.1.1
 	current_military_strength > 10000
-	hd_cao_controls_xuchang_trigger = yes
+	hd_cao_fengying_territory_trigger = yes
 	hd_dong_transition_pending_trigger = no
+}
+
+# 奉迎宣战对象：挟持天子之人（通用权臣优先，其次剧本摄政），无人挟持则为天子本人。Scope：被检查的角色
+hd_cao_fengying_target_trigger = {
+	trigger_if = {
+		limit = { hd_court_has_regent_trigger = yes }
+		this = title:h_china.var:hd_court_regent
+	}
+	trigger_else_if = {
+		limit = { hd_dong_historical_regent_active_trigger = yes }
+		this = title:h_china.holder.var:hd_dong_fixed_regent
+	}
+	trigger_else = {
+		has_title = title:h_china
+	}
+}
+
+# Scope：宣战对象
+hd_cao_fengying_target_ok_trigger = {
+	is_alive = yes
+	NOT = { this = character:cao_cao }
+	NOT = { character:cao_cao = { has_truce = prev } }
+	NOT = { is_allied_to = character:cao_cao }
 }
 
 hd_cao_fengying_can_declare_trigger = {
@@ -30,11 +64,21 @@ hd_cao_fengying_can_declare_trigger = {
 	hd_dong_transition_pending_trigger = no
 	is_at_war = no
 	is_imprisoned = no
-	exists = title:d_jingzhao.holder
-	title:d_jingzhao.holder = { is_alive = yes NOT = { this = character:cao_cao } }
-	NOT = { has_truce = title:d_jingzhao.holder }
-	NOT = { is_allied_to = title:d_jingzhao.holder }
-	can_declare_war = { defender = title:d_jingzhao.holder casus_belli = hd_cao_fengying_cb }
+	trigger_if = {
+		limit = { hd_court_has_regent_trigger = yes }
+		title:h_china.var:hd_court_regent = { hd_cao_fengying_target_ok_trigger = yes }
+		can_declare_war = { defender = title:h_china.var:hd_court_regent casus_belli = hd_cao_fengying_cb }
+	}
+	trigger_else_if = {
+		limit = { hd_dong_historical_regent_active_trigger = yes }
+		title:h_china.holder.var:hd_dong_fixed_regent = { hd_cao_fengying_target_ok_trigger = yes }
+		can_declare_war = { defender = title:h_china.holder.var:hd_dong_fixed_regent casus_belli = hd_cao_fengying_cb }
+	}
+	trigger_else = {
+		exists = title:h_china.holder
+		title:h_china.holder = { hd_cao_fengying_target_ok_trigger = yes }
+		can_declare_war = { defender = title:h_china.holder casus_belli = hd_cao_fengying_cb }
+	}
 }
 
 hd_fengying_world_ready_trigger = {
@@ -63,6 +107,11 @@ hd_cao_historical_war_leader_trigger = {
 		AND = {
 			liege = title:h_china.holder
 			title:h_china.holder = { has_variable = hd_dong_fixed_regent var:hd_dong_fixed_regent = character:cao_cao }
+		}
+		# 2026-10-11：奉迎后曹操为通用挟天子权臣
+		AND = {
+			this = character:cao_cao
+			hd_court_is_regent_trigger = yes
 		}
 	}
 }

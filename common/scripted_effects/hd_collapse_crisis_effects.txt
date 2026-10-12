@@ -71,10 +71,6 @@ hd_collapse_yearly_effect = {
 ############################################################
 hd_collapse_select_crisis_effect = {
 	random_list = {
-		100 = {	# 集体独立
-			trigger = { hd_collapse_independence_target_valid_trigger = yes }
-			trigger_event = hd_collapse.1001
-		}
 		100 = {	# 军阀称帝叛乱
 			trigger = { hd_collapse_warlord_target_valid_trigger = yes }
 			hd_collapse_start_warlord_revolt_effect = yes
@@ -98,135 +94,9 @@ hd_collapse_crisis_outbreak_effect = {
 	hd_dc_kit_fire_global_effect = { CATALYST = catalyst_hd_collapse_crisis_outbreak }
 }
 
-############################################################
-# 1. 集体独立（Scope：皇帝）
-############################################################
-
-# 皇帝同意：一次性和平放走全部合格封臣
-hd_collapse_accept_independence_effect = {
-	save_scope_as = hd_collapse_emperor
-	every_vassal = {
-		limit = { hd_collapse_independence_vassal_eligible_trigger = yes }
-		add_to_temporary_list = hd_collapse_conceded_vassals
-	}
-	if = {
-		limit = { any_in_list = { list = hd_collapse_conceded_vassals always = yes } }
-		create_title_and_vassal_change = {
-			type = independency
-			save_scope_as = hd_collapse_independence_change
-			add_claim_on_loss = no
-		}
-		every_in_list = {
-			list = hd_collapse_conceded_vassals
-			if = {
-				limit = { exists = joined_faction }
-				leave_faction = joined_faction
-			}
-			becomes_independent = { change = scope:hd_collapse_independence_change }
-			add_truce_both_ways = {
-				character = scope:hd_collapse_emperor
-				days = 1825
-				name = TRUCE_GRANT_INDEPENDENCE
-			}
-		}
-		resolve_title_and_vassal_change = scope:hd_collapse_independence_change
-		hd_collapse_crisis_succeeded_effect = yes
-	}
-}
-
-# 皇帝拒绝：组建/复用独立派系，邀请全部合格封臣，次日结算
-hd_collapse_refuse_independence_effect = {
-	save_scope_as = hd_collapse_emperor
-	clear_saved_scope = hd_collapse_independence_faction
-	if = {
-		limit = { hd_collapse_independence_target_valid_trigger = yes }
-		random_targeting_faction = {
-			limit = {
-				faction_is_type = independence_faction
-				faction_is_at_war = no
-			}
-			save_scope_as = hd_collapse_independence_faction
-		}
-		if = {
-			limit = { NOT = { exists = scope:hd_collapse_independence_faction } }
-			ordered_vassal = {
-				limit = {
-					hd_collapse_independence_vassal_eligible_trigger = yes
-					can_create_faction = { type = independence_faction target = scope:hd_collapse_emperor }
-				}
-				order_by = military_power
-				max = 1
-				create_faction = { type = independence_faction target = scope:hd_collapse_emperor }
-				joined_faction ?= { save_scope_as = hd_collapse_independence_faction }
-			}
-		}
-		if = {
-			limit = { exists = scope:hd_collapse_independence_faction }
-			add_character_flag = hd_collapse_independence_pending
-			set_variable = { name = hd_collapse_independence_faction value = scope:hd_collapse_independence_faction }
-			every_vassal = {
-				limit = { hd_collapse_independence_vassal_eligible_trigger = yes }
-				add_character_flag = hd_collapse_independence_invited
-				if = {
-					limit = { is_ai = yes }
-					hd_collapse_join_independence_effect = yes
-				}
-				else = { trigger_event = hd_collapse.1002 }
-			}
-			trigger_event = { id = hd_collapse.1003 days = 1 }
-		}
-	}
-}
-
-# Scope：受邀封臣。加入独立派系
-hd_collapse_join_independence_effect = {
-	if = {
-		limit = {
-			has_character_flag = hd_collapse_independence_invited
-			exists = liege.var:hd_collapse_independence_faction
-		}
-		liege.var:hd_collapse_independence_faction = { save_scope_as = hd_collapse_invited_faction }
-		if = {
-			limit = {
-				exists = joined_faction
-				NOT = { joined_faction = scope:hd_collapse_invited_faction }
-			}
-			leave_faction = joined_faction
-		}
-		if = {
-			limit = { NOT = { joined_faction ?= scope:hd_collapse_invited_faction } }
-			join_faction_skip_check = scope:hd_collapse_invited_faction
-		}
-	}
-	remove_character_flag = hd_collapse_independence_invited
-}
-
 # Scope：受邀封臣。拒绝
 hd_collapse_refuse_invitation_effect = {
-	remove_character_flag = hd_collapse_independence_invited
 	remove_character_flag = hd_collapse_warlord_invited
-}
-
-# Scope：皇帝（次日）。人数 >= 2 则开战，否则解散
-hd_collapse_finalize_independence_effect = {
-	save_scope_as = hd_collapse_emperor
-	if = {
-		limit = { exists = var:hd_collapse_independence_faction }
-		var:hd_collapse_independence_faction = {
-			if = {
-				limit = {
-					faction_is_at_war = no
-					faction_target = scope:hd_collapse_emperor
-					any_faction_member = { count >= 2 }
-				}
-				faction_start_war = {}
-				scope:hd_collapse_emperor = { hd_collapse_crisis_outbreak_effect = yes }
-			}
-		}
-	}
-	every_vassal = { remove_character_flag = hd_collapse_independence_invited }
-	remove_variable = hd_collapse_independence_faction
-	remove_character_flag = hd_collapse_independence_pending
 }
 
 ############################################################

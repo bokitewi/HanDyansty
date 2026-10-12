@@ -1,0 +1,178 @@
+﻿namespace = hjbz_guard
+
+# ==========================================================================
+# 汉晋春秋 · 兵戈志 —— 禁军事件（hjbz_guard）
+#
+#   hjbz_guard.0001  重建羽林军     ← 决议「重建羽林军」触发
+#   hjbz_guard.0002  重建执金吾     ← 决议「重建执金吾」触发
+#   hjbz_guard.0003  瘫痪的羽林军   ← 年度检查触发（见 on_action）
+#   hjbz_guard.0004  崩溃的执金吾   ← 年度检查触发
+#
+# --------------------------------------------------------------------------
+# 【素材选取依据（原版取证）】
+#   事件没有 picture 字段（原版事件 0 处使用）；用 theme + override_background。
+#   override_background 的 key 池来自 common/event_backgrounds/，
+#   本体整份覆盖了该文件，key 与原版一致。
+#   立绘动画：ecstasy = 狂喜（非常高兴）；grief = 悲痛（非常悲伤）
+#             （gfx/portraits/portrait_animations/animations.txt:4728 / :4810）
+# ==========================================================================
+
+
+# ══════════════════ 事件一 · 重建羽林军 ══════════════════
+hjbz_guard.0001 = {
+	type = character_event
+	title = hjbz_guard.0001.t
+	desc = hjbz_guard.0001.desc
+	theme = war
+	override_background = { reference = army_camp }
+
+	left_portrait = {
+		character = root
+		animation = ecstasy
+	}
+
+	is_triggered_only = yes
+
+	trigger = {
+		has_title = title:h_china
+		title:h_china = { has_variable = hjbz_yulin_rebuilt }
+	}
+
+	option = {
+		name = hjbz_guard.0001.a
+
+		add_prestige = 500
+		add_legitimacy = 200
+
+		# 永久角色修正，不可继承（角色死亡即消失）
+		add_character_modifier = { modifier = hjbz_yulin_rebuilder_modifier }
+		# 「朝廷之制」，随 h_china 头衔转移（见 on_action 钩子）
+		add_character_modifier = { modifier = hjbz_yulin_guard_modifier }
+	}
+
+	# 旅行选项「羽林军护卫」的开放条件即 has_character_modifier = hjbz_yulin_guard_modifier，
+	# 故此处无需额外写「解锁」效果（详见 common/travel/travel_options/）。
+}
+
+
+# ══════════════════ 事件二 · 重建执金吾 ══════════════════
+hjbz_guard.0002 = {
+	type = character_event
+	title = hjbz_guard.0002.t
+	desc = hjbz_guard.0002.desc
+	theme = stewardship
+	override_background = { reference = tgp_chinese_city }
+
+	left_portrait = {
+		character = root
+		animation = ecstasy
+	}
+
+	is_triggered_only = yes
+
+	trigger = {
+		has_title = title:h_china
+		title:h_china = { has_variable = hjbz_zhijinwu_rebuilt }
+	}
+
+	option = {
+		name = hjbz_guard.0002.a
+
+		add_prestige = 200
+		add_legitimacy = 100
+
+		capital_county = {
+			add_county_modifier = {
+				modifier = hjbz_zhijinwu_renewed_modifier
+				years = 20
+			}
+		}
+	}
+}
+
+
+# ══════════════════ 事件三 · 瘫痪的羽林军 ══════════════════
+hjbz_guard.0003 = {
+	type = character_event
+	title = hjbz_guard.0003.t
+	desc = hjbz_guard.0003.desc
+	theme = war
+	override_background = { reference = army_camp }
+
+	left_portrait = {
+		character = root
+		animation = grief
+	}
+
+	is_triggered_only = yes
+
+	trigger = {
+		title:h_china = { has_variable = hjbz_yulin_rebuilt }
+	}
+
+	option = {
+		name = hjbz_guard.0003.a
+
+		add_prestige = -500
+		add_legitimacy = -200
+
+		remove_character_modifier = hjbz_yulin_rebuilder_modifier
+		remove_character_modifier = hjbz_yulin_guard_modifier
+		# 皇位易主时，新持有者已由 on_title_gain 得到该修正，一并移除
+		if = {
+			limit = {
+				exists = title:h_china.holder
+				NOT = { title:h_china.holder = root }
+			}
+			title:h_china.holder = { remove_character_modifier = hjbz_yulin_guard_modifier }
+		}
+
+		# 撤销招募权 —— 一次同时达成两件事：
+		#   ① can_recruit 失效 → 不能再募羽林卫/羽林骑
+		#   ② is_shown 的 NOT 重新成立 → 「重建羽林军」决议重新出现
+		# 不销毁现有军团（按需求方 2026-10-07 决定）。
+		title:h_china = { remove_variable = hjbz_yulin_rebuilt }
+
+		# 旅行选项「羽林军护卫」随 hjbz_yulin_guard_modifier 的移除自动关闭，
+		# 因其 is_shown 即以该修正为条件。
+	}
+}
+
+
+# ══════════════════ 事件四 · 崩溃的执金吾 ══════════════════
+hjbz_guard.0004 = {
+	type = character_event
+	title = hjbz_guard.0004.t
+	desc = hjbz_guard.0004.desc
+	theme = stewardship
+	override_background = { reference = tgp_chinese_city }
+
+	left_portrait = {
+		character = root
+		animation = grief
+	}
+
+	is_triggered_only = yes
+
+	trigger = {
+		title:h_china = { has_variable = hjbz_zhijinwu_rebuilt }
+	}
+
+	option = {
+		name = hjbz_guard.0004.a
+
+		add_prestige = -200
+		add_legitimacy = -200
+
+		capital_county = {
+			remove_county_modifier = hjbz_zhijinwu_renewed_modifier
+			add_county_modifier = {
+				modifier = hjbz_zhijinwu_collapsed_modifier
+				years = 20
+			}
+		}
+
+		# 同事件三：撤销招募权 + 决议重新出现，不销毁现有军团。
+		title:h_china = { remove_variable = hjbz_zhijinwu_rebuilt }
+	}
+}

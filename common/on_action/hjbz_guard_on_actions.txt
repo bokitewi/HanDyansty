@@ -1,0 +1,155 @@
+﻿# ==========================================================================
+# 汉晋春秋 · 兵戈志 —— 禁军事件的触发与修正继承（hjbz_）
+#
+# 本文件负责三件事：
+#   ① 「羽林军」修正随 h_china 头衔转移（角色修正本身不跨角色继承）
+#   ② 事件三「瘫痪的羽林军」的触发
+#   ③ 事件四「崩溃的执金吾」的触发
+#
+# --------------------------------------------------------------------------
+# 【为什么必须用委托写法】
+#   官方文档 common/on_action/_on_actions.info:102-115 明示：
+#   同一 on_action 的 trigger / effect 块【全库唯一】，重复声明即冲突；
+#   events / random_events / on_actions 三个【列表块】才跨文件累加。
+#   故本文件对原版钩子只写 on_actions = { 自己的 }，逻辑写在下方自定义块里。
+# ==========================================================================
+
+
+# ─────────────────────────────────────────────────────────────
+# ① 修正继承：随 h_china 头衔转移
+# ─────────────────────────────────────────────────────────────
+# 设计：hjbz_yulin_guard_modifier 代表「朝廷有羽林军」，属制而非属人。
+#       得 h_china 者得其修正，失 h_china 者失之。
+#
+# 施加条件：h_china 上仍有 hjbz_yulin_rebuilt 变量（= 羽林军未被裁撤）
+# ─────────────────────────────────────────────────────────────
+
+on_title_gain = {
+	on_actions = { hjbz_guard_on_title_gain }
+}
+
+hjbz_guard_on_title_gain = {
+	effect = {
+		if = {
+			limit = {
+				scope:title = title:h_china
+				scope:title = { has_variable = hjbz_yulin_rebuilt }
+			}
+			add_character_modifier = { modifier = hjbz_yulin_guard_modifier }
+		}
+	}
+}
+
+
+on_title_lost = {
+	on_actions = { hjbz_guard_on_title_lost }
+}
+
+hjbz_guard_on_title_lost = {
+	effect = {
+		# 失去 h_china：本人不再享有「羽林军」修正
+		if = {
+			limit = { scope:title = title:h_china }
+			remove_character_modifier = hjbz_yulin_guard_modifier
+		}
+
+		# 草稿触发条件 1「失去 h_china 头衔」→ 事件三
+		# 注：事件三会清掉 h_china 上的 hjbz_yulin_rebuilt，
+		#     故新持有者亦须重新走「重建羽林军」决议。
+		if = {
+			limit = {
+				scope:title = title:h_china
+				scope:title = { has_variable = hjbz_yulin_rebuilt }
+			}
+			trigger_event = hjbz_guard.0003
+		}
+
+		# 草稿触发条件 1/2「失去 h_china」或「失去洛阳与京兆」→ 事件四
+		if = {
+			limit = {
+				scope:title = title:h_china
+				scope:title = { has_variable = hjbz_zhijinwu_rebuilt }
+			}
+			trigger_event = hjbz_guard.0004
+		}
+	}
+}
+
+
+# ─────────────────────────────────────────────────────────────
+# ②③ 年度检查：事件三 / 事件四的其余触发条件
+# ─────────────────────────────────────────────────────────────
+# 草稿条件（两者共通：失去头衔那一项已由上方的 on_title_lost 处理）：
+#   事件三：权力平衡等级 >= 4 / 乱世 / celestial_bureaucracy 最低级 /
+#           军府募兵制最低级 / 负债超过 3 年
+#   事件四：失去洛阳与京兆 / 乱世 / 负债超过 3 年 / 首都控制力低于 1
+#
+# 【关键术语核实（2026-10-07）】
+#   · 「乱世」不是相位名，而是时代类型 dynastic_cycle_era_type_chaotic。
+#     属于它的相位只有两个：
+#         situation_dynastic_cycle_phase_chaos        群雄逐鹿
+#         situation_dynastic_cycle_phase_hd_standoff  鼎足对峙
+#     ⚠️ hd_collapse（天下崩坏）属【危世】、hd_recovery（百废待兴）属【治世】，
+#        均【不】算乱世，故未纳入。
+#   · 「权力平衡等级 >= 4」按 scales_of_power 换算 = swing >= 80
+#     （power_level 阈值 0/20/40/60/80，等级 4 即 swing 80）
+#   · 「负债超过 3 年」= debt_level >= 3
+#     （defines DEBT_MODIFIER_THRESHOLDS 按「月收入倍数」划分，level 3 = 36 个月；
+#      债务分级显示名 debt_level_3 即 "Three years in debt"）
+# ─────────────────────────────────────────────────────────────
+
+yearly_playable_pulse = {
+	on_actions = { hjbz_guard_yearly_check }
+}
+
+hjbz_guard_yearly_check = {
+	trigger = {
+		has_title = title:h_china
+	}
+	effect = {
+		# ── 事件三：瘫痪的羽林军 ──
+		if = {
+			limit = {
+				title:h_china = { has_variable = hjbz_yulin_rebuilt }
+				OR = {
+					# 权力平衡等级 >= 4
+					diarchy_swing >= 80
+					# 乱世
+					situation_current_phase = situation_dynastic_cycle_phase_chaos
+					situation_current_phase = situation_dynastic_cycle_phase_hd_standoff
+					# 天朝官僚最低级
+					has_realm_law = celestial_bureaucracy_0
+					# 军府募兵制最低级
+					has_realm_law = kuzhu_admin_recruit_military_noble
+					# 负债超过 3 年
+					debt_level >= 3
+					treasury_debt_level >= 3
+				}
+			}
+			trigger_event = hjbz_guard.0003
+		}
+
+		# ── 事件四：崩溃的执金吾 ──
+		if = {
+			limit = {
+				title:h_china = { has_variable = hjbz_zhijinwu_rebuilt }
+				OR = {
+					# 首都既不在洛阳，也不在京兆
+					NOR = {
+						capital_county = { this = title:c_luoyang }
+						capital_county.duchy = { this = title:d_jingzhao }
+					}
+					# 乱世
+					situation_current_phase = situation_dynastic_cycle_phase_chaos
+					situation_current_phase = situation_dynastic_cycle_phase_hd_standoff
+					# 负债超过 3 年
+					debt_level >= 3
+					treasury_debt_level >= 3
+					# 首都控制力低于 1
+					capital_county = { county_control < 1 }
+				}
+			}
+			trigger_event = hjbz_guard.0004
+		}
+	}
+}

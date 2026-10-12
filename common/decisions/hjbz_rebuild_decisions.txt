@@ -1,0 +1,307 @@
+﻿# ==========================================================================
+# 汉晋春秋 · 兵戈志 —— 禁军重建决议
+#
+#   hjbz_rebuild_yulin_decision     重建羽林军  → 解锁 羽林卫 / 羽林骑
+#   hjbz_rebuild_zhijinwu_decision  重建执金吾  → 解锁 执金吾持戟士 / 执金吾缇骑
+#
+# --------------------------------------------------------------------------
+# 【解锁机制】
+#   决议在 title:h_china 上写变量，兵士的 can_recruit 读同一个变量：
+#     决议 effect : title:h_china = { set_variable = hjbz_yulin_rebuilt }
+#     兵士 can_recruit: title:h_china = { has_variable = hjbz_yulin_rebuilt }
+#   → 得中华霸权者方得重建禁军；霸权易主，禁军随之易主。
+#
+# 【为何放在 h_china 上而非角色旗标】
+#   角色旗标随死亡消失，而禁军属「朝廷之制」，不当随一帝之崩而废。
+#   本体的 hd_established_* 也挂在 primary_title 上，此处同法。
+#
+# 【已核实的依赖】
+#   title:h_china      中华霸权（本体 h_china）
+#   title:k_uuii_sili  司隶（王国，首都 c_luoyang 洛阳）
+#   title:d_jingzhao   京兆（公国，含长安所在县）
+#   title:c_luoyang    洛阳（伯爵领，本体实有）
+#   法律：celestial_bureaucracy_* / kuzhu_admin_recruit_*
+#
+# 【待确认项 —— 见文件末注释】
+# ==========================================================================
+
+
+# ══════════════════════ 决议一：重建羽林军 ══════════════════════
+hjbz_rebuild_yulin_decision = {
+	picture = { reference = "gfx/interface/illustrations/decisions/decision_knight_kneeling.dds" }
+	title = hjbz_rebuild_yulin_decision
+	desc = hjbz_rebuild_yulin_decision_desc
+	selection_tooltip = hjbz_rebuild_yulin_decision_tooltip
+	confirm_text = hjbz_rebuild_yulin_decision_confirm
+	decision_group_type = major
+	sort_order = 2201
+
+	# ── 显示条件：持有中华霸权，且尚未重建 ──
+	is_shown = {
+		has_title = title:h_china
+		NOT = { title:h_china = { has_variable = hjbz_yulin_rebuilt } }
+	}
+
+	# ── 执行条件 ──
+	is_valid = {
+		# 1. 持有中华霸权
+		has_title = title:h_china
+
+		# 2. 天朝官僚：有限行政（_1）或更高
+		OR = {
+			has_realm_law = celestial_bureaucracy_1
+			has_realm_law = celestial_bureaucracy_2
+			has_realm_law = celestial_bureaucracy_3
+		}
+
+		# 3. 军制：中外分掌制（balanced）或更高
+		#    ⚠️ 草稿原文作「军府募兵制高于或等于中外分掌制」，
+		#       但 kuzhu_admin_recruit_laws 是 cumulative = no 的互斥选支
+		#       （军府募兵制为 default，即最低档），故按「中外分掌制以上」实现。
+		OR = {
+			has_realm_law = kuzhu_admin_recruit_balanced
+			has_realm_law = kuzhu_admin_recruit_theme
+			has_realm_law = kuzhu_admin_recruit_legion
+		}
+
+		# 4. 威望等级 >= 3
+		prestige_level >= 3
+
+		# 5. 影响力等级 >= 3
+		influence_level >= 3
+
+		# 6. 正统性等级 >= 7
+		legitimacy_level >= 7
+
+		# 7. 所有强力封臣好感 > 50
+		NOT = {
+			any_powerful_vassal = {
+				opinion = { target = root  value <= 50 }
+			}
+		}
+
+		# 8. 司隶之柄：司隶持有者是己，或其心向己（好感 > 50）
+		OR = {
+			title:k_uuii_sili.holder = root
+			AND = {
+				exists = title:k_uuii_sili.holder
+				title:k_uuii_sili.holder = {
+					opinion = { target = root  value > 50 }
+				}
+			}
+		}
+
+		# 9. 权柄在己 —— 以下三项择一
+		OR = {
+			# a. 未行权力分享
+			NOT = { has_active_diarchy = yes }
+
+			# b. 共治者忠诚（无私）
+			AND = {
+				has_active_diarchy = yes
+				exists = diarch
+				diarch = {
+					diarch_loyalty >= diarch_loyalty_visibly_loyal_threshold
+				}
+			}
+
+			# c. 权力天平未偏（等级 <= 2，即 swing < 60）
+			AND = {
+				has_active_diarchy = yes
+				diarchy_swing < 60
+			}
+		}
+	}
+
+	# ── 消耗：国库 500、威望 1000 ──
+	# 用原版双分支写法（06_ep3_admin_decisions.txt:228 起），
+	# 有国库则扣国库，无国库则扣金币，二者择一。
+	cost = {
+		treasury = {
+			value = 0
+			if = {
+				limit = { has_treasury = yes }
+				add = 500
+			}
+		}
+		gold = {
+			value = 0
+			if = {
+				limit = { has_treasury = no }
+				add = 500
+			}
+		}
+		prestige = 1000
+	}
+
+	# ── 效果：立制 ──
+	effect = {
+		title:h_china = { set_variable = hjbz_yulin_rebuilt }
+		custom_tooltip = hjbz_rebuild_yulin_decision_effect
+		# 立制即成军 —— 触发重建事件（羽林卫/羽林骑 + 两项角色修正）
+		trigger_event = hjbz_guard.0001
+	}
+
+	ai_check_interval = 12
+	ai_will_do = {
+		base = 100
+		modifier = {
+			factor = 0
+			NOT = { prestige = 1200 }
+		}
+	}
+}
+
+
+# ══════════════════════ 决议二：重建执金吾 ══════════════════════
+hjbz_rebuild_zhijinwu_decision = {
+	picture = { reference = "gfx/interface/illustrations/decisions/decision_invite_knights.dds" }
+	title = hjbz_rebuild_zhijinwu_decision
+	desc = hjbz_rebuild_zhijinwu_decision_desc
+	selection_tooltip = hjbz_rebuild_zhijinwu_decision_tooltip
+	confirm_text = hjbz_rebuild_zhijinwu_decision_confirm
+	decision_group_type = major
+	sort_order = 2202
+
+	# ── 显示条件：持有中华霸权，且尚未重建 ──
+	is_shown = {
+		has_title = title:h_china
+		NOT = { title:h_china = { has_variable = hjbz_zhijinwu_rebuilt } }
+	}
+
+	# ── 执行条件 ──
+	is_valid = {
+		# 1. 持有中华霸权
+		has_title = title:h_china
+
+		# 2. 都于洛阳或长安
+		#    ⚠️ c_changan 在本体只有本地化、无头衔定义（属脚本动态生成的
+		#       range titles），故长安一侧改判「首都属京兆公国」。
+		OR = {
+			capital_county = { this = title:c_luoyang }
+			capital_county.duchy = { this = title:d_jingzhao }
+		}
+
+		# 3. 首都控制力 > 80
+		capital_county = { county_control > 80 }
+
+		# 4. 威望等级 >= 2
+		prestige_level >= 2
+
+		# 5. 影响力等级 >= 2
+		influence_level >= 2
+
+		# 6. 权柄在己 —— 以下三项择一
+		OR = {
+			# a. 未行权力分享
+			NOT = { has_active_diarchy = yes }
+
+			# b. 共治者忠诚（无私）
+			AND = {
+				has_active_diarchy = yes
+				exists = diarch
+				diarch = {
+					diarch_loyalty >= diarch_loyalty_visibly_loyal_threshold
+				}
+			}
+
+			# c. 权力天平未偏（等级 <= 3，即 swing < 80）
+			AND = {
+				has_active_diarchy = yes
+				diarchy_swing < 80
+			}
+		}
+	}
+
+	# ── 消耗：金 200、威望 300 ──
+	cost = {
+		gold = 200
+		prestige = 300
+	}
+
+	# ── 效果：立制 ──
+	effect = {
+		title:h_china = { set_variable = hjbz_zhijinwu_rebuilt }
+		custom_tooltip = hjbz_rebuild_zhijinwu_decision_effect
+		# 立制即成军 —— 触发重建事件（首都修正「焕然一新的执金吾」）
+		trigger_event = hjbz_guard.0002
+	}
+
+	ai_check_interval = 12
+	ai_will_do = {
+		base = 100
+		modifier = {
+			factor = 0
+			NOT = { gold = 400 }
+		}
+	}
+}
+
+
+# ==========================================================================
+# 【待确认项】以下三处按推断实现，请复核后决定是否调整：
+#
+# 1. 军制门槛
+#    草稿：「军府募兵制高于或等于中外分掌制」
+#    实现：中外分掌制 / 府兵制 / 禁军制（即排除最低档「军府募兵制」）
+#    依据：kuzhu_admin_recruit_laws 为 cumulative = no 的互斥选支，
+#          军府募兵制是其 default。
+#
+# 2. 共治者忠诚「无私」
+#    实现：diarch_loyalty >= diarch_loyalty_visibly_loyal_threshold（= 75）
+#    依据：原版 diarch_loyalty 只有「明显忠诚 / 不明 / 明显不忠」三档可见态，
+#          未找到名为「无私」的独立档位，故取「明显忠诚」为「无私」。
+#
+# 3. 权力平衡等级
+#    实现：以 scales_of_power 的 swing 值换算 —— 等级 0~4 对应 swing 0/20/40/60/80
+#          故「等级 <= 2」写作 diarchy_swing < 60，决议二「<= 3」写作 < 80。
+#    依据：原版 common/diarchies/diarchy_types/00_co_rulerships.txt 的 power_level 阈值。
+# ==========================================================================
+
+
+# ==========================================================================
+# 【事件接口契约】—— 供日后写「禁军被裁撤」类事件时使用
+#
+# 设计：本组禁军的「可招募」与「决议可见」读的是【同一个变量】，
+#       故一次撤销即同时完成两件事，无需额外代码：
+#
+#       ① 不能再招募新军团 —— can_recruit 读不到变量，实时失效
+#       ② 决议重新出现在列表中 —— is_shown 的 NOT 重新成立
+#
+# --------------------------------------------------------------------------
+# 事件中【只需要】写这一行（以羽林军为例）：
+#
+#     title:h_china = { remove_variable = hjbz_yulin_rebuilt }
+#     # 执金吾组： remove_variable = hjbz_zhijinwu_rebuilt
+#
+# --------------------------------------------------------------------------
+# 【按需求方决定，以下三点明确不做】
+#
+#   · 不销毁现有军团 —— 不加 destroy_maa_regiment。
+#     事件后玩家仍持有已招募的羽林卫/羽林骑，只是不能再募新的。
+#
+#   · 不设冷却 —— 撤销后只要付得起代价，可立刻重走决议。
+#
+#   · 重建条件不变 —— 与首次相同，不分支、不加额外门槛。
+#
+# --------------------------------------------------------------------------
+# 【备查】若日后要连现有军团一并裁撤，在事件里追加：
+#
+#     every_maa_regiment = {
+#         limit = {
+#             OR = {
+#                 is_maa_type = hjbz_yulin_wei
+#                 is_maa_type = hjbz_yulin_qi
+#             }
+#         }
+#         destroy_maa_regiment = yes
+#     }
+#
+#   核实记录（2026-10-07）：
+#     every_maa_regiment   —— 原版 32 处在用
+#     is_maa_type = <key>  —— 原版用它指定兵种 key，故 hjbz_* 可用
+#     destroy_maa_regiment —— 正确效果名（不是 destroy_maa）；本体自己用了 17 次
+#   ⚠️ 未实机验证：every_maa_regiment 是否覆盖天朝制的「头衔兵士」
+#      （原版有 is_title_maa_regiment = yes/no 的限定用法，疑为两类分开）。
+#      本组禁军是常规 MAA，理应被覆盖，但若要启用该段请先实测。
+# ==========================================================================
