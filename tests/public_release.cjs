@@ -163,8 +163,8 @@ for(const [key,effect] of [['WJ_puppet_council_appointment_interaction','assign_
 const nativePath=process.env.CK3_GAME_PATH||'E:/SteamLibrary/steamapps/common/Crusader Kings III/game';
 const native=fs.readFileSync(path.join(nativePath,'common/puppets/types/pam_puppet_types.txt'),'utf8');
 const normalized=s=>s.replace(/^\uFEFF/,'').replace(/\r\n/g,'\n').replace(/[ \t]+$/gm,'').trim();
-assert(normalized(read('common/puppets/types/pam_puppet_types.txt').replace(/^[ \t]*WJ_puppet_action_(?:council|court)_appointment\r?\n/gm,''))===normalized(native),'native puppet definitions must differ only by our two actions');
-for(const file of ['common/puppets/types/pam_puppet_types.txt','common/puppets/types/hd_court_puppet_types.txt']){
+assert(normalized(read('common/puppets/types/pam_puppet_types.txt').replace(/^[ \t]*WJ_puppet_action_(?:council|court)_appointment\r?\n/gm,'').replace(/^[ \t]*hd_court_puppet_action_(?:grant_titles|revoke_title)\r?\n/gm,'').replace(/[ \t]*# HD_REGENT_BEGIN[\s\S]*?# HD_REGENT_END\r?\n/,'\tcan_have = {\n\t\tcan_have_external_ruler_puppet_trigger = yes\n\t}\n'))===normalized(native),'native puppet definitions must differ only by our WJ/HD actions and the regent can_have/is_valid block');
+for(const file of ['common/puppets/types/pam_puppet_types.txt']){
  for(const type of Object.values(defs(file))){
   assert(one(type,'actions').children.some(x=>x.key==='WJ_puppet_action_council_appointment'));
   assert(one(type,'actions').children.some(x=>x.key==='WJ_puppet_action_court_appointment'));

@@ -17,13 +17,13 @@ hd_hb_yearly_effect = {
 		if = {
 			limit = { global_var:hd_hb_cursor < global_var:hd_hb_now }
 			set_global_variable = { name = hd_hb_sweep value = global_var:hd_hb_cursor }
-			hd_hb_dispatch_now_effect = yes
+			hd_hb_dispatch_now_wrap_effect = yes
 		}
 		else = {
 			# 先补上一年漏掉的人，再给今年的人排期。
 			set_global_variable = { name = hd_hb_sweep value = global_var:hd_hb_cursor }
 			change_global_variable = { name = hd_hb_sweep add = -1 }
-			hd_hb_dispatch_now_effect = yes
+			hd_hb_dispatch_now_wrap_effect = yes
 			hd_hb_pick_carrier_effect = yes
 			hd_hb_dispatch_schedule_effect = yes
 			clear_saved_scope = hd_hb_carrier
@@ -72,7 +72,41 @@ hd_hb_save_court_effect = {
 	}
 }
 
+# 218 开局补跑 184-217 年各桶时只沿用、不新建：这些人都生于 218 年以前，本该由 history 原生，
+# 找不到就说明已死并被清理，不能再按模板生成活人。只包住"立即出场"，此时 hd_hb_sweep 就是正在补跑的出场年份；
+# 218 年当年排期的延迟事件不经过这里，执行时没有 hd_hb_adopt_only，照常生成（那时 hd_hb_sweep 停在 217，不能在 spawn 里直接判断它）。
+hd_hb_dispatch_now_wrap_effect = {
+	if = {
+		limit = {
+			game_start_date = 218.1.1
+			global_var:hd_hb_sweep < 218
+		}
+		set_global_variable = { name = hd_hb_adopt_only value = yes }
+	}
+	hd_hb_dispatch_now_effect = yes
+	if = {
+		limit = { has_global_variable = hd_hb_adopt_only }
+		remove_global_variable = hd_hb_adopt_only
+	}
+}
+
+# 本局 history 已原生此人（218 开局时生于 218 年以前的人）：直接沿用，不再生成，
+# 也不改其父母、家族、雇主；调用方随后照常写出场标记和指针。184 开局时只有改过生年的梁习、杨千万是原生的，同样沿用。
 hd_hb_spawn_effect = {
+	character:$ID$ ?= {
+		save_scope_as = hd_hb_person
+		add_character_flag = hd_popclean_protect
+	}
+	if = {
+		limit = {
+			NOT = { exists = scope:hd_hb_person }
+			NOT = { has_global_variable = hd_hb_adopt_only }
+		}
+		hd_hb_spawn_new_effect = { ID = $ID$ }
+	}
+}
+
+hd_hb_spawn_new_effect = {
 	scope:hd_hb_father ?= {
 		if = { limit = { is_alive = yes } hd_hb_save_court_effect = yes }
 	}
