@@ -70,7 +70,7 @@ engine = runner({effects,triggers,values,primitives:{
  always: (c,s,e)=>engine.resolve(e.value,c,s),
  any_de_jure_county: (c,s,e,p)=>(c.deJureCounties || []).some(t=>engine.check(e.children,t,s,p)),
  // Unchanged crown/fief predicates are fixtures; the new rank/diarchy guards execute production code.
- WJ_cr_king: (c,s,e)=>false===engine.resolve(e.value,c,s),
+ WJ_cr_crowned_king: (c,s,e)=>false===engine.resolve(e.value,c,s),
  WJ_rf_has_fief: (c,s,e)=>Boolean(c.vars.wj_rf_owned_title)===engine.resolve(e.value,c,s),
  is_in_list: (c,s,e)=>(s.lists?.[e.value] || []).includes(c),
 },onEffect:(e,c,s,p)=>{
@@ -251,7 +251,7 @@ for(const tier of [2,3,4]) {
  assert(!engine.check(roleTrigger,emperor));assert(!engine.check(regentName,local));
 }
 emperor.primary_title={tier:5,is_noble_family_title:false,isMinister:false,vars:{wj_rf_rank:1},deJureCounties:[{}]};
-emperor.titles=[emperor.primary_title];assert(!engine.check(roleTrigger,emperor),'borrowed fief empire is not an emperor');
+emperor.titles=[emperor.primary_title];assert(engine.check(roleTrigger,emperor),'independent territorial fief empire now qualifies as emperor');
 delete emperor.primary_title.vars.wj_rf_rank;assert(engine.check(roleTrigger,emperor),'actual geographical empire qualifies');
 emperor.primary_title=realPrimary;emperor.titles=[];
 emperor.governmentFlags=[];assert(!engine.check(roleTrigger,emperor));assert(!engine.check(regentName,local));

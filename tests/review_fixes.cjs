@@ -12,7 +12,10 @@ for (const id of [1001,1002,1003]) {
  assert(part.includes('POINTS = 0'));
 }
 const ui = read('gui/WJ_district_military.gui');
-assert(ui.includes("GetVariableSystem.Toggle(Concatenate('wj_dd_wars_'"));
+const lawLabels=read('localization/simp_chinese/replace/WJ_regency_and_capital_l_simp_chinese.yml');
+assert(!lawLabels.includes('GetGovernment.HasFlag('));
+assert.equal((lawLabels.match(/GetGovernment.HasGovernmentFlag\(/g)||[]).length,2);
+assert(!/wj_dd_members_closed_|wj_dd_wars_|IntToString\(Character.GetID\)/.test(ui));
 assert(ui.includes('size = { 0 360 }'));
 const people = read('common/scripted_effects/WJ_district_people_effects.txt');
 assert(people.includes('WJ_dd_member_of_core_trigger'));
@@ -35,11 +38,11 @@ const named=name=>all(guiTree).find(n=>n.children?.some(x=>x.key==='name'&&x.val
 const membersToggle=named('WJ_dd_members_toggle'),warsToggle=named('WJ_dd_wars_toggle');
 assert(membersToggle&&warsToggle);
 assert.deepEqual(one(membersToggle,'size').children.map(n=>n.key),['100','32']);
-assert(one(membersToggle,'onclick').value.includes('wj_dd_members_closed_'));
-assert(one(warsToggle,'onclick').value.includes('wj_dd_wars_'));
+assert.equal(one(membersToggle,'onclick').value,'"[PdxGuiFoldOut.Toggle]"');
+assert.equal(one(warsToggle,'onclick').value,'"[PdxGuiFoldOut.Toggle]"');
 for(const n of [membersToggle,warsToggle]){
  assert(!n.children.some(x=>x.key==='visible'||x.key==='enabled'),'display-only toggles must not inherit emperor permissions');
- for(const key of ['text','tooltip'])assert(one(n,key).value.includes('Select_CString')&&one(n,key).value.includes('Character.GetID'));
+ for(const key of ['text','tooltip'])assert(one(n,key).value.includes('Select_CString')&&one(n,key).value.includes('PdxGuiFoldOut.IsUnfolded'));
 }
 const actionRow=all(guiTree).find(n=>n.children?.includes(membersToggle));
 assert(!actionRow.children.some(n=>n.key==='visible'));
@@ -50,13 +53,28 @@ assert.equal(one(buttons[1],'layoutpolicy_horizontal').value,'expanding');
 assert.deepEqual(one(buttons[1],'size').children.map(n=>n.key),['0','32']);
 assert.deepEqual(one(buttons[2],'size').children.map(n=>n.key),['100','32']);
 const memberList=named('WJ_dd_members_list'),warList=named('WJ_dd_wars_list');
-assert.equal(one(memberList,'visible').value,'"[Not(GetVariableSystem.Exists(Concatenate(\'wj_dd_members_closed_\', IntToString(Character.GetID))))]"');
-assert(!one(memberList,'visible').value.includes('wj_dd_wars_'));
-assert(one(warList,'visible').value.includes('wj_dd_wars_')&&!one(warList,'visible').value.includes('wj_dd_members_closed_'));
+assert.equal(one(memberList,'visible').value,'"[PdxGuiFoldOut.IsUnfolded]"');
+assert(one(warList,'visible').value.includes('PdxGuiFoldOut.IsUnfolded'));
 assert(one(warList,'visible').value.includes('Not(IsDataModelEmpty'));
 const card=all(guiTree).find(n=>n.children?.includes(actionRow));
 assert.equal(one(card,'ignoreinvisible').value,'yes','hidden lists must not reserve height');
-assert(card.children.includes(memberList)&&card.children.includes(warList)&&card.children.includes(warsToggle));
+const warFold=named('WJ_dd_wars_foldout');
+assert(card.children.includes(memberList)&&card.children.includes(warFold));
+assert(warFold.children.includes(warList)&&warFold.children.includes(warsToggle));
+for(const [owner,initial] of [[card,'Unfold'],[warFold,'Fold']]){
+ assert.equal(one(owner,'layoutpolicy_vertical').value,'preferred');
+ assert.equal(one(owner,'ignoreinvisible').value,'yes');
+ assert.deepEqual(owner.children.filter(n=>n.key==='oncreate').map(n=>n.value),['"[BindFoldOutContext]"',`"[PdxGuiFoldOut.${initial}]"`]);
+}
+// Every card creates its own native context; the nested war list creates a second one.
+// The two controls must bind to their own nearest context, not a global player key.
+const foldOwner=(node,parent=guiTree,owner)=>{
+ if(parent.children?.some(n=>n.key==='oncreate'&&n.value==='"[BindFoldOutContext]"'))owner=parent;
+ if(parent===node)return owner;
+ for(const child of parent.children||[]){const found=foldOwner(node,child,owner);if(found)return found;}
+};
+assert.equal(foldOwner(membersToggle),card);assert.equal(foldOwner(memberList),card);
+assert.equal(foldOwner(warsToggle),warFold);assert.equal(foldOwner(warList),warFold);
 const labels=read('localization/simp_chinese/gui/WJ_ui_l_simp_chinese.yml');
 for(const [key,arrow]of [['members_expand','▶'],['members_collapse','▼'],['wars_expand','▶'],['wars_collapse','▼']])assert(labels.match(new RegExp(' WJ_dd_ui_'+key+':0 "([^"]+)"'))[1].startsWith(arrow));
 const effectDefs=byName(parse(people));

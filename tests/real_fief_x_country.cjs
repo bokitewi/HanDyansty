@@ -10,9 +10,10 @@ const fx=defs('common/scripted_effects/WJ_real_fief_effects.txt');
 const memorial=defs('common/scripted_effects/WJ_name_memorial_effects.txt');
 const storage=defs('common/scripted_effects/WJ_name_memorial_storage.txt');
 const deadAction=defs('common/on_action/WJ_name_memorial_on_actions.txt').WJ_name_store_dead_memorial;
-for(const name of ['WJ_name_queue_memorial']) assert(storage[name].children.some(n=>n.key==='WJ_name_save_memorial_field'&&one(n,'KEY').value==='wj_rf_miaoshi_rank'));
+for(const key of ['wj_last_hanjin','wj_rf_miaoshi_rank']) assert(storage.WJ_name_queue_memorial.children.some(n=>n.key==='WJ_name_save_memorial_value'&&one(n,'KEY').value===key));
+assert(storage.WJ_name_save_memorial_value.children.some(n=>n.key==='if'&&n.children.some(x=>x.key==='save_scope_value_as')));
 assert(one(deadAction,'effect').children.some(n=>n.key==='WJ_name_store_memorial_field'&&one(n,'KEY').value==='wj_rf_miaoshi_rank'));
-const rankCapture=memorial.WJ_name_before_death.children[0].children.find(n=>n.key==='if'&&one(n,'limit').children.some(t=>t.key==='WJ_rf_has_fief'));
+const rankCapture=memorial.WJ_name_before_death.children[0].children.find(n=>['if','else_if'].includes(n.key)&&one(n,'limit').children.some(t=>t.key==='WJ_rf_has_fief'));
 const ranks=defs('common/customizable_localization/WJ_real_fief_miaoshi.txt');
 const deathRun=runner({effects:{},triggers:{},values:{},primitives:{
  exists:(c,s,n)=>n.value.startsWith('dead_var:')?c.dead_var?.[n.value.slice(9)]!==undefined:deathRun.resolve(n.value,c,s)!==undefined,
@@ -201,7 +202,7 @@ const coronationTriggers=defs('common/scripted_triggers/zz_WJ_chinese_coronation
 const funeralAction=defs('common/on_action/WJ_tianjia_miaoshi_on_actions.txt').WJ_miaoshi_death;
 let life;
 life=runner({effects:{...fx,...memorial,...storage,...defs('common/scripted_effects/WJ_tianjia_miaoshi_effects.txt')},
- triggers:{...nameTriggers,...gates,...coronationTriggers},values:defs('common/script_values/WJ_tianjia_miaoshi_values.txt'),primitives:{
+ triggers:{...nameTriggers,...gates,...coronationTriggers,WJ_inner_emperor_trigger:defs('common/scripted_triggers/WJ_inner_court_triggers.txt').WJ_inner_emperor_trigger},values:defs('common/script_values/WJ_tianjia_miaoshi_values.txt'),primitives:{
  has_realm_law:(c,s,n)=>c.laws.includes(n.value),
  has_game_rule:(c,s,n)=>c.miaoRule&&n.value==='MiaoShi_on',
  has_trait:(c,s,n)=>c.traits.includes(n.value),
@@ -220,49 +221,63 @@ life=runner({effects:{...fx,...memorial,...storage,...defs('common/scripted_effe
  }
  if(n.key==='WJ_title_style_reconcile')return true; // Unchanged native title display maintenance.
  if(n.key==='store_localized_text_in_death'){
-  assert.equal(n.value,'WJ_rf_miaoshi_realm_name');c.savedRealm=c.vars.wj_rf_owned_title?stem(c.vars.wj_rf_owned_title):c.primary_title.name;return true;
+  assert.equal(n.value,'WJ_rf_miaoshi_realm_name');c.savedRealm=life.check(coronationTriggers.WJ_cr_crowned_king.children,c)?c.primary_title.name:c.vars.wj_rf_owned_title?stem(c.vars.wj_rf_owned_title):c.primary_title.name;return true;
  }
  if(n.key==='trigger_event'){
   if(n.children?.some(x=>x.key==='on_action'))(c.pending||=[]).push({...s});
-  else(c.funeralEvents||=[]).push({id:n.value||one(n,'id').value,deceased:s.XianDi});return true;
+  else(c.funeralEvents||=[]).push({id:n.value||one(n,'id').value,deceased:s.XianDi,scopes:{...s}});return true;
  }
  if(n.key==='set_dead_character_variable'){
   assert.equal(c.is_alive,false,'never write corpse variables while alive');
-  const key=life.resolve(one(n,'name').value,c,s,p),value=life.resolve(one(n,'value').value,c,s,p);
+  const key=life.resolve(one(n,'name').value,c,s,p)??one(n,'name').value,value=life.resolve(one(n,'value').value,c,s,p);
   (c.dead_var||={})[key]=value;c['dead_var:'+key]=value;c.deadWrites=(c.deadWrites||0)+1;return true;
  }
  if(n.key==='add_trait'){c.traits.push(n.value);return true;}
+ if(n.key==='remove_nickname'){delete c.nickname;return true;}
+ if(n.key==='give_nickname'){c.nickname=life.resolve(n.value,c,s,p)??n.value;return true;}
  return false;
 }});
 const uiNames=defs('common/customizable_localization/WJ_name_offices.txt');
-const nativeStem=defs('common/customizable_localization/WJ_native_province_pilot.txt').WJ_NativeFiefStem;
+const nativeNames=defs('common/customizable_localization/WJ_native_province_pilot.txt');
+const nativeStem=nativeNames.WJ_NativeFiefStem;
 const choose=(node,c)=>one(node.children.find(n=>n.key==='text'&&(!n.children.some(x=>x.key==='trigger')||life.check(one(n,'trigger').children,c,{root:c}))),'localization_key').value;
 for(const miaoFirst of [false,true])for(const [kind,office,independent,rule,sameFamily]of [
  ['duke',true,false,true,true],['king',true,false,true,true],['duke',false,true,true,true],['king',false,true,true,true],
- ['crowned',false,true,true,true],['king',true,false,false,true],['king',true,false,true,false],['emperor',false,true,true,true],['hegemon',false,true,true,true]
+ ['crowned',false,true,true,true],['advanced-duke',false,true,true,true],['king',true,false,false,true],['king',true,false,true,false],['emperor',false,true,true,true],['hegemon',false,true,true,true]
 ]){
  const family={},heir={vars:{},dynasty:sameFamily?family:{}};
  const territorial={tier:kind==='duke'?4:kind==='emperor'?5:kind==='hegemon'?6:4,is_noble_family_title:false,isMinister:false,counties:[{}],vars:{},name:'楚',current_heir:heir};
  if(['duke','king'].includes(kind)){territorial.tier=kind==='duke'?4:5;territorial.vars={wj_rf_rank:kind==='duke'?1:2,wj_rf_name_code:13};}
+ if(kind==='advanced-duke')territorial.vars={wj_rf_rank:1,wj_rf_name_code:13};
+ if(['crowned','advanced-duke'].includes(kind))territorial.vars.wj_cr_hereditary_king=true;
  const minister={tier:5,is_noble_family_title:false,isMinister:true,counties:[],vars:{},current_heir:{dynasty:family}};
  const c={vars:{},titles:office?[minister,territorial]:[territorial],primary_title:office?minister:territorial,
   is_alive:true,is_landed:true,is_independent_ruler:independent,is_ai:false,is_councillor:office,seat:office?'councillor_chancellor':null,
   governmentFlags:['government_is_celestial'],highest_held_title_tier:Math.max(territorial.tier,office?5:0),
-  dynasty:family,primary_heir:heir,laws:kind==='crowned'?['crowned_king']:[],traits:[],miaoRule:rule,sub_realm_size:100,age:50,prestige_level:0};
+  dynasty:family,primary_heir:heir,laws:[],traits:[],miaoRule:rule,sub_realm_size:100,age:50,prestige_level:0};
  const lord={governmentFlags:['government_is_celestial'],accessMinistry:true};c.liege_or_court_owner=lord;c.top_liege=independent?c:lord;territorial.holder=c;
- if(['duke','king'].includes(kind)){
+ if(['duke','king','advanced-duke'].includes(kind)){
   life.run('WJ_rf_refresh_holder',c,{root:c});
   assert(life.check(nameTriggers.WJ_name_ui_enabled_trigger.children,c));
-  assert.equal(choose(nativeStem,c),'WJ_rf_native_stem');
-  for(const node of [uiNames.WJ_NameDesignation,uiNames.WJ_NameCompactOffice])assert.equal(choose(node,c),'WJ_name_basic_prefix');
+  assert.equal(choose(nativeStem,c),kind==='king'&&independent?'WJ_name_empty':kind==='advanced-duke'?'WJ_cr_native_king_stem':'WJ_rf_native_stem');
+  assert.equal(choose(uiNames.WJ_NameDesignation,c),kind==='king'&&independent?'WJ_name_emperor_prefix':'WJ_name_basic_prefix');
+  assert.equal(choose(uiNames.WJ_NameCompactOffice,c),kind==='king'&&independent?'WJ_name_compact_designation':'WJ_name_basic_prefix');
+  if(kind==='king'&&independent){
+   assert.equal(choose(names.WJ_rf_held_name,c),'WJ_name_empty','the independent emperor must not append an obsolete king peerage');
+   for(const node of [nativeNames.WJ_NativeKingRank,nativeNames.WJ_NativeOfficeRank])assert.equal(choose(node,c),'WJ_native_emperor_rank');
+  }
+  if(kind==='advanced-duke'){
+   assert.equal(choose(names.WJ_rf_held_name,c),'WJ_name_king','the new kingdom identity wins over the old duke label');
+   for(const node of [nativeNames.WJ_NativeKingRank,nativeNames.WJ_NativeOfficeRank,nativeNames.WJ_NativeProvinceRank])assert.equal(choose(node,c),'WJ_native_king_rank');
+  }
  }
  const scopes={root:c};
  const burial=()=>{if(life.check(one(funeralAction,'trigger').children,c,scopes))life.execute(one(funeralAction,'effect').children,c,scopes);};
  if(miaoFirst)burial();life.run('WJ_name_before_death',c,scopes);if(!miaoFirst)burial();
- const emperorCase=['emperor','hegemon'].includes(kind),rank=kind==='duke'?1:2;
+ const emperorCase=['emperor','hegemon'].includes(kind)||(kind==='king'&&independent),rank=kind==='duke'?1:2;
  assert.equal(c.vars.wj_rf_miaoshi_rank,emperorCase?undefined:rank);
  if(emperorCase){assert.equal(c.pending,undefined);assert.equal(heir.funeralEvents[0].id,'HuangDi_miaoshi.009');continue;}
- assert.equal(c.savedRealm,kind==='crowned'?'楚':'晋');assert.equal(c.pending.length,2);
+ assert.equal(c.savedRealm,['crowned','advanced-duke'].includes(kind)?'楚':'晋');assert.equal(c.pending.length,2);
  assert.equal(c.pending[0].wj_memorial_wj_rf_miaoshi_rank,rank);assert.equal(c.dead_var,undefined);
  assert.equal(life.check(one(deadAction,'trigger').children,c,c.pending[0]),false,'early callback must wait for death');
  c.is_alive=false;c.vars={};c.titles=[];c.laws=[];territorial.holder=heir;
@@ -272,9 +287,31 @@ for(const miaoFirst of [false,true])for(const [kind,office,independent,rule,same
  assert.equal(choose(ranks.WJ_rf_miaoshi_full_rank,c),rank===2?'WJ_rf_miaoshi_king':'WJ_rf_miaoshi_duke');
  for(const file of ['WJ_name_offices.txt','WJ_name_death_details.txt','WJ_tianjia_history_names.txt'])for(const node of Object.values(defs('common/customizable_localization/'+file)).filter(n=>/^WJ_Get.*Name$/.test(n.key)))assert.equal(choose(node,c),'WJ_rf_dead_full_name');
  assert.equal(heir.funeralEvents?.[0].id,rule&&sameFamily?'WJ_rf_shihao.1':undefined);
+ if(rule&&sameFamily){
+  // Even if the general memorial lost its rank, this dedicated chain restores the captured identity.
+  delete c.dead_var.wj_rf_miaoshi_rank;delete c['dead_var:wj_rf_miaoshi_rank'];
+  const funeralScopes=heir.funeralEvents[0].scopes;
+  assert.equal(funeralScopes.wj_rf_shihao_rank,rank);
+  const initial=one(defs('events/WJ_real_fief_shihao_events.txt')['WJ_rf_shihao.1'],'immediate');
+  life.execute(initial.children,heir,funeralScopes);
+  assert.equal(c.dead_var.wj_rf_miaoshi_rank,rank);assert.equal(c.nickname,'WJ_rf_miaoshi_base');
+  assert.equal(choose(ranks.WJ_rf_miaoshi_full_rank,c),rank===2?'WJ_rf_miaoshi_king':'WJ_rf_miaoshi_duke');
+ }
+}
+// A partial first callback must not block the complete one-day retry.
+for(const rank of [1,2]){
+ const dead={is_alive:false,vars:{},dead_var:{}},complete={wj_memorial_wj_last_hanjin:true,wj_memorial_wj_last_office:'flag:WJ_baiguan_label_situ',wj_memorial_wj_rf_miaoshi_rank:rank};
+ const partial={...complete};delete partial.wj_memorial_wj_rf_miaoshi_rank;
+ life.execute(one(deadAction,'effect').children,dead,partial);
+ assert.equal(choose(ranks.WJ_rf_miaoshi_full_rank,dead),'WJ_rf_miaoshi_emperor_full','this is the reported missing-rank failure, not a title-priority issue');
+ assert(life.check(one(deadAction,'trigger').children,dead,complete),'existing hanjin marker must not block missing rank repair');
+ life.execute(one(deadAction,'effect').children,dead,complete);
+ assert.equal(dead.dead_var.wj_rf_miaoshi_rank,rank);assert.equal(dead.dead_var.wj_last_office,'flag:WJ_baiguan_label_situ');
+ assert.equal(choose(ranks.WJ_rf_miaoshi_full_rank,dead),rank===2?'WJ_rf_miaoshi_king':'WJ_rf_miaoshi_duke');
+ const writes=dead.deadWrites;life.execute(one(deadAction,'effect').children,dead,complete);assert.equal(dead.deadWrites,writes);
 }
 const nativeFormats=Object.fromEntries([...read('localization/simp_chinese/replace/WJ_character_name_formats_l_simp_chinese.yml').matchAll(/^\s+(\w+):0 "(.*)"$/gm)].map(m=>[m[1],m[2]]));
 assert.equal(Object.values(nativeFormats).filter(v=>v.includes("Custom('WJ_NativeFiefStem')")).length,26);
 for(const [key,v]of Object.entries(nativeFormats))if(v.includes('$TITLE$'))assert(!v.includes('WJ_NativeFiefStem'),key+' would repeat the title');
-assert.equal(choose(nativeStem,{is_alive:false,vars:{}}),'WJ_name_empty');assert.equal(choose(nativeStem,{is_alive:true,vars:{}}),'WJ_name_empty');
-console.log('PASS: real pre-death→queue→native cleanup→dead-storage lifecycle, both callback orders, duke/king with and without ministry, independent crowned king, rule-off/foreign heir, true emperor/hegemony protection, 7 name outlets, live/native stems; existing expansion/preview/gate checks. Native timing, title transactions and UI remain untested.');
+assert.equal(choose(nativeStem,{is_alive:false,vars:{}}),'WJ_name_empty');assert.equal(choose(nativeStem,{is_alive:true,is_independent_ruler:false,governmentFlags:[],vars:{}}),'WJ_name_empty');
+console.log('PASS: real pre-death→queue→native cleanup→dead-storage lifecycle, both callback orders, vassal duke/king with ministry, title-marked independent king, independent real-fief empire directly emperor, rule-off/foreign heir, 7 name outlets/native stems; existing expansion/preview/gate checks. Native timing, title transactions and UI remain untested.');

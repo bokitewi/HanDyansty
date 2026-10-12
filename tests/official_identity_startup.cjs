@@ -59,7 +59,7 @@ engine=runner({effects,triggers,values:{},primitives:{
  government_allows:(c,s,e)=>(c.allows || []).includes(e.value),
  any_house_member:(c,s,e,p)=>c.members.some(m=>engine.check(e.children,m,s,p)),
  // Existing crown/fief/local-contract logic is unchanged by these display-boundary tests.
- WJ_cr_king:(c,s,e)=>false===engine.resolve(e.value,c,s),
+ WJ_cr_crowned_king:(c,s,e)=>false===engine.resolve(e.value,c,s),
  WJ_rf_has_fief:(c,s,e)=>false===engine.resolve(e.value,c,s),
  WJ_contract_local_official_trigger:(c,s,e)=>false===engine.resolve(e.value,c,s),
  WJ_inner_emperor_trigger:(c,s,e)=>false===engine.resolve(e.value,c,s),

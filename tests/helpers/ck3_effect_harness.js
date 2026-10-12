@@ -164,7 +164,7 @@ function runner({ effects, triggers, values, primitives = {}, onEffect } = {}) {
         }
       } else if (k === 'hidden_effect') execute(e.children, ctx, scopes, params);
       else if (k === 'save_scope_as') scopes[e.value] = ctx;
-      else if (k === 'save_scope_value_as') scopes[one(e, 'name').value] = number(one(e, 'value'), ctx, scopes, params);
+      else if (k === 'save_scope_value_as') scopes[expand(one(e, 'name').value, params)] = number(one(e, 'value'), ctx, scopes, params);
       else if (k === 'set_variable') {
         if (!e.children) { ctx.vars[e.value] = true; continue; }
         const name = expand(one(e, 'name').value, params);
@@ -225,6 +225,7 @@ if (require.main === module) {
     }
     eligible = { is_alive = yes }
     string_macro = { var:$KEY$ ?= { save_scope_as = copied_$KEY$ } }
+    value_macro = { save_scope_value_as = { name = value_$KEY$ value = var:$KEY$ } }
     apply = {
       if = {
         limit = { eligible = yes }
@@ -257,6 +258,8 @@ if (require.main === module) {
   const macroEngine=runner({effects:definitions,triggers:{},values:{}}),macroScopes={};
   macroEngine.run('string_macro',{vars:{king_rank:2}},macroScopes,{KEY:'king_rank'});
   assert.equal(macroScopes.copied_king_rank,2);
+  macroEngine.run('value_macro',{vars:{king_rank:2}},macroScopes,{KEY:'king_rank'});
+  assert.equal(macroScopes.value_king_rank,2);
   assert.throws(() => runner({ effects: {}, triggers: {}, values: {} }).run('missing', a), /Missing production effect/);
   console.log('PASS: harness AST arithmetic, branches, parameters, scopes, missing-file read and strict missing-effect checks');
 }

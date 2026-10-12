@@ -45,39 +45,52 @@ engine.run('WJ_ab_abort',active,{wj_ab_ticket:6});assert.equal(active.vars.wj_ab
 engine.run('WJ_ab_abort',active,{wj_ab_ticket:7});
 assert.deepEqual(oldEmperor.modifiers,['unrelated']);assert.equal(oldEmperor.vars.wj_ab_successor,undefined);
 assert.equal(active.vars.wj_ab_emperor,undefined);assert.equal(active.vars.wj_ab_declines,undefined);assert.equal(active.vars.wj_ab_ticket,7);
-// Read the real main phase predicate; only the native phase field is a fixture.
+// Division is not a veto; final transfer uses the two cached participants only.
 const abTriggers=byName(parse(read('common/scripted_triggers/WJ_abdication_triggers.txt')));
 let phaseEngine, nativeTransfers=0;
-phaseEngine=runner({effects,triggers:{...abTriggers,...byName(parse(read('common/scripted_triggers/hd_cycle_phase_triggers.txt')))},values:{},primitives:{
+phaseEngine=runner({effects,triggers:abTriggers,values:{},primitives:{
+ always:(ctx,s,n)=>n.value==='yes',
  situation_current_phase:(ctx,scopes,n)=>ctx.phase===n.value,
+ custom_description:(ctx,scopes,n)=>phaseEngine.check(n.children.filter(x=>x.key!=='text'),ctx,scopes),
+ has_ach_dlc_trigger:(ctx,s,n)=>ctx.dlc===(n.value==='yes'),
+ has_game_rule:(ctx,s,n)=>ctx.rules.includes(n.value),
+ has_diarchy_type:(ctx,s,n)=>ctx.diarchy===n.value,
 },onEffect(n,ctx){
  if(n.key==='remove_character_modifier'){ctx.modifiers=(ctx.modifiers||[]).filter(m=>m!==n.value);return true;}
  if(n.key==='clear_variable_list'){delete (ctx.lists||{})[n.value];return true;}
  if(n.key==='create_title_and_vassal_change'){nativeTransfers++;return true;}
  return false;
 }});
-const entryPhase=one(abTriggers.WJ_ab_can_start,'custom_description').children.filter(n=>n.key!=='text');
-for(const [phase,want] of [
- ['stability',true],['stability_expansion',true],['stability_advancement',true],
- ['instability_conquest',true],['instability',true],['hd_recovery',true],['hd_collapse',true],
- ['chaos',false],['hd_standoff',false]
-]){
- const previous={is_alive:true,vars:{wj_ab_successor:true},modifiers:['WJ_ab_protection','unrelated']};
- const pending={is_alive:true,'situation:dynastic_cycle':{phase:'situation_dynastic_cycle_phase_'+phase},vars:{wj_ab_emperor:previous,wj_ab_ticket:7,wj_ab_round:3,wj_ab_declines:2,wj_ab_penalty:0}};
- assert.equal(phaseEngine.check(entryPhase,pending,{}),want);
- assert.equal(phaseEngine.check(abTriggers.WJ_ab_flow_valid.children,pending,{wj_ab_ticket:7}),want);
- if(!want){
-  phaseEngine.run('WJ_ab_transfer',pending,{wj_ab_ticket:7});
-  assert.equal(pending.vars.wj_ab_emperor,undefined);assert.equal(pending.vars.wj_ab_declines,undefined);
-  assert.deepEqual(previous.modifiers,['unrelated']);assert.equal(previous.vars.wj_ab_successor,undefined);
-  assert.equal(nativeTransfers,0);assert.equal(pending.vars.wj_ab_transferred,undefined);
- }
+const hegemony={tier:6,vars:{},is_landless_type_title:true};
+const previous={is_alive:true,vars:{wj_ab_successor:true},titles:[hegemony],modifiers:['WJ_ab_protection','unrelated']};
+const pending={is_alive:true,is_adult:true,is_ai:false,governmentFlags:['government_is_celestial'],dlc:true,rules:[],top_liege:previous,'title:h_china':hegemony,titles:[{tier:5,vars:{wj_rf_rank:2}}],vars:{wj_ab_emperor:previous,wj_ab_ticket:7,wj_ab_round:3,wj_ab_declines:2,wj_ab_penalty:0}};
+previous['title:h_china']=hegemony;hegemony.holder=previous;
+for(const phase of ['stability','stability_expansion','stability_advancement','instability_conquest','instability','hd_recovery','hd_collapse','chaos','hd_standoff']){
+ pending['situation:dynastic_cycle']={phase:'situation_dynastic_cycle_phase_'+phase};
+ assert.equal(phaseEngine.check(abTriggers.WJ_ab_flow_valid.children,pending,{wj_ab_ticket:7}),true);
+ assert.equal(phaseEngine.check(abTriggers.WJ_ab_transfer_valid.children,pending,{wj_ab_ticket:7}),true);
  const settled={is_alive:true,'situation:dynastic_cycle':{phase:'situation_dynastic_cycle_phase_'+phase},vars:{wj_ab_emperor:previous,wj_ab_ticket:7,wj_ab_transferred:true,wj_ab_placement:true}};
  assert.equal(phaseEngine.check(abTriggers.WJ_ab_flow_valid.children,settled,{wj_ab_ticket:7}),true);
  phaseEngine.run('WJ_ab_transfer',settled,{wj_ab_ticket:7});
  assert.equal(settled.vars.wj_ab_placement,true);assert.equal(nativeTransfers,0);
 }
-assert.equal(phaseEngine.check(entryPhase,{vars:{}},{}),false);
+const entry={...pending,vars:{}};
+assert(phaseEngine.check(abTriggers.WJ_ab_can_start.children,entry,{}),'test entry bypasses political requirements, not the real throne/fief');
+abTriggers.WJ_ab_player_test.children[0].value='no';
+assert(!phaseEngine.check(abTriggers.WJ_ab_can_start.children,entry,{}));
+Object.assign(previous,{diarchy:'grand_secretariat',diarchy_swing:80,diarch:entry,puppeteer:entry});
+assert(phaseEngine.check(abTriggers.WJ_ab_can_start.children,entry,{}));
+previous.diarchy_swing=79;assert(!phaseEngine.check(abTriggers.WJ_ab_can_start.children,entry,{}));
+abTriggers.WJ_ab_player_test.children[0].value='yes';
+for(const change of [{is_ai:true},{dlc:false},{rules:['coronation_laws_off']},{titles:[]},{top_liege:entry},{vars:{wj_peer_target:previous}}])assert(!phaseEngine.check(abTriggers.WJ_ab_can_start.children,{...entry,...change},{}));
+// If the court actually changed during the ten-day gaps, abort without transfer/reward.
+for(const departed of [false,true]){
+ const old={...previous,vars:{wj_ab_successor:true},modifiers:['WJ_ab_protection','unrelated'],titles:departed?[hegemony]:[]};
+ const applicant={...pending,top_liege:departed?{}:old,vars:{...pending.vars,wj_ab_emperor:old}};
+ phaseEngine.run('WJ_ab_transfer',applicant,{wj_ab_ticket:7});
+ assert.equal(applicant.vars.wj_ab_emperor,undefined);assert.equal(applicant.vars.wj_ab_declines,undefined);
+ assert.deepEqual(old.modifiers,['unrelated']);assert.equal(nativeTransfers,0);
+}
 const transfer=all(effects.WJ_ab_transfer);
 assert.ok(transfer.some(n=>n.key==='change_title_holder_include_vassals'));
 assert.ok(!transfer.some(n=>['every_courtier','move_to_pool','add_courtier'].includes(n.key)));
@@ -85,6 +98,13 @@ assert.ok(transfer.some(n=>n.key==='WJ_rf_restore_destroyed_fief'));
 assert.ok(transfer.filter(n=>n.key==='destroy_title').every(n=>n.value!=='yes'));
 assert.ok(transfer.some(n=>n.key==='trigger_event'&&n.value==='WJ_ab.4'));
 assert.ok(transfer.some(n=>n.key==='is_noble_family_title'&&n.value==='no'));
+// main's landless hegemony is an explicit exception; titular offices/family remain excluded.
+const donorBlock=all(effects.WJ_ab_transfer).find(n=>n.key==='scope:wj_ab_old_emperor'&&n.children?.some(x=>x.key==='every_held_title'));
+const titleCollector=one(donorBlock,'every_held_title'),collectorLimit=one(titleCollector,'limit');
+for(const [t,want]of [[hegemony,true],[{is_landless_type_title:false,is_noble_family_title:false,tgp_is_minister_title:false,vars:{}},true],[{is_landless_type_title:true,is_noble_family_title:false,tgp_is_minister_title:true,vars:{}},false],[{is_landless_type_title:false,is_noble_family_title:true,tgp_is_minister_title:false,vars:{}},false],[{is_landless_type_title:false,is_noble_family_title:false,tgp_is_minister_title:false,vars:{SanGong_DongGong_title:true}},false]])assert.equal(phaseEngine.check(collectorLimit.children,t,{wj_ab_throne:hegemony}),want);
+assert(transfer.some(n=>n.key==='hd_court_release_effect'));
+assert(transfer.findIndex(n=>n.key==='hd_court_release_effect')<transfer.findIndex(n=>n.key==='resolve_title_and_vassal_change'));
+assert(!all(abTriggers).some(n=>n.key==='hd_cycle_is_divided_trigger'||n.key==='situation_current_phase'));
 // Production context triggers: territorial court wins over a concurrent ministry.
 const triggers={...byName(parse(read('common/scripted_triggers/zz_WJ_chinese_coronation_triggers.txt'))),...byName(parse(read('common/scripted_triggers/WJ_court_context_triggers.txt')))};
 const ce=runner({effects:{},triggers,values:{},primitives:{
@@ -95,7 +115,7 @@ const ce=runner({effects:{},triggers,values:{},primitives:{
 }});
 const title=(tier,extra={})=>({tier,is_noble_family_title:false,tgp_is_minister_title:false,is_landless_type_title:false,counties:true,vars:{},...extra});
 const person=(titles,extra={})=>({titles,primary_title:titles[0],vars:{},laws:[],governmentFlags:['government_is_celestial'],is_alive:true,is_landed:true,is_independent_ruler:false,highest_held_title_tier:Math.max(...titles.map(t=>t.tier)),...extra});
-const crownedKing=person([title(4)],{is_independent_ruler:true,laws:['crowned_king']});
+const crownedKing=person([title(4,{vars:{wj_cr_hereditary_king:true}})],{is_independent_ruler:true});
 for(const [p,want] of [
  [person([title(5)],{is_independent_ruler:true,minister:true}),'emperor'],
  [person([title(5)],{minister:true}),'king'],
@@ -104,7 +124,8 @@ for(const [p,want] of [
  [person([title(5,{tgp_is_minister_title:true,is_landless_type_title:true})],{minister:true}),'ministry'],
  [person([title(4)],{is_independent_ruler:true}),'state'],
  [crownedKing,'king'],
- [person([title(4)],{is_independent_ruler:true,laws:['crowned_king'],minister:true}),'king'],
+ [person([title(4,{vars:{wj_cr_hereditary_king:true}})],{is_independent_ruler:true,minister:true}),'king'],
+ [person([title(4)],{is_independent_ruler:true,laws:['crowned_king']}),'state'],
  [person([title(4)],{laws:['crowned_king']}),'state'],
  [person([title(4,{counties:false})],{is_independent_ruler:true,laws:['crowned_king']}),'state'],
  [person([title(3)]),'prefecture'],[person([title(2)]),'county']
@@ -162,11 +183,11 @@ const maximum=20+Number(all(cr['WJ_cr.1']).find(n=>n.key==='add').value)+Number(
 assert.equal(maximum,100);
 const naming=byName(parse(read('common/scripted_triggers/10_tgp_triggers.txt')));
 assert.ok(all(naming.hd_chinese_naming_eligible_trigger).some(n=>n.key==='has_variable'&&n.value==='wj_cr_allow_naming'));
-// Execute actual settlement and hereditary-law branches. Only native side effects are fixture adapters.
+// Execute actual settlement, decision and title inheritance; only native primitives are fixtures.
 const crownTriggers={...Object.fromEntries(['hd_chinese_naming_eligible_trigger','tgp_use_chinese_naming_trigger','tgp_chinese_naming_tier_trigger'].map(k=>[k,naming[k]])),...byName(parse(read('common/scripted_triggers/zz_WJ_chinese_coronation_triggers.txt')))};
 const crownEngine=runner({effects:{...crEffects,...miaoshiEffects},triggers:crownTriggers,values:miaoshiValues,primitives:{
  any_character_situation:()=>false,
- has_ach_dlc_trigger:()=>true,
+ has_ach_dlc_trigger:ctx=>ctx.dlc!==false,
  has_game_rule:(ctx,s,n)=>!!ctx.rules?.includes(n.value),
  has_realm_law:(ctx,s,n)=>!!ctx.laws?.includes(n.value),
  trigger_if:(ctx,s,n)=>!crownEngine.check(n.children.find(c=>c.key==='limit').children,ctx,s)||crownEngine.check(n.children.filter(c=>c.key!=='limit'),ctx,s),
@@ -179,8 +200,12 @@ const crownEngine=runner({effects:{...crEffects,...miaoshiEffects},triggers:crow
  if(n.key==='progress_activity_phase_after'){ctx.waitDays=Number(n.children[0].value)*(n.children[0].key==='weeks'?7:1);return true;}
  if(n.key==='every_attending_character'){assert.equal(ctx.guests,false);return true;}
  if(n.key==='add_realm_law'){ctx.laws=[n.value];(ctx.lawWrites||=[]).push(n.value);return true;}
+ if(n.key==='add_character_flag'){(ctx.flags||=[]).push(n.value);return true;}
+ if(n.key==='clear_variable_list'){delete (ctx.lists||{})[n.value];return true;}
+ if(n.key==='set_definitive_form'){ctx.definitive=n.value;return true;}
+ if(n.key==='set_title_name_dynamic'){ctx.name=scopes.root.vars.new_realm_title_name||scopes.enteredName;return true;}
  if(n.key==='trigger_event'){(ctx.queued||=[]).push(n.value||n.children.find(c=>c.key==='id').value);return true;}
- if(['coronation_disburse_rewards_effect','coronation_upgrade_oath_value_effect','WJ_mr_end_request','WJ_mr_clear_rank','WJ_title_style_reconcile'].includes(n.key)){(ctx.calls||=[]).push(n.key);return true;}
+ if(['coronation_disburse_rewards_effect','coronation_upgrade_oath_value_effect','WJ_mr_end_request','WJ_mr_clear_rank','WJ_title_style_reconcile','create_artifact_dynastic_imperial_seal_effect'].includes(n.key)){(ctx.calls||=[]).push(n.key);return true;}
  return false;
 }});
 function monarch(tier=4){const primary=title(tier),ruler={vars:{hide_make_primary_title:1},titles:[primary],primary_title:primary,governmentFlags:['government_is_celestial'],is_alive:true,is_landed:true,is_independent_ruler:true,is_ai:false,is_incapable:false,is_imprisoned:false,highest_held_title_tier:tier,sub_realm_size:100,laws:['uncrowned']};ruler.top_liege=ruler;return ruler;}
@@ -195,7 +220,7 @@ assert.equal(new Set(eventLoc.map(m=>m[1])).size,eventLoc.length);
 const eventKeys=new Set(eventLoc.map(m=>m[1]));
 for(const node of [...all(activityType),...all({children:Object.values(cr)})])if(['name','title','desc'].includes(node.key)&&node.value?.startsWith('WJ_cr'))assert.ok(eventKeys.has(node.value),'Missing localization '+node.value);
 for(const [size,initial] of [['coronation_small_ceremony',0],['coronation_medium_ceremony',10],['coronation_large_ceremony',20]]){
- const host=monarch(),activity={vars:{},phaseActive:false,guests:false,options:[size,'WJ_cr_type_king']},scopes={root:host,host,activity};
+ const host=monarch(5),activity={vars:{},phaseActive:false,guests:false,options:[size,'WJ_cr_type_accession']},scopes={root:host,host,activity};
  assert.equal(crownEngine.check(one(activityType,'is_valid').children,activity,scopes),true);
  crownEngine.execute(one(activityType,'on_start').children,activity,scopes);
  assert.equal(activity.vars.wj_cr_title,host.primary_title);assert.equal(activity.vars.activity_special_type_progression,initial);
@@ -215,11 +240,11 @@ for(const [size,initial] of [['coronation_small_ceremony',0],['coronation_medium
  assert.equal(host.queued.at(-1),'WJ_cr.5');assert.equal(host.vars.hide_make_primary_title,undefined);assert.equal(host.calls,undefined);
  assert.deepEqual(host.laws,['uncrowned']);assert.equal(host.vars.wj_cr_allow_naming,undefined);
 }
-for(const tier of [4,5,6]){
+for(const tier of [5,6]){
  const host=monarch(tier),activity={vars:{wj_cr_investiture_done:true,wj_cr_oath:1}},scopes={root:host,activity};
  assert.equal(crownEngine.check(naming.hd_chinese_naming_eligible_trigger.children,host,scopes),false);
  crownEngine.run('WJ_cr_complete',host,scopes);
- assert.deepEqual(host.laws,[tier===4?'crowned_king':'crowned_emperor']);
+ assert.deepEqual(host.laws,['crowned_emperor']);
  assert.equal(host.vars.diplomacy_oath_1,0);assert.equal(host.vars.hide_make_primary_title,undefined);
  assert.equal(activity.vars.wj_cr_paid,true);assert.equal(host.vars.wj_cr_allow_naming,true);
  assert.equal(host.vars.Dengji_sub_realm_var,100);assert.equal(host.vars.SanGong_XiongZhu_var,150);
@@ -227,19 +252,50 @@ for(const tier of [4,5,6]){
  assert.equal(crownEngine.check(naming.hd_chinese_naming_eligible_trigger.children,host,scopes),true);
  crownEngine.run('WJ_cr_complete',host,scopes);
  assert.equal(host.calls.filter(k=>k==='coronation_disburse_rewards_effect').length,1);
- if(tier===4)assert.equal(host.primary_title.vars.wj_cr_hereditary_king,true);
 }
+assert.deepEqual(one(one(activityType,'options'),'special_type').children.map(n=>n.key),['WJ_cr_type_accession']);
+for(const p of [monarch(),monarch(5),monarch(6)])assert.equal(crownEngine.check(one(activityType,'is_shown').children,p),p.primary_title.tier>=5);
 const cancelled=monarch();crownEngine.run('WJ_cr_cleanup',cancelled,{});
 assert.equal(cancelled.vars.diplomacy_oath_1,undefined);assert.equal(cancelled.vars.wj_cr_allow_naming,undefined);
 const incomplete=monarch();crownEngine.run('WJ_cr_complete',incomplete,{activity:{vars:{}},root:incomplete});assert.equal(incomplete.calls,undefined);assert.deepEqual(incomplete.laws,['uncrowned']);
-for(const higher of [false,true]){
- const heir=monarch();heir.vars.wj_cr_inherited_kingdom=heir.primary_title;if(higher)heir.laws=['crowned_emperor'];
- crownEngine.execute(cr['WJ_cr.100'].children.find(n=>n.key==='immediate').children,heir,{root:heir});
- assert.deepEqual(heir.laws,[higher?'crowned_emperor':'crowned_king']);assert.equal(heir.vars.wj_cr_inherited_kingdom,undefined);
- if(!higher)assert.equal(heir.vars.Dengji_sub_realm_var,100);
+const kingDecision=byName(parse(read('common/decisions/WJ_chinese_kingship_decisions.txt'))).WJ_cr_advance_king_decision;
+const decisionEngine=runner({effects:{},triggers:crownTriggers,values:{},primitives:{
+ any_de_jure_county:c=>!!c.counties,
+ custom_description:(c,s,n)=>decisionEngine.check(n.children.filter(x=>x.key!=='text'),c,s)
+}});
+for(const [count,want]of [[150,false],[151,true]]){
+ const p=monarch();p.sub_realm_size=count;
+ assert.equal(decisionEngine.check(one(kingDecision,'is_valid').children,p,{root:p}),want);
+ crownEngine.execute(one(kingDecision,'effect').children,p,{root:p});
+ assert.equal(p.primary_title.vars.wj_cr_hereditary_king,want?true:undefined);
+ assert.deepEqual(p.laws,['uncrowned']);assert.equal(p.lawWrites,undefined);
+ assert.deepEqual(p.queued,want?['tgp_dynastic_cycle.9001']:undefined);
+ if(want){assert.equal(p.calls.filter(k=>k==='WJ_mr_clear_rank').length,1);crownEngine.run('WJ_cr_advance_king',p,{root:p});assert.equal(p.queued.length,1);}
 }
-// Production death dispatch: uncrowned officials are excluded; an independent
-// crowned king uses the territorial title heir, not an unrelated player heir.
+for(const change of [{is_independent_ruler:false},{is_ai:true},{primary_title:title(3)},{primary_title:title(5)},{primary_title:title(4,{tgp_is_minister_title:true})},{primary_title:title(4,{is_noble_family_title:true})},{vars:{wj_cr_allow_naming:true}}]){
+ const p={...monarch(),sub_realm_size:151,...change};
+ assert.equal(crownEngine.check(crownTriggers.WJ_cr_can_advance_king.children,p),false);
+ crownEngine.run('WJ_cr_advance_king',p,{root:p});assert.equal(p.calls,undefined);assert.equal(p.lawWrites,undefined);
+}
+const noDlcKing=monarch();noDlcKing.sub_realm_size=151;noDlcKing.dlc=false;noDlcKing.rules=['coronation_laws_off'];
+crownEngine.run('WJ_cr_advance_king',noDlcKing,{root:noDlcKing});assert.equal(noDlcKing.primary_title.vars.wj_cr_hereditary_king,true);assert.equal(noDlcKing.lawWrites,undefined);
+const inherited=byName(parse(read('common/on_action/WJ_chinese_coronation_on_actions.txt'))).WJ_cr_inherit_king;
+const heirKing=monarch();heirKing.primary_title=noDlcKing.primary_title;heirKing.primary_title.holder=heirKing;heirKing.dlc=false;heirKing.rules=['coronation_laws_off'];heirKing.laws=[];
+const heirScopes={root:heirKing,title:heirKing.primary_title};
+assert.equal(crownEngine.check(one(inherited,'trigger').children,heirKing,heirScopes),true);
+crownEngine.execute(one(inherited,'effect').children,heirKing,heirScopes);
+assert.equal(crownEngine.check(crownTriggers.WJ_cr_crowned_king.children,heirKing),true);assert.deepEqual(heirKing.laws,[]);assert.equal(heirKing.lawWrites,undefined);assert.equal(heirKing.queued,undefined);
+assert.equal(crownEngine.check(crownTriggers.WJ_cr_can_advance_king.children,heirKing),false);assert.equal(crownEngine.check(crownTriggers.WJ_cr_can_plan.children,heirKing),false);
+assert.ok(!cr['WJ_cr.100']);
+const displayRules=byName(parse(read('common/scripted_effects/WJ_title_display_effects.txt'))).WJ_title_style_reconcile.children;
+const displayIndex=displayRules.findIndex(n=>n.key==='if');
+for(const p of [monarch(),heirKing]){
+ p.flags=['WJ_cr_crowned_king'];
+ crownEngine.execute(displayRules.slice(displayIndex,displayIndex+2),p,{root:p});
+ assert.equal(p.flags.includes('WJ_cr_crowned_king'),p===heirKing,'native display flag must follow the title, not a law');
+}
+// Production death dispatch: ordinary officials are excluded; title-marked kings
+// use the territorial title heir, not an unrelated player heir or a crown law.
 const miaoshiActions=byName(parse(read('common/on_action/WJ_tianjia_miaoshi_on_actions.txt')));
 const miaoshiTriggers={...crownTriggers,...byName(parse(read('common/scripted_triggers/WJ_real_fief_triggers.txt'))),
  ...byName(parse(read('common/scripted_triggers/WJ_name_triggers.txt'))),
@@ -270,7 +326,7 @@ const family={vars:{}},heir={vars:{},dynasty:family},other={vars:{},dynasty:fami
 const deceased={...monarch(),dynasty:family,primary_heir:other,prestige_level:0,age:50};
 deceased.primary_title.current_heir=heir;
 assert.equal(funeral.check(one(miaoshiActions.WJ_miaoshi_death,'trigger').children,deceased,{root:deceased}),false);
-deceased.laws=['crowned_king'];
+deceased.primary_title.vars.wj_cr_hereditary_king=true;
 assert.equal(funeral.check(one(miaoshiActions.WJ_miaoshi_accession,'trigger').children,deceased,{root:deceased}),true);
 assert.equal(funeral.check(one(miaoshiActions.WJ_miaoshi_death,'trigger').children,deceased,{root:deceased}),true);
 const deathScopes={root:deceased};funeral.execute(one(miaoshiActions.WJ_miaoshi_death,'effect').children,deceased,deathScopes);
@@ -283,17 +339,27 @@ deceased.is_alive=false;
 funeral.run('WJ_rf_shihao_first_effect',deceased,{root:heir,XianDi:deceased},{ShiHao:'nick_SanGong_Shihao_han_pin_1_01'});
 assert.equal(deceased.nickname,'nick_SanGong_Shihao_han_pin_1_01');assert.equal(heir.nickname,undefined);
 assert.equal(heir.queued.at(-1).id,'WJ_rf_shihao.2');assert.equal(heir.queued.at(-1).deceased,deceased);
-const wrongFamily={...monarch(),dynasty:family,laws:['crowned_king']};wrongFamily.primary_title.current_heir={dynasty:{}};
+const wrongFamily={...monarch(),dynasty:family};wrongFamily.primary_title.vars.wj_cr_hereditary_king=true;wrongFamily.primary_title.current_heir={dynasty:{}};
 assert.equal(funeral.check(one(miaoshiActions.WJ_miaoshi_death,'trigger').children,wrongFamily,{root:wrongFamily}),false);
 delete wrongFamily.primary_title.current_heir;
 assert.equal(funeral.check(one(miaoshiActions.WJ_miaoshi_death,'trigger').children,wrongFamily,{root:wrongFamily}),false);
-const titleRank=one(byName(parse(read('common/scripted_triggers/WJ_abdication_triggers.txt'))).WJ_ab_can_start,'any_held_title');
+const titleRank=all(byName(parse(read('common/scripted_triggers/WJ_abdication_triggers.txt'))).WJ_ab_can_start).find(n=>n.key==='any_held_title');
 assert.equal(one(titleRank,'has_variable').value,'wj_rf_rank');assert.equal(one(titleRank,'var:wj_rf_rank').op,'?=');
 for(const [rank,want] of [[undefined,false],[1,false],[2,true]]){
  const t=title(5);if(rank!==undefined)t.vars.wj_rf_rank=rank;
  assert.equal(funeral.check(titleRank.children,t,{}),want);
 }
 const nativeEvents=byName(parse(read('events/dlc/tgp/tgp_dynastic_cycle_events.txt')));
+for(const entered of [false,true]){
+ const p=monarch();p.sub_realm_size=151;p.primary_title.vars.wj_rf_rank=1;
+ crownEngine.execute(one(kingDecision,'effect').children,p,{root:p});
+ assert.equal(p.primary_title.vars.wj_rf_rank,1,'independent kingship must not rewrite the fief lifecycle rank');
+ if(!entered)p.vars.new_realm_title_name='魏';
+ crownEngine.execute(one(nativeEvents['tgp_dynastic_cycle.9001'],'after').children,p,{root:p,enteredName:'楚'});
+ assert.equal(p.primary_title.name,entered?'楚':'魏');assert.equal(p.primary_title.definitive,'no');
+ assert.equal(p.vars.wj_cr_allow_naming,undefined);assert(!p.flags.includes('received_chinese_hegemonic_ascension_event'));
+ assert.equal(p.primary_title.vars.wj_cr_hereditary_king,true);assert.deepEqual(p.laws,['uncrowned']);
+}
 const permit=all(crEffects.WJ_cr_complete).find(n=>n.key==='set_variable'&&(n.value==='wj_cr_allow_naming'||n.children?.some(c=>c.value==='wj_cr_allow_naming')));
 assert.ok(!all(permit).some(n=>['days','months','years'].includes(n.key)));
 for(const id of ['tgp_dynastic_cycle.9000','tgp_dynastic_cycle.9001'])assert.ok(all(nativeEvents[id]).some(n=>n.key==='remove_variable'&&n.value==='wj_cr_allow_naming'));
@@ -330,7 +396,7 @@ const interruptedOld={vars:{wj_ab_successor:true},modifiers:['WJ_ab_protection']
 const interrupted={vars:{wj_ab_placement:true,wj_ab_emperor:interruptedOld,wj_ab_ticket:8,wj_peer_target:interruptedOld}};
 peerEngine.run('WJ_ab_abort',interrupted,{wj_ab_ticket:7});assert.equal(interrupted.vars.wj_ab_placement,true);
 peerEngine.run('WJ_ab_abort',interrupted,{wj_ab_ticket:8});assert.equal(interrupted.vars.wj_peer_target,undefined);assert.deepEqual(interruptedOld.modifiers,[]);
-for(const [file,operation] of [['common/scripted_effects/WJ_name_memorial_storage.txt','WJ_name_save_memorial_field'],['common/on_action/WJ_name_memorial_on_actions.txt','WJ_name_store_memorial_field']]){
+for(const [file,operation] of [['common/scripted_effects/WJ_name_memorial_storage.txt','WJ_name_save_memorial_value'],['common/on_action/WJ_name_memorial_on_actions.txt','WJ_name_store_memorial_field']]){
  assert.ok(all(parse(read(file))).some(n=>n.key===operation&&n.children?.some(c=>c.key==='KEY'&&c.value==='wj_peer_retired_emperor')));
 }
 const deadNames=byName(parse(read('common/customizable_localization/WJ_name_death_details.txt')));
@@ -345,4 +411,4 @@ for(const file of [
 for(const file of ['localization/simp_chinese/events/WJ_abdication_l_simp_chinese.yml','localization/simp_chinese/custom_localization/WJ_court_context_l_simp_chinese.yml']){
  const data=fs.readFileSync(path.join(base,file));assert.equal(data.subarray(0,3).toString('hex'),'efbbbf');
 }
-console.log('PASS: pre-division entry/flow/transfer cleanup, completed placement in all nine phases; positive event IDs, start/phase dispatch and DDS assets; independent crowned-king evaluation/death snapshot/title-heir dispatch/deceased nickname; safe abdication rank lookup; court assets and unchanged empire-only posts; refusal/reward, settlement once/king inheritance, employer guards, placement cleanup, memorial/naming lifecycle, structure/BOM. Native engine start button/transfer/timing/UI remain untested.');
+console.log('PASS: 150/151 county kingship and inheritance; empire-only accession; abdication test/formal gates, all nine phases, cached court-change abort, landless hegemony transfer filter, outgoing regent release; court layers, assets, cleanup/BOM. Native engine timing, title transactions and UI remain untested.');
