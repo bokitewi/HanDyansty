@@ -1,6 +1,10 @@
 # Applicant scope throughout. Existing peerage picker performs the mandatory final placement.
 WJ_ab_begin = {
  set_variable = { name = wj_ab_emperor value = top_liege }
+ if = { limit = { top_liege = { has_title = title:h_china } }
+  set_variable = { name = wj_ab_throne value = title:h_china }
+ }
+ else = { set_variable = { name = wj_ab_throne value = top_liege.primary_title } }
  set_variable = { name = wj_ab_round value = 1 }
  set_variable = { name = wj_ab_declines value = 0 }
  set_variable = { name = wj_ab_penalty value = 0 }
@@ -16,7 +20,7 @@ WJ_ab_begin = {
  var:wj_mufu_slot_5 ?= { if = { limit = { is_alive = yes WJ_mufu_member_valid = yes var:wj_mufu_owner = root } root = { add_to_variable_list = { name = wj_ab_advisors target = prev } } } }
  random_in_list = { variable = wj_ab_advisors save_scope_as = wj_ab_advisor }
  clear_variable_list = wj_ab_advisors
- if = { limit = { NOT = { exists = scope:wj_ab_advisor } } top_liege = { random_councillor = { limit = { is_alive = yes tgp_is_any_minister = yes NOT = { this = root } } save_scope_as = wj_ab_advisor } } }
+ if = { limit = { NOT = { exists = scope:wj_ab_advisor } } top_liege = { random_councillor = { limit = { is_alive = yes NOT = { this = root } } save_scope_as = wj_ab_advisor } } }
  if = { limit = { exists = scope:wj_ab_advisor } set_variable = { name = wj_ab_advisor value = scope:wj_ab_advisor } }
  var:wj_ab_emperor = {
   set_variable = { name = wj_ab_successor value = scope:wj_ab_successor }
@@ -38,7 +42,7 @@ WJ_ab_accept = {
 }
 WJ_ab_cleanup = {
  var:wj_ab_emperor ?= { remove_character_modifier = WJ_ab_protection remove_variable = wj_ab_successor }
- remove_variable = wj_ab_emperor remove_variable = wj_ab_round remove_variable = wj_ab_declines
+ remove_variable = wj_ab_emperor remove_variable = wj_ab_throne remove_variable = wj_ab_round remove_variable = wj_ab_declines
  remove_variable = wj_ab_penalty remove_variable = wj_ab_transferred remove_variable = wj_ab_placement
  remove_variable = wj_ab_country_stem clear_variable_list = wj_ab_titles
  remove_variable = wj_ab_advisor clear_variable_list = wj_ab_advisors
@@ -53,9 +57,12 @@ WJ_ab_transfer = {
  if = { limit = { WJ_ab_transfer_valid = yes }
   save_scope_as = wj_ab_successor
   var:wj_ab_emperor = { save_scope_as = wj_ab_old_emperor capital_county = { save_scope_as = wj_ab_imperial_capital } }
-  title:h_china = { save_scope_as = wj_ab_throne }
+  var:wj_ab_throne = { save_scope_as = wj_ab_throne }
   # Preserve the existing fief's name before native transfer/death callbacks reconcile title mirrors.
-  every_held_title = { limit = { var:wj_rf_rank = 2 } save_scope_as = wj_ab_old_kingdom }
+  if = { limit = { any_held_title = { var:wj_rf_rank = 2 } }
+   every_held_title = { limit = { var:wj_rf_rank = 2 } save_scope_as = wj_ab_old_kingdom }
+  }
+  else = { every_held_title = { limit = { var:wj_rf_rank = 1 } save_scope_as = wj_ab_old_kingdom } }
   set_variable = { name = wj_ab_country_stem value = scope:wj_ab_old_kingdom }
   clear_variable_list = wj_ab_titles
   scope:wj_ab_old_emperor = {
@@ -66,7 +73,7 @@ WJ_ab_transfer = {
    }
   }
   # Reuse main's release of the outgoing court's controller, so next-day repair cannot reinstall it.
-  hd_court_release_effect = yes
+  if = { limit = { scope:wj_ab_throne = title:h_china } hd_court_release_effect = yes }
   create_title_and_vassal_change = { type = granted save_scope_as = wj_ab_change add_claim_on_loss = no }
   every_in_list = { variable = wj_ab_titles change_title_holder_include_vassals = { holder = scope:wj_ab_successor change = scope:wj_ab_change } }
   resolve_title_and_vassal_change = scope:wj_ab_change
@@ -79,7 +86,8 @@ WJ_ab_transfer = {
    dynasty ?= { remove_variable = hd_fixed_realm_name set_variable = { name = hd_fixed_realm_title value = root.primary_title } }
    # Restore constituent commanderies before destroying the former real-fief kingdom/empire.
    every_held_title = { limit = { var:wj_rf_rank = 1 } save_scope_as = wj_ab_dismantled WJ_rf_restore_destroyed_fief = yes root = { destroy_title = scope:wj_ab_dismantled } }
-   destroy_title = scope:wj_ab_old_kingdom
+   if = { limit = { scope:wj_ab_old_kingdom = { var:wj_rf_rank = 2 } } destroy_title = scope:wj_ab_old_kingdom }
+   set_variable = wj_cr_empire_settled
    add_realm_law = crowned_emperor set_variable = crowned_emperor_var remove_variable = crowned_king_var
    add_legitimacy = { value = 1000 add = { value = var:wj_ab_declines multiply = 1000 } subtract = var:wj_ab_penalty }
    WJ_mr_end_request = yes WJ_mr_clear_rank = yes remove_variable = WJ_mr_award_realm

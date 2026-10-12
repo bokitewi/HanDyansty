@@ -48,13 +48,16 @@ assert.equal(active.vars.wj_ab_emperor,undefined);assert.equal(active.vars.wj_ab
 // Division is not a veto; final transfer uses the two cached participants only.
 const abTriggers=byName(parse(read('common/scripted_triggers/WJ_abdication_triggers.txt')));
 let phaseEngine, nativeTransfers=0;
-phaseEngine=runner({effects,triggers:abTriggers,values:{},primitives:{
+phaseEngine=runner({effects,triggers:{...byName(parse(read('common/scripted_triggers/zz_WJ_chinese_coronation_triggers.txt'))),...abTriggers},values:{},primitives:{
+ any_de_jure_county:ctx=>!!ctx.counties,
+ is_landed:(ctx,s,n)=>!!ctx.is_landed===(n.value==='yes'),
  always:(ctx,s,n)=>n.value==='yes',
  situation_current_phase:(ctx,scopes,n)=>ctx.phase===n.value,
  custom_description:(ctx,scopes,n)=>phaseEngine.check(n.children.filter(x=>x.key!=='text'),ctx,scopes),
  has_ach_dlc_trigger:(ctx,s,n)=>ctx.dlc===(n.value==='yes'),
  has_game_rule:(ctx,s,n)=>ctx.rules.includes(n.value),
  has_diarchy_type:(ctx,s,n)=>ctx.diarchy===n.value,
+ diarchy_swing:(ctx,s,n)=>(ctx.diarchy_swing||0)>=Number(n.value),
 },onEffect(n,ctx){
  if(n.key==='remove_character_modifier'){ctx.modifiers=(ctx.modifiers||[]).filter(m=>m!==n.value);return true;}
  if(n.key==='clear_variable_list'){delete (ctx.lists||{})[n.value];return true;}
@@ -62,8 +65,8 @@ phaseEngine=runner({effects,triggers:abTriggers,values:{},primitives:{
  return false;
 }});
 const hegemony={tier:6,vars:{},is_landless_type_title:true};
-const previous={is_alive:true,vars:{wj_ab_successor:true},titles:[hegemony],modifiers:['WJ_ab_protection','unrelated']};
-const pending={is_alive:true,is_adult:true,is_ai:false,governmentFlags:['government_is_celestial'],dlc:true,rules:[],top_liege:previous,'title:h_china':hegemony,titles:[{tier:5,vars:{wj_rf_rank:2}}],vars:{wj_ab_emperor:previous,wj_ab_ticket:7,wj_ab_round:3,wj_ab_declines:2,wj_ab_penalty:0}};
+const previous={is_alive:true,governmentFlags:[],is_landed:false,vars:{wj_ab_successor:true},titles:[hegemony],modifiers:['WJ_ab_protection','unrelated']};
+const pending={is_alive:true,is_adult:true,is_ai:false,governmentFlags:['government_is_celestial'],dlc:true,rules:[],top_liege:previous,'title:h_china':hegemony,titles:[{tier:5,vars:{wj_rf_rank:2}}],vars:{wj_ab_emperor:previous,wj_ab_throne:hegemony,wj_ab_ticket:7,wj_ab_round:3,wj_ab_declines:2,wj_ab_penalty:0}};
 previous['title:h_china']=hegemony;hegemony.holder=previous;
 for(const phase of ['stability','stability_expansion','stability_advancement','instability_conquest','instability','hd_recovery','hd_collapse','chaos','hd_standoff']){
  pending['situation:dynastic_cycle']={phase:'situation_dynastic_cycle_phase_'+phase};
@@ -263,8 +266,9 @@ const decisionEngine=runner({effects:{},triggers:crownTriggers,values:{},primiti
  any_de_jure_county:c=>!!c.counties,
  custom_description:(c,s,n)=>decisionEngine.check(n.children.filter(x=>x.key!=='text'),c,s)
 }});
-for(const [count,want]of [[150,false],[151,true]]){
- const p=monarch();p.sub_realm_size=count;
+for(const ai of [false,true])for(const [count,want]of [[109,false],[110,true],[111,true]]){
+ const p=monarch();p.sub_realm_size=count;p.is_ai=ai;
+ assert.equal(decisionEngine.check(one(kingDecision,'is_shown').children,p,{root:p}),true);
  assert.equal(decisionEngine.check(one(kingDecision,'is_valid').children,p,{root:p}),want);
  crownEngine.execute(one(kingDecision,'effect').children,p,{root:p});
  assert.equal(p.primary_title.vars.wj_cr_hereditary_king,want?true:undefined);
@@ -272,12 +276,14 @@ for(const [count,want]of [[150,false],[151,true]]){
  assert.deepEqual(p.queued,want?['tgp_dynastic_cycle.9001']:undefined);
  if(want){assert.equal(p.calls.filter(k=>k==='WJ_mr_clear_rank').length,1);crownEngine.run('WJ_cr_advance_king',p,{root:p});assert.equal(p.queued.length,1);}
 }
-for(const change of [{is_independent_ruler:false},{is_ai:true},{primary_title:title(3)},{primary_title:title(5)},{primary_title:title(4,{tgp_is_minister_title:true})},{primary_title:title(4,{is_noble_family_title:true})},{vars:{wj_cr_allow_naming:true}}]){
- const p={...monarch(),sub_realm_size:151,...change};
+assert.equal(one(kingDecision,'ai_check_interval').value,'1');
+assert.equal(one(one(kingDecision,'ai_will_do'),'base').value,'100000');
+for(const change of [{is_independent_ruler:false},{primary_title:title(3)},{primary_title:title(5)},{primary_title:title(4,{tgp_is_minister_title:true})},{primary_title:title(4,{is_noble_family_title:true})},{vars:{wj_cr_allow_naming:true}}]){
+ const p={...monarch(),sub_realm_size:110,...change};
  assert.equal(crownEngine.check(crownTriggers.WJ_cr_can_advance_king.children,p),false);
  crownEngine.run('WJ_cr_advance_king',p,{root:p});assert.equal(p.calls,undefined);assert.equal(p.lawWrites,undefined);
 }
-const noDlcKing=monarch();noDlcKing.sub_realm_size=151;noDlcKing.dlc=false;noDlcKing.rules=['coronation_laws_off'];
+const noDlcKing=monarch();noDlcKing.sub_realm_size=110;noDlcKing.dlc=false;noDlcKing.rules=['coronation_laws_off'];
 crownEngine.run('WJ_cr_advance_king',noDlcKing,{root:noDlcKing});assert.equal(noDlcKing.primary_title.vars.wj_cr_hereditary_king,true);assert.equal(noDlcKing.lawWrites,undefined);
 const inherited=byName(parse(read('common/on_action/WJ_chinese_coronation_on_actions.txt'))).WJ_cr_inherit_king;
 const heirKing=monarch();heirKing.primary_title=noDlcKing.primary_title;heirKing.primary_title.holder=heirKing;heirKing.dlc=false;heirKing.rules=['coronation_laws_off'];heirKing.laws=[];
@@ -286,7 +292,108 @@ assert.equal(crownEngine.check(one(inherited,'trigger').children,heirKing,heirSc
 crownEngine.execute(one(inherited,'effect').children,heirKing,heirScopes);
 assert.equal(crownEngine.check(crownTriggers.WJ_cr_crowned_king.children,heirKing),true);assert.deepEqual(heirKing.laws,[]);assert.equal(heirKing.lawWrites,undefined);assert.equal(heirKing.queued,undefined);
 assert.equal(crownEngine.check(crownTriggers.WJ_cr_can_advance_king.children,heirKing),false);assert.equal(crownEngine.check(crownTriggers.WJ_cr_can_plan.children,heirKing),false);
+// Actual title/independence hooks dispatch the shared hidden event, once per imperial founder.
+const accessionActions=byName(parse(read('common/on_action/WJ_chinese_coronation_on_actions.txt')));
+const imperialEngine=runner({effects:crEffects,triggers:crownTriggers,values:{},primitives:{
+ any_de_jure_county:c=>!!c.counties,
+ is_de_jure_liege_or_above_target:(c,s,n)=>c.deJureTitles.includes(imperialEngine.resolve(n.value,s.prev,s)),
+},onEffect(n,c,s){
+ if(n.key==='add_legitimacy'){c.legitimacy=(c.legitimacy||0)+Number(n.value);return true;}
+ if(n.key==='send_interface_toast'){(c.notices||=[]).push(one(n,'title').value);return true;}
+ if(n.key==='WJ_miaoshi_initialize_effect'){c.miaoshiInitialized=true;return true;}
+ if(n.key==='trigger_event'){(c.pending||=[]).push({...s,id:n.value});return true;}
+ if(n.key==='every_independent_ruler'){
+  for(const ruler of s.independentRulers)if(imperialEngine.check(one(n,'limit').children,ruler,{...s,root:ruler}))imperialEngine.execute(n.children.filter(x=>x.key!=='limit'),ruler,{...s,root:ruler});
+  return true;
+ }
+ return false;
+}});
+function imperialRuler(royal=false,rank){
+ const p=monarch(5),state=title(4);p.primary_title.counties=false;
+ p.titles.push(state);if(royal)state.vars.wj_cr_hereditary_king=true;
+ if(rank!==undefined)p.primary_title.vars.wj_rf_rank=rank;
+ p['title:h_china']={deJureTitles:[state]};
+ for(const t of p.titles)t['title:h_china']=p['title:h_china'];
+ return p;
+}
+function imperialHook(name,p,type='created'){
+ const hook=accessionActions[name],s={root:p,title:p.primary_title,transfer_type:'flag:'+type};
+ if(imperialEngine.check(one(hook,'trigger').children,p,s))imperialEngine.execute(one(hook,'effect').children,p,s);
+ for(const event of p.pending||[])imperialEngine.execute(one(cr[event.id],'immediate').children,p,event);
+ p.pending=[];
+}
+for(const ai of [false,true])for(const royal of [false,true]){
+ const p=imperialRuler(royal);p.is_ai=ai;
+ imperialHook('WJ_cr_gain_empire',p);
+ assert.equal(p.legitimacy,royal?1000:-1000);assert.equal(p.vars.wj_cr_empire_settled,true);
+ imperialHook('WJ_cr_gain_empire',p,'usurped');imperialHook('WJ_cr_independent_empire',p,'independency');
+ assert.equal(p.legitimacy,royal?1000:-1000);assert.equal(p.notices.length,1);assert.equal(p.lawWrites,undefined);
+}
+for(const rank of [1,2]){
+ const p=imperialRuler(false,rank);p['title:h_china'].deJureTitles=[];
+ imperialHook('WJ_cr_independent_empire',p,'independency');assert.equal(p.legitimacy,rank===2?1000:-1000);
+}
+for(const type of ['inheritance','appointment_succession','abdication'])for(const hook of ['WJ_cr_gain_empire','WJ_cr_independent_empire']){
+ const p=imperialRuler();imperialHook(hook,p,type);
+ assert.equal(p.legitimacy,undefined);assert.equal(p.vars.wj_cr_empire_settled,true);
+ imperialHook('WJ_cr_independent_empire',p,'independency');assert.equal(p.legitimacy,undefined);
+}
+for(const change of [{is_independent_ruler:false},{is_landed:false},{governmentFlags:[]},{highest_held_title_tier:6},{primary_title:title(4)},{primary_title:title(5,{tgp_is_minister_title:true})},{primary_title:title(5,{is_noble_family_title:true})},{vars:{wj_ab_emperor:{}}}]){
+ if(change.primary_title)change.titles=[change.primary_title];
+ const p={...imperialRuler(),...change};imperialHook('WJ_cr_gain_empire',p);assert.equal(p.legitimacy,undefined);assert.equal(p.vars.wj_cr_empire_settled,undefined);
+}
+const beforePrimarySwitch=imperialRuler(true);beforePrimarySwitch.primary_title=beforePrimarySwitch.titles[1];
+imperialHook('WJ_cr_gain_empire',beforePrimarySwitch); // gain supplies the actual empire, not this still-old primary title
+assert.equal(beforePrimarySwitch.legitimacy,undefined);
+beforePrimarySwitch.pending=[];
+const gainedTitle=beforePrimarySwitch.titles[0],gainScopes={root:beforePrimarySwitch,title:gainedTitle,transfer_type:'flag:created'};
+imperialEngine.execute(one(accessionActions.WJ_cr_gain_empire,'effect').children,beforePrimarySwitch,gainScopes);
+for(const event of beforePrimarySwitch.pending)imperialEngine.execute(one(cr[event.id],'immediate').children,beforePrimarySwitch,event);
+assert.equal(beforePrimarySwitch.legitimacy,1000,'founding must not depend on set_primary_title_to happening first');
+const foreignEmpire=imperialRuler();foreignEmpire['title:h_china'].deJureTitles=[];
+imperialHook('WJ_cr_gain_empire',foreignEmpire);assert.equal(foreignEmpire.legitimacy,undefined);
+// main's legacy proclaim route keeps its split and all political consequences, without a second reward.
+const legacy=byName(parse(read('common/scripted_effects/hd_court_usurp_effects.txt'))).hd_court_proclaim_emperor_effect;
+const legacyFounder=imperialRuler();imperialEngine.execute([legacy.children[0]],legacyFounder,{});
+imperialHook('WJ_cr_gain_empire',legacyFounder);assert.equal(legacyFounder.legitimacy,undefined);
+assert(all(legacy).some(n=>n.key==='multiply'&&n.value==='0.5'));
+for(const key of ['hd_court_set_stance_effect','add_character_modifier','every_neighboring_top_liege_realm_owner','hd_dc_kit_fire_effect'])assert(all(legacy).some(n=>n.key===key));
+const existingEmpire=imperialRuler();imperialEngine.execute(one(accessionActions.WJ_cr_existing_empires,'effect').children,existingEmpire,{independentRulers:[existingEmpire],root:existingEmpire});
+imperialHook('WJ_cr_independent_empire',existingEmpire,'independency');assert.equal(existingEmpire.legitimacy,undefined);assert.equal(existingEmpire.vars.wj_cr_empire_settled,true);
 assert.ok(!cr['WJ_cr.100']);
+// Independent imperial council: native seats, not the central court's unique office titles.
+const councilNames=byName(parse(read('common/customizable_localization/WJ_council_names.txt'))),council=byName(parse(read('common/council_positions/00_council_positions.txt')));
+const localEmperor=imperialRuler();
+for(const [seat,label]of [['chancellor','WJ_council_independent_chancellor'],['steward','WJ_council_independent_steward'],['marshal','WJ_council_independent_marshal'],['spymaster','WJ_baiguan_label_sikong']]){
+ const first=councilNames['WJ_CouncilName_'+seat].children.find(n=>n.key==='text');
+ assert(imperialEngine.check(one(first,'trigger').children,localEmperor,{}));assert.equal(one(first,'localization_key').value,label);
+ assert(!imperialEngine.check(one(first,'trigger').children,monarch(),{}));
+}
+const priestName=one(one(council.councillor_court_chaplain,'name'),'first_valid').children[0];
+assert(imperialEngine.check(one(priestName,'trigger').children,localEmperor,{}));assert.equal(one(priestName,'desc').value,'WJ_baiguan_label_taifu');
+const grant=byName(parse(read('common/character_interactions/WJ_real_fief_interactions.txt'))).WJ_rf_grant;
+const grantEngine=runner({effects:{},triggers:{...crownTriggers,WJ_rf_candidate:{children:[{key:'is_alive',op:'=',value:'yes'}]}},values:{},primitives:{any_de_jure_county:c=>!!c.counties}});
+const ducalCandidate={is_alive:true,top_liege:localEmperor};
+for(const key of ['is_shown','is_valid_showing_failures_only']){
+ assert(grantEngine.check(one(grant,key).children,localEmperor,{actor:localEmperor,recipient:ducalCandidate}));
+ const central=monarch(6);ducalCandidate.top_liege=central;assert(!grantEngine.check(one(grant,key).children,central,{actor:central,recipient:ducalCandidate}));ducalCandidate.top_liege=localEmperor;
+}
+// Local abdication uses the cached local throne; the hegemony is neither required nor released.
+const localDuke={...person([title(4,{vars:{wj_rf_rank:1}})]),is_adult:true,is_ai:false,dlc:true,rules:[],top_liege:localEmperor,'title:h_china':hegemony};
+localEmperor['title:h_china']=hegemony;localEmperor.primary_title.holder=localEmperor;
+const beginThrone=effects.WJ_ab_begin.children.slice(0,3);
+phaseEngine.execute(beginThrone,localDuke,{root:localDuke});
+assert.equal(localDuke.vars.wj_ab_emperor,localEmperor);assert.equal(localDuke.vars.wj_ab_throne,localEmperor.primary_title);
+delete localDuke.vars.wj_ab_emperor;assert(phaseEngine.check(abTriggers.WJ_ab_can_start.children,localDuke,{}));
+abTriggers.WJ_ab_player_test.children[0].value='no';assert(!phaseEngine.check(abTriggers.WJ_ab_can_start.children,localDuke,{}));
+Object.assign(localEmperor,{diarchy:'regency',diarchy_swing:80,diarch:localDuke,puppeteer:localDuke});assert(phaseEngine.check(abTriggers.WJ_ab_can_start.children,localDuke,{}));
+localEmperor.diarchy_swing=79;assert(!phaseEngine.check(abTriggers.WJ_ab_can_start.children,localDuke,{}));localEmperor.diarchy_swing=80;
+abTriggers.WJ_ab_player_test.children[0].value='yes';
+Object.assign(localDuke.vars,{wj_ab_emperor:localEmperor,wj_ab_ticket:9});assert(phaseEngine.check(abTriggers.WJ_ab_transfer_valid.children,localDuke,{wj_ab_ticket:9}));
+localEmperor.primary_title.holder={};assert(!phaseEngine.check(abTriggers.WJ_ab_transfer_valid.children,localDuke,{wj_ab_ticket:9}));localEmperor.primary_title.holder=localEmperor;
+const release=effects.WJ_ab_transfer.children[0].children.find(n=>n.key==='if'&&all(n).some(x=>x.key==='hd_court_release_effect'));
+assert(!phaseEngine.check(one(release,'limit').children,localDuke,{wj_ab_throne:localEmperor.primary_title}));
+assert(phaseEngine.check(one(release,'limit').children,pending,{wj_ab_throne:hegemony}));
 const displayRules=byName(parse(read('common/scripted_effects/WJ_title_display_effects.txt'))).WJ_title_style_reconcile.children;
 const displayIndex=displayRules.findIndex(n=>n.key==='if');
 for(const p of [monarch(),heirKing]){
@@ -343,7 +450,7 @@ const wrongFamily={...monarch(),dynasty:family};wrongFamily.primary_title.vars.w
 assert.equal(funeral.check(one(miaoshiActions.WJ_miaoshi_death,'trigger').children,wrongFamily,{root:wrongFamily}),false);
 delete wrongFamily.primary_title.current_heir;
 assert.equal(funeral.check(one(miaoshiActions.WJ_miaoshi_death,'trigger').children,wrongFamily,{root:wrongFamily}),false);
-const titleRank=all(byName(parse(read('common/scripted_triggers/WJ_abdication_triggers.txt'))).WJ_ab_can_start).find(n=>n.key==='any_held_title');
+const titleRank=all(abTriggers.WJ_ab_real_successor).find(n=>n.key==='any_held_title');
 assert.equal(one(titleRank,'has_variable').value,'wj_rf_rank');assert.equal(one(titleRank,'var:wj_rf_rank').op,'?=');
 for(const [rank,want] of [[undefined,false],[1,false],[2,true]]){
  const t=title(5);if(rank!==undefined)t.vars.wj_rf_rank=rank;
@@ -351,7 +458,7 @@ for(const [rank,want] of [[undefined,false],[1,false],[2,true]]){
 }
 const nativeEvents=byName(parse(read('events/dlc/tgp/tgp_dynastic_cycle_events.txt')));
 for(const entered of [false,true]){
- const p=monarch();p.sub_realm_size=151;p.primary_title.vars.wj_rf_rank=1;
+ const p=monarch();p.sub_realm_size=110;p.primary_title.vars.wj_rf_rank=1;
  crownEngine.execute(one(kingDecision,'effect').children,p,{root:p});
  assert.equal(p.primary_title.vars.wj_rf_rank,1,'independent kingship must not rewrite the fief lifecycle rank');
  if(!entered)p.vars.new_realm_title_name='魏';
@@ -411,4 +518,4 @@ for(const file of [
 for(const file of ['localization/simp_chinese/events/WJ_abdication_l_simp_chinese.yml','localization/simp_chinese/custom_localization/WJ_court_context_l_simp_chinese.yml']){
  const data=fs.readFileSync(path.join(base,file));assert.equal(data.subarray(0,3).toString('hex'),'efbbbf');
 }
-console.log('PASS: 150/151 county kingship and inheritance; empire-only accession; abdication test/formal gates, all nine phases, cached court-change abort, landless hegemony transfer filter, outgoing regent release; court layers, assets, cleanup/BOM. Native engine timing, title transactions and UI remain untested.');
+console.log('PASS: player/AI 109/110/111 kingship and title inheritance; once-only imperial foundation +/-1000, inherited/legacy/abdication exclusions and gain-before-primary; independent imperial council/grant gates; local-duke/central-king abdication gates and cached thrones; nine phases, legitimacy branches, transfer filters; court assets/BOM. Native transactions, AI timing and UI remain untested.');

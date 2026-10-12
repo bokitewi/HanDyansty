@@ -209,6 +209,7 @@ life=runner({effects:{...fx,...memorial,...storage,...defs('common/scripted_effe
  has_council_position:(c,s,n)=>c.seat===n.value,
  has_dead_character_variable:(c,s,n)=>Object.hasOwn(c.dead_var||{},n.value),
  tgp_is_minister_title:(c,s,n)=>!!c.isMinister===(n.value==='yes'),
+ is_landless_type_title:(c,s,n)=>!!c.is_landless_type_title===(n.value==='yes'),
  tgp_has_access_to_ministry_trigger:(c,s,n)=>!!c.accessMinistry===(n.value==='yes'),
  any_de_jure_county:(c,s,n)=>(c.counties||[]).some(x=>life.check(n.children,x,s)),
  always:(c,s,n)=>n.value==='yes',any_character_situation:()=>false,

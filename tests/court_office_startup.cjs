@@ -57,6 +57,7 @@ engine = runner({effects,triggers,values,primitives:{
  tgp_has_minister_title: (c,s,e)=>c.isMinister===engine.resolve(e.value,c,s),
  tgp_is_any_minister: (c,s,e)=>c.isMinister===engine.resolve(e.value,c,s),
  tgp_is_minister_title: (c,s,e)=>Boolean(c.isMinister)===engine.resolve(e.value,c,s),
+ is_landless_type_title:(c,s,e)=>Boolean(c.is_landless_type_title)===engine.resolve(e.value,c,s),
  vassal_contract_has_flag: (c,s,e)=>c.contractFlags.includes(e.value),
  has_realm_law: (c,s,e)=>(c.laws || []).includes(e.value),
  has_holding_type: (c,s,e)=>c.holdingType===e.value,
@@ -173,6 +174,7 @@ familyEngine=runner({effects:{hd_184_ensure_noble_families_effect:familyEffect},
  government_allows:(c,s,e)=>(c.allows || []).includes(e.value),
  any_house_member:(c,s,e,p)=>c.members.some(m=>familyEngine.check(e.children,m,s,p)),
  tgp_is_minister_title:(c,s,e)=>Boolean(c.isMinister)===familyEngine.resolve(e.value,c,s),
+ is_landless_type_title:(c,s,e)=>Boolean(c.is_landless_type_title)===familyEngine.resolve(e.value,c,s),
 },onEffect:(e,c,s,p)=>{
  if(e.key==='every_ruler') {
   for(const r of familyPool.filter(x=>x.is_ruler))if(familyEngine.check(one(e,'limit').children,r,s,p))familyEngine.execute(without(e,['limit']),r,s,p);
