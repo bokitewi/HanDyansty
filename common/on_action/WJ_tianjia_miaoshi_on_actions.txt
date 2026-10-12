@@ -2,10 +2,10 @@
 on_game_start_after_lobby = { on_actions = { WJ_miaoshi_living_start } }
 on_title_gain = { on_actions = { WJ_miaoshi_accession } }
 WJ_miaoshi_living_start = {
- effect = { every_ruler = { limit = { OR = { WJ_inner_emperor_trigger = yes WJ_rf_has_fief = yes } } WJ_miaoshi_initialize_effect = yes } }
+ effect = { every_ruler = { limit = { OR = { WJ_inner_emperor_trigger = yes WJ_rf_has_fief = yes WJ_cr_crowned_king = yes } } WJ_miaoshi_initialize_effect = yes } }
 }
 WJ_miaoshi_accession = {
- trigger = { OR = { WJ_inner_emperor_trigger = yes WJ_rf_has_fief = yes } NOT = { has_variable = Dengji_sub_realm_var } }
+ trigger = { OR = { WJ_inner_emperor_trigger = yes WJ_rf_has_fief = yes WJ_cr_crowned_king = yes } NOT = { has_variable = Dengji_sub_realm_var } }
  effect = {
   WJ_miaoshi_initialize_effect = yes
   if = {
@@ -15,21 +15,30 @@ WJ_miaoshi_accession = {
  }
 }
 on_death = { on_actions = { WJ_miaoshi_death } }
-WJ_miaoshi_death = { #皇帝死亡。盖棺定论
+WJ_miaoshi_death = { # Emperor or eligible duke/king; capture before native death cleanup.
     trigger = {
         has_game_rule = MiaoShi_on
         OR = {
-            AND = { WJ_inner_emperor_trigger = yes primary_heir = { dynasty = root.dynasty } }
-            AND = { WJ_inner_emperor_trigger = no any_held_title = { has_variable = wj_rf_rank current_heir = { dynasty = root.dynasty } } }
+            AND = { WJ_name_actual_emperor_trigger = yes primary_heir = { dynasty = root.dynasty } }
+            AND = { WJ_name_actual_emperor_trigger = no any_held_title = { has_variable = wj_rf_rank current_heir = { dynasty = root.dynasty } } }
+            AND = { OR = { WJ_cr_crowned_king = yes AND = { has_variable = wj_rf_miaoshi_rank var:wj_rf_miaoshi_rank = 2 WJ_rf_has_fief = no } } exists = primary_title.current_heir primary_title.current_heir = { dynasty = root.dynasty } }
         }
 	}
     effect = {
+        # Either death callback can run first; freeze rank, realm and office before queuing.
+        WJ_name_before_death = yes
         if = {
-            limit = { WJ_rf_has_fief = yes WJ_inner_emperor_trigger = no }
-            WJ_rf_refresh_holder = yes
-            set_variable = { name = wj_rf_miaoshi_rank value = var:wj_rf_owned_title.var:wj_rf_rank }
-            store_localized_text_in_death = WJ_rf_miaoshi_realm_name
+            limit = { WJ_cr_crowned_king = yes }
+            primary_title.current_heir = { save_scope_as = wj_rf_shihao_heir }
+        }
+        else_if = {
+            limit = { WJ_rf_has_fief = yes WJ_name_actual_emperor_trigger = no }
             var:wj_rf_owned_title.current_heir = { save_scope_as = wj_rf_shihao_heir }
+        }
+        else_if = {
+            limit = { has_variable = wj_rf_miaoshi_rank var:wj_rf_miaoshi_rank = 2 }
+            # Identity and realm text were frozen before the native death transaction.
+            primary_title.current_heir = { save_scope_as = wj_rf_shihao_heir }
         }
         else = { primary_heir = { save_scope_as = wj_rf_shihao_heir } }
         WJ_miaoshi_initialize_effect = yes

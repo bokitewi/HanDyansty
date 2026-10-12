@@ -53,13 +53,14 @@ engine=runner({effects,triggers,values:{},primitives:{
  has_diarchy_type:(c,s,e)=>c.diarchyType===e.value,
  is_diarch_of_target:(c,s,e)=>engine.resolve(e.value,c,s)?.diarch===c,
  tgp_is_minister_title:(c,s,e)=>Boolean(c.isMinister)===engine.resolve(e.value,c,s),
+ is_landless_type_title:(c,s,e)=>Boolean(c.is_landless_type_title)===engine.resolve(e.value,c,s),
  has_holding_type:(c,s,e)=>c.holdingType===e.value,
  any_de_jure_county:(c,s,e,p)=>(c.counties || []).some(t=>engine.check(e.children,t,s,p)),
  has_game_rule:(c,s,e)=>e.value==='never_noble_family_title'&&Boolean(s.disabled),
  government_allows:(c,s,e)=>(c.allows || []).includes(e.value),
  any_house_member:(c,s,e,p)=>c.members.some(m=>engine.check(e.children,m,s,p)),
  // Existing crown/fief/local-contract logic is unchanged by these display-boundary tests.
- WJ_cr_king:(c,s,e)=>false===engine.resolve(e.value,c,s),
+ WJ_cr_crowned_king:(c,s,e)=>false===engine.resolve(e.value,c,s),
  WJ_rf_has_fief:(c,s,e)=>false===engine.resolve(e.value,c,s),
  WJ_contract_local_official_trigger:(c,s,e)=>false===engine.resolve(e.value,c,s),
  WJ_inner_emperor_trigger:(c,s,e)=>false===engine.resolve(e.value,c,s),
@@ -85,8 +86,9 @@ const prefix=one(defs('common/customizable_localization/WJ_name_fragments.txt').
 assert(engine.check(role,emperor));assert(engine.check(prefix,regent));
 for(const type of ['regency','temporary_regency','co_emperorship']){emperor.diarchyType=type;assert(!engine.check(role,emperor));assert(!engine.check(prefix,regent));}
 emperor.diarchyType='grand_secretariat';emperor.primary_title.tier=4;assert(!engine.check(role,emperor));
-emperor.primary_title.tier=5;emperor.primary_title.vars.wj_rf_rank=1;assert(!engine.check(role,emperor));
-delete emperor.primary_title.vars.wj_rf_rank;emperor.primary_title.counties=[{}];assert(engine.check(role,emperor));
+emperor.primary_title.tier=5;emperor.primary_title.vars.wj_rf_rank=1;emperor.primary_title.isMinister=true;assert(!engine.check(role,emperor),'a titular ministry is not a real independent empire');
+delete emperor.primary_title.vars.wj_rf_rank;emperor.primary_title.isMinister=false;assert(engine.check(role,emperor),'a landed dynamic empire need not already have de jure counties');
+emperor.primary_title.counties=[{}];assert(engine.check(role,emperor));
 emperor.primary_title.tier=6;emperor.governmentFlags=[];assert(!engine.check(role,emperor));emperor.governmentFlags=['government_is_celestial'];
 assert(read('localization/simp_chinese/replace/WJ_regency_and_capital_l_simp_chinese.yml').includes('WJ_diarch_role_celestial:0 "录尚书事"'));
 assert(read('gui/window_character.gui').includes("CharacterWindow.GetCharacter.Custom('WJ_DiarchRoleTitle')"));

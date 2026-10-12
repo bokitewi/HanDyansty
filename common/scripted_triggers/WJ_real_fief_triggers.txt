@@ -5,17 +5,22 @@ WJ_rf_view_current = {
  exists = var:wj_rf_target exists = var:wj_rf_emperor
 }
 # Ordinary real fiefs only. No official-system law or fixed realm ID.
+# TEMP player test switch: change always to no after acceptance; formal gates stay below.
+WJ_rf_player_test = { always = yes is_ai = no }
 WJ_rf_emperor = { is_alive = yes this = top_liege government_has_flag = government_is_celestial highest_held_title_tier >= tier_empire }
 WJ_rf_has_fief = { any_held_title = { has_variable = wj_rf_rank } }
 WJ_rf_local = { any_held_title = { tier = tier_kingdom is_landless_type_title = no is_noble_family_title = no tgp_is_minister_title = no } }
 WJ_rf_candidate = {
- is_alive = yes is_adult = yes is_male = yes
- exists = dynasty NOT = { dynasty = top_liege.dynasty }
+ is_alive = yes
  government_has_flag = government_is_celestial
  NOT = { this = top_liege }
  top_liege = { WJ_rf_emperor = yes }
  NOT = { WJ_rf_has_fief = yes }
- OR = { WJ_rf_local = yes any_held_title = { tgp_is_minister_title = yes } }
+ OR = { WJ_rf_player_test = yes AND = {
+  is_adult = yes is_male = yes
+  exists = dynasty NOT = { dynasty = top_liege.dynasty }
+  OR = { WJ_rf_local = yes any_held_title = { tgp_is_minister_title = yes } }
+ } }
 }
 WJ_rf_supporter = {
  is_alive = yes NOT = { this = scope:wj_rf_applicant }
@@ -33,6 +38,7 @@ WJ_rf_secretariat_support = {
 }
 WJ_rf_duke_qualification = {
  WJ_rf_candidate = yes
+ OR = { WJ_rf_player_test = yes AND = {
  # Any valid marquisate or higher. Personal rank-4 grants go only to the emperor's own dynasty, which WJ_rf_candidate excludes.
  WJ_peer_valid = yes has_variable = wj_peer_rank var:wj_peer_rank >= 1
  OR = {
@@ -43,6 +49,7 @@ WJ_rf_duke_qualification = {
  exists = top_liege.puppeteer top_liege.puppeteer = this
  WJ_rf_secretariat_support = yes
  WJ_rf_support_seats >= 2
+ } }
 }
 # Picker ROOT owns the transient selection. Holder identity is rechecked on each click.
 WJ_rf_flow_valid = {
@@ -55,7 +62,7 @@ WJ_rf_flow_valid = {
   var:wj_rf_target = { WJ_rf_candidate = yes }
  }
  trigger_else = {
-  var:wj_rf_target = { WJ_rf_has_fief = yes NOT = { has_variable = wj_rf_cooldown } }
+  var:wj_rf_target = { WJ_rf_has_fief = yes OR = { WJ_rf_player_test = yes NOT = { has_variable = wj_rf_cooldown } } }
   exists = var:wj_rf_fief.holder var:wj_rf_fief.holder = var:wj_rf_target
  }
 }
@@ -63,7 +70,9 @@ WJ_rf_flow_valid = {
 WJ_rf_in_realm = { tier = tier_county exists = holder holder.top_liege = root.var:wj_rf_emperor }
 WJ_rf_in_fief = {
  tier = tier_county exists = holder
- root.var:wj_rf_fief = { is_de_facto_liege_or_above_target = prev }
+ # A secondary fief can sit outside the holder's primary ministry's de-facto title tree.
+ # Use incorporated land plus actual character allegiance, never a completely lost county.
+ target_is_de_jure_liege_or_above = root.var:wj_rf_fief
  OR = { holder = root.var:wj_rf_target holder = { is_vassal_or_below_of = root.var:wj_rf_target } }
 }
 WJ_rf_duchy_available = {
@@ -98,7 +107,12 @@ WJ_rf_adjacent = {
     exists = county NOT = { county.duchy = scope:wj_rf_neighbor_duchy }
     county = {
      trigger_if = { limit = { root.var:wj_rf_mode = 2 } WJ_rf_in_fief = yes }
-     trigger_else = { OR = { duchy = root.var:wj_rf_capital duchy = root.var:wj_rf_second } }
+     trigger_else = {
+      OR = {
+       duchy = root.var:wj_rf_capital
+       AND = { exists = root.var:wj_rf_second duchy = root.var:wj_rf_second }
+      }
+     }
     }
     WJ_rf_physical_neighbor = { OTHER = prev }
    }
@@ -108,17 +122,7 @@ WJ_rf_adjacent = {
 WJ_rf_choice_valid = {
  WJ_rf_flow_valid = yes exists = scope:wj_rf_choice
  is_target_in_variable_list = { name = wj_rf_choices target = scope:wj_rf_choice }
- scope:wj_rf_choice = {
-  trigger_if = { limit = { root.var:wj_rf_stage = 0 }
-   tier = tier_kingdom any_direct_de_jure_vassal_title = { WJ_rf_capital_available = yes }
-  }
-  trigger_else_if = { limit = { root.var:wj_rf_stage = 1 } WJ_rf_capital_available = yes }
-  trigger_else = {
-   WJ_rf_duchy_available = yes
-   NOR = { this = root.var:wj_rf_capital this = root.var:wj_rf_second de_jure_liege = root.var:wj_rf_fief }
-   WJ_rf_adjacent = yes
-  }
- }
+ scope:wj_rf_choice = { WJ_rf_option_available = yes }
 }
 WJ_rf_three_valid = {
  WJ_rf_flow_valid = yes var:wj_rf_mode = 1
@@ -139,17 +143,22 @@ WJ_rf_option_available = {
  }
  trigger_else = {
   WJ_rf_duchy_available = yes
-  NOR = { this = root.var:wj_rf_capital this = root.var:wj_rf_second de_jure_liege = root.var:wj_rf_fief }
+  trigger_if = { limit = { exists = root.var:wj_rf_capital } NOT = { this = root.var:wj_rf_capital } }
+  trigger_if = { limit = { exists = root.var:wj_rf_second } NOT = { this = root.var:wj_rf_second } }
+  trigger_if = { limit = { exists = root.var:wj_rf_fief } NOT = { de_jure_liege = root.var:wj_rf_fief } }
   WJ_rf_adjacent = yes
  }
 }
 WJ_rf_can_promote = {
  is_ai = no is_alive = yes government_has_flag = government_is_celestial
- NOT = { dynasty = top_liege.dynasty }
+ # A peer empire still needs a hegemony above it for a valid vassal transfer.
  top_liege = { WJ_rf_emperor = yes highest_held_title_tier = tier_hegemony }
+ NOT = { any_held_title = { has_variable = wj_rf_rank var:wj_rf_rank = 2 } }
+ any_held_title = { tier = tier_kingdom has_variable = wj_rf_rank var:wj_rf_rank = 1 }
+ OR = { WJ_rf_player_test = yes AND = {
+ NOT = { dynasty = top_liege.dynasty }
  exists = top_liege.puppeteer top_liege.puppeteer = this
  WJ_rf_secretariat_support = yes
- NOT = { any_held_title = { has_variable = wj_rf_rank var:wj_rf_rank = 2 } }
  any_held_title = {
   tier = tier_kingdom has_variable = wj_rf_rank var:wj_rf_rank = 1
   save_temporary_scope_as = wj_rf_promote_fief
@@ -158,4 +167,5 @@ WJ_rf_can_promote = {
    OR = { holder = root holder = { is_vassal_or_below_of = root } }
   }
  }
+ } }
 }

@@ -24,14 +24,18 @@ WJ_dd_title_changed = {
  }
  effect = {
   WJ_dd_remember_jie_effect = yes
+  clear_saved_scope = wj_dd_affected_core
   var:wj_dd_held_core ?= { save_scope_as = wj_dd_affected_core }
   scope:wj_dd_affected_core.holder ?= {
    trigger_event = { on_action = WJ_dd_after_change days = 1 }
   }
-  scope:title.var:wj_dd_core ?= { save_scope_as = wj_dd_affected_core }
-  # Schedule on the current holder, not a possibly dead previous holder.
-  scope:wj_dd_affected_core.holder ?= {
-   trigger_event = { on_action = WJ_dd_after_change days = 1 }
+  scope:title.var:wj_dd_core ?= {
+   if = {
+    limit = { OR = { NOT = { exists = scope:wj_dd_affected_core } this != scope:wj_dd_affected_core } }
+    save_scope_as = wj_dd_affected_core
+    # Schedule each distinct core on its current holder, not on a dead predecessor.
+    holder ?= { trigger_event = { on_action = WJ_dd_after_change days = 1 } }
+   }
   }
  }
 }
@@ -39,13 +43,17 @@ WJ_dd_person_changed = {
  trigger = { OR = { exists = primary_title.kingdom.var:wj_dd_core exists = var:wj_dd_held_core } }
  effect = {
   WJ_dd_remember_jie_effect = yes
+  clear_saved_scope = wj_dd_affected_core
   var:wj_dd_held_core ?= { save_scope_as = wj_dd_affected_core }
   scope:wj_dd_affected_core.holder ?= {
    trigger_event = { on_action = WJ_dd_after_change days = 1 }
   }
-  primary_title.kingdom.var:wj_dd_core ?= { save_scope_as = wj_dd_affected_core }
-  scope:wj_dd_affected_core.holder ?= {
-   trigger_event = { on_action = WJ_dd_after_change days = 1 }
+  primary_title.kingdom.var:wj_dd_core ?= {
+   if = {
+    limit = { OR = { NOT = { exists = scope:wj_dd_affected_core } this != scope:wj_dd_affected_core } }
+    save_scope_as = wj_dd_affected_core
+    holder ?= { trigger_event = { on_action = WJ_dd_after_change days = 1 } }
+   }
   }
  }
 }
@@ -99,13 +107,16 @@ WJ_dd_subrealm_changed = {
   }
   every_held_title = {
    limit = { has_variable = wj_dd_core }
-   var:wj_dd_core = { WJ_dd_reconcile_core_effect = yes }
+   var:wj_dd_core = { if = { limit = { NOT = { is_in_list = wj_dd_subrealm_cores } } add_to_list = wj_dd_subrealm_cores } }
   }
   every_vassal_or_below = {
    every_held_title = {
     limit = { has_variable = wj_dd_core }
-    var:wj_dd_core = { WJ_dd_reconcile_core_effect = yes }
+    var:wj_dd_core = { if = { limit = { NOT = { is_in_list = wj_dd_subrealm_cores } } add_to_list = wj_dd_subrealm_cores } }
    }
   }
+  # Membership is discovered first: pruning must not edit pointers during the scan.
+  every_in_list = { list = wj_dd_subrealm_cores WJ_dd_reconcile_core_effect = yes }
+  every_in_list = { list = wj_dd_subrealm_cores remove_from_list = wj_dd_subrealm_cores }
  }
 }

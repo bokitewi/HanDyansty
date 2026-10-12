@@ -561,7 +561,82 @@ WJ_temp_official_retry_effect = {
 	WJ_kaoke_reconcile_effect = yes
 }
 
-# 郎官转试守固定结算为举孝廉；其他假吏按当前最高非家族官职分流。
+# 只供试守转正调用：按已经实际授予的资格署名，不建立师徒关系或占年度举荐次数。
+WJ_trial_record_nominal_sponsor_effect = {
+ remove_variable ?= wj_trial_nominal_sponsor
+ clear_saved_scope = wj_trial_nominal_sponsor
+ save_scope_as = wj_trial_promoted_official
+ top_liege = {
+  random_vassal_or_below = {
+   limit = {
+    is_alive = yes is_adult = yes is_imprisoned = no is_incapable = no
+    government_has_flag = government_is_celestial
+    NOT = { this = scope:wj_trial_promoted_official }
+    any_held_title = {
+     is_noble_family_title = no
+     NOT = { has_variable = wj_rf_rank }
+     OR = {
+      AND = {
+       scope:wj_trial_promoted_official = {
+        has_character_modifier = WJ_xiaolian_modifier
+        NOT = { has_character_modifier = WJ_maocai_modifier }
+       }
+       tier = tier_duchy is_landless_type_title = no
+      }
+      AND = {
+       scope:wj_trial_promoted_official = { has_character_modifier = WJ_maocai_modifier }
+       tier >= tier_kingdom
+       OR = { is_landless_type_title = no tgp_is_minister_title = yes }
+      }
+     }
+    }
+   }
+   save_scope_as = wj_trial_nominal_sponsor
+  }
+ }
+ if = {
+  limit = { exists = scope:wj_trial_nominal_sponsor }
+  set_variable = { name = wj_trial_nominal_sponsor value = scope:wj_trial_nominal_sponsor }
+ }
+}
+
+# 五年试守差／劣才调用。沿原生卸任的 current_heir + appointment 交易；
+# 不销毁官职，不动士族、爵位、朝臣或本人实封国，不送隐居、不发退休奖励。
+WJ_trial_retire_local_offices_effect = {
+ save_scope_as = wj_trial_retiring_official
+ top_liege = { save_scope_as = wj_trial_retirement_fallback }
+ WJ_temp_official_clear_effect = yes
+ WJ_clear_owned_appointment_timeout_effect = yes
+ create_title_and_vassal_change = {
+  type = appointment save_scope_as = wj_trial_retirement_change add_claim_on_loss = no
+ }
+ every_held_title = {
+  limit = {
+   tier >= tier_county tier <= tier_kingdom
+   is_noble_family_title = no is_landless_type_title = no tgp_is_minister_title = no
+   NOT = { has_variable = wj_rf_rank }
+   trigger_if = {
+    limit = { exists = scope:wj_trial_retiring_official.var:wj_rf_owned_title }
+    NOT = { scope:wj_trial_retiring_official.var:wj_rf_owned_title = { is_de_jure_liege_or_above_target = prev } }
+   }
+  }
+  clear_saved_scope = wj_trial_office_successor
+  current_heir ?= {
+   if = { limit = { is_alive = yes NOT = { this = scope:wj_trial_retiring_official } }
+    save_scope_as = wj_trial_office_successor
+   }
+  }
+  if = { limit = { NOT = { exists = scope:wj_trial_office_successor } }
+   scope:wj_trial_retirement_fallback = { save_scope_as = wj_trial_office_successor }
+  }
+  change_title_holder = {
+   holder = scope:wj_trial_office_successor change = scope:wj_trial_retirement_change take_baronies = yes
+  }
+ }
+ resolve_title_and_vassal_change = scope:wj_trial_retirement_change
+}
+
+# 一年考试保留主包按当前最高非家族官职授资格的规则。
 WJ_temp_official_kaoke_pass_effect = {
 # 	if = {
 # 		limit = { has_character_flag = wj_temp_official_from_langguan }
@@ -579,6 +654,7 @@ WJ_temp_official_kaoke_pass_effect = {
 	else = {
 		WJ_grant_road_xiaolian_effect = yes
 	}
+	WJ_trial_record_nominal_sponsor_effect = yes
 	send_interface_toast = {
 		type = event_toast_effect_good
 		title = wj_temp_official_kaoke_pass_toast
