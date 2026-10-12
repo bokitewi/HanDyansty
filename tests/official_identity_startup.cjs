@@ -26,7 +26,7 @@ for(const[title,id,seat,file]of [
  ['e_minister_censor','zhang_ji','councillor_spymaster','00_yuzhou.txt'],
  ['e_minister_of_war','yang_ci','councillor_marshal','00_sili.txt'],
  ['e_minister_of_justice','cui_lie','minister_justice','00_jizhou.txt'],
- ['e_minister_of_revenue','nanyang_zhang_002','councillor_steward','00_jingzhou.txt'],
+ ['e_minister_of_revenue','zhang_wen_2','councillor_steward','00_jingzhou.txt'],
  ['e_minister_of_rites','yang_biao','councillor_court_chaplain','00_sili.txt'],
  ['e_minister_of_works','deng_sheng_2','minister_works','east_asian_han_180_200.txt'],
  ['e_minister_of_personnel','WJ_liu_tao_184','minister_personnel','WJ_184_court.txt'],
@@ -94,7 +94,7 @@ assert(read('localization/simp_chinese/replace/WJ_regency_and_capital_l_simp_chi
 assert(read('gui/window_character.gui').includes("CharacterWindow.GetCharacter.Custom('WJ_DiarchRoleTitle')"));
 
 const family=id=>{const c=character(5);c.id=id;c.primary_title.isMinister=true;c.liege=emperor;c.house={house_head:c,members:[c]};pool.push(c);return c;};
-const missing=['cui_lie','liu_kuan','nanyang_zhang_002'].map(family);missing[0].house.house_head={id:'older_ai_head'};
+const missing=['cui_lie','liu_kuan','zhang_wen_2'].map(family);missing[0].house.house_head={id:'older_ai_head'};
 const shared=family('yang_biao');shared.house.members.push({titles:[{tier:2,is_noble_family_title:true}]});
 const existing=family('existing');existing.titles.push({tier:2,is_noble_family_title:true});
 const foreign=family('foreign');foreign.governmentFlags=[];

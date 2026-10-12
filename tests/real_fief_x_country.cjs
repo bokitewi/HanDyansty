@@ -19,18 +19,28 @@ const deathRun=runner({effects:{},triggers:{},values:{},primitives:{
  exists:(c,s,n)=>n.value.startsWith('dead_var:')?c.dead_var?.[n.value.slice(9)]!==undefined:deathRun.resolve(n.value,c,s)!==undefined,
  WJ_has_miaoshi_trigger:(c,s,n)=>Boolean(c.nickname)===(n.value==='yes'),
  'dead_var:wj_rf_miaoshi_rank':(c,s,n)=>c.dead_var?.wj_rf_miaoshi_rank===Number(n.value),
+ 'dead_var:wj_rf_miaoshi_name_code':(c,s,n)=>c.dead_var?.wj_rf_miaoshi_name_code===Number(n.value),
 },onEffect(n,c){if(n.key==='WJ_rf_refresh_holder')return true;if(n.key==='store_localized_text_in_death'){c.storedRealm=true;return true;}}});
 const select=(name,c)=>one(ranks[name].children.find(n=>n.key==='text'&&(!n.children.some(x=>x.key==='trigger')||deathRun.check(one(n,'trigger').children,c))),'localization_key').value;
 for(const [rank,key]of[[1,'WJ_rf_miaoshi_duke'],[2,'WJ_rf_miaoshi_king']]){
- const c={vars:{wj_rf_owned_title:{vars:{wj_rf_rank:rank}}}};
+ const title={vars:{wj_rf_rank:rank,wj_rf_name_code:13}};
+ const c={vars:{wj_rf_owned_title:title}};
  deathRun.execute(rankCapture.children.filter(n=>n.key!=='limit'),c);
- assert.equal(c.vars.wj_rf_miaoshi_rank,rank);assert(c.storedRealm);
+ assert.equal(c.vars.wj_rf_miaoshi_rank,rank);
+ assert.equal(c.vars.wj_rf_miaoshi_name_code,13);
+ assert.equal(c.vars.wj_rf_miaoshi_realm_title,title);
  const dead={dead_var:{wj_rf_miaoshi_rank:c.vars.wj_rf_miaoshi_rank}};
  assert.equal(select('WJ_rf_miaoshi_full_rank',dead),key);
  assert.equal(select('WJ_rf_dead_name_prefix',dead),rank===2?'WJ_rf_dead_king':'WJ_rf_dead_duke');
  dead.nickname=true;assert.equal(select('WJ_rf_dead_name_prefix',dead),'WJ_rf_dead_nickname');
 }
 assert.equal(select('WJ_rf_miaoshi_full_rank',{dead_var:{}}),'WJ_rf_miaoshi_emperor_full','ordinary emperors unchanged');
+for(const [code,name] of [[1,"WJ_rf_name_sili"],[2,"WJ_rf_name_yuzhou"],[3,"WJ_rf_name_yanzhou"],[4,"WJ_rf_name_qingzhou"],[5,"WJ_rf_name_xuzhou"],[6,"WJ_rf_name_youzhou"],[7,"WJ_rf_name_jizhou"],[8,"WJ_rf_name_liangzhou"],[9,"WJ_rf_name_yangzhou"],[10,"WJ_rf_name_jingzhou"],[11,"WJ_rf_name_yizhou"],[12,"WJ_rf_name_jiaozhou"],[13,"WJ_rf_name_bingzhou"]]){
+ assert.equal(select('WJ_rf_dead_realm',{dead_var:{wj_rf_miaoshi_name_code:code}}),name);
+}
+assert.equal(select('WJ_rf_dead_realm',{dead_var:{wj_rf_miaoshi_stem_capital:{}}}),'WJ_rf_dead_capital_stem');
+assert.equal(select('WJ_rf_dead_realm',{dead_var:{wj_rf_miaoshi_realm_title:{}}}),'WJ_rf_dead_realm_title');
+assert.equal(select('WJ_rf_dead_realm',{dead_var:{}}),'WJ_name_empty');
 const fiefOffice=memorial.WJ_name_capture_office.children.find(n=>n.key==='if');
 const fiefIdentity=one(one(fiefOffice,'limit'),'OR');
 assert.equal(one(fiefIdentity,'WJ_rf_has_fief').value,'yes');
@@ -82,6 +92,9 @@ assert.equal(blockedScopes.event,'WJ_rf.5');assert.deepEqual(blocked.vars,{});
 const failed=defs('events/WJ_real_fief_events.txt')['WJ_rf.5'];assert.equal(one(failed,'desc').value,'WJ_rf_promote_ineligible_desc');assert.ok(loc.WJ_rf_promote_ineligible_desc);
 // Temporary player test gates cover both the decision and its settlement/selection path.
 const gates=defs('common/scripted_triggers/WJ_real_fief_triggers.txt');
+assert.equal(one(gates.WJ_rf_player_test,'always').value,'no','release must have no testing exemptions');
+// Exercise the dormant test branch too, without changing the production release file.
+one(gates.WJ_rf_player_test,'always').value='yes';
 const gate=runner({effects:{},triggers:gates,values:{},primitives:{
  always:(c,s,n)=>n.value==='yes',
  WJ_peer_valid:()=>false,
@@ -278,12 +291,16 @@ for(const miaoFirst of [false,true])for(const [kind,office,independent,rule,same
  const emperorCase=['emperor','hegemon'].includes(kind)||(kind==='king'&&independent),rank=kind==='duke'?1:2;
  assert.equal(c.vars.wj_rf_miaoshi_rank,emperorCase?undefined:rank);
  if(emperorCase){assert.equal(c.pending,undefined);assert.equal(heir.funeralEvents[0].id,'HuangDi_miaoshi.009');continue;}
- assert.equal(c.savedRealm,['crowned','advanced-duke'].includes(kind)?'楚':'晋');assert.equal(c.pending.length,2);
+ assert.equal(c.vars.wj_rf_miaoshi_name_code,['crowned','advanced-duke'].includes(kind)?undefined:13);
+ assert.equal(c.vars.wj_rf_miaoshi_realm_title,territorial);assert.equal(c.pending.length,2);
  assert.equal(c.pending[0].wj_memorial_wj_rf_miaoshi_rank,rank);assert.equal(c.dead_var,undefined);
  assert.equal(life.check(one(deadAction,'trigger').children,c,c.pending[0]),false,'early callback must wait for death');
  c.is_alive=false;c.vars={};c.titles=[];c.laws=[];territorial.holder=heir;
  for(const eventScopes of c.pending)if(life.check(one(deadAction,'trigger').children,c,eventScopes))life.execute(one(deadAction,'effect').children,c,eventScopes);
- assert.equal(c.dead_var.wj_rf_miaoshi_rank,rank);assert.equal(c.deadWrites,office?3:2,'one-day retry must not duplicate writes');
+ assert.equal(c.dead_var.wj_rf_miaoshi_rank,rank);
+ assert.equal(c.dead_var.wj_rf_miaoshi_realm_title,territorial);
+ assert.equal(c.dead_var.wj_rf_miaoshi_name_code,['crowned','advanced-duke'].includes(kind)?undefined:13);
+ assert.equal(c.deadWrites,(office?3:2)+(['crowned','advanced-duke'].includes(kind)?1:2),'one-day retry must not duplicate writes');
  assert.equal(c.dead_var.wj_last_office,office?'flag:WJ_baiguan_label_situ':undefined);
  assert.equal(choose(ranks.WJ_rf_miaoshi_full_rank,c),rank===2?'WJ_rf_miaoshi_king':'WJ_rf_miaoshi_duke');
  for(const file of ['WJ_name_offices.txt','WJ_name_death_details.txt','WJ_tianjia_history_names.txt'])for(const node of Object.values(defs('common/customizable_localization/'+file)).filter(n=>/^WJ_Get.*Name$/.test(n.key)))assert.equal(choose(node,c),'WJ_rf_dead_full_name');
