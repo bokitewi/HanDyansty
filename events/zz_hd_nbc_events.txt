@@ -1,0 +1,624 @@
+﻿namespace = hd_nbc
+
+# 南北朝剧本事件。计划见 docs/南北朝剧本_整合计划.md 第 5.8 节。
+
+# 五城水口兵变（照工坊 3752942070 的 xishu_events.0404 改写）：义熙元年（405）二月，毛璩遣谯纵等率蜀兵东下讨桓，
+# 军至五城水口，蜀兵不愿远征，拥谯纵为主，还袭成都。
+# 由 hd_nbc404_court_effect 在 404 开局给谯纵排期（约 405 年二月）。Root：谯纵。
+hd_nbc.0001 = {
+	type = character_event
+	title = hd_nbc.0001.t
+	desc = hd_nbc.0001.desc
+	theme = war
+	left_portrait = {
+		character = root
+		animation = disapproval
+	}
+	trigger = {
+		is_alive = yes
+		is_landed = no
+		exists = title:k_uuii_yizhou.holder
+		title:k_uuii_yizhou.holder = { is_alive = yes is_independent_ruler = yes }
+		title:c_uuii_p_3304.holder ?= {
+			OR = {
+				this = title:k_uuii_yizhou.holder
+				is_vassal_or_below_of = title:k_uuii_yizhou.holder
+			}
+		}
+	}
+
+	# 受众拥立，还袭成都
+	option = {
+		name = hd_nbc.0001.a
+		title:k_uuii_yizhou.holder = { save_scope_as = hd_nbc_xishu_target }
+		create_title_and_vassal_change = {
+			type = usurped
+			save_scope_as = change
+		}
+		title:c_uuii_p_3304 = {
+			change_title_holder = {
+				holder = root
+				change = scope:change
+				take_baronies = yes
+			}
+		}
+		hidden_effect = {
+			becomes_independent = {
+				change = scope:change
+			}
+		}
+		resolve_title_and_vassal_change = scope:change
+		spawn_army = {
+			levies = 6000
+			location = title:c_uuii_p_3304.title_province
+			origin = title:c_uuii_p_3304.title_province
+			inheritable = no
+			uses_supply = yes
+			name = hd_nbc_xishu_army_name
+		}
+		start_war = {
+			cb = hd_nbc_war_cb
+			target = scope:hd_nbc_xishu_target
+			target_title = title:k_uuii_yizhou
+		}
+		ai_chance = { base = 100 }
+	}
+
+	# 投水求去，不受推戴
+	option = {
+		name = hd_nbc.0001.b
+		add_prestige = minor_prestige_loss
+		ai_chance = { base = 0 }
+	}
+}
+
+############################################################
+# 史实主线（docs/南北朝剧本_改进计划.md 3.7、第 8 节）。由 zz_hd_nbc_history_effects.txt 的心跳发起。
+# AI 一律走史实选项（ai_chance 100），玩家可选另一项。
+############################################################
+
+# A0 病笃（只给玩家；AI 由心跳直接病逝）。Root：史实卒年已到的君主
+hd_nbc.0100 = {
+	type = character_event
+	title = hd_nbc.0100.t
+	desc = hd_nbc.0100.desc
+	theme = physical_health
+	left_portrait = { character = root animation = sick }
+	trigger = { is_alive = yes }
+	option = {
+		name = hd_nbc.0100.a
+		death = { death_reason = death_natural_causes }
+		ai_chance = { base = 100 }
+	}
+	option = {
+		name = hd_nbc.0100.b
+		if = {
+			limit = { NOT = { has_trait = ill } }
+			add_trait = ill
+		}
+		add_stress = major_stress_impact_gain
+		set_variable = { name = hd_nbc_death_delay years = 1 }
+		ai_chance = { base = 0 }
+	}
+}
+
+# A1 灭蜀。Root：桓温
+hd_nbc.0110 = {
+	type = character_event
+	title = hd_nbc.0110.t
+	desc = hd_nbc.0110.desc
+	theme = war
+	left_portrait = { character = root animation = personality_bold }
+	option = {
+		name = hd_nbc.0110.a
+		add_prestige = major_prestige_gain
+		title:h_china.holder ?= {
+			save_scope_as = hd_nbc_jin_emperor
+			if = {
+				limit = { root = { has_title = title:e_bashu } }
+				create_title_and_vassal_change = { type = granted save_scope_as = hd_nbc_bashu_change add_claim_on_loss = no }
+				title:e_bashu = { change_title_holder = { holder = scope:hd_nbc_jin_emperor change = scope:hd_nbc_bashu_change } }
+				resolve_title_and_vassal_change = scope:hd_nbc_bashu_change
+			}
+		}
+		# 李势出降，送建康
+		character:bacong_li_026 ?= {
+			if = {
+				limit = {
+					is_alive = yes
+					is_landed = no
+					exists = scope:hd_nbc_jin_emperor
+				}
+				scope:hd_nbc_jin_emperor = { add_courtier = character:bacong_li_026 }
+			}
+		}
+		save_scope_as = hd_news_a
+		character:bacong_li_026 ?= { save_scope_as = hd_news_b }
+		hd_world_news_send_effect = { EVENT = hd_nbc.0901 }
+		ai_chance = { base = 100 }
+	}
+}
+
+# A3b 前燕南下。Root：平州之主（慕容氏）
+hd_nbc.0120 = {
+	type = character_event
+	title = hd_nbc.0120.t
+	desc = hd_nbc.0120.desc
+	theme = war
+	left_portrait = { character = root animation = war_attacker }
+	option = {
+		name = hd_nbc.0120.a
+		title:k_uuii_youzhou.holder.top_liege = { save_scope_as = hd_nbc_def_yannan }
+		hd_nbc_start_war_effect = { ATTACKER = root DEFENDER = scope:hd_nbc_def_yannan TARGET = title:k_uuii_youzhou KIND = yannan }
+		ai_chance = { base = 100 }
+	}
+	option = {
+		name = hd_nbc.0120.b
+		ai_chance = { base = 0 }
+	}
+}
+
+# A3 冉闵建魏。Root：冉闵
+hd_nbc.0130 = {
+	type = character_event
+	title = hd_nbc.0130.t
+	desc = hd_nbc.0130.desc
+	theme = intrigue
+	left_portrait = { character = root animation = war_attacker }
+	option = {
+		name = hd_nbc.0130.a
+		title:d_weijun.holder.top_liege = { save_scope_as = hd_nbc_zhao }
+		# 先记下魏郡里属于后赵的县
+		title:d_weijun = {
+			every_de_jure_county = {
+				limit = {
+					holder ?= {
+						OR = {
+							this = scope:hd_nbc_zhao
+							any_liege_or_above = { this = scope:hd_nbc_zhao }
+						}
+					}
+				}
+				add_to_list = hd_nbc_ranmin_counties
+			}
+		}
+		# 诛石鉴（后赵之主是 AI 时）
+		scope:hd_nbc_zhao = {
+			if = {
+				limit = { is_ai = yes is_alive = yes }
+				death = { death_reason = death_murder_known killer = root }
+			}
+		}
+		every_in_list = {
+			list = hd_nbc_ranmin_counties
+			save_scope_as = hd_nbc_rm_county
+			hd_nbc_give_county_effect = { COUNTY = scope:hd_nbc_rm_county TO = root }
+		}
+		if = {
+			limit = { NOT = { has_title = title:d_weijun } }
+			create_title_and_vassal_change = { type = usurped save_scope_as = hd_nbc_weijun_change add_claim_on_loss = no }
+			title:d_weijun = { change_title_holder = { holder = root change = scope:hd_nbc_weijun_change } }
+			resolve_title_and_vassal_change = scope:hd_nbc_weijun_change
+		}
+		hd_nbc_become_independent_effect = yes
+		if = {
+			limit = { has_title = title:d_weijun }
+			set_primary_title_to = title:d_weijun
+			hd_nbc_found_realm_effect = { NAME = dynn_title_wei STYLE = huangdi FIXED = yes }
+			hd_nbc_spawn_army_effect = { SIZE = 15000 WHERE = title:d_weijun.title_capital_county NAME = hd_nbc_ranmin_army_name }
+		}
+		save_scope_as = hd_news_a
+		scope:hd_nbc_zhao ?= { save_scope_as = hd_news_b }
+		hd_world_news_send_effect = { EVENT = hd_nbc.0904 }
+		debug_log = "HD_NBC 346 RANMIN"
+		ai_chance = { base = 100 }
+	}
+	option = {
+		name = hd_nbc.0130.b
+		ai_chance = { base = 0 }
+	}
+}
+
+# A4 苻健入关。Root：苻健
+hd_nbc.0140 = {
+	type = character_event
+	title = hd_nbc.0140.t
+	desc = hd_nbc.0140.desc
+	theme = war
+	left_portrait = { character = root animation = war_attacker }
+	option = {
+		name = hd_nbc.0140.a
+		# 烧桥西行：枋头一带的旧封地交还宗主，免成飞地
+		if = {
+			limit = { exists = liege }
+			liege = { save_scope_as = hd_nbc_fujian_old_liege }
+			every_held_title = {
+				limit = { tier = tier_county }
+				save_scope_as = hd_nbc_fj_old
+				hd_nbc_give_county_effect = { COUNTY = scope:hd_nbc_fj_old TO = scope:hd_nbc_fujian_old_liege }
+			}
+		}
+		hd_nbc_fujian_duchy_effect = { DUCHY = d_jingzhao }
+		hd_nbc_fujian_duchy_effect = { DUCHY = d_fufeng }
+		hd_nbc_fujian_duchy_effect = { DUCHY = d_fengyi }
+		hd_nbc_fujian_duchy_effect = { DUCHY = d_shiping }	# 始平、咸阳夹在京兆与扶风西部之间，不取则扶风西部成飞地
+		hd_nbc_fujian_duchy_effect = { DUCHY = d_xianyang }
+		if = {
+			limit = { NOT = { has_title = title:d_jingzhao } }
+			create_title_and_vassal_change = { type = usurped save_scope_as = hd_nbc_jingzhao_change add_claim_on_loss = no }
+			title:d_jingzhao = { change_title_holder = { holder = root change = scope:hd_nbc_jingzhao_change } }
+			resolve_title_and_vassal_change = scope:hd_nbc_jingzhao_change
+		}
+		hd_nbc_become_independent_effect = yes
+		if = {
+			limit = { has_title = title:d_jingzhao }
+			set_primary_title_to = title:d_jingzhao
+			hd_nbc_found_realm_effect = { NAME = dynn_title_qin STYLE = tianwang FIXED = yes }
+			hd_nbc_spawn_army_effect = { SIZE = 10000 WHERE = title:d_jingzhao.title_capital_county NAME = hd_nbc_fujian_army_name }
+		}
+		save_scope_as = hd_news_a
+		hd_world_news_send_effect = { EVENT = hd_nbc.0905 }
+		debug_log = "HD_NBC 346 FUJIAN"
+		ai_chance = { base = 100 }
+	}
+	option = {
+		name = hd_nbc.0140.b
+		ai_chance = { base = 0 }
+	}
+}
+
+# A4b 苻坚夺位。Root：苻坚
+hd_nbc.0145 = {
+	type = character_event
+	title = hd_nbc.0145.t
+	desc = hd_nbc.0145.desc
+	theme = intrigue
+	left_portrait = { character = root animation = personality_bold }
+	right_portrait = { character = title:d_jingzhao.holder.top_liege animation = anger }
+	trigger = {
+		is_alive = yes
+		title:d_jingzhao.holder.top_liege ?= {
+			is_ai = yes
+			dynasty ?= dynasty:fu_1
+			NOT = { this = root }
+		}
+	}
+	option = {
+		name = hd_nbc.0145.a
+		title:d_jingzhao.holder.top_liege = { save_scope_as = hd_nbc_fu_old }
+		hd_nbc_seize_realm_effect = { OLD = scope:hd_nbc_fu_old }
+		save_scope_as = hd_news_a
+		scope:hd_nbc_fu_old ?= { save_scope_as = hd_news_b }
+		hd_world_news_send_effect = { EVENT = hd_nbc.0906 }
+		debug_log = "HD_NBC 346 FUJIAN_COUP"
+		ai_chance = { base = 100 }
+	}
+	option = {
+		name = hd_nbc.0145.b
+		ai_chance = { base = 0 }
+	}
+}
+
+# A5 桓温北伐。Root：桓温
+hd_nbc.0150 = {
+	type = character_event
+	title = hd_nbc.0150.t
+	desc = hd_nbc.0150.desc
+	theme = war
+	left_portrait = { character = root animation = war_attacker }
+	option = {
+		name = hd_nbc.0150.a
+		title:d_henan.holder.top_liege = { save_scope_as = hd_nbc_def_beifa }
+		hd_nbc_vassal_war_effect = { WHO = longkang_huan_017 DEFENDER = scope:hd_nbc_def_beifa TARGET = title:d_henan KIND = beifa }
+		add_prestige = medium_prestige_gain
+		ai_chance = { base = 100 }
+	}
+	option = {
+		name = hd_nbc.0150.b
+		ai_chance = { base = 0 }
+	}
+}
+
+# A6 淝水之战。Root：苻坚
+hd_nbc.0160 = {
+	type = character_event
+	title = hd_nbc.0160.t
+	desc = hd_nbc.0160.desc
+	theme = war
+	left_portrait = { character = root animation = war_attacker }
+	option = {
+		name = hd_nbc.0160.a
+		title:h_china.holder = { save_scope_as = hd_nbc_def_feishui }
+		hd_nbc_start_war_effect = { ATTACKER = root DEFENDER = scope:hd_nbc_def_feishui TARGET = title:k_uuii_yangzhou KIND = feishui }
+		ai_chance = { base = 100 }
+	}
+	option = {
+		name = hd_nbc.0160.b
+		ai_chance = { base = 0 }
+	}
+}
+
+# A6 淝水败后，前秦瓦解：非氐族、公爵级以上的封臣全部自立。Root：苻坚
+hd_nbc.0161 = {
+	type = character_event
+	title = hd_nbc.0161.t
+	desc = hd_nbc.0161.desc
+	theme = war
+	left_portrait = { character = root animation = worry }
+	immediate = {
+		every_vassal = {
+			limit = {
+				is_alive = yes
+				highest_held_title_tier >= tier_duchy
+				NOT = { culture = culture:diren }
+			}
+			hd_nbc_become_independent_effect = yes
+		}
+		save_scope_as = hd_news_a
+		title:h_china.holder ?= { save_scope_as = hd_news_b }
+		hd_world_news_send_effect = { EVENT = hd_nbc.0903 }
+		debug_log = "HD_NBC 346 FEISHUI COLLAPSE"
+	}
+	option = {
+		name = hd_nbc.0161.a
+		ai_chance = { base = 100 }
+	}
+}
+
+# H1 覆舟山。Root：桓玄
+hd_nbc.0210 = {
+	type = character_event
+	title = hd_nbc.0210.t
+	desc = hd_nbc.0210.desc
+	theme = war
+	left_portrait = { character = root animation = worry }
+	right_portrait = { character = character:suiyuli_liu_013 animation = war_attacker }
+	trigger = {
+		is_alive = yes
+		has_title = title:h_china
+		character:suiyuli_liu_013 ?= {
+			is_alive = yes
+			any_character_war = {
+				primary_attacker = character:suiyuli_liu_013
+				using_cb = independence_war
+			}
+		}
+	}
+	option = {
+		name = hd_nbc.0210.a
+		set_global_variable = hd_nbc_fuzhoushan_west
+		hd_nbc_fuzhoushan_effect = yes
+		character:suiyuli_liu_013 = { save_scope_as = hd_news_a }
+		save_scope_as = hd_news_b
+		hd_world_news_send_skip_both_effect = { EVENT = hd_nbc.0910 }
+		ai_chance = { base = 100 }
+	}
+	option = {
+		name = hd_nbc.0210.b
+		ai_chance = { base = 0 }
+	}
+}
+
+# H2 峥嵘洲。Root：刘裕
+hd_nbc.0220 = {
+	type = character_event
+	title = hd_nbc.0220.t
+	desc = hd_nbc.0220.desc
+	theme = war
+	left_portrait = { character = root animation = war_attacker }
+	right_portrait = { character = character:longkang_huan_027 animation = worry }
+	option = {
+		name = hd_nbc.0220.a
+		if = {
+			limit = { character:longkang_huan_027 = { is_ai = yes } }
+			# 桓玄是 AI：峥嵘洲一战结算，奉迎晋帝
+			if = {
+				limit = { character:si_ma_de_zong ?= { is_alive = yes } }
+				character:si_ma_de_zong = { trigger_event = hd_nbc.0221 }
+			}
+			else = {
+				character:si_ma_de_wen = { trigger_event = hd_nbc.0221 }
+			}
+		}
+		else = {
+			# 桓玄是玩家：真刀真枪打一场
+			hd_nbc_start_war_effect = { ATTACKER = root DEFENDER = character:longkang_huan_027 TARGET = title:e_jiangdong KIND = restore }
+		}
+		ai_chance = { base = 100 }
+	}
+	option = {
+		name = hd_nbc.0220.b
+		ai_chance = { base = 0 }
+	}
+}
+
+# H2 复晋（隐藏）。Root：被奉迎的晋帝
+hd_nbc.0221 = {
+	type = character_event
+	hidden = yes
+	trigger = {
+		is_alive = yes
+		character:longkang_huan_027 ?= { is_alive = yes has_title = title:h_china }
+	}
+	immediate = {
+		hd_nbc_restore_effect = yes
+		character:suiyuli_liu_013 = { save_scope_as = hd_news_a }
+		root = { save_scope_as = hd_news_b }
+		hd_world_news_send_all_effect = { EVENT = hd_nbc.0911 }
+	}
+}
+
+# H3 卢循据番禺。Root：卢循
+hd_nbc.0230 = {
+	type = character_event
+	title = hd_nbc.0230.t
+	desc = hd_nbc.0230.desc
+	theme = war
+	left_portrait = { character = root animation = war_attacker }
+	option = {
+		name = hd_nbc.0230.a
+		title:c_uuii_p_6157.holder.top_liege = { save_scope_as = hd_nbc_def_luxun }
+		hd_nbc_give_county_effect = { COUNTY = title:c_uuii_p_6157 TO = root }
+		hd_nbc_become_independent_effect = yes
+		if = {
+			limit = { has_title = title:c_uuii_p_6157 }
+			if = {
+				limit = { NOT = { has_government = celestial_government } }
+				change_government = celestial_government
+			}
+			hd_nbc_spawn_army_effect = { SIZE = 8000 WHERE = title:c_uuii_p_6157 NAME = hd_nbc_luxun_army_name }
+			hd_nbc_start_war_effect = { ATTACKER = root DEFENDER = scope:hd_nbc_def_luxun TARGET = title:d_nanhai KIND = luxun }
+		}
+		debug_log = "HD_NBC 404 LUXUN"
+		ai_chance = { base = 100 }
+	}
+	option = {
+		name = hd_nbc.0230.b
+		ai_chance = { base = 0 }
+	}
+}
+
+# H4 灭南燕。Root：刘裕
+hd_nbc.0240 = {
+	type = character_event
+	title = hd_nbc.0240.t
+	desc = hd_nbc.0240.desc
+	theme = war
+	left_portrait = { character = root animation = war_attacker }
+	option = {
+		name = hd_nbc.0240.a
+		title:k_uuii_qingzhou.holder.top_liege = { save_scope_as = hd_nbc_def_nanyan }
+		hd_nbc_vassal_war_effect = { WHO = suiyuli_liu_013 DEFENDER = scope:hd_nbc_def_nanyan TARGET = title:k_uuii_qingzhou KIND = nanyan }
+		ai_chance = { base = 100 }
+	}
+	option = {
+		name = hd_nbc.0240.b
+		ai_chance = { base = 0 }
+	}
+}
+
+# H5 北伐后秦。Root：刘裕
+hd_nbc.0250 = {
+	type = character_event
+	title = hd_nbc.0250.t
+	desc = hd_nbc.0250.desc
+	theme = war
+	left_portrait = { character = root animation = war_attacker }
+	option = {
+		name = hd_nbc.0250.a
+		title:k_uuii_sili.holder.top_liege = { save_scope_as = hd_nbc_def_houqin }
+		hd_nbc_vassal_war_effect = { WHO = suiyuli_liu_013 DEFENDER = scope:hd_nbc_def_houqin TARGET = title:k_uuii_sili KIND = houqin }
+		ai_chance = { base = 100 }
+	}
+	option = {
+		name = hd_nbc.0250.b
+		ai_chance = { base = 0 }
+	}
+}
+
+# H6 受禅（只给玩家；AI 由心跳直接受禅）。Root：刘裕
+hd_nbc.0260 = {
+	type = character_event
+	title = hd_nbc.0260.t
+	desc = hd_nbc.0260.desc
+	theme = dynastic_cycle
+	left_portrait = { character = root animation = personality_bold }
+	right_portrait = { character = title:h_china.holder animation = worry }
+	trigger = {
+		is_alive = yes
+		title:h_china.var:hd_court_regent ?= root
+	}
+	option = {
+		name = hd_nbc.0260.a
+		set_global_variable = hd_nbc_song_done
+		hd_nbc_song_effect = yes
+		ai_chance = { base = 100 }
+	}
+	option = {
+		name = hd_nbc.0260.b
+		set_variable = { name = hd_nbc_song_wait years = 1 }
+		ai_chance = { base = 0 }
+	}
+}
+
+############################################################
+# 天下通报（写法同 hd_sg218.0620）
+############################################################
+hd_nbc.0901 = {
+	type = character_event
+	title = hd_nbc.0901.t
+	desc = hd_nbc.0901.desc
+	theme = war
+	left_portrait = { character = scope:hd_news_a animation = personality_bold }
+	right_portrait = { character = scope:hd_news_b animation = worry trigger = { exists = scope:hd_news_b } }
+	option = { name = hd_world_news.a ai_chance = { base = 100 } }
+}
+hd_nbc.0902 = {
+	type = character_event
+	title = hd_nbc.0902.t
+	desc = hd_nbc.0902.desc
+	theme = war
+	left_portrait = { character = scope:hd_news_a animation = personality_bold }
+	right_portrait = { character = scope:hd_news_b animation = worry trigger = { exists = scope:hd_news_b } }
+	option = { name = hd_world_news.a ai_chance = { base = 100 } }
+}
+hd_nbc.0903 = {
+	type = character_event
+	title = hd_nbc.0903.t
+	desc = hd_nbc.0903.desc
+	theme = war
+	left_portrait = { character = scope:hd_news_b animation = personality_bold trigger = { exists = scope:hd_news_b } }
+	right_portrait = { character = scope:hd_news_a animation = worry }
+	option = { name = hd_world_news.a ai_chance = { base = 100 } }
+}
+hd_nbc.0904 = {
+	type = character_event
+	title = hd_nbc.0904.t
+	desc = hd_nbc.0904.desc
+	theme = intrigue
+	left_portrait = { character = scope:hd_news_a animation = war_attacker }
+	option = { name = hd_world_news.a ai_chance = { base = 100 } }
+}
+hd_nbc.0905 = {
+	type = character_event
+	title = hd_nbc.0905.t
+	desc = hd_nbc.0905.desc
+	theme = war
+	left_portrait = { character = scope:hd_news_a animation = war_attacker }
+	option = { name = hd_world_news.a ai_chance = { base = 100 } }
+}
+hd_nbc.0910 = {
+	type = character_event
+	title = hd_nbc.0910.t
+	desc = hd_nbc.0910.desc
+	theme = war
+	left_portrait = { character = scope:hd_news_a animation = war_attacker }
+	right_portrait = { character = scope:hd_news_b animation = worry }
+	option = { name = hd_world_news.a ai_chance = { base = 100 } }
+}
+hd_nbc.0911 = {
+	type = character_event
+	title = hd_nbc.0911.t
+	desc = hd_nbc.0911.desc
+	theme = dynastic_cycle
+	left_portrait = { character = scope:hd_news_a animation = personality_bold }
+	right_portrait = { character = scope:hd_news_b animation = personality_content }
+	option = { name = hd_world_news.a ai_chance = { base = 100 } }
+}
+hd_nbc.0920 = {
+	type = character_event
+	title = hd_nbc.0920.t
+	desc = hd_nbc.0920.desc
+	theme = dynastic_cycle
+	left_portrait = { character = scope:hd_news_a animation = personality_bold }
+	right_portrait = { character = scope:hd_news_b animation = worry trigger = { exists = scope:hd_news_b } }
+	option = { name = hd_world_news.a ai_chance = { base = 100 } }
+}
+hd_nbc.0906 = {
+	type = character_event
+	title = hd_nbc.0906.t
+	desc = hd_nbc.0906.desc
+	theme = intrigue
+	left_portrait = { character = scope:hd_news_a animation = personality_bold }
+	option = { name = hd_world_news.a ai_chance = { base = 100 } }
+}

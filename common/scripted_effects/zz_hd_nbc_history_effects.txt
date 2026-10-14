@@ -1,0 +1,878 @@
+﻿# 南北朝剧本史实主线（docs/南北朝剧本_改进计划.md 3.7、第 8 节）。全部只由 zz_hd_nbc_history_on_actions.txt 的心跳调用，
+# 那边带 game_start_date 闸门。写法照 218 剧本（zz_hd_218_history_effects.txt），规模小得多：
+#   每个节点只看日期窗口和当事人是否在世、是否掌权；进入窗口后第一次心跳就发；条件不合设 done 跳过，不生成替身；
+#   AI 的史实选项 ai_chance 100，玩家可选另一项。
+# 战争结局标记由 hd_nbc_war_cb 设：hd_nbc_<场次>_won / _lost / _white / _invalid（以攻方论胜负），进行中的有 hd_nbc_<场次>_active。
+
+############################################################
+# 心跳（root：title:h_china）
+############################################################
+hd_nbc_pulse_effect = {
+	if = {
+		limit = { game_start_date = 346.12.10 }
+		# A0 史实卒年：history 写在开局之后的死亡不会执行，由这里补
+		hd_nbc_hist_death_effect = { WHO = changli_murong_007 DATE = 348.10.25 }   # 慕容皝
+		hd_nbc_hist_death_effect = { WHO = shangdang_shi_010 DATE = 349.5.26 }     # 石虎
+		hd_nbc_hist_death_effect = { WHO = lueyang_fu_002 DATE = 350.1.1 }         # 苻洪（为麻秋所毒）
+		hd_nbc_hist_death_effect = { WHO = lueyang_fu_003 DATE = 355.7.10 }        # 苻健
+		hd_nbc_check_fashu_effect = yes      # A1 灭蜀
+		hd_nbc_check_ranmin_effect = yes     # A3 冉闵建魏
+		hd_nbc_check_fujian_effect = yes     # A4 苻健入关
+		hd_nbc_check_yannan_effect = yes     # A3b 前燕南下
+		hd_nbc_check_beifa_effect = yes      # A5 桓温北伐
+		hd_nbc_check_fujian_coup_effect = yes # A4b 苻坚夺位
+		hd_nbc_check_feishui_effect = yes    # A6 淝水之战
+	}
+	else = {
+		hd_nbc_hist_death_effect = { WHO = changli_murong_028 DATE = 405.10.1 }    # 慕容德（405 年九月卒）
+		hd_nbc_hist_death_effect = { WHO = tuoba_011 DATE = 409.11.6 }             # 拓跋珪（为子拓跋绍所弑）
+		hd_nbc_hist_death_effect = { WHO = shaodang_yao_013 DATE = 416.2.1 }       # 姚兴
+		hd_nbc_check_fuzhoushan_effect = yes # H1 覆舟山
+		hd_nbc_check_restore_effect = yes    # H2 复晋讨桓
+		hd_nbc_check_luxun_effect = yes      # H3 卢循据番禺
+		hd_nbc_check_nanyan_effect = yes     # H4 灭南燕
+		hd_nbc_check_houqin_effect = yes     # H5 北伐后秦
+		hd_nbc_check_song_effect = yes       # H6 刘宋代晋
+	}
+}
+
+############################################################
+# 战争工具
+############################################################
+
+# $ATTACKER$ 对 $DEFENDER$ 宣战，主目标 $TARGET$（头衔），场次 $KIND$。成功则存为 scope:hd_nbc_war_$KIND$
+hd_nbc_start_war_effect = {
+	$ATTACKER$ = {
+		if = {
+			limit = { is_allied_to = $DEFENDER$ }
+			break_alliance_due_to_attack_effect = { TARGET = $DEFENDER$ }
+		}
+		start_war = {
+			cb = hd_nbc_war_cb
+			target = $DEFENDER$
+			target_title = $TARGET$
+		}
+		random_character_war = {
+			limit = {
+				using_cb = hd_nbc_war_cb
+				primary_attacker = $ATTACKER$
+				primary_defender = $DEFENDER$
+				NOT = { has_variable = hd_nbc_war_kind }
+			}
+			set_variable = { name = hd_nbc_war_kind value = flag:$KIND$ }
+			save_scope_as = hd_nbc_war_$KIND$
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_nbc_war_$KIND$ }
+		set_global_variable = hd_nbc_$KIND$_active
+		debug_log = "HD_NBC WAR_CONFIRMED $KIND$"
+	}
+	else = {
+		debug_log = "HD_NBC WAR_START_FAILED $KIND$"
+	}
+}
+
+# 封臣出征：先由本人宣战，不成则由其最高领主宣战、本人参战。$WHO$ 是人物 ID
+hd_nbc_vassal_war_effect = {
+	hd_nbc_start_war_effect = { ATTACKER = character:$WHO$ DEFENDER = $DEFENDER$ TARGET = $TARGET$ KIND = $KIND$ }
+	if = {
+		limit = {
+			NOT = { exists = scope:hd_nbc_war_$KIND$ }
+			character:$WHO$ = { is_independent_ruler = no }
+		}
+		character:$WHO$.top_liege = { save_scope_as = hd_nbc_att_$KIND$ }
+		hd_nbc_start_war_effect = { ATTACKER = scope:hd_nbc_att_$KIND$ DEFENDER = $DEFENDER$ TARGET = $TARGET$ KIND = $KIND$ }
+		scope:hd_nbc_war_$KIND$ ?= { hd_nbc_add_attacker_effect = { WHO = $WHO$ } }
+	}
+}
+
+# 战争结局。Root：战争（hd_nbc_war_cb 的 on_victory 等）
+hd_nbc_war_result_effect = {
+	hd_nbc_war_result_kind_effect = { KIND = fashu RESULT = $RESULT$ }
+	hd_nbc_war_result_kind_effect = { KIND = yannan RESULT = $RESULT$ }
+	hd_nbc_war_result_kind_effect = { KIND = beifa RESULT = $RESULT$ }
+	hd_nbc_war_result_kind_effect = { KIND = feishui RESULT = $RESULT$ }
+	hd_nbc_war_result_kind_effect = { KIND = restore RESULT = $RESULT$ }
+	hd_nbc_war_result_kind_effect = { KIND = luxun RESULT = $RESULT$ }
+	hd_nbc_war_result_kind_effect = { KIND = nanyan RESULT = $RESULT$ }
+	hd_nbc_war_result_kind_effect = { KIND = houqin RESULT = $RESULT$ }
+}
+hd_nbc_war_result_kind_effect = {
+	if = {
+		limit = { var:hd_nbc_war_kind ?= flag:$KIND$ }
+		set_global_variable = hd_nbc_$KIND$_$RESULT$
+		if = {
+			limit = { has_global_variable = hd_nbc_$KIND$_active }
+			remove_global_variable = hd_nbc_$KIND$_active
+		}
+		debug_log = "HD_NBC WAR_RESULT $KIND$ $RESULT$"
+	}
+}
+
+############################################################
+# 小工具
+############################################################
+
+# 把 $COUNTY$ 转给 $TO$（scope），附属男爵领一并转
+hd_nbc_give_county_effect = {
+	if = {
+		limit = { NOT = { $COUNTY$.holder ?= $TO$ } }
+		create_title_and_vassal_change = { type = usurped save_scope_as = hd_nbc_give_change add_claim_on_loss = no }
+		$COUNTY$ = {
+			change_title_holder = {
+				holder = $TO$
+				change = scope:hd_nbc_give_change
+				take_baronies = yes
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_nbc_give_change
+	}
+}
+
+# Character：脱离领主独立
+hd_nbc_become_independent_effect = {
+	if = {
+		limit = {
+			is_landed = yes
+			is_independent_ruler = no
+		}
+		create_title_and_vassal_change = { type = independency save_scope_as = hd_nbc_indep_change add_claim_on_loss = no }
+		becomes_independent = { change = scope:hd_nbc_indep_change }
+		resolve_title_and_vassal_change = scope:hd_nbc_indep_change
+	}
+}
+
+# Character：改投 $LIEGE$
+hd_nbc_swear_fealty_effect = {
+	if = {
+		limit = {
+			is_landed = yes
+			NOT = { liege ?= $LIEGE$ }
+			NOT = { this = $LIEGE$ }
+		}
+		create_title_and_vassal_change = { type = swear_fealty save_scope_as = hd_nbc_fealty_change add_claim_on_loss = no }
+		change_liege = { liege = $LIEGE$ change = scope:hd_nbc_fealty_change }
+		resolve_title_and_vassal_change = scope:hd_nbc_fealty_change
+	}
+}
+
+# Character：建国号、定称谓（新政权）。FIXED = yes 时记到王朝上
+hd_nbc_found_realm_effect = {
+	if = {
+		limit = { NOT = { has_government = celestial_government } }
+		change_government = celestial_government
+	}
+	primary_title = {
+		set_title_name = $NAME$
+		set_variable = { name = hd_nbc_style value = flag:$STYLE$ }
+	}
+	if = {
+		limit = { always = $FIXED$ }
+		dynasty ?= {
+			remove_variable = hd_fixed_realm_title
+			set_variable = { name = hd_fixed_realm_name value = flag:$NAME$ }
+		}
+	}
+}
+
+# 史实事件兵（不可继承）。$WHERE$ 是县头衔
+hd_nbc_spawn_army_effect = {
+	spawn_army = {
+		levies = $SIZE$
+		location = $WHERE$.title_province
+		origin = $WHERE$.title_province
+		inheritable = no
+		uses_supply = yes
+		name = $NAME$
+	}
+}
+
+############################################################
+# A0 史实卒年：电脑角色到日病逝；玩家角色弹"病笃"，可"强撑"一年
+############################################################
+hd_nbc_hist_death_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_nbc_death_$WHO$_done }
+			current_date >= $DATE$
+		}
+		if = {
+			limit = { NOT = { character:$WHO$ ?= { is_alive = yes } } }
+			set_global_variable = hd_nbc_death_$WHO$_done
+		}
+		else = {
+			character:$WHO$ = {
+				if = {
+					limit = { is_ai = yes }
+					death = { death_reason = death_natural_causes }
+					set_global_variable = hd_nbc_death_$WHO$_done
+					debug_log = "HD_NBC HIST_DEATH $WHO$"
+				}
+				else_if = {
+					limit = { NOT = { has_variable = hd_nbc_death_delay } }
+					trigger_event = hd_nbc.0100
+				}
+			}
+		}
+	}
+}
+
+############################################################
+# A1 灭蜀：桓温伐蜀得胜。巴蜀帝国头衔交还天子，李势归建康
+############################################################
+hd_nbc_check_fashu_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_nbc_fashu_done }
+			OR = {
+				has_global_variable = hd_nbc_fashu_won
+				has_global_variable = hd_nbc_fashu_lost
+				has_global_variable = hd_nbc_fashu_white
+				has_global_variable = hd_nbc_fashu_invalid
+			}
+		}
+		set_global_variable = hd_nbc_fashu_done
+		if = {
+			limit = {
+				has_global_variable = hd_nbc_fashu_won
+				character:longkang_huan_017 ?= { is_alive = yes }
+			}
+			character:longkang_huan_017 = { trigger_event = hd_nbc.0110 }
+		}
+	}
+}
+
+############################################################
+# A3 冉闵建魏：350 年初，石虎已死，冉闵在世，邺仍在石氏手中
+############################################################
+hd_nbc_check_ranmin_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_nbc_ranmin_done }
+			current_date >= 350.2.1
+		}
+		if = {
+			limit = {
+				has_global_variable = hd_nbc_death_shangdang_shi_010_done
+				character:hd_nbc_ran_min ?= {
+					is_alive = yes
+					is_landed = no
+					is_adult = yes
+				}
+				title:d_weijun.holder.top_liege ?= {
+					dynasty ?= dynasty:shi_2
+					NOT = { this = character:hd_nbc_ran_min }
+				}
+			}
+			set_global_variable = hd_nbc_ranmin_done
+			character:hd_nbc_ran_min = { trigger_event = hd_nbc.0130 }
+		}
+		else_if = {
+			limit = { current_date >= 352.1.1 }
+			set_global_variable = hd_nbc_ranmin_done
+			debug_log = "HD_NBC SKIP ranmin"
+		}
+	}
+}
+
+############################################################
+# A4 苻健入关：苻洪已死，苻健在世，关中不在晋手中
+############################################################
+hd_nbc_check_fujian_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_nbc_fujian_done }
+			current_date >= 350.6.1
+		}
+		if = {
+			limit = {
+				has_global_variable = hd_nbc_death_lueyang_fu_002_done
+				character:lueyang_fu_003 ?= { is_alive = yes }
+				title:d_jingzhao.holder.top_liege ?= {
+					NOT = { this = title:h_china.holder }
+					NOT = { this = character:lueyang_fu_003 }
+				}
+			}
+			set_global_variable = hd_nbc_fujian_done
+			character:lueyang_fu_003 = { trigger_event = hd_nbc.0140 }
+		}
+		else_if = {
+			limit = { current_date >= 353.1.1 }
+			set_global_variable = hd_nbc_fujian_done
+			debug_log = "HD_NBC SKIP fujian"
+		}
+	}
+}
+
+############################################################
+# A3b 前燕南下：351 年起，平州之主是慕容氏、独立，幽州不在其手
+############################################################
+hd_nbc_check_yannan_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_nbc_yannan_done }
+			current_date >= 351.1.1
+		}
+		if = {
+			limit = {
+				title:k_pingzhou.holder ?= {
+					is_alive = yes
+					is_independent_ruler = yes
+					dynasty ?= dynasty:murong
+					is_at_war = no
+				}
+				title:k_uuii_youzhou.holder.top_liege ?= {
+					NOT = { this = title:k_pingzhou.holder }
+				}
+			}
+			set_global_variable = hd_nbc_yannan_done
+			title:k_pingzhou.holder = { trigger_event = hd_nbc.0120 }
+		}
+		else_if = {
+			limit = { current_date >= 356.1.1 }
+			set_global_variable = hd_nbc_yannan_done
+			debug_log = "HD_NBC SKIP yannan"
+		}
+	}
+}
+
+############################################################
+# A5 桓温北伐：356 年起，桓温是晋臣、不在战中，洛阳（河南郡）不在晋手
+############################################################
+hd_nbc_check_beifa_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_nbc_beifa_done }
+			current_date >= 356.1.1
+		}
+		if = {
+			limit = {
+				exists = title:h_china.holder
+				character:longkang_huan_017 ?= {
+					is_alive = yes
+					is_at_war = no
+					top_liege = title:h_china.holder
+					NOT = { this = title:h_china.holder }
+				}
+				title:d_henan.holder.top_liege ?= {
+					NOT = { this = title:h_china.holder }
+				}
+			}
+			set_global_variable = hd_nbc_beifa_done
+			character:longkang_huan_017 = { trigger_event = hd_nbc.0150 }
+		}
+		else_if = {
+			limit = { current_date >= 362.1.1 }
+			set_global_variable = hd_nbc_beifa_done
+			debug_log = "HD_NBC SKIP beifa"
+		}
+	}
+}
+
+############################################################
+# A6 淝水之战：383 年起，苻坚独立、持帝国级头衔，晋（天子）在
+############################################################
+hd_nbc_check_feishui_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_nbc_feishui_done }
+			current_date >= 383.6.1
+		}
+		if = {
+			limit = {
+				exists = title:h_china.holder
+				character:lueyang_fu_020 ?= {
+					is_alive = yes
+					is_independent_ruler = yes
+					realm_size >= 100	# 苻坚统一北方的程度：领土不少于 100 县（前秦只有郡级头衔，不按头衔等级判）
+					is_at_war = no
+					NOT = { this = title:h_china.holder }
+				}
+			}
+			set_global_variable = hd_nbc_feishui_done
+			character:lueyang_fu_020 = { trigger_event = hd_nbc.0160 }
+		}
+		else_if = {
+			limit = { current_date >= 386.1.1 }
+			set_global_variable = hd_nbc_feishui_done
+			debug_log = "HD_NBC SKIP feishui"
+		}
+	}
+	# 淝水结局：苻坚败（或白和），前秦瓦解
+	if = {
+		limit = {
+			has_global_variable = hd_nbc_feishui_done
+			NOT = { has_global_variable = hd_nbc_feishui_result_done }
+			OR = {
+				has_global_variable = hd_nbc_feishui_won
+				has_global_variable = hd_nbc_feishui_lost
+				has_global_variable = hd_nbc_feishui_white
+				has_global_variable = hd_nbc_feishui_invalid
+			}
+		}
+		set_global_variable = hd_nbc_feishui_result_done
+		character:lueyang_fu_020 ?= {
+			if = {
+				limit = {
+					is_alive = yes
+					OR = {
+						has_global_variable = hd_nbc_feishui_lost
+						has_global_variable = hd_nbc_feishui_white
+					}
+				}
+				trigger_event = hd_nbc.0161
+			}
+			else_if = {
+				limit = { has_global_variable = hd_nbc_feishui_won }
+				save_scope_as = hd_news_a
+				title:h_china.holder ?= { save_scope_as = hd_news_b }
+				hd_world_news_send_all_effect = { EVENT = hd_nbc.0902 }
+			}
+		}
+	}
+}
+
+############################################################
+# H1 覆舟山：京口之战打响 5 天后，桓玄弃建康西走江陵。
+# 正常由 hd_nbc404_jingkou_war_effect 直接排期 5 天后发事件（并设 done）；这里只是没排上时的兜底
+############################################################
+hd_nbc_check_fuzhoushan_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_nbc_fuzhoushan_done }
+			current_date >= 404.3.29
+		}
+		set_global_variable = hd_nbc_fuzhoushan_done
+		if = {
+			limit = {
+				character:suiyuli_liu_013 ?= {
+					is_alive = yes
+					any_character_war = {
+						primary_attacker = character:suiyuli_liu_013
+						using_cb = independence_war
+					}
+				}
+				character:longkang_huan_027 ?= {
+					is_alive = yes
+					has_title = title:h_china
+				}
+			}
+			character:longkang_huan_027 = { trigger_event = hd_nbc.0210 }
+		}
+		else = {
+			debug_log = "HD_NBC SKIP fuzhoushan"
+		}
+	}
+}
+
+# Root：桓玄。京口之战以刘裕胜结束；丹阳、毗陵、吴、吴兴、会稽五郡里桓玄、桓谦直辖的县与郡转给刘裕，
+# 五郡内其余持有者改投刘裕；楚的京城改为江陵（从桓石康手里收回江陵县）。
+hd_nbc_fuzhoushan_effect = {
+	character:suiyuli_liu_013 = { save_scope_as = hd_nbc_liu_yu }
+	scope:hd_nbc_liu_yu = {
+		random_character_war = {
+			limit = {
+				primary_attacker = scope:hd_nbc_liu_yu
+				using_cb = independence_war
+			}
+			end_war = attacker
+		}
+	}
+	hd_nbc_fuzhoushan_duchy_effect = { DUCHY = d_danyang }
+	hd_nbc_fuzhoushan_duchy_effect = { DUCHY = d_piling }
+	hd_nbc_fuzhoushan_duchy_effect = { DUCHY = d_wujun }
+	hd_nbc_fuzhoushan_duchy_effect = { DUCHY = d_wuxing }
+	hd_nbc_fuzhoushan_duchy_effect = { DUCHY = d_kuaiji }
+	# 西走江陵
+	hd_nbc_give_county_effect = { COUNTY = title:c_uuii_p_1813 TO = root }
+	if = {
+		limit = { has_title = title:c_uuii_p_1813 }
+		set_realm_capital = title:c_uuii_p_1813
+		title:h_china = {
+			set_capital_county = title:c_uuii_p_1813
+			set_variable = { name = hd_court_capital_county value = title:c_uuii_p_1813 }
+		}
+	}
+	debug_log = "HD_NBC 404 FUZHOUSHAN"
+}
+hd_nbc_fuzhoushan_duchy_effect = {
+	title:$DUCHY$ = {
+		every_de_jure_county = {
+			limit = {
+				exists = holder
+				holder = {
+					OR = {
+						this = root
+						this = character:longkang_huan_052
+					}
+				}
+			}
+			save_scope_as = hd_nbc_fzs_county
+			hd_nbc_give_county_effect = { COUNTY = scope:hd_nbc_fzs_county TO = scope:hd_nbc_liu_yu }
+		}
+		every_de_jure_county = {
+			limit = {
+				exists = holder
+				holder = {
+					NOR = {
+						this = scope:hd_nbc_liu_yu
+						this = root
+						this = character:longkang_huan_052
+					}
+					is_landed = yes
+					top_liege = root
+				}
+			}
+			holder = { hd_nbc_swear_fealty_effect = { LIEGE = scope:hd_nbc_liu_yu } }
+		}
+		if = {
+			limit = {
+				holder ?= {
+					OR = {
+						this = root
+						this = character:longkang_huan_052
+					}
+				}
+			}
+			create_title_and_vassal_change = { type = usurped save_scope_as = hd_nbc_fzs_change add_claim_on_loss = no }
+			change_title_holder = { holder = scope:hd_nbc_liu_yu change = scope:hd_nbc_fzs_change }
+			resolve_title_and_vassal_change = scope:hd_nbc_fzs_change
+		}
+	}
+}
+
+############################################################
+# H2 复晋讨桓：覆舟山后，峥嵘洲（404 年五月）。桓玄是 AI 时由事件结算；桓玄是玩家时打仗
+############################################################
+hd_nbc_check_restore_effect = {
+	if = {
+		limit = {
+			has_global_variable = hd_nbc_fuzhoushan_west
+			NOT = { has_global_variable = hd_nbc_restore_done }
+			current_date >= 404.6.10
+			NOT = { has_global_variable = hd_nbc_restore_wait }
+		}
+		if = {
+			limit = {
+				character:suiyuli_liu_013 ?= {
+					is_alive = yes
+					is_independent_ruler = yes
+				}
+				character:longkang_huan_027 ?= {
+					is_alive = yes
+					has_title = title:h_china
+				}
+				OR = {
+					character:si_ma_de_zong ?= { is_alive = yes }
+					character:si_ma_de_wen ?= { is_alive = yes }
+				}
+			}
+			set_global_variable = hd_nbc_restore_done
+			character:suiyuli_liu_013 = { trigger_event = hd_nbc.0220 }
+		}
+		else = {
+			set_global_variable = hd_nbc_restore_done
+			debug_log = "HD_NBC SKIP restore"
+		}
+	}
+}
+
+# Root：被奉迎的晋帝（安帝，或司马德文）。天命归晋，桓玄的封臣与领地尽归晋帝，桓玄败死；刘裕作晋臣、秉政
+hd_nbc_restore_effect = {
+	save_scope_as = hd_nbc_jin_emperor
+	character:longkang_huan_027 = { save_scope_as = hd_nbc_huan_xuan }
+	character:suiyuli_liu_013 = { save_scope_as = hd_nbc_liu_yu }
+	hd_transfer_mandate_to_claimant_effect = yes
+	scope:hd_nbc_huan_xuan = {
+		every_vassal = {
+			limit = { NOT = { this = scope:hd_nbc_jin_emperor } }
+			hd_nbc_swear_fealty_effect = { LIEGE = scope:hd_nbc_jin_emperor }
+		}
+		every_held_title = {
+			limit = {
+				is_noble_family_title = no
+				tgp_is_minister_title = no
+				tier >= tier_county
+				tier <= tier_empire
+			}
+			save_scope_as = hd_nbc_restore_title
+			create_title_and_vassal_change = { type = usurped save_scope_as = hd_nbc_restore_change add_claim_on_loss = no }
+			scope:hd_nbc_restore_title = {
+				change_title_holder = {
+					holder = scope:hd_nbc_jin_emperor
+					change = scope:hd_nbc_restore_change
+					take_baronies = yes
+				}
+			}
+			resolve_title_and_vassal_change = scope:hd_nbc_restore_change
+		}
+		death = { death_reason = death_battle }
+	}
+	# 刘裕奉迎晋帝，作晋臣、秉政（写法照 218 曹操挟天子：玩家功名不足时补到帝国级预期，免丞相授不上）
+	scope:hd_nbc_liu_yu = {
+		hd_nbc_swear_fealty_effect = { LIEGE = scope:hd_nbc_jin_emperor }
+		if = {
+			limit = { liege ?= scope:hd_nbc_jin_emperor }
+			if = {
+				limit = {
+					is_ai = no
+					merit_level < merit_level_expected_empire_value
+				}
+				while = {
+					limit = { merit_level < merit_level_expected_empire_value }
+					change_merit_level = 1
+				}
+			}
+			hd_court_install_regency_effect = yes
+		}
+	}
+	# 国号、京城、年号
+	title:h_china = {
+		set_title_name = dynn_title_jin
+		set_capital_county = title:c_uuii_p_4389
+		set_variable = { name = hd_court_capital_county value = title:c_uuii_p_4389 }
+	}
+	dynasty ?= {
+		remove_variable = hd_fixed_realm_title
+		set_variable = { name = hd_fixed_realm_name value = flag:dynn_title_jin }
+	}
+	remove_variable = SG_NianHao_data
+	hd_nbc_set_era_effect = { WHO = si_ma_de_zong KEY = yixi YEAR = 1 }
+	debug_log = "HD_NBC 404 RESTORE"
+}
+
+############################################################
+# H3 卢循据番禺：404 年十月
+############################################################
+hd_nbc_check_luxun_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_nbc_luxun_done }
+			current_date >= 404.10.15
+		}
+		set_global_variable = hd_nbc_luxun_done
+		if = {
+			limit = {
+				character:lu_xun_4 ?= {
+					is_alive = yes
+					is_landed = no
+					is_adult = yes
+				}
+				title:c_uuii_p_6157.holder ?= {
+					NOT = { this = character:lu_xun_4 }
+				}
+			}
+			character:lu_xun_4 = { trigger_event = hd_nbc.0230 }
+		}
+		else = {
+			debug_log = "HD_NBC SKIP luxun"
+		}
+	}
+}
+
+############################################################
+# H4 灭南燕（409 年起）、H5 北伐后秦（416 年起）：刘裕在世、是权臣或独立王国级以上、不在战中
+############################################################
+hd_nbc_check_nanyan_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_nbc_nanyan_done }
+			current_date >= 409.4.1
+		}
+		if = {
+			limit = {
+				character:suiyuli_liu_013 ?= {
+					is_alive = yes
+					is_at_war = no
+					OR = {
+						title:h_china.var:hd_court_regent ?= this
+						AND = {
+							is_independent_ruler = yes
+							highest_held_title_tier >= tier_kingdom
+						}
+					}
+				}
+				title:k_uuii_qingzhou.holder.top_liege ?= {
+					is_independent_ruler = yes
+					NOT = { this = character:suiyuli_liu_013.top_liege }
+				}
+			}
+			set_global_variable = hd_nbc_nanyan_done
+			character:suiyuli_liu_013 = { trigger_event = hd_nbc.0240 }
+		}
+		else_if = {
+			limit = { current_date >= 413.1.1 }
+			set_global_variable = hd_nbc_nanyan_done
+			debug_log = "HD_NBC SKIP nanyan"
+		}
+	}
+}
+hd_nbc_check_houqin_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_nbc_houqin_done }
+			current_date >= 416.9.1
+		}
+		if = {
+			limit = {
+				character:suiyuli_liu_013 ?= {
+					is_alive = yes
+					is_at_war = no
+					OR = {
+						title:h_china.var:hd_court_regent ?= this
+						AND = {
+							is_independent_ruler = yes
+							highest_held_title_tier >= tier_kingdom
+						}
+					}
+				}
+				title:k_uuii_sili.holder.top_liege ?= {
+					is_independent_ruler = yes
+					NOT = { this = character:suiyuli_liu_013.top_liege }
+				}
+			}
+			set_global_variable = hd_nbc_houqin_done
+			character:suiyuli_liu_013 = { trigger_event = hd_nbc.0250 }
+		}
+		else_if = {
+			limit = { current_date >= 419.1.1 }
+			set_global_variable = hd_nbc_houqin_done
+			debug_log = "HD_NBC SKIP houqin"
+		}
+	}
+}
+
+############################################################
+# H6 刘宋代晋：418 年底起，刘裕是权臣、不在战中
+############################################################
+hd_nbc_check_song_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_nbc_song_done }
+			current_date >= 418.12.1
+		}
+		if = {
+			limit = {
+				character:suiyuli_liu_013 ?= {
+					is_alive = yes
+					is_at_war = no
+					NOT = { has_variable = hd_nbc_song_wait }
+				}
+				title:h_china.var:hd_court_regent ?= character:suiyuli_liu_013
+			}
+			character:suiyuli_liu_013 = {
+				if = {
+					limit = { is_ai = yes }
+					set_global_variable = hd_nbc_song_done
+					hd_nbc_song_effect = yes
+				}
+				else = {
+					trigger_event = hd_nbc.0260
+				}
+			}
+		}
+		else_if = {
+			limit = {
+				OR = {
+					current_date >= 421.1.1
+					NOT = { character:suiyuli_liu_013 ?= { is_alive = yes } }
+				}
+			}
+			set_global_variable = hd_nbc_song_done
+			debug_log = "HD_NBC SKIP song"
+		}
+	}
+}
+
+# Root：刘裕。受禅（复用乱世霸权的篡位共通效果），国号宋。刘氏是通用王朝，宋不记到王朝上
+hd_nbc_song_effect = {
+	title:h_china.holder = { save_scope_as = hd_nbc_old_emperor }
+	hd_court_usurp_common_effect = { TITLE_TIER = duchy TITLE_NAME = hd_court_abdicated_title_name LEVEL = 2 }
+	title:h_china = { set_title_name = dynn_title_song }
+	save_scope_as = hd_news_a
+	scope:hd_nbc_old_emperor ?= { save_scope_as = hd_news_b }
+	hd_world_news_send_effect = { EVENT = hd_nbc.0920 }
+	debug_log = "HD_NBC 404 SONG"
+}
+
+# A4 用。Root：苻健。关中五郡（京兆、扶风、冯翊、始平、咸阳）里不属晋的县归苻健
+hd_nbc_fujian_duchy_effect = {
+	title:$DUCHY$ = {
+		every_de_jure_county = {
+			limit = {
+				exists = holder
+				holder = {
+					NOT = { this = root }
+					NOT = { top_liege = title:h_china.holder }
+				}
+			}
+			save_scope_as = hd_nbc_fj_county
+			hd_nbc_give_county_effect = { COUNTY = scope:hd_nbc_fj_county TO = root }
+		}
+	}
+}
+
+############################################################
+# A4b 苻坚夺位：357 年起，前秦（长安所在）之主是苻氏、不是苻坚、是 AI，苻坚在世
+############################################################
+hd_nbc_check_fujian_coup_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_nbc_fujian_coup_done }
+			current_date >= 357.6.1
+		}
+		if = {
+			limit = {
+				character:lueyang_fu_020 ?= {
+					is_alive = yes
+					is_adult = yes
+					is_imprisoned = no
+				}
+				title:d_jingzhao.holder.top_liege ?= {
+					is_ai = yes
+					dynasty ?= dynasty:fu_1
+					NOT = { this = character:lueyang_fu_020 }
+				}
+			}
+			set_global_variable = hd_nbc_fujian_coup_done
+			character:lueyang_fu_020 = { trigger_event = hd_nbc.0145 }
+		}
+		else_if = {
+			limit = { current_date >= 360.1.1 }
+			set_global_variable = hd_nbc_fujian_coup_done
+			debug_log = "HD_NBC SKIP fujian_coup"
+		}
+	}
+}
+
+# Root：夺位者。$OLD$ 的封臣与领地头衔（县到帝国，不含世族、朝官头衔）尽归 root，$OLD$ 被杀
+hd_nbc_seize_realm_effect = {
+	save_scope_as = hd_nbc_new_ruler
+	hd_nbc_become_independent_effect = yes
+	$OLD$ = {
+		every_vassal = {
+			limit = { NOT = { this = scope:hd_nbc_new_ruler } }
+			hd_nbc_swear_fealty_effect = { LIEGE = scope:hd_nbc_new_ruler }
+		}
+		every_held_title = {
+			limit = {
+				is_noble_family_title = no
+				tgp_is_minister_title = no
+				tier >= tier_county
+				tier <= tier_empire
+			}
+			save_scope_as = hd_nbc_seize_title
+			create_title_and_vassal_change = { type = usurped save_scope_as = hd_nbc_seize_change add_claim_on_loss = no }
+			scope:hd_nbc_seize_title = {
+				change_title_holder = {
+					holder = scope:hd_nbc_new_ruler
+					change = scope:hd_nbc_seize_change
+					take_baronies = yes
+				}
+			}
+			resolve_title_and_vassal_change = scope:hd_nbc_seize_change
+		}
+		death = { death_reason = death_murder_known killer = scope:hd_nbc_new_ruler }
+	}
+}

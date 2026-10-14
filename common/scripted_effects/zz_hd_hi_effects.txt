@@ -214,9 +214,15 @@ hd_hi_rise_effect = {
 		limit = { NOT = { this = scope:hd_hi_leader } }
 		trigger_event = hd_hi.1001
 	}
+	debug_log = "hd_hi: rise"
+	debug_log_scopes = yes
+	# 电脑：宣战并随之发兵；玩家：自行宣战，起兵时先发满额事件军
 	if = {
 		limit = { is_ai = yes }
 		hd_hi_declare_effect = yes
+	}
+	else = {
+		hd_hi_raise_army_effect = yes
 	}
 }
 
@@ -263,7 +269,8 @@ hd_hi_dormant_effect = {
 	}
 }
 
-### Character（本人）：入侵者加成、财富与常备部众（起兵与蛰伏共用，同一场入侵只给一次）
+### Character（本人）：入侵者加成与财富（起兵与蛰伏共用，同一场入侵只给一次）
+### 兵马不在这里发：和平时生成的兵会被电脑解散，统一改到起兵/宣战时由 hd_hi_raise_army_effect 发放
 hd_hi_strengthen_effect = {
 	if = {
 		limit = { NOT = { scope:hd_hi_story = { has_variable = hd_hi_strengthened } } }
@@ -280,8 +287,41 @@ hd_hi_strengthen_effect = {
 			value = 300
 			multiply = scope:hd_hi_story.var:hd_hi_size
 		}
-		hd_hi_save_army_location_effect = yes
-		hd_hi_spawn_army_effect = { WAR = no NAME = hd_hi_hold_army_name SCALE = 0.5 }
+	}
+}
+
+### Character（本人，需 scope:hd_hi_story）：发事件军
+### 本场第一次 = 1.5 倍满额（有战争就绑定战争，没有也照发、不随战争解散）；之后每次宣战成功另发 1 倍并绑定战争
+hd_hi_raise_army_effect = {
+	hd_hi_save_army_location_effect = yes
+	if = {
+		limit = { NOT = { scope:hd_hi_story = { has_variable = hd_hi_first_army } } }
+		scope:hd_hi_story = { set_variable = { name = hd_hi_first_army value = yes } }
+		if = {
+			limit = { exists = scope:hd_hi_war }
+			hd_hi_spawn_army_effect = { WAR = yes NAME = hd_hi_war_army_name SCALE = 1.5 }
+		}
+		else = {
+			hd_hi_spawn_army_effect = { WAR = no NAME = hd_hi_war_army_name SCALE = 1.5 }
+		}
+		hd_hi_log_spawn_effect = yes
+	}
+	else_if = {
+		limit = { exists = scope:hd_hi_war }
+		hd_hi_spawn_army_effect = { WAR = yes NAME = hd_hi_war_army_name SCALE = 1 }
+		hd_hi_log_spawn_effect = yes
+	}
+	scope:hd_hi_army ?= { assign_commander = scope:hd_hi_leader }
+}
+
+### 诊断：刚生成的兵马是否真的存在（每个事件只发一次兵，不会读到旧的 scope）
+hd_hi_log_spawn_effect = {
+	if = {
+		limit = { exists = scope:hd_hi_army }
+		debug_log = "hd_hi: spawn OK"
+	}
+	else = {
+		debug_log = "hd_hi: spawn_army FAILED"
 	}
 }
 
@@ -431,61 +471,29 @@ hd_hi_spawn_army_effect = {
 
 ############################
 # 宣战（Character = 本人，需 scope:hd_hi_story）
-# 守方：当前阶段中占伯爵领最多的独立统治者（排除自己、停战对象和已在交战的对象）。
+# 守方：阶段中占伯爵领最多的独立统治者（排除自己和已在交战的对象）。依次放宽：
+#   ① 当前阶段、排除停战对象 → ② 下一阶段、排除停战对象 → ③ 当前阶段、无视停战。
+# 宣战后由 hd_hi_raise_army_effect 发兵（第一次即使宣战失败也照发）。
 ############################
 hd_hi_declare_effect = {
 	save_scope_as = hd_hi_leader
 	scope:hd_hi_story = {
 		hd_hi_load_stage_effect = yes
-		every_in_list = {
-			variable = hd_hi_cur
-			every_de_jure_county = {
-				limit = {
-					exists = holder
-					NOT = { holder.top_liege = scope:hd_hi_leader }
-				}
-				holder.top_liege = {
-					if = {
-						limit = { NOT = { is_in_list = hd_hi_defenders } }
-						add_to_temporary_list = hd_hi_defenders
-						set_variable = { name = hd_hi_cnt value = 0 }
-					}
-					change_variable = { name = hd_hi_cnt add = 1 }
-				}
-			}
-		}
+		hd_hi_load_next_stage_effect = yes
 	}
-	ordered_in_list = {
-		list = hd_hi_defenders
-		limit = {
-			NOT = { this = scope:hd_hi_leader }
-			NOT = { has_truce = scope:hd_hi_leader }
-			NOT = { is_at_war_with = scope:hd_hi_leader }
-		}
-		order_by = var:hd_hi_cnt
-		save_scope_as = hd_hi_defender
-	}
-	every_in_list = {
-		list = hd_hi_defenders
-		remove_variable = hd_hi_cnt
+	hd_hi_pick_defender_effect = { LIST = hd_hi_cur TRUCE = yes }
+	if = {
+		limit = { NOT = { exists = scope:hd_hi_defender } }
+		hd_hi_pick_defender_effect = { LIST = hd_hi_next TRUCE = yes }
 	}
 	if = {
-		limit = { exists = scope:hd_hi_defender }
-		scope:hd_hi_story = {
-			ordered_in_list = {
-				variable = hd_hi_cur
-				limit = {
-					any_de_jure_county = { holder.top_liege ?= scope:hd_hi_defender }
-				}
-				order_by = {
-					value = 0
-					every_de_jure_county = {
-						limit = { holder.top_liege ?= scope:hd_hi_defender }
-						add = 1
-					}
-				}
-				save_scope_as = hd_hi_target
-			}
+		limit = { NOT = { exists = scope:hd_hi_defender } }
+		hd_hi_pick_defender_effect = { LIST = hd_hi_cur TRUCE = no }
+	}
+	if = {
+		limit = {
+			exists = scope:hd_hi_defender
+			exists = scope:hd_hi_target
 		}
 		start_war = {
 			cb = hd_hi_invasion_cb
@@ -501,9 +509,101 @@ hd_hi_declare_effect = {
 		}
 		if = {
 			limit = { exists = scope:hd_hi_war }
-			hd_hi_save_army_location_effect = yes
-			hd_hi_spawn_army_effect = { WAR = yes NAME = hd_hi_war_army_name SCALE = 1 }
-			scope:hd_hi_army ?= { assign_commander = scope:hd_hi_leader }
+			debug_log = "hd_hi: war declared"
+		}
+		else = {
+			debug_log = "hd_hi: start_war FAILED"
+		}
+	}
+	else = {
+		debug_log = "hd_hi: no defender found"
+	}
+	debug_log_scopes = yes
+	hd_hi_raise_army_effect = yes
+	scope:hd_hi_story = { clear_variable_list = hd_hi_next }
+}
+
+### Story：把下一阶段的公爵领装入 hd_hi_next（已是最后阶段则为空）
+hd_hi_load_next_stage_effect = {
+	clear_variable_list = hd_hi_next
+	if = {
+		limit = {
+			var:hd_hi_stage = 1
+			var:hd_hi_stage_count >= 2
+		}
+		every_in_list = {
+			variable = hd_hi_stage_2
+			scope:hd_hi_story = { add_to_variable_list = { name = hd_hi_next target = prev } }
+		}
+	}
+	else_if = {
+		limit = {
+			var:hd_hi_stage = 2
+			var:hd_hi_stage_count >= 3
+		}
+		every_in_list = {
+			variable = hd_hi_stage_3
+			scope:hd_hi_story = { add_to_variable_list = { name = hd_hi_next target = prev } }
+		}
+	}
+}
+
+### Character（本人）：在故事列表 $LIST$ 中挑守方与目标公爵领，存为 scope:hd_hi_defender / scope:hd_hi_target
+### TRUCE = yes 时排除与本人有停战的对象
+hd_hi_pick_defender_effect = {
+	scope:hd_hi_story = {
+		every_in_list = {
+			variable = $LIST$
+			every_de_jure_county = {
+				limit = {
+					exists = holder
+					NOT = { holder.top_liege = scope:hd_hi_leader }
+				}
+				holder.top_liege = {
+					if = {
+						limit = { NOT = { is_in_list = hd_hi_def_$LIST$_$TRUCE$ } }
+						add_to_temporary_list = hd_hi_def_$LIST$_$TRUCE$
+						set_variable = { name = hd_hi_cnt value = 0 }
+					}
+					change_variable = { name = hd_hi_cnt add = 1 }
+				}
+			}
+		}
+	}
+	ordered_in_list = {
+		list = hd_hi_def_$LIST$_$TRUCE$
+		limit = {
+			NOT = { this = scope:hd_hi_leader }
+			NOT = { is_at_war_with = scope:hd_hi_leader }
+			trigger_if = {
+				limit = { always = $TRUCE$ }
+				NOT = { has_truce = scope:hd_hi_leader }
+			}
+		}
+		order_by = var:hd_hi_cnt
+		save_scope_as = hd_hi_defender
+	}
+	every_in_list = {
+		list = hd_hi_def_$LIST$_$TRUCE$
+		remove_variable = hd_hi_cnt
+	}
+	if = {
+		limit = { exists = scope:hd_hi_defender }
+		scope:hd_hi_story = {
+			ordered_in_list = {
+				variable = $LIST$
+				limit = {
+					any_de_jure_county = { holder.top_liege ?= scope:hd_hi_defender }
+				}
+				order_by = {
+					value = 0
+					every_de_jure_county = {
+						limit = { holder.top_liege ?= scope:hd_hi_defender }
+						add = 1
+					}
+				}
+				save_scope_as = hd_hi_target
+			}
 		}
 	}
 }

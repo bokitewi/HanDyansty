@@ -212,6 +212,8 @@ hd_sg218_pulse_effect = {
 	hd_sg218_check_kebineng_effect = yes
 	hd_sg218_check_wan_effect = yes
 	hd_sg218_check_dingjunshan_effect = yes
+	hd_sg218_check_jilei_effect = yes
+	hd_sg218_check_hanzhong_invalid_effect = yes
 	hd_sg218_check_hanzhong_result_effect = yes
 	hd_sg218_check_xiangfan_effect = yes
 	hd_sg218_check_flood_effect = yes
@@ -364,6 +366,70 @@ hd_sg218_check_dingjunshan_effect = {
 			set_global_variable = hd_sg218_dingjunshan_done
 			scope:hd_sg218_att_hanzhong = { trigger_event = hd_sg218.0050 }
 		}
+		# 诊断：每次心跳记下卡在哪一条（boki 10-13 选"不放宽条件，只加日志"）
+		else_if = {
+			limit = { NOT = { exists = scope:hd_sg218_war_hanzhong } }
+			debug_log = "HD218 DINGJUNSHAN WAIT no_war_found"
+		}
+		else_if = {
+			limit = { NOT = { character:huang_zhong = { hd_sg218_in_army_for_trigger = { SIDE = scope:hd_sg218_att_hanzhong } } } }
+			debug_log = "HD218 DINGJUNSHAN WAIT huang_zhong_not_in_army"
+		}
+		else = {
+			debug_log = "HD218 DINGJUNSHAN WAIT xia_hou_yuan_not_in_army"
+		}
+	}
+}
+
+############################################################
+# 5b 鸡肋（boki 10-13）：引擎不能直接加战分，"夏侯渊死后战分 +50%"改成门槛打对折——
+# 夏侯渊死于汉中之战期间（定军山事件或任何死因）后：攻方战分 ≥ 50 即退兵；
+# 或满 120 天（史实正月定军山、五月退兵）且攻方战分不为负也退兵。退兵即判攻方胜（hd_sg218.0055）
+############################################################
+# Root：夏侯渊（on_death）
+hd_sg218_xhy_death_effect = {
+	if = {
+		limit = {
+			hd_sg218_war_active_trigger = { KIND = hanzhong }
+			NOT = { has_global_variable = hd_sg218_xhy_dead }
+		}
+		set_global_variable = hd_sg218_xhy_dead
+		set_global_variable = { name = hd_sg218_jilei_wait value = yes days = 120 }
+		debug_log = "HD218 XHY_DEAD_IN_HANZHONG_WAR"
+	}
+}
+
+hd_sg218_check_jilei_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_sg218_jilei_done }
+			has_global_variable = hd_sg218_xhy_dead
+			hd_sg218_war_active_trigger = { KIND = hanzhong }
+		}
+		hd_sg218_find_war_effect = { WHO = global_var:hd218_hanzhong_title.holder KIND = hanzhong }
+		if = {
+			limit = {
+				exists = scope:hd_sg218_war_hanzhong
+				scope:hd_sg218_war_hanzhong = {
+					OR = {
+						attacker_war_score >= 50
+						AND = {
+							NOT = { has_global_variable = hd_sg218_jilei_wait }
+							attacker_war_score >= 0
+						}
+					}
+				}
+			}
+			set_global_variable = hd_sg218_jilei_done
+			# 守方是夏侯渊（死后由其继承人接战），鸡肋由魏王下令；魏王不在就发给守方
+			if = {
+				limit = { exists = title:e_hd218_wei.holder }
+				title:e_hd218_wei.holder = { trigger_event = hd_sg218.0055 }
+			}
+			else = {
+				scope:hd_sg218_def_hanzhong = { trigger_event = hd_sg218.0055 }
+			}
+		}
 	}
 }
 
@@ -379,9 +445,81 @@ hd_sg218_check_hanzhong_result_effect = {
 		}
 		set_global_variable = hd_sg218_hanzhong_result_done
 		set_global_variable = hd_sg218_liu_got_hanzhong
+		hd_sg218_hanzhong_annex_effect = yes
 		# 襄樊之战至少等四个月
 		set_global_variable = { name = hd_sg218_xiangfan_wait value = yes days = 120 }
 		global_var:hd218_hanzhong_title.holder = { trigger_event = hd_sg218.0060 }
+	}
+}
+
+# 汉中之战作废兜底（boki 10-13）：战争由夏侯渊的主继承人接手，但天朝制郡守按任命继承，汉中郡可能另派他人，
+# 接战者手里没有汉中的县，战争即判 invalid。夏侯渊已死时视为刘备胜：汉中郡里属魏国一方的县直接归蜀主，
+# 再设 hd_sg218_hanzhong_won，同一次心跳里接着走汉中归属（0060）和吞并武都、阴平。夏侯渊没死就照常作废
+hd_sg218_check_hanzhong_invalid_effect = {
+	if = {
+		limit = {
+			has_global_variable = hd_sg218_hanzhong_invalid
+			has_global_variable = hd_sg218_xhy_dead
+			NOT = { has_global_variable = hd_sg218_hanzhong_won }
+			NOT = { has_global_variable = hd_sg218_hanzhong_result_done }
+			exists = global_var:hd218_hanzhong_title.holder
+			exists = title:e_hd218_wei.holder
+		}
+		remove_global_variable = hd_sg218_hanzhong_invalid
+		set_global_variable = hd_sg218_hanzhong_won
+		global_var:hd218_hanzhong_title.holder = { save_scope_as = hd_sg218_annexer }
+		title:e_hd218_wei.holder = { save_scope_as = hd_sg218_annex_from }
+		create_title_and_vassal_change = { type = conquest save_scope_as = hd_sg218_annex_change add_claim_on_loss = no }
+		hd_sg218_annex_duchy_effect = { DUCHY = title:d_hanzhong }
+		resolve_title_and_vassal_change = scope:hd_sg218_annex_change
+		debug_log = "HD218 HANZHONG INVALID_AFTER_XHY -> WON"
+	}
+}
+
+# 汉中之战只打夏侯渊的汉中郡（边境战争，boki 10-13）；打赢后武都、阴平两郡里属魏国一方的县、郡头衔直接归蜀主，
+# 原持有人（杨阜等）失地（boki 选"全部县直接归刘备"）。上庸、房陵、魏兴仍留给孟达那一仗。
+hd_sg218_hanzhong_annex_effect = {
+	if = {
+		limit = {
+			exists = global_var:hd218_hanzhong_title.holder
+			exists = title:e_hd218_wei.holder
+		}
+		global_var:hd218_hanzhong_title.holder = { save_scope_as = hd_sg218_annexer }
+		title:e_hd218_wei.holder = { save_scope_as = hd_sg218_annex_from }
+		create_title_and_vassal_change = { type = conquest save_scope_as = hd_sg218_annex_change add_claim_on_loss = no }
+		hd_sg218_annex_duchy_effect = { DUCHY = title:d_wudou }
+		hd_sg218_annex_duchy_effect = { DUCHY = title:d_yinping1 }
+		resolve_title_and_vassal_change = scope:hd_sg218_annex_change
+		debug_log = "HD218 HANZHONG ANNEX wudou yinping"
+	}
+	else = { debug_log = "HD218 HANZHONG ANNEX_SKIPPED" }
+}
+
+hd_sg218_annex_duchy_effect = {
+	$DUCHY$ = {
+		every_in_de_jure_hierarchy = {
+			limit = {
+				tier = tier_county
+				holder ?= {
+					OR = {
+						this = scope:hd_sg218_annex_from
+						is_vassal_or_below_of = scope:hd_sg218_annex_from
+					}
+				}
+			}
+			change_title_holder = { holder = scope:hd_sg218_annexer change = scope:hd_sg218_annex_change take_baronies = yes }
+		}
+		if = {
+			limit = {
+				holder ?= {
+					OR = {
+						this = scope:hd_sg218_annex_from
+						is_vassal_or_below_of = scope:hd_sg218_annex_from
+					}
+				}
+			}
+			change_title_holder = { holder = scope:hd_sg218_annexer change = scope:hd_sg218_annex_change }
+		}
 	}
 }
 
@@ -571,6 +709,18 @@ hd_sg218_cao_cao_death_effect = {
 		add_to_global_variable_list = { name = hd_sg218_cao_vassals target = this }
 	}
 	title:h_china = { trigger_event = { on_action = hd_sg218_after_cao_cao_death days = 3 } }
+	# 郡国制开关为 no：曹操死前先把丞相 granted 给曹丕（此时他还没继承魏国），魏国随后走继承交易；
+	# 之后挟天子修复、WJ 30 天补授见曹丕已持丞相，不再 appointment（待实测，日志 HD218 CHENG_XIANG）
+	if = {
+		limit = {
+			has_title = title:e_WJ_minister_cheng_xiang
+			character:cao_pi ?= {
+				is_alive = yes
+				NOT = { this = title:h_china.holder }
+			}
+		}
+		character:cao_pi = { hd218_grant_chengxiang_effect = yes }
+	}
 }
 
 # 曹操原有头衔、直属封臣中没有到曹丕手里的（AI 持有），一并交给曹丕。Root：曹丕
