@@ -1,0 +1,1674 @@
+﻿# 218 年（建安二十三年）剧本开局效果。只由 common/on_action/zz_hd_218_startup.txt 调用，调用处已带 218 闸门。
+# 计划见 /mnt/project-files/scenario_218/218年剧本_施工计划.md 第 3 步、第八节第 1、8 条。
+
+############################################################
+# on_game_start：头衔与封臣关系
+############################################################
+hd218_game_start_effect = {
+	# 顺序固定（引擎开局辞头衔检查在 after_lobby 之前，法理和持有都要在这里改好）：
+	# 魏国法理 → 魏王 → 刘备汉中王与荆州 → 孙权 → 五郡独立 → 三家郡守、空郡、玉门 → 天朝循环（最后启动，乱世阶段开始时按已改好的头衔发战略 AI）
+	hd218_wei_dejure_effect = yes
+	character:cao_cao ?= {
+		if = {
+			limit = { is_alive = yes }
+			hd218_wei_wang_effect = yes
+		}
+	}
+	hd218_liu_bei_titles_effect = yes
+	hd218_sun_quan_titles_effect = yes
+	hd218_independent_duchies_effect = yes
+	hd218_governors_effect = yes
+	hd218_preset_flags_effect = yes
+	hd218_cadet_houses_effect = yes
+	# 传国玉玺归献帝
+	character:liu_xie ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				NOT = { exists = global_var:hd_han_treasures_initialized }
+			}
+			hd_han_create_imperial_seal_effect = { OWNER = this }
+			set_global_variable = hd_han_treasures_initialized
+		}
+	}
+	hd218_dynastic_cycle_effect = yes
+	debug_log = "HD218 TEST STAGE GAME_START"
+	hd218_test_dump_effect = yes
+}
+
+# 曹操魏王：持新建帝国级魏国 e_hd218_wei（boki 10-12 20:39 选"新建帝国级"，22:32 定改回），按实封二级王号显示"魏王"。
+# 法理在 hd218_wei_dejure_effect 里挂好（九州整州加 8 个零散郡）。丞相官职 e_WJ_minister_cheng_xiang 也是帝国级：
+# 郡国制开关为 no（boki 10-13 11:39），丞相一律先 granted 交给本人再走 WJ 拜相（hd218_grant_chengxiang_effect），
+# 避开 appointment 的辞头衔检查。关东 e_zhongyuan 不授予。不调 WJ 实封流程本身。Scope：曹操
+hd218_wei_wang_effect = {
+	save_scope_as = hd218_wei_wang_holder
+	title:e_hd218_wei = {
+		save_scope_as = hd218_wei_wang_title_scope
+		set_variable = { name = wj_rf_rank value = 2 }
+		set_variable = { name = wj_rf_name_code value = 0 } # 显示走 WJ_rf_title_county_name，取魏郡名"魏"
+		set_variable = { name = wj_rf_stem_capital value = title:d_weijun }
+	}
+	# 魏国开局无人持有，授给曹操（已在手则跳过）
+	if = {
+		limit = { NOT = { scope:hd218_wei_wang_title_scope.holder ?= scope:hd218_wei_wang_holder } }
+		create_title_and_vassal_change = { type = granted save_scope_as = hd218_wei_wang_change add_claim_on_loss = no }
+		scope:hd218_wei_wang_title_scope = {
+			change_title_holder = { holder = scope:hd218_wei_wang_holder change = scope:hd218_wei_wang_change }
+		}
+		resolve_title_and_vassal_change = scope:hd218_wei_wang_change
+	}
+
+	if = {
+		limit = { scope:hd218_wei_wang_title_scope.holder ?= scope:hd218_wei_wang_holder }
+		set_primary_title_to = scope:hd218_wei_wang_title_scope
+		set_realm_capital = title:c_uuii_p_1172 # 邺城
+		WJ_rf_refresh_holder = yes
+		# 继承法：照 WJ_rf.4 的写法，魏国和邺城设世家继承（法理头衔不设无继承人销毁）
+		scope:hd218_wei_wang_title_scope = {
+			clear_title_laws = yes
+			add_title_law = noble_family_succession_law
+		}
+		title:c_uuii_p_1172 = {
+			# 世家继承法的 can_title_have 要求县带 wj_rf_capital_of（照 WJ_rf_commit）
+			set_variable = { name = wj_rf_capital_of value = scope:hd218_wei_wang_title_scope }
+			clear_title_laws = yes
+			add_title_law = noble_family_succession_law
+		}
+		# 曹丕为魏王继承人
+		if = {
+			limit = { character:cao_pi ?= { is_alive = yes } }
+			set_designated_heir = character:cao_pi
+		}
+		set_global_variable = { name = hd218_wei_wang_title value = scope:hd218_wei_wang_title_scope }
+		debug_log = "HD218 WEI_WANG CREATED"
+	}
+	else = {
+		debug_log = "HD218 WEI_WANG FAILED"
+	}
+}
+
+# 新魏国法理（boki 10-12 20:39 选"新建帝国级"）。只改帝国、州、郡的法理上级，县一律不动（项目规则 20:45）。
+# 帝国挂霸权照原版 00_major_decisions_scripted_effects_3.txt:395 的写法。每处都写显式头衔键，不用遍历。
+hd218_wei_dejure_effect = {
+	title:e_hd218_wei = { set_de_jure_liege_title = title:h_china }
+	title:k_uuii_sili = { set_de_jure_liege_title = title:e_hd218_wei }
+	title:k_uuii_yuzhou = { set_de_jure_liege_title = title:e_hd218_wei }
+	title:k_uuii_yanzhou = { set_de_jure_liege_title = title:e_hd218_wei }
+	title:k_uuii_qingzhou = { set_de_jure_liege_title = title:e_hd218_wei }
+	title:k_uuii_xuzhou = { set_de_jure_liege_title = title:e_hd218_wei }
+	title:k_uuii_jizhou = { set_de_jure_liege_title = title:e_hd218_wei }
+	title:k_uuii_youzhou = { set_de_jure_liege_title = title:e_hd218_wei }
+	title:k_uuii_liangzhou = { set_de_jure_liege_title = title:e_hd218_wei }
+	title:k_uuii_bingzhou = { set_de_jure_liege_title = title:e_hd218_wei }
+	# 曹操直持、法理在荆、扬、益的整郡就近挂进他的州
+	title:d_xiangyang = { set_de_jure_liege_title = title:k_uuii_yuzhou }
+	title:d_xinye = { set_de_jure_liege_title = title:k_uuii_yuzhou }
+	title:d_jingling = { set_de_jure_liege_title = title:k_uuii_yuzhou }
+	title:d_yiyang = { set_de_jure_liege_title = title:k_uuii_yuzhou }
+	title:d_guangling_yangzhou = { set_de_jure_liege_title = title:k_uuii_xuzhou }
+	title:d_huainan = { set_de_jure_liege_title = title:k_uuii_xuzhou }
+	title:d_zhongli = { set_de_jure_liege_title = title:k_uuii_xuzhou }
+	title:d_yinping1 = { set_de_jure_liege_title = title:k_uuii_liangzhou }
+	# boki 10-13：寿春、六安、章陵、南阳、南乡并入豫州；历阳并入徐州；上庸、房陵、魏兴、汉中、武都并入司隶
+	title:d_anfeng = { set_de_jure_liege_title = title:k_uuii_yuzhou }
+	title:d_luan = { set_de_jure_liege_title = title:k_uuii_yuzhou }
+	title:d_anlu = { set_de_jure_liege_title = title:k_uuii_yuzhou }
+	title:d_nanyang = { set_de_jure_liege_title = title:k_uuii_yuzhou }
+	title:d_nanxiang = { set_de_jure_liege_title = title:k_uuii_yuzhou }
+	title:d_liyang = { set_de_jure_liege_title = title:k_uuii_xuzhou }
+	title:d_shangyong = { set_de_jure_liege_title = title:k_uuii_sili }
+	title:d_fangling = { set_de_jure_liege_title = title:k_uuii_sili }
+	title:d_weixing = { set_de_jure_liege_title = title:k_uuii_sili }
+	title:d_hanzhong = { set_de_jure_liege_title = title:k_uuii_sili }
+	title:d_wudou = { set_de_jure_liege_title = title:k_uuii_sili }
+	debug_log = "HD218 WEI_DEJURE SET"
+}
+
+# 两个"上"郡、北地、赵兴开局独立（boki 10-12 20:43 选"仍要独立"），雕阴 d_beidi_bingzhou（boki 22:32 加），各生成一个随机郡守持整郡。
+# 写法照 zzzz_hd_dong_total_breakup_effects.txt:39-75：模板 post_migration_minor_warlord_template 读 scope:seceding_county 的首府县。
+hd218_independent_duchies_effect = {
+	hd218_independent_duchy_effect = { DUCHY = d_shangjun }
+	hd218_independent_duchy_effect = { DUCHY = d_shangjun_sili }
+	hd218_independent_duchy_effect = { DUCHY = d_beidi }
+	hd218_independent_duchy_effect = { DUCHY = d_zhaoxing }
+	hd218_independent_duchy_effect = { DUCHY = d_beidi_bingzhou }
+}
+
+hd218_independent_duchy_effect = {
+	if = {
+		limit = { title:$DUCHY$.holder ?= character:cao_cao }
+		title:$DUCHY$ = { save_temporary_scope_as = seceding_county }
+		create_character = {
+			location = title:$DUCHY$.title_capital_county.title_province
+			template = post_migration_minor_warlord_template
+			dynasty = generate # 天朝政体要求君主有王朝
+			save_temporary_scope_as = hd218_ind_new
+		}
+		create_title_and_vassal_change = { type = usurped save_scope_as = hd218_ind_change add_claim_on_loss = no }
+		title:$DUCHY$ = {
+			every_in_de_jure_hierarchy = {
+				limit = {
+					tier = tier_county
+					holder ?= character:cao_cao
+				}
+				change_title_holder = { holder = scope:hd218_ind_new change = scope:hd218_ind_change take_baronies = yes }
+			}
+			change_title_holder = { holder = scope:hd218_ind_new change = scope:hd218_ind_change }
+		}
+		resolve_title_and_vassal_change = scope:hd218_ind_change
+		create_title_and_vassal_change = { type = independency save_scope_as = hd218_ind_free_change add_claim_on_loss = no }
+		scope:hd218_ind_new = { becomes_independent = { change = scope:hd218_ind_free_change } }
+		resolve_title_and_vassal_change = scope:hd218_ind_free_change
+		scope:hd218_ind_new = {
+			if = {
+				limit = { NOT = { has_government = celestial_government } }
+				change_government = celestial_government
+			}
+			if = {
+				limit = { is_independent_ruler = yes has_title = title:$DUCHY$ }
+				debug_log = "HD218 IND_DUCHY OK $DUCHY$"
+			}
+			else = { debug_log = "HD218 IND_DUCHY FAILED $DUCHY$" }
+		}
+	}
+	else = { debug_log = "HD218 IND_DUCHY SKIPPED $DUCHY$" }
+}
+
+# 随机郡守（boki 10-12 20:43 选"三家也补"）：曹、刘、孙直持的郡各生成一个郡守作封臣，交付该郡和郡内由君主直持的县；
+# 郡内别人持有的县不动。入选条件见 hd218_governor_duchy_trigger（首都郡、颍川、无县郡除外）。
+# 之后给无人持有的郡定郡守，最后是玉门。必须在刘、孙头衔之后（两人的首都在那里设定）。
+hd218_governors_effect = {
+	hd218_ruler_governors_effect = { WHO = cao_cao }
+	hd218_ruler_governors_effect = { WHO = liu_bei }
+	hd218_ruler_governors_effect = { WHO = sun_quan }
+	# 薛干在铁弗之前：两郡首府县同属一人，他拿到薛干后铁弗按条件跳过
+	hd218_empty_duchy_governor_effect = { DUCHY = d_changcheng }
+	hd218_empty_duchy_governor_effect = { DUCHY = d_taibei }
+	hd218_empty_duchy_governor_effect = { DUCHY = d_xuegan }
+	hd218_empty_duchy_governor_effect = { DUCHY = d_tiefu }
+	hd218_yumen_governor_effect = yes
+}
+
+hd218_ruler_governors_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = { is_alive = yes is_landed = yes exists = capital_county }
+			save_temporary_scope_as = hd218_gov_ruler
+			set_global_variable = { name = hd218_gov_count_$WHO$ value = 0 }
+			every_held_title = {
+				limit = { hd218_governor_duchy_trigger = { RULER = scope:hd218_gov_ruler } }
+				add_to_temporary_list = hd218_gov_duchies_$WHO$
+			}
+			every_in_list = {
+				list = hd218_gov_duchies_$WHO$
+				hd218_make_governor_effect = { RULER = scope:hd218_gov_ruler WHO = $WHO$ }
+			}
+			debug_log = "HD218 GOVERNORS DONE $WHO$"
+		}
+	}
+}
+
+# Scope：郡。$RULER$ 为君主；新郡守作其廷臣生成，再受封成封臣。
+hd218_make_governor_effect = {
+	save_temporary_scope_as = seceding_county
+	save_temporary_scope_as = hd218_gov_duchy
+	create_character = {
+		location = scope:seceding_county.title_capital_county.title_province
+		template = post_migration_minor_warlord_template
+		employer = $RULER$
+		dynasty = generate # 天朝政体要求君主有王朝
+		save_temporary_scope_as = hd218_gov_new
+	}
+	create_title_and_vassal_change = { type = granted save_scope_as = hd218_gov_change add_claim_on_loss = no }
+	every_in_de_jure_hierarchy = {
+		limit = {
+			tier = tier_county
+			holder ?= $RULER$
+		}
+		change_title_holder = { holder = scope:hd218_gov_new change = scope:hd218_gov_change take_baronies = yes }
+	}
+	change_title_holder = { holder = scope:hd218_gov_new change = scope:hd218_gov_change }
+	resolve_title_and_vassal_change = scope:hd218_gov_change
+	scope:hd218_gov_new = {
+		hd218_governor_fix_liege_effect = { LIEGE = $RULER$ }
+		add_to_global_variable_list = { name = hd218_governors target = this }
+	}
+	change_global_variable = { name = hd218_gov_count_$WHO$ add = 1 }
+}
+
+# Scope：新郡守。受封后领主不对就补一笔改投，并补天朝政体
+hd218_governor_fix_liege_effect = {
+	if = {
+		limit = { NOT = { liege ?= $LIEGE$ } }
+		create_title_and_vassal_change = { type = swear_fealty save_scope_as = hd218_gov_fix_change add_claim_on_loss = no }
+		change_liege = { liege = $LIEGE$ change = scope:hd218_gov_fix_change }
+		resolve_title_and_vassal_change = scope:hd218_gov_fix_change
+		debug_log = "HD218 GOVERNOR LIEGE_FIXED"
+	}
+	if = {
+		limit = { NOT = { has_government = celestial_government } }
+		change_government = celestial_government
+	}
+}
+
+# 无人持有的郡（复核意见"乙"）：郡头衔交给首府县的现任县主（独立、只持县），不生成新人；
+# 首府在本郡、只持县、独立的其他县主改投他。条件不合就跳过（铁弗预期跳过）。
+hd218_empty_duchy_governor_effect = {
+	if = {
+		limit = {
+			NOT = { exists = title:$DUCHY$.holder }
+			title:$DUCHY$.title_capital_county.holder ?= {
+				is_independent_ruler = yes
+				highest_held_title_tier = tier_county
+			}
+		}
+		title:$DUCHY$.title_capital_county.holder = { save_temporary_scope_as = hd218_empty_duke }
+		create_title_and_vassal_change = { type = created save_scope_as = hd218_empty_change add_claim_on_loss = no }
+		title:$DUCHY$ = { change_title_holder = { holder = scope:hd218_empty_duke change = scope:hd218_empty_change } }
+		resolve_title_and_vassal_change = scope:hd218_empty_change
+		title:$DUCHY$ = {
+			every_in_de_jure_hierarchy = {
+				limit = {
+					tier = tier_county
+					holder ?= {
+						NOT = { this = scope:hd218_empty_duke }
+						hd218_empty_duchy_chief_trigger = { DUCHY = $DUCHY$ }
+					}
+				}
+				holder = { add_to_temporary_list = hd218_empty_chiefs_$DUCHY$ }
+			}
+		}
+		create_title_and_vassal_change = { type = swear_fealty save_scope_as = hd218_empty_vassal_change add_claim_on_loss = no }
+		every_in_list = {
+			list = hd218_empty_chiefs_$DUCHY$
+			change_liege = { liege = scope:hd218_empty_duke change = scope:hd218_empty_vassal_change }
+		}
+		resolve_title_and_vassal_change = scope:hd218_empty_vassal_change
+		debug_log = "HD218 EMPTY_DUCHY OK $DUCHY$"
+	}
+	else = { debug_log = "HD218 EMPTY_DUCHY SKIPPED $DUCHY$" }
+}
+
+# 玉门：4 县在酒泉的黄华手里，不在他的主头衔之内（开局会被引擎辞掉）。新郡守作曹操封臣，持玉门和这 4 县。
+hd218_yumen_governor_effect = {
+	if = {
+		limit = {
+			NOT = { exists = title:d_yumen.holder }
+			character:cao_cao ?= { is_alive = yes is_landed = yes }
+		}
+		title:d_yumen = { save_temporary_scope_as = seceding_county }
+		create_character = {
+			location = title:d_yumen.title_capital_county.title_province
+			template = post_migration_minor_warlord_template
+			employer = character:cao_cao
+			dynasty = generate
+			save_temporary_scope_as = hd218_gov_new
+		}
+		create_title_and_vassal_change = { type = granted save_scope_as = hd218_yumen_change add_claim_on_loss = no }
+		title:d_yumen = {
+			every_in_de_jure_hierarchy = {
+				limit = {
+					tier = tier_county
+					holder ?= character:huang_hua_2
+				}
+				change_title_holder = { holder = scope:hd218_gov_new change = scope:hd218_yumen_change take_baronies = yes }
+			}
+			change_title_holder = { holder = scope:hd218_gov_new change = scope:hd218_yumen_change }
+		}
+		resolve_title_and_vassal_change = scope:hd218_yumen_change
+		scope:hd218_gov_new = { hd218_governor_fix_liege_effect = { LIEGE = character:cao_cao } }
+		debug_log = "HD218 YUMEN_GOVERNOR"
+	}
+	else = { debug_log = "HD218 YUMEN_SKIPPED" }
+}
+
+# 人物关系（boki 10-12 20:31）：赵云与刘备、关羽、张飞为好友；诸葛亮为刘备至交（挚友）。
+# 理由键：friend_common_ground 照 zz_hd_dynasty_startup.txt；best_friend_counsel_and_support 为原版本地化键。
+hd218_relations_effect = {
+	character:zhao_yun ?= {
+		if = {
+			limit = { is_alive = yes }
+			hd218_friend_effect = { WHO = liu_bei }
+			hd218_friend_effect = { WHO = guan_yu }
+			hd218_friend_effect = { WHO = zhang_fei }
+		}
+	}
+	character:zhu_ge_liang ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				character:liu_bei ?= { is_alive = yes }
+				NOT = { has_relation_best_friend = character:liu_bei }
+			}
+			set_relation_best_friend = { reason = best_friend_counsel_and_support copy_reason = friend target = character:liu_bei }
+		}
+	}
+}
+
+# Scope：赵云
+hd218_friend_effect = {
+	if = {
+		limit = {
+			character:$WHO$ ?= { is_alive = yes }
+			NOT = { has_relation_friend = character:$WHO$ }
+		}
+		set_relation_friend = { reason = friend_common_ground target = character:$WHO$ }
+	}
+}
+
+# 孙权开局持江东法理帝国 e_jiangdong（boki 10-12 19:28 选"江东吴王"），和刘备一样按实封二级王号处理，称号显示"吴王"；
+# 称帝走 hd218_wang_proclaim_emperor_decision。扬州、交州仍由他持有，挂在帝国之下。
+hd218_sun_quan_titles_effect = {
+	character:sun_quan ?= {
+		if = {
+			limit = { is_alive = yes has_title = title:k_uuii_yangzhou }
+			save_scope_as = hd218_sun_quan
+			# 必须在拿到帝国头衔之前设，免得 WJ_cr 建国结算加正统、弹建国提示
+			set_variable = wj_cr_empire_settled
+			title:e_jiangdong = {
+				save_scope_as = hd218_wu_title
+				set_variable = { name = wj_rf_rank value = 2 }
+				set_variable = { name = wj_rf_name_code value = 0 }
+				set_variable = { name = wj_rf_stem_capital value = title:d_wujun }
+				# 称帝前显示为吴王（WJ_name_actual_emperor_trigger 的例外），称帝时去掉
+				set_variable = hd218_wang_display
+				set_title_name = hd218_wu_name
+			}
+			create_title_and_vassal_change = { type = granted save_scope_as = hd218_wu_change add_claim_on_loss = no }
+			scope:hd218_wu_title = {
+				change_title_holder = { holder = scope:hd218_sun_quan change = scope:hd218_wu_change }
+			}
+			resolve_title_and_vassal_change = scope:hd218_wu_change
+			if = {
+				limit = { scope:hd218_wu_title.holder ?= scope:hd218_sun_quan }
+				set_primary_title_to = scope:hd218_wu_title
+				debug_log = "HD218 WU_TITLE GRANTED"
+			}
+			else = {
+				set_primary_title_to = title:k_uuii_yangzhou
+				debug_log = "HD218 WU_TITLE FAILED"
+			}
+			set_realm_capital = title:c_uuii_p_4389 # 建业
+			WJ_rf_refresh_holder = yes
+		}
+	}
+}
+
+# D5b：刘备开局持益州所属的法理帝国 e_bashu（巴蜀，boki 10-12 19:15 定），按实封二级王号处理（称号显示"汉中王"）；
+# 荆州交给关羽，糜芳、孟达、士仁改为关羽封臣。
+# 契约和都督区在 after_lobby 里设（hd218_liu_bei_district_effect）。
+hd218_liu_bei_titles_effect = {
+	character:liu_bei ?= {
+		if = {
+			limit = { is_alive = yes has_title = title:k_uuii_yizhou }
+			save_scope_as = hd218_liu_bei
+			# 必须在拿到帝国头衔之前设，免得 WJ_cr 建国结算加正统、弹建国提示
+			set_variable = wj_cr_empire_settled
+			title:e_bashu = {
+				save_scope_as = hd218_hanzhong_title
+				set_variable = { name = wj_rf_rank value = 2 }
+				set_variable = { name = wj_rf_name_code value = 0 }
+				set_variable = { name = wj_rf_stem_capital value = title:d_hanzhong }
+				# 称帝前显示为汉中王（WJ_name_actual_emperor_trigger 的例外），称帝时去掉
+				set_variable = hd218_wang_display
+				set_title_name = hd218_hanzhong_name
+			}
+			# e_bashu 法理仍在 h_china 之下，首都本来就是成都：刘备仍在天下之内
+			create_title_and_vassal_change = { type = granted save_scope_as = hd218_hanzhong_change add_claim_on_loss = no }
+			scope:hd218_hanzhong_title = {
+				change_title_holder = { holder = scope:hd218_liu_bei change = scope:hd218_hanzhong_change }
+			}
+			resolve_title_and_vassal_change = scope:hd218_hanzhong_change
+			if = {
+				limit = { scope:hd218_hanzhong_title.holder ?= scope:hd218_liu_bei }
+				set_primary_title_to = scope:hd218_hanzhong_title
+				set_realm_capital = title:c_uuii_p_4282
+				WJ_rf_refresh_holder = yes
+				set_global_variable = { name = hd218_hanzhong_title value = scope:hd218_hanzhong_title }
+				debug_log = "HD218 BASHU_TITLE GRANTED"
+			}
+			else = {
+				debug_log = "HD218 BASHU_TITLE FAILED"
+			}
+		}
+	}
+	# 荆州交给关羽，三人改投关羽
+	if = {
+		limit = {
+			exists = scope:hd218_liu_bei
+			title:k_uuii_jingzhou.holder ?= scope:hd218_liu_bei
+			character:guan_yu ?= {
+				is_alive = yes
+				liege ?= scope:hd218_liu_bei
+			}
+		}
+		create_title_and_vassal_change = { type = granted save_scope_as = hd218_jingzhou_change add_claim_on_loss = no }
+		title:k_uuii_jingzhou = {
+			change_title_holder = { holder = character:guan_yu change = scope:hd218_jingzhou_change }
+		}
+		resolve_title_and_vassal_change = scope:hd218_jingzhou_change
+		create_title_and_vassal_change = { type = granted save_scope_as = hd218_jingzhou_vassal_change add_claim_on_loss = no }
+		hd218_change_liege_to_guan_yu_effect = { WHO = mi_fang }
+		hd218_change_liege_to_guan_yu_effect = { WHO = hd218_meng_da }
+		hd218_change_liege_to_guan_yu_effect = { WHO = shi_ren }
+		resolve_title_and_vassal_change = scope:hd218_jingzhou_vassal_change
+		character:guan_yu = {
+			if = {
+				limit = { has_title = title:k_uuii_jingzhou }
+				set_primary_title_to = title:k_uuii_jingzhou
+				debug_log = "HD218 JINGZHOU GUAN_YU"
+			}
+			else = {
+				debug_log = "HD218 JINGZHOU FAILED"
+			}
+		}
+	}
+}
+
+# 需要 scope:hd218_jingzhou_vassal_change
+hd218_change_liege_to_guan_yu_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = yes
+				liege ?= scope:hd218_liu_bei
+			}
+			change_liege = { liege = character:guan_yu change = scope:hd218_jingzhou_vassal_change }
+		}
+	}
+}
+
+# 第四节：开局预置的剧情标记（184 至 217 年已经发生或不再发生的剧情）。事件写入的 hd_sg218_* 标记不在这里设。
+hd218_preset_flags_effect = {
+	# 黄巾
+	set_global_variable = hd_yellow_turban_184_initialized
+	set_global_variable = hd_yellow_turban_outcome_resolved
+	# 宫廷危机
+	set_global_variable = hd_palace_crisis_started
+	set_global_variable = hd_palace_crisis_completed
+	set_global_variable = hd_palace_purge_completed
+	# 反董
+	set_global_variable = { name = hd_anti_regent_chain_resolved value = yes }
+	set_global_variable = hd_world_news_coalition_done
+	set_global_variable = hds_coalition_ended
+	set_global_variable = hd_qxzl_started
+	set_global_variable = hd_qxzl_scan_done
+	# 董卓善后
+	set_global_variable = hd_dong_settlement_completed
+	set_global_variable = hd_dong_war_chain_ended
+	set_global_variable = hd_dong_yuan_purge_completed
+	set_global_variable = hd_li_jue_war_resolved
+	# 冀州
+	set_global_variable = hd_yuan_jizhou_handover_started
+	set_global_variable = hd_yuan_jizhou_handover_complete
+	set_global_variable = hd4_jizhou_finished
+	# 陶谦让徐州
+	set_global_variable = hd_lb_bequest_completed
+	set_global_variable = hd_lb_bequest_resolved
+	# 孙家线
+	set_global_variable = hds_sj_xianshan_done
+	set_global_variable = hds_sc_zhou_friendship_done
+	# 奉迎、官渡、赤壁
+	set_global_variable = hd_fengying_world_resolved
+	character:cao_cao ?= { set_global_variable = { name = hd_fengying_world_claimed value = this } }
+	set_global_variable = hd_guandu_world_resolved
+	set_global_variable = hd_chibi_world_resolved
+	set_global_variable = hd_chain_terminal_historical
+	# 9 场历史叛乱
+	set_global_variable = hd_revolt_jiaozhi_fired
+	set_global_variable = hd_revolt_beigong_fired
+	set_global_variable = hd_revolt_heishan_fired
+	set_global_variable = hd_revolt_jiangxia_fired
+	set_global_variable = hd_revolt_wangguo_fired
+	set_global_variable = hd_revolt_zhangchun_fired
+	set_global_variable = hd_revolt_bingzhou_hu_fired
+	set_global_variable = hd_revolt_maxiang_fired
+	set_global_variable = hd_revolt_yanbaihu_fired
+	# 五胡（乌桓内徙 207 年已发生）
+	set_global_variable = { name = hd_wuhu_hist_xiongnu_done value = yes }
+	set_global_variable = { name = hd_wuhu_xiutu_resolved value = yes }
+	set_global_variable = { name = hd_wuhu_hist_wuhuan_done value = yes }
+	# 历史入侵：轲比能寇边由"曹彰北征乌桓"代替
+	set_global_variable = { name = hd_hi_done_kebineng value = yes }
+	# 曹操
+	character:cao_cao ?= {
+		add_character_flag = hd_hj_done
+		add_character_flag = hd_cao_expansion_initialized
+		add_character_flag = hd_rise_retired # 崛起加成只给起家阶段
+	}
+	# 刘关张
+	character:liu_bei ?= {
+		add_character_flag = hd_peach_garden_oath_completed
+		add_character_flag = hd_rise_retired
+	}
+	character:guan_yu ?= { add_character_flag = hd_peach_garden_oath_completed }
+	character:zhang_fei ?= { add_character_flag = hd_peach_garden_oath_completed }
+}
+
+# 天朝循环：从对峙期开局（同 saas_start_dynastic_cycle 的 184 分支写法）
+hd218_dynastic_cycle_effect = {
+	if = {
+		limit = {
+			has_tgp_dlc_trigger = yes
+			exists = title:h_china.holder
+			NOT = { exists = situation:dynastic_cycle }
+		}
+		start_situation = {
+			type = dynastic_cycle
+			start_phase = situation_dynastic_cycle_phase_hd_standoff
+		}
+	}
+	if = {
+		limit = {
+			has_tgp_dlc_trigger = yes
+			exists = situation:dynastic_cycle
+			NOT = { exists = global_var:saas_dynastic_cycle_initialized }
+		}
+		situation:dynastic_cycle = {
+			title:h_china = {
+				set_variable = {
+					name = years_since_imperial_examination
+					value = 0
+				}
+			}
+			# 同 184：天子正统不低于 6 级
+			title:h_china.holder ?= {
+				if = {
+					limit = { legitimacy < legitimacy_level_6 }
+					add_legitimacy = {
+						value = legitimacy_level_6
+						subtract = legitimacy
+					}
+				}
+			}
+			tgp_set_wuking_element_effect = { ELEMENT = earth }
+			every_situation_participant = {
+				recalculate_participant_group = situation:dynastic_cycle
+			}
+			every_situation_sub_region = {
+				hd_dc_zero_phase_points_effect = { PHASE = situation_dynastic_cycle_phase_chaos }
+			}
+			trigger_event = { on_action = hd218_dc_zero_progress days = 2 }
+		}
+		set_global_variable = {
+			name = saas_dynastic_cycle_initialized
+			value = yes
+		}
+		debug_log = "HD218 DYNASTIC_CYCLE STANDOFF"
+	}
+}
+
+# 诸葛亮、司马懿开局各入新分家（boki 10-12 22:14）。两人开局已是原家族家主，create_cadet_branch 会报错（22:32 实测），
+# 所以分家预设在 common/dynasty_houses/zz_hd_218_houses.txt（汉人分家只用本姓），开局移入本人（两人后代都不在原家族）。
+# 同名世族头衔 c_hd218_nf_* 已由 218 头衔历史交给本人
+hd218_cadet_houses_effect = {
+	hd218_cadet_house_effect = { WHO = zhu_ge_liang OLD_HOUSE = langya_zhuge NEW_HOUSE = hd218_house_zhuge_liang }
+	hd218_cadet_house_effect = { WHO = si_ma_yi OLD_HOUSE = house_111010756002013 NEW_HOUSE = hd218_house_si_ma_yi }
+	# 庄园移到世族头衔首府：诸葛亮成都（白帝托孤要求在蜀），司马懿温县
+	character:zhu_ge_liang ?= { domicile ?= { move_domicile = title:c_uuii_p_4282.title_province } }
+	character:si_ma_yi ?= { domicile ?= { move_domicile = title:c_uuii_p_1077.title_province } }
+	hd218_cadet_sons_effect = yes
+}
+
+# 诸葛亮、司马懿在世的儿子移入新家族（boki 10-12 23:05 选"移入儿子"）。开局一次，hd218_yearly 每年再跑，接住生日生成器后来生的儿子
+hd218_cadet_sons_effect = {
+	hd218_cadet_sons_of_effect = { WHO = zhu_ge_liang NEW_HOUSE = hd218_house_zhuge_liang }
+	hd218_cadet_sons_of_effect = { WHO = si_ma_yi NEW_HOUSE = hd218_house_si_ma_yi }
+	# 诸葛乔：诸葛瑾之子，过继给诸葛亮
+	character:zhu_ge_qiao ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				NOT = { has_character_flag = hd218_cadet_son_moved }
+				NOT = { house ?= house:hd218_house_zhuge_liang }
+				character:zhu_ge_liang ?= { house ?= house:hd218_house_zhuge_liang }
+			}
+			set_house = house:hd218_house_zhuge_liang
+			add_character_flag = hd218_cadet_son_moved
+		}
+	}
+}
+
+hd218_cadet_sons_of_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = { house ?= house:$NEW_HOUSE$ }
+			every_child = {
+				limit = {
+					is_alive = yes
+					is_male = yes
+					NOT = { has_character_flag = hd218_cadet_son_moved } # 只移一次，日后自建分家不拉回
+					NOT = { house ?= house:$NEW_HOUSE$ }
+				}
+				set_house = house:$NEW_HOUSE$
+				add_character_flag = hd218_cadet_son_moved
+			}
+		}
+	}
+}
+
+hd218_cadet_house_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				house ?= house:$OLD_HOUSE$
+			}
+			set_house = house:$NEW_HOUSE$
+		}
+	}
+}
+
+############################################################
+# on_game_start_after_lobby：朝官、契约、都督区、年号、雇主、宣战
+############################################################
+hd218_after_lobby_effect = {
+	hd218_regency_effect = yes
+	hd218_liu_bei_district_effect = yes
+	hd218_era_effect = yes
+	hd218_employer_check_effect = yes
+	hd218_three_rulers_effect = yes
+	hd218_sun_liu_alliance_effect = yes
+	hd218_relations_effect = yes
+	hd218_verify_effect = yes
+	hd218_hanzhong_war_effect = yes
+	title:h_china = { trigger_event = { on_action = hd218_day10_check days = 10 } }
+}
+
+# 挟天子：曹操为权臣兼丞相，献帝为傀儡，京城许昌。不调奉迎接管效果（它会把京城设成曹操首都邺城），
+# 不加 hd_court_regent_tenure，不设 hd_dong_fixed_regent（固化改用终身辅政锁 hd_dc_ten_qjc_regent）。必须在魏王之后（权臣主头衔记为王号）。
+hd218_regency_effect = {
+	if = {
+		limit = {
+			exists = title:h_china.holder
+			title:h_china.holder = character:liu_xie
+			character:cao_cao ?= {
+				is_alive = yes
+				liege ?= character:liu_xie
+			}
+		}
+		title:c_uuii_p_738 = { save_scope_as = hd218_xuchang } # 许昌
+		title:h_china = {
+			set_landless_title = yes
+			set_capital_county = scope:hd218_xuchang
+			set_variable = { name = hd_court_capital_county value = scope:hd218_xuchang }
+		}
+		character:liu_xie = {
+			domicile ?= { move_domicile = scope:hd218_xuchang.title_province }
+			set_location = {
+				location = scope:hd218_xuchang.title_province
+				stick_to_location = yes
+			}
+		}
+		character:cao_cao = {
+			# 玩家扮演曹操时，天朝授官要求玩家功名达到帝国级预期（tgp_can_be_a_minister_trigger），
+			# 否则丞相授不上（10-12 实测报"无法担任丞相"）。只在玩家且功名不足时补到 7 级。
+			if = {
+				limit = {
+					is_ai = no
+					merit_level < merit_level_expected_empire_value
+				}
+				while = {
+					limit = { merit_level < merit_level_expected_empire_value }
+					change_merit_level = 1
+				}
+			}
+			# 拜相秉政实测（boki 10-12 23:25）：决议 wj_create_cheng_xiang_decision 的效果原样执行一次，前后各 dump 一次。
+			# 之后 hd_court_install_regency_effect 见已有丞相和摄政，不再重复授官，只设傀儡。
+			debug_log = "HD218 TEST STAGE BEFORE_BAIXIANG"
+			hd218_test_dump_effect = yes
+			hd218_grant_chengxiang_effect = yes
+			debug_log = "HD218 TEST STAGE AFTER_GRANT"
+			hd218_test_dump_effect = yes
+			WJ_install_historical_secretariat_effect = { OFFICE = e_WJ_minister_cheng_xiang POSITION = WJ_minister_cheng_xiang LAW = WJ_grand_chengxiang_law }
+			debug_log = "HD218 TEST STAGE AFTER_BAIXIANG"
+			hd218_test_dump_effect = yes
+			hd_court_install_regency_effect = yes
+			debug_log = "HD218 TEST STAGE AFTER_INSTALL"
+			hd218_test_dump_effect = yes
+			hd_court_set_stance_effect = { STANCE = moni }
+			if = {
+				limit = { NOT = { has_council_position = WJ_minister_cheng_xiang } }
+				debug_log = "HD218 CAO_MINISTER FAILED"
+			}
+		}
+		# 满级固化（boki 10-12 19:55 选"终身辅政锁"）：权力 100，挂清君侧的终身辅政锁
+		# hd_dc_ten_qjc_regent——天子罢免后由 hd_dc_kit_ten_regent_watch 自动补回，曹操死时清除
+		character:liu_xie = {
+			if = {
+				limit = { has_diarchy_type = grand_secretariat diarch ?= character:cao_cao }
+				set_diarchy_swing = 100
+			}
+		}
+		title:h_china = {
+			set_variable = { name = hd_dc_ten_qjc_regent value = character:cao_cao }
+		}
+		debug_log = "HD218 TEST STAGE AFTER_LOCK"
+		hd218_test_dump_effect = yes
+		debug_log = "HD218 REGENCY INSTALLED"
+	}
+	else = {
+		debug_log = "HD218 REGENCY FAILED"
+	}
+	character:liu_bei ?= {
+		if = {
+			limit = { is_alive = yes }
+			hd_court_set_stance_effect = { STANCE = zunhan }
+		}
+	}
+}
+
+# D5b 第 6、7 步：先给关羽、再给三人设军戍契约（军戍档要求领主本身带军戍任命），然后建都督区（持节）
+hd218_liu_bei_district_effect = {
+	if = {
+		limit = {
+			character:liu_bei ?= { is_alive = yes }
+			character:guan_yu ?= {
+				is_alive = yes
+				has_title = title:k_uuii_jingzhou
+				liege ?= character:liu_bei
+			}
+		}
+		character:guan_yu = {
+			vassal_contract_set_obligation_level = { type = celestial_provinces level = 3 }
+			WJ_mr_initialize_rank = yes
+		}
+		hd218_military_contract_effect = { WHO = mi_fang }
+		hd218_military_contract_effect = { WHO = hd218_meng_da }
+		hd218_military_contract_effect = { WHO = shi_ren }
+		character:liu_bei = { save_scope_as = actor }
+		character:guan_yu = { save_scope_as = recipient }
+		WJ_dd_create_effect = { JIE = 2 }
+		clear_saved_scope = actor
+		clear_saved_scope = recipient
+	}
+	else = {
+		debug_log = "HD218 DISTRICT SKIPPED"
+	}
+}
+
+hd218_military_contract_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				liege ?= character:guan_yu
+			}
+			vassal_contract_set_obligation_level = { type = celestial_provinces level = 3 }
+			WJ_mr_initialize_rank = yes
+		}
+	}
+}
+
+# 年号：建安二十三年（同 WJ_era_184_start 的写法）
+hd218_era_effect = {
+	character:liu_xie ?= {
+		if = {
+			limit = {
+				title:h_china.holder ?= this
+				NOT = { has_variable = SG_NianHao_data }
+			}
+			remove_all_NianHao = yes
+			set_variable = data_nianhao_to_SG
+			set_variable = SG_nianhao_jianan
+			set_variable = { name = SG_NianHao_data value = 23 }
+			set_global_variable = { name = SG_nianhao_jianan years = 100 value = yes }
+			add_character_flag = SanGong_NianHao_flag
+		}
+	}
+}
+
+# 雇主表：同一天的雇主行能否在头衔条目之后生效取决于引擎顺序，这里逐个核对，不对的补上并写日志
+hd218_employer_check_effect = {
+	hd218_employer_fix_effect = { WHO = cao_pi BOSS = cao_cao }
+	hd218_employer_fix_effect = { WHO = cao_zhang BOSS = cao_cao }
+	hd218_employer_fix_effect = { WHO = zhang_he BOSS = cao_cao }
+	hd218_employer_fix_effect = { WHO = xu_huang BOSS = cao_cao }
+	hd218_employer_fix_effect = { WHO = hd218_xu_chu BOSS = cao_cao }
+	hd218_employer_fix_effect = { WHO = si_ma_yi BOSS = cao_cao }
+	hd218_employer_fix_effect = { WHO = zhang_ji_3 BOSS = cao_cao }
+	hd218_employer_fix_effect = { WHO = cao_hong BOSS = cao_cao }
+	hd218_employer_fix_effect = { WHO = hd218_guo_nv_wang BOSS = cao_cao }
+	hd218_employer_fix_effect = { WHO = jiang_wei BOSS = cao_cao }
+	hd218_employer_fix_effect = { WHO = xiongnu_liu_005 BOSS = cao_cao }
+	hd218_employer_fix_effect = { WHO = pang_de BOSS = cao_cao }
+	hd218_employer_fix_effect = { WHO = hd218_hu_xiu BOSS = cao_ren }
+	hd218_employer_fix_effect = { WHO = zhao_yun BOSS = liu_bei }
+	hd218_employer_fix_effect = { WHO = zhu_ge_liang BOSS = liu_bei }
+	hd218_employer_fix_effect = { WHO = hd218_yi_ji BOSS = liu_bei }
+	hd218_employer_fix_effect = { WHO = hd218_zhang_nan BOSS = liu_bei }
+	hd218_employer_fix_effect = { WHO = liu_feng BOSS = liu_bei }
+	hd218_employer_fix_effect = { WHO = ma_su BOSS = liu_bei }
+	hd218_employer_fix_effect = { WHO = feng_xi BOSS = liu_bei }
+	hd218_employer_fix_effect = { WHO = cheng_ji_2 BOSS = liu_bei }
+	hd218_employer_fix_effect = { WHO = fu_rong_2 BOSS = liu_bei }
+	hd218_employer_fix_effect = { WHO = sun_an BOSS = sun_quan }
+	hd218_employer_fix_effect = { WHO = zhang_da BOSS = zhang_fei }
+	hd218_employer_fix_effect = { WHO = geng_ji BOSS = liu_xie }
+	hd218_employer_fix_effect = { WHO = wei_huang BOSS = liu_xie }
+	hd218_employer_fix_effect = { WHO = jin_yi BOSS = liu_xie }
+	hd218_employer_fix_effect = { WHO = hd218_ji_ben BOSS = liu_xie }
+}
+
+hd218_employer_fix_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = no
+				is_ruler = no # 持世族头衔的诸葛亮、司马懿是封臣，不拉进宫廷
+				character:$BOSS$ ?= { is_alive = yes is_landed = yes }
+				NOT = { employer ?= character:$BOSS$ }
+			}
+			debug_log = "HD218 EMPLOYER_FIX $WHO$ -> $BOSS$"
+			set_employer = character:$BOSS$
+		}
+		else = {
+			debug_log = "HD218 EMPLOYER_OK $WHO$"
+		}
+	}
+}
+
+# 三家（曹、刘、孙）：去掉短暂统治，正统设到 6 级（boki 10-12 19:49）。放在 after_lobby，头衔都已定好。
+hd218_three_rulers_effect = {
+	hd218_ruler_setup_effect = { WHO = cao_cao }
+	hd218_ruler_setup_effect = { WHO = liu_bei }
+	hd218_ruler_setup_effect = { WHO = sun_quan }
+	# 刘备：益州之资（补给 buff，十年）
+	character:liu_bei ?= {
+		if = {
+			limit = { is_alive = yes is_landed = yes }
+			add_character_modifier = {
+				modifier = hd_sg218_hanzhong_supply_modifier
+				years = 10
+			}
+		}
+	}
+}
+
+hd218_ruler_setup_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = { is_alive = yes is_landed = yes }
+			# 短暂统治时长 -100%，十年（原版 SHORT_REIGN_YEARS = 10）后自然无短暂统治
+			add_character_modifier = {
+				modifier = hd_sg218_established_rule_modifier
+				years = 10
+			}
+			# 正统 6 级：legitimacy_level 5，门槛 legitimacy_level_6（按持有者层级换算），照 saas_game_start.txt 的写法
+			# 天朝（行政）封臣没有正统（原版 use_general_legitimacy 要求行政制须为最高领主），曹操作献帝封臣时跳过
+			if = {
+				limit = {
+					use_general_legitimacy = yes
+					legitimacy < legitimacy_level_6
+				}
+				add_legitimacy = {
+					value = legitimacy_level_6
+					subtract = legitimacy
+					add = 1
+				}
+			}
+		}
+	}
+}
+
+# 孙权、刘备开局为盟友（boki 10-12 20:28）。只在 218 开局脚本里建，不动共享文件。
+# 盟约照原版 05_fp3_wars.txt 的写法，两人各为自己的结盟人。白衣渡江等 218 战争开打前由 hd_sg218_start_war_effect 先背盟。
+hd218_sun_liu_alliance_effect = {
+	if = {
+		limit = {
+			character:liu_bei ?= { is_alive = yes is_landed = yes }
+			character:sun_quan ?= { is_alive = yes is_landed = yes }
+			NOT = { character:liu_bei = { is_allied_to = character:sun_quan } }
+		}
+		character:liu_bei = {
+			create_alliance = {
+				target = character:sun_quan
+				allied_through_owner = character:liu_bei
+				allied_through_target = character:sun_quan
+			}
+		}
+	}
+}
+
+# 开局自检（结果写进日志，boki 实机看 debug.log 里的 HD218 行）
+hd218_verify_effect = {
+	if = {
+		limit = {
+			character:cao_cao ?= {
+				primary_title ?= global_var:hd218_wei_wang_title
+			}
+			global_var:hd218_wei_wang_title ?= { has_title_law = noble_family_succession_law }
+			title:c_uuii_p_1172 = { has_title_law = noble_family_succession_law }
+		}
+		debug_log = "HD218 CHECK WEI_LAWS OK"
+	}
+	else = { debug_log = "HD218 CHECK WEI_LAWS BAD" }
+	# 曹操持魏国且为主头衔、仍是献帝封臣、有地、九州照旧在手
+	if = {
+		limit = {
+			character:cao_cao ?= {
+				is_landed = yes
+				has_title = title:e_hd218_wei
+				primary_title ?= title:e_hd218_wei
+				liege ?= character:liu_xie
+				has_title = title:k_uuii_sili
+				has_title = title:k_uuii_yuzhou
+				has_title = title:k_uuii_yanzhou
+				has_title = title:k_uuii_qingzhou
+				has_title = title:k_uuii_xuzhou
+				has_title = title:k_uuii_jizhou
+				has_title = title:k_uuii_youzhou
+				has_title = title:k_uuii_liangzhou
+				has_title = title:k_uuii_bingzhou
+			}
+		}
+		debug_log = "HD218 CHECK CAO_WEI OK"
+	}
+	else = { debug_log = "HD218 CHECK CAO_WEI BAD" }
+	# 刘协是曹操的挟天子傀儡（hd_court_install_regency_effect 的 set_puppet，boki 22:36）
+	if = {
+		limit = { character:liu_xie ?= { puppeteer ?= character:cao_cao } }
+		debug_log = "HD218 CHECK CAO_PUPPET OK"
+	}
+	else = { debug_log = "HD218 CHECK CAO_PUPPET BAD" }
+	# 魏国法理在天下之内、九州挂魏国；邺城、许昌判在天下之内（hd_dc_in_china_trigger 的口径）
+	if = {
+		limit = {
+			title:e_hd218_wei = { target_is_de_jure_liege_or_above = title:h_china }
+			title:c_uuii_p_1172 = { target_is_de_jure_liege_or_above = title:h_china }
+			title:c_uuii_p_738 = { target_is_de_jure_liege_or_above = title:h_china }
+			title:k_uuii_sili = { target_is_de_jure_liege_or_above = title:e_hd218_wei }
+			title:k_uuii_bingzhou = { target_is_de_jure_liege_or_above = title:e_hd218_wei }
+			title:d_xiangyang = { target_is_de_jure_liege_or_above = title:e_hd218_wei }
+			title:d_yinping1 = { target_is_de_jure_liege_or_above = title:e_hd218_wei }
+		}
+		debug_log = "HD218 CHECK WEI_DEJURE OK"
+	}
+	else = { debug_log = "HD218 CHECK WEI_DEJURE BAD" }
+	if = {
+		limit = { NOT = { exists = title:e_zhongyuan.holder } }
+		debug_log = "HD218 CHECK OLD_EMPIRES OK"
+	}
+	else = { debug_log = "HD218 CHECK OLD_EMPIRES BAD" }
+	# e_han 仍在献帝手里、已无法理县（e_han 处理复核建议 4）
+	if = {
+		limit = {
+			title:e_han.holder ?= character:liu_xie
+			title:e_han = { NOT = { any_de_jure_county = { count >= 1 } } }
+		}
+		debug_log = "HD218 CHECK E_HAN OK"
+	}
+	else = { debug_log = "HD218 CHECK E_HAN BAD" }
+	if = {
+		limit = {
+			hd218_ind_duchy_ok_trigger = { DUCHY = d_shangjun }
+			hd218_ind_duchy_ok_trigger = { DUCHY = d_shangjun_sili }
+			hd218_ind_duchy_ok_trigger = { DUCHY = d_beidi }
+			hd218_ind_duchy_ok_trigger = { DUCHY = d_zhaoxing }
+			hd218_ind_duchy_ok_trigger = { DUCHY = d_beidi_bingzhou }
+		}
+		debug_log = "HD218 CHECK IND_DUCHIES OK"
+	}
+	else = { debug_log = "HD218 CHECK IND_DUCHIES BAD" }
+	# 三家直持的郡只剩首都郡、颍川、无县郡
+	if = {
+		limit = {
+			character:cao_cao ?= { NOT = { any_held_title = { hd218_governor_duchy_trigger = { RULER = character:cao_cao } } } }
+			character:liu_bei ?= { NOT = { any_held_title = { hd218_governor_duchy_trigger = { RULER = character:liu_bei } } } }
+			character:sun_quan ?= { NOT = { any_held_title = { hd218_governor_duchy_trigger = { RULER = character:sun_quan } } } }
+		}
+		debug_log = "HD218 CHECK GOVERNORS_LEFT OK"
+	}
+	else = { debug_log = "HD218 CHECK GOVERNORS_LEFT BAD" }
+	# 每个郡守：有地、有首都县、天朝政体、领主是三家之一
+	if = {
+		limit = {
+			NOT = {
+				any_in_global_list = {
+					variable = hd218_governors
+					NOR = {
+						AND = {
+							is_landed = yes
+							exists = capital_county
+							has_government = celestial_government
+							liege ?= {
+								OR = {
+									this = character:cao_cao
+									this = character:liu_bei
+									this = character:sun_quan
+								}
+							}
+						}
+						is_alive = no
+					}
+				}
+			}
+		}
+		debug_log = "HD218 CHECK GOVERNORS_STATE OK"
+	}
+	else = { debug_log = "HD218 CHECK GOVERNORS_STATE BAD" }
+	# 生成数与施工前实算对照：曹 108（雕阴独立后）、刘 11、孙 28
+	if = {
+		limit = {
+			global_var:hd218_gov_count_cao_cao ?= 108
+			global_var:hd218_gov_count_liu_bei ?= 11
+			global_var:hd218_gov_count_sun_quan ?= 28
+		}
+		debug_log = "HD218 CHECK GOVERNORS_COUNT OK"
+	}
+	else = { debug_log = "HD218 CHECK GOVERNORS_COUNT BAD" }
+	# 空郡：长城、台北、薛干有郡守；铁弗预期跳过；玉门归新郡守（曹操封臣），四县已不在黄华手里
+	if = {
+		limit = {
+			exists = title:d_changcheng.holder
+			exists = title:d_taibei.holder
+			exists = title:d_xuegan.holder
+			NOT = { exists = title:d_tiefu.holder }
+			title:d_yumen.holder ?= { liege ?= character:cao_cao }
+			title:d_yumen = {
+				NOT = {
+					any_in_de_jure_hierarchy = {
+						tier = tier_county
+						holder ?= character:huang_hua_2
+					}
+				}
+			}
+		}
+		debug_log = "HD218 CHECK EMPTY_DUCHIES OK"
+	}
+	else = { debug_log = "HD218 CHECK EMPTY_DUCHIES BAD" }
+	# 辞头衔观察：这些封臣持有主头衔法理之外的头衔，开局后应仍在手；BAD 说明引擎也辞郡、县
+	if = {
+		limit = {
+			title:d_shian.holder ?= character:guan_yu
+			title:d_luoyang.holder ?= character:cao_cao # 洛阳郡无法理县
+			title:d_jiaozhi.holder ?= character:shi_xie
+			title:d_wuping.holder ?= character:shi_xie
+			title:d_dianbian.holder ?= character:shi_xie
+			title:d_hepu_jiaozhou.holder ?= character:shi_xie
+			title:d_pingyang.holder ?= character:xiongnu_liu_006
+			title:d_xihe_sili.holder ?= character:xiongnu_liu_006
+			title:d_xinxing.holder ?= character:xiongnu_liu_006
+			title:d_zangke.holder ?= character:zhu_bao
+			title:d_yelang.holder ?= character:zhu_bao
+			title:c_uuii_p_1916.holder ?= character:sun_jiao
+			character:fa_zheng ?= {
+				any_held_title = {
+					count >= 7
+					tier = tier_county
+					is_noble_family_title = no
+				}
+			}
+		}
+		debug_log = "HD218 CHECK RESIGN_WATCH OK"
+	}
+	else = { debug_log = "HD218 CHECK RESIGN_WATCH BAD" }
+	# 许昌：王必持有，领主是颍川持有者曹操
+	if = {
+		limit = {
+			title:c_uuii_p_738.holder ?= {
+				this = character:wang_bi_2
+				liege ?= character:cao_cao
+			}
+			title:d_yinchuan.holder ?= character:cao_cao
+		}
+		debug_log = "HD218 CHECK XUCHANG OK"
+	}
+	else = { debug_log = "HD218 CHECK XUCHANG BAD" }
+	if = {
+		limit = {
+			character:zhao_yun ?= {
+				has_relation_friend = character:liu_bei
+				has_relation_friend = character:guan_yu
+				has_relation_friend = character:zhang_fei
+			}
+			character:zhu_ge_liang ?= { has_relation_best_friend = character:liu_bei }
+		}
+		debug_log = "HD218 CHECK RELATIONS OK"
+	}
+	else = { debug_log = "HD218 CHECK RELATIONS BAD" }
+	# 三家去短暂统治修正在身；刘、孙正统 6 级（legitimacy_level 从 0 起算，即 5）。曹操是封臣，引擎不给正统，不查
+	if = {
+		limit = {
+			character:cao_cao ?= { has_character_modifier = hd_sg218_established_rule_modifier }
+			character:liu_bei ?= { legitimacy_level >= 5 has_character_modifier = hd_sg218_established_rule_modifier }
+			character:sun_quan ?= { legitimacy_level >= 5 has_character_modifier = hd_sg218_established_rule_modifier }
+		}
+		debug_log = "HD218 CHECK THREE_RULERS OK"
+	}
+	else = { debug_log = "HD218 CHECK THREE_RULERS BAD" }
+	if = {
+		limit = { character:liu_bei ?= { is_allied_to = character:sun_quan } }
+		debug_log = "HD218 CHECK SUN_LIU_ALLIANCE OK"
+	}
+	else = { debug_log = "HD218 CHECK SUN_LIU_ALLIANCE BAD" }
+	if = {
+		limit = {
+			exists = title:h_china.var:hd_court_regent_title
+			title:h_china.var:hd_court_regent_title = global_var:hd218_wei_wang_title
+		}
+		debug_log = "HD218 CHECK REGENT_TITLE OK"
+	}
+	else = { debug_log = "HD218 CHECK REGENT_TITLE BAD" }
+	if = {
+		limit = {
+			title:h_china.var:hd_dc_ten_qjc_regent ?= character:cao_cao
+			character:liu_xie ?= {
+				has_diarchy_type = grand_secretariat
+				diarch ?= character:cao_cao
+				has_realm_law = WJ_grand_chengxiang_law
+			}
+			character:cao_cao ?= { has_title = title:e_WJ_minister_cheng_xiang }
+		}
+		debug_log = "HD218 CHECK REGENT_LOCK OK"
+	}
+	else = { debug_log = "HD218 CHECK REGENT_LOCK BAD" }
+	if = {
+		limit = {
+			character:guan_yu ?= { WJ_dd_head_trigger = yes }
+		}
+		debug_log = "HD218 CHECK DUDU_HEAD OK"
+	}
+	else = { debug_log = "HD218 CHECK DUDU_HEAD BAD" }
+	if = {
+		limit = {
+			character:mi_fang ?= { liege ?= character:guan_yu WJ_dd_member_of_core_trigger = { CORE = title:k_uuii_jingzhou } }
+			character:hd218_meng_da ?= { liege ?= character:guan_yu WJ_dd_member_of_core_trigger = { CORE = title:k_uuii_jingzhou } }
+			character:shi_ren ?= { liege ?= character:guan_yu WJ_dd_member_of_core_trigger = { CORE = title:k_uuii_jingzhou } }
+		}
+		debug_log = "HD218 CHECK DUDU_MEMBERS OK"
+	}
+	else = { debug_log = "HD218 CHECK DUDU_MEMBERS BAD" }
+	if = {
+		limit = {
+			title:k_uuii_jingzhou.var:wj_dd_realm ?= global_var:hd218_hanzhong_title
+			character:liu_bei ?= { capital_county ?= title:c_uuii_p_4282 }
+		}
+		debug_log = "HD218 CHECK DUDU_REALM_CAPITAL OK"
+	}
+	else = { debug_log = "HD218 CHECK DUDU_REALM_CAPITAL BAD" }
+	if = {
+		limit = { character:liu_bei ?= { primary_spouse ?= character:wu_xian_2 } }
+		debug_log = "HD218 CHECK LIU_BEI_SPOUSE OK"
+	}
+	else = { debug_log = "HD218 CHECK LIU_BEI_SPOUSE BAD" }
+	if = {
+		limit = {
+			title:k_uuii_yizhou = { title:h_china = { is_de_jure_liege_or_above_target = prev } }
+			title:k_uuii_jingzhou = { title:h_china = { is_de_jure_liege_or_above_target = prev } }
+			title:k_uuii_ningzhou ?= { title:h_china = { is_de_jure_liege_or_above_target = prev } }
+		}
+		debug_log = "HD218 CHECK DEJURE_IN_CHINA OK"
+	}
+	else = { debug_log = "HD218 CHECK DEJURE_IN_CHINA BAD" }
+	# 诸葛亮、司马懿：已离开原家族、是新分家家主、持同名世族头衔
+	if = {
+		limit = {
+			character:zhu_ge_liang ?= {
+				NOT = { house ?= house:langya_zhuge }
+				is_house_head = yes
+				has_title = title:c_hd218_nf_zhuge_liang
+				hd_sg218_in_shu_trigger = yes
+			}
+		}
+		debug_log = "HD218 CHECK CADET_ZHUGE OK"
+	}
+	else = { debug_log = "HD218 CHECK CADET_ZHUGE BAD" }
+	if = {
+		limit = {
+			character:si_ma_yi ?= {
+				NOT = { house ?= house:house_111010756002013 }
+				is_house_head = yes
+				has_title = title:c_hd218_nf_si_ma_yi
+			}
+		}
+		debug_log = "HD218 CHECK CADET_SIMA OK"
+	}
+	else = { debug_log = "HD218 CHECK CADET_SIMA BAD" }
+	if = {
+		limit = {
+			character:si_ma_shi ?= { house ?= house:hd218_house_si_ma_yi }
+			character:si_ma_zhao ?= { house ?= house:hd218_house_si_ma_yi }
+			character:zhu_ge_qiao ?= { house ?= house:hd218_house_zhuge_liang }
+		}
+		debug_log = "HD218 CHECK CADET_SONS OK"
+	}
+	else = { debug_log = "HD218 CHECK CADET_SONS BAD" }
+}
+
+# 汉中之战：照原版边境战争（boki 10-13）——刘备只打汉中郡持有者夏侯渊，曹操不当守方。
+# 宗主满 border_war_grace_period_days（1095 天）后才能用「加入封臣战争」下场；中央调派都督援助照常允许。
+# 曹刘互给三年停战，挡住曹操 AI 另行对刘备宣战（脚本宣战不受停战影响）。
+# 打赢后武都、阴平两郡由 hd_sg218_hanzhong_annex_effect 一并划归刘备。
+# 成功后沿用战争种类和全局标记 hd_sg218_hanzhong_active，失败写日志。
+hd218_hanzhong_war_effect = {
+	if = {
+		limit = {
+			character:liu_bei ?= {
+				is_alive = yes
+				is_landed = yes
+				NOT = { any_character_war = { using_cb = hd_sg218_war_cb } }
+			}
+			character:cao_cao ?= { is_alive = yes }
+			title:d_hanzhong.holder ?= {
+				NOT = { this = character:cao_cao }
+				is_vassal_or_below_of = character:cao_cao
+			}
+		}
+		title:d_hanzhong.holder = { save_scope_as = hd_sg218_def_hanzhong }
+		# 「加入封臣战争」要求守方宗主链上有人持边境战争法律；天子是霸权级，原版本该自带，没有才补
+		scope:hd_sg218_def_hanzhong.top_liege = {
+			if = {
+				limit = {
+					NOT = { has_realm_law = top_liege_not_redirected_to_border_wars_law }
+					NOT = { this = scope:hd_sg218_def_hanzhong }
+				}
+				add_realm_law_skip_effects = top_liege_not_redirected_to_border_wars_law
+				debug_log = "HD218 HANZHONG BORDER_LAW_ADDED"
+			}
+		}
+		character:liu_bei = {
+			if = {
+				limit = { is_allied_to = scope:hd_sg218_def_hanzhong }
+				break_alliance_due_to_attack_effect = { TARGET = scope:hd_sg218_def_hanzhong }
+			}
+			start_war = {
+				cb = hd_sg218_war_cb
+				target = scope:hd_sg218_def_hanzhong
+				target_title = title:d_hanzhong
+			}
+			random_character_war = {
+				limit = {
+					using_cb = hd_sg218_war_cb
+					primary_attacker = character:liu_bei
+					primary_defender = scope:hd_sg218_def_hanzhong
+					NOT = { has_variable = hd_sg218_war_kind }
+				}
+				set_variable = { name = hd_sg218_war_kind value = flag:hanzhong }
+				save_scope_as = hd_sg218_war_hanzhong
+			}
+		}
+		if = {
+			limit = { exists = scope:hd_sg218_war_hanzhong }
+			set_global_variable = hd_sg218_hanzhong_active
+			debug_log = "HD218 WAR_CONFIRMED hanzhong"
+			set_global_variable = hd_sg218_hanzhong_started
+			character:cao_cao = {
+				if = {
+					limit = { NOT = { is_at_war_with = character:liu_bei } }
+					add_truce_both_ways = {
+						character = character:liu_bei
+						years = 3
+					}
+				}
+			}
+			character:liu_bei = { trigger_event = hd_sg218.0010 }
+		}
+		else = {
+			debug_log = "HD218 WAR_START_FAILED hanzhong"
+		}
+	}
+	else = {
+		debug_log = "HD218 HANZHONG WAR_SKIPPED"
+	}
+}
+
+############################################################
+# 每年：生日生成器补出的遗腹子改接父亲（重复人物取舍后的小补丁，第八节第 2 条）
+############################################################
+hd218_father_patch_effect = {
+	# 陆抗（226 年生）：父亲接到 lu_xun
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd218_lu_kang_patched }
+			exists = global_var:hd_hb_p_wujun_lu_013
+			exists = character:lu_xun
+		}
+		global_var:hd_hb_p_wujun_lu_013 = {
+			if = {
+				limit = { NOT = { father ?= character:lu_xun } }
+				set_father = character:lu_xun
+			}
+		}
+		set_global_variable = hd218_lu_kang_patched
+	}
+	# 张震、张氏（219 年生）：生成器只留了出场标记，按"生父已死于 216 年、孩子未满 3 岁"找，父亲接到 zhang_zhao
+	if = {
+		limit = {
+			exists = character:danyang_zhang_001
+			exists = character:zhang_zhao
+		}
+		character:danyang_zhang_001 = {
+			every_child = {
+				limit = { age < 3 }
+				set_father = character:zhang_zhao
+			}
+		}
+	}
+}
+
+# 曹操丢地观察（boki 10-12 22:07 实测曹操开局失地）：曹操在世却无地时每年记一次
+hd218_cao_land_watch_effect = {
+	if = {
+		limit = { character:cao_cao ?= { is_alive = yes is_landed = no } }
+		debug_log = "HD218 WATCH CAO_LANDLESS"
+	}
+}
+
+# e_han 观察（e_han 处理复核建议 4）：受禅后献帝作封臣持空法理 e_han，引擎继承、收回、辞头衔会不会把它交到天子手里，脚本看不到，每年记一次
+hd218_e_han_watch_effect = {
+	if = {
+		limit = { title:h_china.holder ?= { has_title = title:e_han NOT = { this = character:liu_xie } } } # 献帝本就同持
+		if = {
+			limit = { title:h_china.holder = { has_title = title:e_hd218_wei } }
+			debug_log = "HD218 WATCH E_HAN_WITH_HEGEMON HAS_WEI"
+		}
+		else = { debug_log = "HD218 WATCH E_HAN_WITH_HEGEMON NO_WEI" }
+	}
+	if = {
+		limit = { title:e_han = { any_de_jure_county = { count >= 1 } } }
+		debug_log = "HD218 WATCH E_HAN_DEJURE_RESTORED"
+	}
+}
+
+# 郡国制开关为 no（boki 10-13 11:39）：丞相 e_WJ_minister_cheng_xiang 是帝国级，appointment 授官时引擎会辞头衔（10-12 实测丢地）。
+# 先用 granted 交给本人，再走 WJ 拜相效果：got_minister_position_effect 见本人已持该官职就跳过 appointment
+# （WJ_ministry_override_effects.txt:40-44），只补朝官席位、法律和摄政。granted 能否避开检查待实测（HD218 TEST AFTER_GRANT）。Scope：受任人
+hd218_grant_chengxiang_effect = {
+	if = {
+		limit = { NOT = { has_title = title:e_WJ_minister_cheng_xiang } }
+		save_scope_as = hd218_cx_target
+		# 不能先建给天子：刘协持丞相会被引擎当场辞掉并销毁（10-13 实测），之后再授就会走 WJ 的 appointment
+		create_title_and_vassal_change = { type = granted save_scope_as = hd218_cx_change add_claim_on_loss = no }
+		title:e_WJ_minister_cheng_xiang = {
+			change_title_holder = { holder = scope:hd218_cx_target change = scope:hd218_cx_change }
+		}
+		resolve_title_and_vassal_change = scope:hd218_cx_change
+	}
+	if = {
+		limit = { has_title = title:e_WJ_minister_cheng_xiang }
+		debug_log = "HD218 CHENG_XIANG GRANTED"
+	}
+	else = { debug_log = "HD218 CHENG_XIANG GRANT_FAILED" }
+}
+
+# 开局第 10 天检查（终身辅政锁第 5 天授丞相之后）：曹操仍持魏国且为主头衔、刘协仍是他的傀儡
+hd218_day10_check_effect = {
+	if = {
+		limit = { character:cao_cao ?= { primary_title ?= title:e_hd218_wei is_landed = yes } }
+		debug_log = "HD218 DAY10 CAO_WEI OK"
+	}
+	else = { debug_log = "HD218 DAY10 CAO_WEI BAD" }
+	if = {
+		limit = { character:liu_xie ?= { puppeteer ?= character:cao_cao } }
+		debug_log = "HD218 DAY10 CAO_PUPPET OK"
+	}
+	else = { debug_log = "HD218 DAY10 CAO_PUPPET BAD" }
+	hd218_cao_land_watch_effect = yes
+	debug_log = "HD218 TEST STAGE DAY10"
+	hd218_test_dump_effect = yes
+}
+
+# 拜相秉政实测（boki 10-12 23:25）：把曹操、魏国、曹丕、丞相、刘协的状态逐行写进 debug.log。
+# 每次调用前由调用处先打 "HD218 TEST STAGE <阶段>"；头衔清单看 LIST_BEGIN 与 LIST_END 之间的 scope 输出。Scope：任意
+hd218_test_dump_effect = {
+	# 曹操
+	character:cao_cao ?= {
+		if = {
+			limit = { has_title = title:e_hd218_wei }
+			debug_log = "HD218 TEST CAO HAS WEI"
+		}
+		else = { debug_log = "HD218 TEST CAO NO WEI" }
+		if = {
+			limit = { has_title = title:e_WJ_minister_cheng_xiang }
+			debug_log = "HD218 TEST CAO HAS CHENG_XIANG"
+		}
+		else = { debug_log = "HD218 TEST CAO NO CHENG_XIANG" }
+		if = {
+			limit = { has_title = title:k_uuii_sili }
+			debug_log = "HD218 TEST CAO HAS SILI"
+		}
+		else = { debug_log = "HD218 TEST CAO NO SILI" }
+		if = {
+			limit = { has_title = title:k_uuii_yuzhou }
+			debug_log = "HD218 TEST CAO HAS YUZHOU"
+		}
+		else = { debug_log = "HD218 TEST CAO NO YUZHOU" }
+		if = {
+			limit = { has_title = title:k_uuii_yanzhou }
+			debug_log = "HD218 TEST CAO HAS YANZHOU"
+		}
+		else = { debug_log = "HD218 TEST CAO NO YANZHOU" }
+		if = {
+			limit = { has_title = title:k_uuii_qingzhou }
+			debug_log = "HD218 TEST CAO HAS QINGZHOU"
+		}
+		else = { debug_log = "HD218 TEST CAO NO QINGZHOU" }
+		if = {
+			limit = { has_title = title:k_uuii_xuzhou }
+			debug_log = "HD218 TEST CAO HAS XUZHOU"
+		}
+		else = { debug_log = "HD218 TEST CAO NO XUZHOU" }
+		if = {
+			limit = { has_title = title:k_uuii_jizhou }
+			debug_log = "HD218 TEST CAO HAS JIZHOU"
+		}
+		else = { debug_log = "HD218 TEST CAO NO JIZHOU" }
+		if = {
+			limit = { has_title = title:k_uuii_youzhou }
+			debug_log = "HD218 TEST CAO HAS YOUZHOU"
+		}
+		else = { debug_log = "HD218 TEST CAO NO YOUZHOU" }
+		if = {
+			limit = { has_title = title:k_uuii_liangzhou }
+			debug_log = "HD218 TEST CAO HAS LIANGZHOU"
+		}
+		else = { debug_log = "HD218 TEST CAO NO LIANGZHOU" }
+		if = {
+			limit = { has_title = title:k_uuii_bingzhou }
+			debug_log = "HD218 TEST CAO HAS BINGZHOU"
+		}
+		else = { debug_log = "HD218 TEST CAO NO BINGZHOU" }
+		if = {
+			limit = { primary_title ?= title:e_hd218_wei }
+			debug_log = "HD218 TEST CAO PRIMARY_WEI YES"
+		}
+		else = { debug_log = "HD218 TEST CAO PRIMARY_WEI NO" }
+		if = {
+			limit = { is_landed = yes }
+			debug_log = "HD218 TEST CAO LANDED YES"
+		}
+		else = { debug_log = "HD218 TEST CAO LANDED NO" }
+		if = {
+			limit = { liege ?= character:liu_xie }
+			debug_log = "HD218 TEST CAO LIEGE_LIU_XIE YES"
+		}
+		else = { debug_log = "HD218 TEST CAO LIEGE_LIU_XIE NO" }
+		# 直持县数门槛
+		if = {
+			limit = { any_held_title = { tier = tier_county count >= 1 } }
+			debug_log = "HD218 TEST CAO COUNTIES_GE_1"
+		}
+		if = {
+			limit = { any_held_title = { tier = tier_county count >= 50 } }
+			debug_log = "HD218 TEST CAO COUNTIES_GE_50"
+		}
+		if = {
+			limit = { any_held_title = { tier = tier_county count >= 100 } }
+			debug_log = "HD218 TEST CAO COUNTIES_GE_100"
+		}
+		if = {
+			limit = { any_held_title = { tier = tier_county count >= 150 } }
+			debug_log = "HD218 TEST CAO COUNTIES_GE_150"
+		}
+		if = {
+			limit = { any_held_title = { tier = tier_county count >= 200 } }
+			debug_log = "HD218 TEST CAO COUNTIES_GE_200"
+		}
+		if = {
+			limit = { any_held_title = { tier = tier_county count >= 300 } }
+			debug_log = "HD218 TEST CAO COUNTIES_GE_300"
+		}
+		if = {
+			limit = { any_held_title = { tier = tier_county count >= 400 } }
+			debug_log = "HD218 TEST CAO COUNTIES_GE_400"
+		}
+		if = {
+			limit = { any_held_title = { tier = tier_county count >= 500 } }
+			debug_log = "HD218 TEST CAO COUNTIES_GE_500"
+		}
+		if = {
+			limit = { any_held_title = { tier = tier_county count >= 600 } }
+			debug_log = "HD218 TEST CAO COUNTIES_GE_600"
+		}
+		if = {
+			limit = { any_held_title = { tier = tier_county count >= 700 } }
+			debug_log = "HD218 TEST CAO COUNTIES_GE_700"
+		}
+		# 封臣数门槛（只降封臣、头衔都在，是授官时封臣交回天子，不是辞头衔）
+		if = {
+			limit = { vassal_count >= 1 }
+			debug_log = "HD218 TEST CAO VASSALS_GE_1"
+		}
+		if = {
+			limit = { vassal_count >= 50 }
+			debug_log = "HD218 TEST CAO VASSALS_GE_50"
+		}
+		if = {
+			limit = { vassal_count >= 100 }
+			debug_log = "HD218 TEST CAO VASSALS_GE_100"
+		}
+		if = {
+			limit = { vassal_count >= 150 }
+			debug_log = "HD218 TEST CAO VASSALS_GE_150"
+		}
+		debug_log = "HD218 TEST LIST_BEGIN CAO"
+		every_held_title = {
+			limit = {
+				OR = {
+					tier >= tier_duchy
+					is_noble_family_title = yes
+				}
+			}
+			debug_log_scopes = yes
+		}
+		debug_log = "HD218 TEST LIST_END CAO"
+	}
+	# 魏国持有者
+	if = {
+		limit = { title:e_hd218_wei = { is_title_created = no } }
+		debug_log = "HD218 TEST WEI_HOLDER NOT_CREATED"
+	}
+	else_if = {
+		limit = { NOT = { exists = title:e_hd218_wei.holder } }
+		debug_log = "HD218 TEST WEI_HOLDER NONE"
+	}
+	else_if = {
+		limit = { title:e_hd218_wei.holder ?= character:cao_cao }
+		debug_log = "HD218 TEST WEI_HOLDER CAO_CAO"
+	}
+	else_if = {
+		limit = { title:e_hd218_wei.holder ?= character:cao_pi }
+		debug_log = "HD218 TEST WEI_HOLDER CAO_PI"
+	}
+	else = { debug_log = "HD218 TEST WEI_HOLDER OTHER" }
+	# 权臣主头衔记录（拜相排在 install 之前，AFTER_INSTALL 起才有）
+	if = {
+		limit = {
+			exists = title:h_china.var:hd_court_regent_title
+			title:h_china.var:hd_court_regent_title = title:e_hd218_wei
+		}
+		debug_log = "HD218 TEST REGENT_TITLE_WEI YES"
+	}
+	else = { debug_log = "HD218 TEST REGENT_TITLE_WEI NO" }
+	# 丞相持有者
+	if = {
+		limit = { title:e_WJ_minister_cheng_xiang.holder ?= character:cao_cao }
+		debug_log = "HD218 TEST CHENG_XIANG_HOLDER CAO_CAO"
+	}
+	else_if = {
+		limit = { title:e_WJ_minister_cheng_xiang.holder ?= character:cao_pi }
+		debug_log = "HD218 TEST CHENG_XIANG_HOLDER CAO_PI"
+	}
+	else_if = {
+		limit = { exists = title:e_WJ_minister_cheng_xiang.holder }
+		debug_log = "HD218 TEST CHENG_XIANG_HOLDER OTHER"
+	}
+	else = { debug_log = "HD218 TEST CHENG_XIANG_HOLDER NONE" }
+	# 曹丕
+	character:cao_pi ?= {
+		if = {
+			limit = { is_landed = yes }
+			debug_log = "HD218 TEST CAO_PI LANDED YES"
+		}
+		else = { debug_log = "HD218 TEST CAO_PI LANDED NO" }
+		if = {
+			limit = { is_independent_ruler = yes }
+			debug_log = "HD218 TEST CAO_PI INDEPENDENT YES"
+		}
+		else = { debug_log = "HD218 TEST CAO_PI INDEPENDENT NO" }
+		if = {
+			limit = { liege ?= character:cao_cao }
+			debug_log = "HD218 TEST CAO_PI LIEGE_CAO_CAO YES"
+		}
+		else = { debug_log = "HD218 TEST CAO_PI LIEGE_CAO_CAO NO" }
+		if = {
+			limit = { any_held_title = { tier >= tier_duchy } }
+			debug_log = "HD218 TEST CAO_PI DUCHY_OR_ABOVE YES"
+		}
+		else = { debug_log = "HD218 TEST CAO_PI DUCHY_OR_ABOVE NO" }
+		if = {
+			limit = { any_held_title = { tier >= tier_kingdom } }
+			debug_log = "HD218 TEST CAO_PI KINGDOM_OR_ABOVE YES"
+		}
+		else = { debug_log = "HD218 TEST CAO_PI KINGDOM_OR_ABOVE NO" }
+		debug_log = "HD218 TEST LIST_BEGIN CAO_PI"
+		every_held_title = {
+			limit = { tier >= tier_duchy }
+			debug_log_scopes = yes
+		}
+		debug_log = "HD218 TEST LIST_END CAO_PI"
+	}
+	# 刘协
+	character:liu_xie ?= {
+		if = {
+			limit = { exists = puppeteer }
+			debug_log = "HD218 TEST LIU_XIE HAS_PUPPETEER YES"
+		}
+		else = { debug_log = "HD218 TEST LIU_XIE HAS_PUPPETEER NO" }
+		if = {
+			limit = { puppeteer ?= character:cao_cao }
+			debug_log = "HD218 TEST LIU_XIE PUPPETEER_CAO_CAO YES"
+		}
+		else = { debug_log = "HD218 TEST LIU_XIE PUPPETEER_CAO_CAO NO" }
+		if = {
+			limit = { has_diarchy_type = grand_secretariat }
+			debug_log = "HD218 TEST LIU_XIE GRAND_SECRETARIAT YES"
+		}
+		else = { debug_log = "HD218 TEST LIU_XIE GRAND_SECRETARIAT NO" }
+		if = {
+			limit = { diarch ?= character:cao_cao }
+			debug_log = "HD218 TEST LIU_XIE DIARCH_CAO_CAO YES"
+		}
+		else = { debug_log = "HD218 TEST LIU_XIE DIARCH_CAO_CAO NO" }
+	}
+}
+
+# 钟繇去重（boki 10-12 23:05 留 zhong_yao，184 同）：yingchuan_zhong_008 卒于 216，其在世子女（钟毓、生成器后来生的钟会）父亲接到 zhong_yao。
+# 不限开局日期，由 zz_hd_218_startup.txt 的 hd_zhong_yao_father_patch 每年跑
+hd_zhong_yao_father_patch_effect = {
+	if = {
+		limit = {
+			exists = character:yingchuan_zhong_008
+			exists = character:zhong_yao
+		}
+		character:yingchuan_zhong_008 = {
+			every_child = {
+				limit = { is_alive = yes }
+				set_father = character:zhong_yao
+			}
+		}
+	}
+}

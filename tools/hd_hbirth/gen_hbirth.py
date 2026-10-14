@@ -166,6 +166,8 @@ def selected(c):
     b = c['birth']
     if not b or not (START < b <= LAST):
         return False
+    if re.match(r'hd_nbc\d+_(gov|chief)', c['id']):
+        return False  # 南北朝剧本的虚构郡守、外围首领，只用于 346/404 开局（2026-10-14）
     a = audit.get(c['id'])
     if a is None:
         return True  # 审查后新增的人物，默认按史实处理并在报告里列出

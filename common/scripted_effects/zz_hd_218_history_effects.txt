@@ -212,7 +212,6 @@ hd_sg218_pulse_effect = {
 	hd_sg218_check_kebineng_effect = yes
 	hd_sg218_check_wan_effect = yes
 	hd_sg218_check_dingjunshan_effect = yes
-	hd_sg218_check_jilei_effect = yes
 	hd_sg218_check_hanzhong_invalid_effect = yes
 	hd_sg218_check_hanzhong_result_effect = yes
 	hd_sg218_check_xiangfan_effect = yes
@@ -381,12 +380,7 @@ hd_sg218_check_dingjunshan_effect = {
 	}
 }
 
-############################################################
-# 5b 鸡肋（boki 10-13）：引擎不能直接加战分，"夏侯渊死后战分 +50%"改成门槛打对折——
-# 夏侯渊死于汉中之战期间（定军山事件或任何死因）后：攻方战分 ≥ 50 即退兵；
-# 或满 120 天（史实正月定军山、五月退兵）且攻方战分不为负也退兵。退兵即判攻方胜（hd_sg218.0055）
-############################################################
-# Root：夏侯渊（on_death）
+# 夏侯渊死于汉中之战期间：只为下面的作废兜底记标记（鸡肋事件、战分 50 即胜已删，boki 10-14）。Root：夏侯渊（on_death）
 hd_sg218_xhy_death_effect = {
 	if = {
 		limit = {
@@ -394,42 +388,7 @@ hd_sg218_xhy_death_effect = {
 			NOT = { has_global_variable = hd_sg218_xhy_dead }
 		}
 		set_global_variable = hd_sg218_xhy_dead
-		set_global_variable = { name = hd_sg218_jilei_wait value = yes days = 120 }
 		debug_log = "HD218 XHY_DEAD_IN_HANZHONG_WAR"
-	}
-}
-
-hd_sg218_check_jilei_effect = {
-	if = {
-		limit = {
-			NOT = { has_global_variable = hd_sg218_jilei_done }
-			has_global_variable = hd_sg218_xhy_dead
-			hd_sg218_war_active_trigger = { KIND = hanzhong }
-		}
-		hd_sg218_find_war_effect = { WHO = global_var:hd218_hanzhong_title.holder KIND = hanzhong }
-		if = {
-			limit = {
-				exists = scope:hd_sg218_war_hanzhong
-				scope:hd_sg218_war_hanzhong = {
-					OR = {
-						attacker_war_score >= 50
-						AND = {
-							NOT = { has_global_variable = hd_sg218_jilei_wait }
-							attacker_war_score >= 0
-						}
-					}
-				}
-			}
-			set_global_variable = hd_sg218_jilei_done
-			# 守方是夏侯渊（死后由其继承人接战），鸡肋由魏王下令；魏王不在就发给守方
-			if = {
-				limit = { exists = title:e_hd218_wei.holder }
-				title:e_hd218_wei.holder = { trigger_event = hd_sg218.0055 }
-			}
-			else = {
-				scope:hd_sg218_def_hanzhong = { trigger_event = hd_sg218.0055 }
-			}
-		}
 	}
 }
 
@@ -454,7 +413,7 @@ hd_sg218_check_hanzhong_result_effect = {
 
 # 汉中之战作废兜底（boki 10-13）：战争由夏侯渊的主继承人接手，但天朝制郡守按任命继承，汉中郡可能另派他人，
 # 接战者手里没有汉中的县，战争即判 invalid。夏侯渊已死时视为刘备胜：汉中郡里属魏国一方的县直接归蜀主，
-# 再设 hd_sg218_hanzhong_won，同一次心跳里接着走汉中归属（0060）和吞并武都、阴平。夏侯渊没死就照常作废
+# 再设 hd_sg218_hanzhong_won，同一次心跳里接着走汉中归属（0060）和夺取东三郡。夏侯渊没死就照常作废
 hd_sg218_check_hanzhong_invalid_effect = {
 	if = {
 		limit = {
@@ -476,25 +435,82 @@ hd_sg218_check_hanzhong_invalid_effect = {
 	}
 }
 
-# 汉中之战只打夏侯渊的汉中郡（边境战争，boki 10-13）；打赢后武都、阴平两郡里属魏国一方的县、郡头衔直接归蜀主，
-# 原持有人（杨阜等）失地（boki 选"全部县直接归刘备"）。上庸、房陵、魏兴仍留给孟达那一仗。
+# 汉中之战打赢后夺取东三郡（boki 10-14）：上庸、房陵、魏兴三郡的县和郡头衔，无论属于谁，一律归蜀主
+# （蜀主本国之内的不动）。武都、阴平不取；原孟达取上庸那一仗已删。Root：任意
 hd_sg218_hanzhong_annex_effect = {
 	if = {
-		limit = {
-			exists = global_var:hd218_hanzhong_title.holder
-			exists = title:e_hd218_wei.holder
-		}
+		limit = { exists = global_var:hd218_hanzhong_title.holder }
 		global_var:hd218_hanzhong_title.holder = { save_scope_as = hd_sg218_annexer }
-		title:e_hd218_wei.holder = { save_scope_as = hd_sg218_annex_from }
 		create_title_and_vassal_change = { type = conquest save_scope_as = hd_sg218_annex_change add_claim_on_loss = no }
-		hd_sg218_annex_duchy_effect = { DUCHY = title:d_wudou }
-		hd_sg218_annex_duchy_effect = { DUCHY = title:d_yinping1 }
+		hd_sg218_seize_duchy_effect = { DUCHY = title:d_shangyong }
+		hd_sg218_seize_duchy_effect = { DUCHY = title:d_fangling }
+		hd_sg218_seize_duchy_effect = { DUCHY = title:d_weixing }
 		resolve_title_and_vassal_change = scope:hd_sg218_annex_change
-		debug_log = "HD218 HANZHONG ANNEX wudou yinping"
+		debug_log = "HD218 HANZHONG ANNEX shangyong fangling weixing"
 	}
 	else = { debug_log = "HD218 HANZHONG ANNEX_SKIPPED" }
 }
 
+# 无论持有人是谁，只要不在 scope:hd_sg218_annexer 国内，县和郡头衔都归 annexer
+hd_sg218_seize_duchy_effect = {
+	$DUCHY$ = {
+		every_in_de_jure_hierarchy = {
+			limit = {
+				tier = tier_county
+				holder ?= {
+					NOT = { this = scope:hd_sg218_annexer }
+					NOT = { is_vassal_or_below_of = scope:hd_sg218_annexer }
+				}
+			}
+			change_title_holder = { holder = scope:hd_sg218_annexer change = scope:hd_sg218_annex_change take_baronies = yes }
+		}
+		if = {
+			limit = {
+				OR = {
+					NOT = { exists = holder }
+					holder = {
+						NOT = { this = scope:hd_sg218_annexer }
+						NOT = { is_vassal_or_below_of = scope:hd_sg218_annexer }
+					}
+				}
+			}
+			change_title_holder = { holder = scope:hd_sg218_annexer change = scope:hd_sg218_annex_change }
+		}
+	}
+}
+
+# 任命魏延为汉中太守（hd_sg218.0065）：汉中郡头衔、蜀主手里的汉中各县授魏延，魏延改为蜀主直属封臣。Root：蜀主
+hd_sg218_appoint_wei_yan_effect = {
+	character:wei_yan = { save_scope_as = hd_sg218_wei_yan }
+	create_title_and_vassal_change = { type = granted save_scope_as = hd_sg218_wy_change add_claim_on_loss = no }
+	title:d_hanzhong = {
+		every_in_de_jure_hierarchy = {
+			limit = {
+				tier = tier_county
+				holder ?= root
+			}
+			change_title_holder = { holder = scope:hd_sg218_wei_yan change = scope:hd_sg218_wy_change take_baronies = yes }
+		}
+		if = {
+			limit = {
+				OR = {
+					NOT = { exists = holder }
+					holder = root
+				}
+			}
+			change_title_holder = { holder = scope:hd_sg218_wei_yan change = scope:hd_sg218_wy_change }
+		}
+	}
+	resolve_title_and_vassal_change = scope:hd_sg218_wy_change
+	hd_sg218_swear_fealty_effect = { WHO = wei_yan LIEGE = root }
+	if = {
+		limit = { title:d_hanzhong.holder ?= scope:hd_sg218_wei_yan }
+		debug_log = "HD218 WEI_YAN_HANZHONG GRANTED"
+	}
+	else = { debug_log = "HD218 WEI_YAN_HANZHONG GRANT_FAILED" }
+}
+
+# 汉中郡里属 scope:hd_sg218_annex_from 一方的县、郡头衔归 annexer（作废兜底用）
 hd_sg218_annex_duchy_effect = {
 	$DUCHY$ = {
 		every_in_de_jure_hierarchy = {
@@ -519,26 +535,6 @@ hd_sg218_annex_duchy_effect = {
 				}
 			}
 			change_title_holder = { holder = scope:hd_sg218_annexer change = scope:hd_sg218_annex_change }
-		}
-	}
-}
-
-# 孟达进取房陵、上庸（0060 选项 a）。目标上庸，一并争夺魏兴（申仪）、房陵（蒯祺）
-hd_sg218_shangyong_war_effect = {
-	if = {
-		limit = {
-			character:hd218_meng_da ?= { is_alive = yes is_landed = yes }
-		}
-		hd_sg218_find_defender_effect = { TARGET = title:d_shangyong KIND = shangyong }
-		if = {
-			limit = {
-				exists = scope:hd_sg218_def_shangyong
-				NOT = { scope:hd_sg218_def_shangyong = character:hd218_meng_da.top_liege }
-				NOT = { character:hd218_meng_da = { is_vassal_or_below_of = scope:hd_sg218_def_shangyong } }
-			}
-			hd_sg218_start_war_fallback_effect = { ATTACKER = character:hd218_meng_da KIND = shangyong TARGET = title:d_shangyong }
-			hd_sg218_add_target_effect = { KIND = shangyong TARGET = title:d_weixing }
-			hd_sg218_add_target_effect = { KIND = shangyong TARGET = title:d_fangling }
 		}
 	}
 }

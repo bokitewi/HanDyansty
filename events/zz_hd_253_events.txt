@@ -1,0 +1,602 @@
+﻿namespace = hd253
+
+# 253「姜维北伐」剧本事件。判断与效果在 common/scripted_effects/zz_hd_253_history_effects.txt，
+# 入口在 common/on_action/zz_hd_253_startup.txt 与 common/casus_belli_types/zz_hd_253_beifa_cb.txt（都只在 253 开局出现）。
+# 0010-0020 开局两战；0100-0120 北伐事件；0200-0500 魏吴大事件；0510-0560 全局通报。
+
+############################################################
+# 开局两战
+############################################################
+
+# 姜维出兵狄道。Root：姜维
+hd253.0010 = {
+	type = character_event
+	title = hd253.0010.t
+	desc = hd253.0010.desc
+	theme = war
+	left_portrait = { character = root animation = war_attacker }
+	option = {
+		name = hd253.0010.a
+		ai_chance = { base = 100 }
+	}
+}
+
+# 诸葛恪围新城。Root：诸葛恪
+hd253.0020 = {
+	type = character_event
+	title = hd253.0020.t
+	desc = hd253.0020.desc
+	theme = war
+	left_portrait = { character = root animation = war_attacker }
+	option = {
+		name = hd253.0020.a
+		ai_chance = { base = 100 }
+	}
+}
+
+############################################################
+# 北伐事件（北伐中原宣战理由触发）
+############################################################
+
+# 羌胡响应：北伐一月后。Root：攻方
+hd253.0100 = {
+	type = character_event
+	title = hd253.0100.t
+	desc = hd253.0100.desc
+	theme = war
+	left_portrait = { character = root animation = personality_bold }
+	trigger = {
+		is_alive = yes
+		any_character_war = { using_cb = hd253_beifa_cb primary_attacker = root }
+	}
+	immediate = {
+		random_character_war = {
+			limit = { using_cb = hd253_beifa_cb primary_attacker = root }
+			save_scope_as = hd253_beifa_war
+		}
+	}
+	# 厚赏羌胡，借其骑兵
+	option = {
+		name = hd253.0100.a
+		trigger = { gold >= 50 }
+		remove_short_term_gold = 50
+		spawn_army = {
+			levies = 5000
+			location = capital_province
+			origin = capital_province
+			inheritable = yes
+			uses_supply = yes
+			war = scope:hd253_beifa_war
+			name = hd253_qianghu_army_name
+		}
+		ai_chance = { base = 100 }
+	}
+	# 胡骑难制，不用
+	option = {
+		name = hd253.0100.b
+		add_prestige = minor_prestige_gain
+		ai_chance = { base = 0 }
+	}
+}
+
+# 粮尽：北伐八月仍未决。Root：攻方
+hd253.0110 = {
+	type = character_event
+	title = hd253.0110.t
+	desc = hd253.0110.desc
+	theme = war
+	left_portrait = { character = root animation = worry }
+	trigger = {
+		is_alive = yes
+		any_character_war = { using_cb = hd253_beifa_cb primary_attacker = root }
+	}
+	immediate = {
+		random_character_war = {
+			limit = { using_cb = hd253_beifa_cb primary_attacker = root }
+			save_scope_as = hd253_beifa_war
+		}
+	}
+	# 粮尽，引兵还
+	option = {
+		name = hd253.0110.a
+		scope:hd253_beifa_war = { end_war = white_peace }
+		ai_chance = {
+			base = 50
+			modifier = { add = 40 scope:hd253_beifa_war = { attacker_war_score < 0 } }
+		}
+	}
+	# 再撑一时
+	option = {
+		name = hd253.0110.b
+		add_character_modifier = { modifier = hd253_grain_shortage_modifier years = 1 }
+		ai_chance = {
+			base = 50
+			modifier = { add = 40 scope:hd253_beifa_war = { attacker_war_score >= 30 } }
+		}
+	}
+}
+
+# 魏将来降：北伐得胜后，守方一名无地将领来投（没有合适的人就不显示）。Root：攻方
+hd253.0120 = {
+	type = character_event
+	title = hd253.0120.t
+	desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { exists = scope:hd253_defector }
+				desc = hd253.0120.desc
+			}
+			desc = hd253.0120.desc_none
+		}
+	}
+	theme = war
+	left_portrait = { character = root animation = personality_honorable }
+	right_portrait = {
+		character = scope:hd253_defector
+		animation = personality_rational
+		trigger = { exists = scope:hd253_defector }
+	}
+	trigger = { is_alive = yes }
+	immediate = {
+		# 先在战败守将宫中挑，再在其主君宫中挑；司马氏、邓艾、钟会等史实上不会入蜀的人除外
+		scope:hd253_beifa_loser ?= {
+			random_courtier = {
+				limit = { hd253_defector_trigger = yes }
+				save_scope_as = hd253_defector
+			}
+			if = {
+				limit = { NOT = { exists = scope:hd253_defector } }
+				liege ?= {
+					random_courtier = {
+						limit = { hd253_defector_trigger = yes }
+						save_scope_as = hd253_defector
+					}
+				}
+			}
+		}
+	}
+	option = {
+		name = hd253.0120.a
+		trigger = { exists = scope:hd253_defector }
+		scope:hd253_defector = {
+			set_employer = root
+			add_opinion = { target = root modifier = grateful_opinion opinion = 20 }
+		}
+		ai_chance = { base = 100 }
+	}
+	option = {
+		name = hd253.0120.b
+		trigger = { NOT = { exists = scope:hd253_defector } }
+		add_prestige = minor_prestige_gain
+		ai_chance = { base = 100 }
+	}
+}
+
+############################################################
+# 魏吴大事件
+############################################################
+
+# 孙峻设宴。Root：诸葛恪。电脑赴宴被杀，玩家可称疾不赴
+hd253.0200 = {
+	type = character_event
+	title = hd253.0200.t
+	desc = hd253.0200.desc
+	theme = intrigue
+	left_portrait = { character = root animation = personality_bold }
+	right_portrait = {
+		character = character:sun_jun
+		animation = scheme
+		trigger = { character:sun_jun ?= { is_alive = yes } }
+	}
+	trigger = { is_alive = yes }
+	# 入宫赴宴
+	option = {
+		name = hd253.0200.a
+		character:sun_jun ?= { save_scope_as = hd_news_b }
+		save_scope_as = hd_news_a
+		hd_world_news_send_effect = { EVENT = hd253.0530 }
+		hd253_zhuge_ke_killed_effect = yes
+		ai_chance = { base = 100 }
+	}
+	# 称疾不入
+	option = {
+		name = hd253.0200.b
+		add_stress = medium_stress_impact_gain
+		character:sun_jun ?= {
+			add_opinion = { target = root modifier = suspicion_opinion opinion = -30 }
+		}
+		ai_chance = { base = 0 }
+	}
+}
+
+# 废立之议。Root：司马师。电脑行废立，玩家可罢
+hd253.0300 = {
+	type = character_event
+	title = hd253.0300.t
+	desc = hd253.0300.desc
+	theme = dynastic_cycle
+	left_portrait = { character = root animation = personality_cynical }
+	right_portrait = { character = character:cao_fang animation = fear }
+	trigger = { is_alive = yes }
+	# 废帝，迎立高贵乡公
+	option = {
+		name = hd253.0300.a
+		save_scope_as = hd_news_a
+		character:cao_fang = { save_scope_as = hd_news_b }
+		# 夏侯玄与李丰同谋，先已伏诛（玩家扮演的不动）
+		character:xia_hou_xuan ?= {
+			if = {
+				limit = { is_alive = yes is_ai = yes }
+				death = { death_reason = death_execution killer = root }
+			}
+		}
+		hd253_feifang_effect = yes
+		hd_world_news_send_effect = { EVENT = hd253.0540 }
+		character:cao_fang ?= {
+			if = {
+				limit = { is_ai = no }
+				trigger_event = hd253.0310
+			}
+		}
+		ai_chance = { base = 100 }
+	}
+	# 暂且隐忍
+	option = {
+		name = hd253.0300.b
+		ai_chance = { base = 0 }
+	}
+}
+
+# 废立之议（玩家曹芳、电脑司马师）。Root：曹芳。可忍辱退位，也可拒不从命
+hd253.0305 = {
+	type = character_event
+	title = hd253.0305.t
+	desc = hd253.0305.desc
+	theme = dynastic_cycle
+	left_portrait = { character = root animation = fear }
+	right_portrait = { character = character:si_ma_shi animation = personality_cynical }
+	trigger = { is_alive = yes }
+	# 忍辱退位
+	option = {
+		name = hd253.0305.a
+		character:si_ma_shi = {
+			save_scope_as = hd_news_a
+			character:cao_fang = { save_scope_as = hd_news_b }
+			character:xia_hou_xuan ?= {
+				if = {
+					limit = { is_alive = yes is_ai = yes }
+					death = { death_reason = death_execution killer = character:si_ma_shi }
+				}
+			}
+			hd253_feifang_effect = yes
+			hd_world_news_send_effect = { EVENT = hd253.0540 }
+		}
+	}
+	# 拒不从命
+	option = {
+		name = hd253.0305.b
+		add_stress = major_stress_impact_gain
+		character:si_ma_shi = {
+			add_opinion = { target = root modifier = suspicion_opinion opinion = -40 }
+		}
+	}
+}
+
+# 被废（只给玩家曹芳）。Root：曹芳
+hd253.0310 = {
+	type = character_event
+	title = hd253.0310.t
+	desc = hd253.0310.desc
+	theme = dynastic_cycle
+	left_portrait = { character = root animation = grief }
+	option = { name = hd253.0310.a }
+}
+
+# 毌丘俭起兵。Root：毌丘俭。电脑起兵，玩家可隐忍
+hd253.0400 = {
+	type = character_event
+	title = hd253.0400.t
+	desc = hd253.0400.desc
+	theme = war
+	left_portrait = { character = root animation = war_attacker }
+	right_portrait = {
+		character = character:wen_qin
+		animation = personality_bold
+		trigger = { character:wen_qin ?= { is_alive = yes } }
+	}
+	trigger = { is_alive = yes }
+	# 矫太后诏，起兵讨司马
+	option = {
+		name = hd253.0400.a
+		hd253_rebel_effect = yes
+		save_scope_as = hd_news_a
+		liege ?= { save_scope_as = hd_news_b }
+		hd_world_news_send_effect = { EVENT = hd253.0550 }
+		ai_chance = { base = 100 }
+	}
+	# 隐忍不发
+	option = {
+		name = hd253.0400.b
+		add_stress = medium_stress_impact_gain
+		ai_chance = { base = 0 }
+	}
+}
+
+# 诸葛诞起兵。Root：诸葛诞。电脑起兵并连吴，玩家可隐忍
+hd253.0500 = {
+	type = character_event
+	title = hd253.0500.t
+	desc = hd253.0500.desc
+	theme = war
+	left_portrait = { character = root animation = war_attacker }
+	trigger = { is_alive = yes }
+	# 敛兵据守，请救于吴
+	option = {
+		name = hd253.0500.a
+		hd253_rebel_effect = yes
+		# 吴发兵来援（吴帝是电脑且不在战中时直接加入攻方）
+		scope:hd253_rebel_war ?= {
+			if = {
+				limit = {
+					title:e_jiangdong.holder ?= { is_ai = yes is_at_war = no }
+				}
+				add_attacker = title:e_jiangdong.holder
+			}
+		}
+		title:e_jiangdong.holder ?= {
+			if = {
+				limit = { is_ai = no exists = scope:hd253_rebel_war }
+				trigger_event = hd253.0505
+			}
+		}
+		save_scope_as = hd_news_a
+		liege ?= { save_scope_as = hd_news_b }
+		hd_world_news_send_effect = { EVENT = hd253.0560 }
+		ai_chance = { base = 100 }
+	}
+	# 隐忍不发
+	option = {
+		name = hd253.0500.b
+		add_stress = medium_stress_impact_gain
+		ai_chance = { base = 0 }
+	}
+}
+
+# 诸葛诞请援（只给玩家吴帝）。Root：吴帝；scope:hd253_rebel_war 诸葛诞起兵之战
+hd253.0505 = {
+	type = character_event
+	title = hd253.0505.t
+	desc = hd253.0505.desc
+	theme = war
+	left_portrait = { character = root animation = personality_rational }
+	right_portrait = { character = scope:hd253_rebel animation = war_attacker }
+	trigger = { is_alive = yes exists = scope:hd253_rebel_war }
+	# 发兵救寿春
+	option = {
+		name = hd253.0505.a
+		scope:hd253_rebel_war = {
+			if = {
+				limit = { NOT = { is_participant = root } }
+				add_attacker = root
+			}
+		}
+	}
+	# 坐观成败
+	option = { name = hd253.0505.b }
+}
+
+# 司马师死后：天子是玩家时问天子是否任司马昭辅政。Root：天子
+hd253.0600 = {
+	type = character_event
+	title = hd253.0600.t
+	desc = hd253.0600.desc
+	theme = dynastic_cycle
+	left_portrait = { character = root animation = worry }
+	right_portrait = { character = character:si_ma_zhao animation = personality_cynical }
+	trigger = { is_alive = yes }
+	# 以司马昭为大将军辅政
+	option = {
+		name = hd253.0600.a
+		hd253_zhao_regency_effect = yes
+	}
+	# 亲揽朝政
+	option = {
+		name = hd253.0600.b
+		add_stress = medium_stress_impact_gain
+		character:si_ma_zhao ?= { add_opinion = { target = root modifier = suspicion_opinion opinion = -30 } }
+	}
+}
+
+# 司马师死后：司马昭是玩家时问是否接任。Root：司马昭
+hd253.0610 = {
+	type = character_event
+	title = hd253.0610.t
+	desc = hd253.0610.desc
+	theme = dynastic_cycle
+	left_portrait = { character = root animation = personality_cynical }
+	trigger = { is_alive = yes }
+	option = {
+		name = hd253.0610.a
+		hd253_zhao_regency_effect = yes
+	}
+	option = {
+		name = hd253.0610.b
+		add_prestige = minor_prestige_gain
+	}
+}
+
+# 曹髦讨司马昭。Root：曹髦。电脑亲率宿卫出讨，玩家可隐忍
+hd253.0700 = {
+	type = character_event
+	title = hd253.0700.t
+	desc = hd253.0700.desc
+	theme = dynastic_cycle
+	left_portrait = { character = root animation = anger }
+	right_portrait = { character = character:si_ma_zhao animation = personality_cynical }
+	trigger = { is_alive = yes }
+	# 宁死不为常道乡公
+	option = {
+		name = hd253.0700.a
+		hd253_cao_mao_strike_effect = yes
+		ai_chance = { base = 100 }
+	}
+	# 隐忍待时
+	option = {
+		name = hd253.0700.b
+		add_stress = major_stress_impact_gain
+		ai_chance = { base = 0 }
+	}
+}
+
+# 南阙之变（只给玩家司马昭）。Root：司马昭
+hd253.0705 = {
+	type = character_event
+	title = hd253.0705.t
+	desc = hd253.0705.desc
+	theme = intrigue
+	left_portrait = { character = root animation = personality_cynical }
+	right_portrait = { character = character:cao_mao animation = anger }
+	trigger = { is_alive = yes }
+	# 任成济出手
+	option = {
+		name = hd253.0705.a
+		hd253_cao_mao_end_effect = { KILL = yes }
+	}
+	# 擒而废之，勿伤天子
+	option = {
+		name = hd253.0705.b
+		hd253_cao_mao_end_effect = { KILL = no }
+		add_prestige = minor_prestige_gain
+	}
+}
+
+# 灭蜀之议。Root：司马昭。电脑发兵，玩家可罢
+hd253.0710 = {
+	type = character_event
+	title = hd253.0710.t
+	desc = hd253.0710.desc
+	theme = war
+	left_portrait = { character = root animation = personality_cynical }
+	right_portrait = {
+		character = character:yingchuan_zhong_024
+		animation = personality_bold
+		trigger = { character:yingchuan_zhong_024 ?= { is_alive = yes } }
+	}
+	trigger = { is_alive = yes }
+	# 钟会、邓艾分道伐蜀
+	option = {
+		name = hd253.0710.a
+		hd253_fashu_war_effect = yes
+		ai_chance = { base = 100 }
+	}
+	# 蜀道艰险，且缓图之
+	option = {
+		name = hd253.0710.b
+		ai_chance = { base = 0 }
+	}
+}
+
+# 出降（只给玩家汉帝）。Root：汉帝
+hd253.0720 = {
+	type = character_event
+	title = hd253.0720.t
+	desc = hd253.0720.desc
+	theme = war
+	left_portrait = { character = root animation = worry }
+	trigger = { is_alive = yes }
+	# 舆榇出降
+	option = {
+		name = hd253.0720.a
+		hd253_shu_surrender_effect = yes
+	}
+	# 背城一战
+	option = {
+		name = hd253.0720.b
+		add_stress = major_stress_impact_gain
+	}
+}
+
+############################################################
+# 全局通报。scope:hd_news_a 主事人，scope:hd_news_b 对手
+############################################################
+hd253.0510 = {
+	type = character_event
+	title = hd253.0510.t
+	desc = hd253.0510.desc
+	theme = war
+	left_portrait = { character = scope:hd_news_a animation = war_attacker }
+	right_portrait = { character = scope:hd_news_b animation = worry }
+	option = { name = hd_world_news.a ai_chance = { base = 100 } }
+}
+hd253.0520 = {
+	type = character_event
+	title = hd253.0520.t
+	desc = hd253.0520.desc
+	theme = war
+	left_portrait = { character = scope:hd_news_a animation = war_attacker }
+	right_portrait = { character = scope:hd_news_b animation = personality_bold }
+	option = { name = hd_world_news.a ai_chance = { base = 100 } }
+}
+hd253.0530 = {
+	type = character_event
+	title = hd253.0530.t
+	desc = hd253.0530.desc
+	theme = intrigue
+	left_portrait = { character = scope:hd_news_a animation = fear }
+	right_portrait = { character = scope:hd_news_b animation = scheme }
+	option = { name = hd_world_news.a ai_chance = { base = 100 } }
+}
+hd253.0540 = {
+	type = character_event
+	title = hd253.0540.t
+	desc = hd253.0540.desc
+	theme = dynastic_cycle
+	left_portrait = { character = scope:hd_news_a animation = personality_cynical }
+	right_portrait = { character = scope:hd_news_b animation = grief }
+	option = { name = hd_world_news.a ai_chance = { base = 100 } }
+}
+hd253.0550 = {
+	type = character_event
+	title = hd253.0550.t
+	desc = hd253.0550.desc
+	theme = war
+	left_portrait = { character = scope:hd_news_a animation = war_attacker }
+	right_portrait = { character = scope:hd_news_b animation = personality_cynical }
+	option = { name = hd_world_news.a ai_chance = { base = 100 } }
+}
+hd253.0560 = {
+	type = character_event
+	title = hd253.0560.t
+	desc = hd253.0560.desc
+	theme = war
+	left_portrait = { character = scope:hd_news_a animation = war_attacker }
+	right_portrait = { character = scope:hd_news_b animation = personality_cynical }
+	option = { name = hd_world_news.a ai_chance = { base = 100 } }
+}
+hd253.0570 = {
+	type = character_event
+	title = hd253.0570.t
+	desc = hd253.0570.desc
+	theme = dynastic_cycle
+	left_portrait = { character = scope:hd_news_a animation = personality_cynical }
+	right_portrait = { character = scope:hd_news_b animation = anger }
+	option = { name = hd_world_news.a ai_chance = { base = 100 } }
+}
+hd253.0580 = {
+	type = character_event
+	title = hd253.0580.t
+	desc = hd253.0580.desc
+	theme = war
+	left_portrait = { character = scope:hd_news_a animation = war_attacker }
+	right_portrait = { character = scope:hd_news_b animation = worry }
+	option = { name = hd_world_news.a ai_chance = { base = 100 } }
+}
+hd253.0590 = {
+	type = character_event
+	title = hd253.0590.t
+	desc = hd253.0590.desc
+	theme = war
+	left_portrait = { character = scope:hd_news_a animation = grief }
+	right_portrait = { character = scope:hd_news_b animation = personality_content }
+	option = { name = hd_world_news.a ai_chance = { base = 100 } }
+}

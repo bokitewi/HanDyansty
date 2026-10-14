@@ -1,0 +1,219 @@
+﻿# 304 年剧本「左国称王」开局效果。只由 common/on_action/zz_hd_304_startup.txt 调用，调用处已带 304.11.20 闸门。
+# 计划见 docs/304刘渊剧本_计划.md 第 6、13、14 节。复用的 nbc 效果都是不分开局日期的通用效果
+# （hd_nbc_set_era_effect、hd_nbc_realm_name_effect、hd_nbc_style_effect、hd_nbc_culture_effect、hd_nbc_start_war_effect、
+#   hd_nbc_spawn_army_effect、hd_nbc_jin_emperor_nicknames_effect），带日期分支的 nbc 效果一律不调。
+
+############################################################
+# on_game_start
+############################################################
+hd_304_game_start_effect = {
+	# 终结乱世锁：诸王是天子的朝贡国，控制率天然超过门槛；永嘉之乱节点结束、天子失洛阳或 312 年解除
+	set_global_variable = hd_304_mandate_lock
+	# 刘渊已即汉王位、李雄已称成都王：五胡大单于不再另起；石勒改由"石勒归汉"节点处理
+	set_global_variable = hd_wuhu_chanyu_liuyuan_done
+	set_global_variable = hd_wuhu_chanyu_lite_done
+	set_global_variable = hd_wuhu_chanyu_shile_done
+	# 慕容廆开局已持昌黎
+	set_global_variable = { name = hd_hi_done_muronghui value = yes }
+	# 天意青睐"每月主动开战"要求讨董链已结束（184 专用变量）；218 开局同样直接设上（zz_hd_218_startup_effects.txt）
+	set_global_variable = { name = hd_anti_regent_chain_resolved value = yes }
+	# 天子京城：洛阳
+	title:h_china = {
+		set_capital_county = title:c_luoyang
+		set_variable = { name = hd_court_capital_county value = title:c_luoyang }
+	}
+	# 传国玉玺归惠帝
+	title:h_china.holder ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				NOT = { exists = global_var:hd_han_treasures_initialized }
+			}
+			hd_han_create_imperial_seal_effect = { OWNER = this }
+			set_global_variable = hd_han_treasures_initialized
+		}
+	}
+	hd_304_dynastic_cycle_effect = yes
+	hd_nbc_culture_effect = yes
+	hd_304_tributaries_effect = yes
+	debug_log = "HD_304 STAGE GAME_START"
+}
+
+# 天朝循环：群雄逐鹿（斗争）开局，五德取晋的金德；进度清零（写法同 hd_nbc_dynastic_cycle_effect，阶段不同）
+hd_304_dynastic_cycle_effect = {
+	if = {
+		limit = {
+			has_tgp_dlc_trigger = yes
+			exists = title:h_china.holder
+			NOT = { exists = situation:dynastic_cycle }
+		}
+		start_situation = {
+			type = dynastic_cycle
+			start_phase = situation_dynastic_cycle_phase_chaos
+		}
+	}
+	if = {
+		limit = {
+			has_tgp_dlc_trigger = yes
+			exists = situation:dynastic_cycle
+			NOT = { exists = global_var:saas_dynastic_cycle_initialized }
+		}
+		situation:dynastic_cycle = {
+			title:h_china = {
+				set_variable = {
+					name = years_since_imperial_examination
+					value = 0
+				}
+			}
+			tgp_set_wuking_element_effect = { ELEMENT = metal }
+			every_situation_participant = {
+				recalculate_participant_group = situation:dynastic_cycle
+			}
+			every_situation_sub_region = {
+				hd_dc_zero_phase_points_effect = { PHASE = situation_dynastic_cycle_phase_hd_standoff }
+			}
+			trigger_event = { on_action = hd_304_dc_zero_progress days = 2 }
+		}
+		set_global_variable = {
+			name = saas_dynastic_cycle_initialized
+			value = yes
+		}
+		debug_log = "HD_304 DYNASTIC_CYCLE CHAOS"
+	}
+}
+
+# 诸王开局独立，奉惠帝为宗主（天朝朝贡合同：只有纳贡、册封，无参战义务）。司马略、段部是封臣，不单独朝贡。
+hd_304_tributary_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_independent_ruler = yes
+				is_tributary = no
+				NOT = { this = title:h_china.holder }
+			}
+			# 不调 start_tributary_interaction_effect：它结尾会给双方加 25 年停战（执行后复核必改 3）。
+			# 下面与它的天朝分支等价（低档贡赋、初始地位 10），只是不加停战
+			start_tributary = {
+				contract_group = tributary_celestial
+				suzerain = title:h_china.holder
+			}
+			if = {
+				limit = { is_tributary = yes }
+				hidden_effect = {
+					tributary_contract_set_obligation_level = { type = celestial_tribute_gold level = 1 }
+					tributary_contract_set_obligation_level = { type = celestial_tribute_prestige level = 1 }
+				}
+				add_subject_standing = 10
+			}
+			debug_log = "HD_304 TRIBUTARY $WHO$"
+		}
+	}
+}
+hd_304_tributaries_effect = {
+	if = {
+		limit = {
+			title:h_china.holder ?= {
+				is_alive = yes
+				has_government = celestial_government
+			}
+		}
+		hd_304_tributary_effect = { WHO = si_ma_yong }          # 河间王司马颙
+		hd_304_tributary_effect = { WHO = si_ma_ying }          # 成都王司马颖
+		hd_304_tributary_effect = { WHO = hd_304_si_ma_yue }    # 东海王司马越
+		hd_304_tributary_effect = { WHO = si_ma_teng }          # 东嬴公司马腾
+		hd_304_tributary_effect = { WHO = taiyuan_wang_005 }    # 王浚
+		hd_304_tributary_effect = { WHO = zhang_gui_3 }         # 张轨
+	}
+}
+
+############################################################
+# on_game_start_after_lobby
+############################################################
+hd_304_after_lobby_effect = {
+	hd_304_era_effect = yes
+	hd_304_realm_display_effect = yes
+	hd_304_liu_family_effect = yes
+	hd_304_heir_effect = yes
+	hd_304_daling_war_effect = yes
+	# 天意青睐（名单在 zz_hd_rise_triggers.txt，带 304 闸门）
+	character:xiongnu_liu_020 ?= { hd_rise_ensure_story_effect = yes }
+	title:h_china = { trigger_event = { on_action = hd_304_tianjia_history_delayed days = 1 } }
+	debug_log = "HD_304 STAGE AFTER_LOBBY"
+}
+
+# 年号：晋建武元年（七月庚申改元建武，十一月丙午才复为永安，《晋书·惠帝纪》），汉元熙元年，成建兴元年
+hd_304_era_effect = {
+	hd_nbc_set_era_effect = { WHO = si_ma_zhong KEY = jianwu YEAR = 1 }
+	hd_nbc_set_era_effect = { WHO = xiongnu_liu_020 KEY = yuanxi YEAR = 1 }
+	hd_nbc_set_era_effect = { WHO = bacong_li_009 KEY = jianxing YEAR = 1 }
+}
+
+# 国号与称谓
+hd_304_realm_display_effect = {
+	hd_nbc_realm_name_effect = { WHO = si_ma_zhong NAME = dynn_title_jin FIXED = yes }
+	hd_nbc_realm_name_effect = { WHO = xiongnu_liu_020 NAME = dynn_title_han FIXED = no }
+	hd_nbc_realm_name_effect = { WHO = bacong_li_009 NAME = dynn_title_cheng FIXED = yes }
+	hd_nbc_style_effect = { WHO = xiongnu_liu_020 STYLE = wang }       # 汉王
+	hd_nbc_style_effect = { WHO = bacong_li_009 STYLE = wang }         # 成都王
+	hd_nbc_style_effect = { WHO = si_ma_yong STYLE = wang }            # 河间王
+	hd_nbc_style_effect = { WHO = si_ma_ying STYLE = wang }            # 成都王（皇太弟）
+	hd_nbc_style_effect = { WHO = hd_304_si_ma_yue STYLE = wang }      # 东海王
+	hd_nbc_style_effect = { WHO = si_ma_teng STYLE = gong }            # 东嬴公
+}
+
+# 刘渊"师事上党崔游，习毛诗、京氏易、马氏尚书"：刘渊及其在世子孙、刘曜改奉经学（只在 304 开局，history 不改）
+hd_304_jingxue_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = { is_alive = yes }
+			set_character_rite = rite:jingxue
+		}
+	}
+}
+hd_304_liu_family_effect = {
+	character:xiongnu_liu_020 ?= {
+		if = {
+			limit = { is_alive = yes }
+			set_character_rite = rite:jingxue
+			every_child = {
+				limit = { is_alive = yes }
+				set_character_rite = rite:jingxue
+				every_child = {
+					limit = { is_alive = yes }
+					set_character_rite = rite:jingxue
+				}
+			}
+		}
+	}
+	hd_304_jingxue_effect = { WHO = xiongnu_liu_041 }	# 刘曜，刘渊族子
+}
+
+# 储君：豫章王司马炽（史实 304 年十二月丁亥立为皇太弟，即 305.2.4，开局提前约两个半月）
+hd_304_heir_effect = {
+	character:si_ma_zhong ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				character:si_ma_chi ?= { is_alive = yes }
+			}
+			set_designated_heir = character:si_ma_chi
+		}
+	}
+}
+
+# 大陵之战：史实是司马腾遣聂玄击刘渊，战于大陵，玄兵大败。这里让刘渊作攻方，目标太原郡（含大陵），胜方才有所得。
+# 刘渊另得 15,000 事件兵（史载其众五万，数字是计划拟定的）
+hd_304_daling_war_effect = {
+	if = {
+		limit = {
+			character:xiongnu_liu_020 ?= { is_alive = yes is_independent_ruler = yes }
+			character:si_ma_teng ?= { is_alive = yes }
+			title:d_taiyuan.holder ?= character:si_ma_teng
+		}
+		character:xiongnu_liu_020 = {
+			hd_nbc_spawn_army_effect = { SIZE = 15000 WHERE = title:c_uuii_p_1385 NAME = hd_304_wubu_army_name }
+		}
+		hd_nbc_start_war_effect = { ATTACKER = character:xiongnu_liu_020 DEFENDER = character:si_ma_teng TARGET = title:d_taiyuan KIND = daling }
+	}
+}
