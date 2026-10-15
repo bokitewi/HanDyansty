@@ -1,0 +1,308 @@
+﻿# 370 年剧本「王猛伐燕」开局效果。只由 common/on_action/zz_hd_370_startup.txt 调用，调用处已带 370.2.13 闸门。
+# 计划见 docs/370苻坚剧本_计划.md 第 6、14 节。复用的 nbc 效果都是不分开局日期的通用效果
+# （hd_nbc_yiguan_late_start_effect、hd_nbc_dynastic_cycle_effect、hd_nbc_culture_effect、hd_nbc_set_era_effect、
+#   hd_nbc_realm_name_effect、hd_nbc_style_effect、hd_nbc_qiaojun_effect、hd_nbc_start_war_effect、hd_nbc_spawn_army_effect、
+#   hd_nbc_minister_effect），只对 346、404 生效的日期分支在 370 下不会执行。
+# scripted effect 里不写 root，人物一律用 character:ID。
+
+############################################################
+# on_game_start
+############################################################
+hd_370_game_start_effect = {
+	# 衣冠南渡 317 年已经发生：与 346、404 一样以对峙阶段开局；第一行就设 hd_yiguan_started
+	hd_nbc_yiguan_late_start_effect = yes
+	# 南徐（京口）、南兖（广陵）侨郡：nbc 只在 346 分支里预置，370 自己补（南豫已由上面的效果预置）
+	if = {
+		limit = { exists = global_var:hd_yiguan_late_start }
+		hd_nbc_qiaojun_effect = { COUNTY = c_uuii_p_2086 }
+		hd_nbc_qiaojun_effect = { COUNTY = c_uuii_p_7062 }
+	}
+	# 五胡大单于：刘渊、石勒、李特、苻洪、姚弋仲都早已去世
+	set_global_variable = hd_wuhu_chanyu_liuyuan_done
+	set_global_variable = hd_wuhu_chanyu_shile_done
+	set_global_variable = hd_wuhu_chanyu_lite_done
+	set_global_variable = hd_wuhu_chanyu_fuhong_done
+	set_global_variable = hd_wuhu_chanyu_yaoyizhong_done
+	# 历史入侵：慕容儁已死（同 346）。慕容垂、姚苌、乞伏国仁、吕光、拓跋珪等淝水以后的规则保留
+	set_global_variable = { name = hd_hi_done_murongjun value = yes }
+	# 天意青睐"每月主动开战"要求讨董链已结束（184 专用变量），同 304、531
+	set_global_variable = { name = hd_anti_regent_chain_resolved value = yes }
+	# 天子京城：建康
+	title:h_china = {
+		set_capital_county = title:c_uuii_p_4389
+		set_variable = { name = hd_court_capital_county value = title:c_uuii_p_4389 }
+	}
+	# 传国玉玺归海西公司马奕
+	title:h_china.holder ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				NOT = { exists = global_var:hd_han_treasures_initialized }
+			}
+			hd_han_create_imperial_seal_effect = { OWNER = this }
+			set_global_variable = hd_han_treasures_initialized
+		}
+	}
+	# 天朝循环：对峙阶段，晋金德（nbc 版本身没有日期分支，直接用）
+	hd_nbc_dynastic_cycle_effect = yes
+	hd_nbc_culture_effect = yes
+	hd_370_exia_effect = yes
+	debug_log = "HD_370 STAGE GAME_START"
+}
+
+# 夏（e_xia）历史上从没有条目，写进头衔历史会漏进 404、531（计划复核必改 6），改由开局脚本交给苻坚
+hd_370_exia_effect = {
+	character:lueyang_fu_020 ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				NOT = { exists = title:e_xia.holder }
+			}
+			save_scope_as = hd_370_exia_new
+			create_title_and_vassal_change = { type = created save_scope_as = hd_370_exia_change add_claim_on_loss = no }
+			title:e_xia = {
+				change_title_holder = {
+					holder = scope:hd_370_exia_new
+					change = scope:hd_370_exia_change
+				}
+			}
+			resolve_title_and_vassal_change = scope:hd_370_exia_change
+			debug_log = "HD_370 E_XIA TO FU_JIAN"
+		}
+	}
+}
+
+############################################################
+# on_game_start_after_lobby
+############################################################
+hd_370_after_lobby_effect = {
+	hd_370_capitals_effect = yes
+	hd_370_courtiers_effect = yes
+	hd_370_heir_effect = yes
+	hd_370_era_effect = yes
+	hd_370_realm_display_effect = yes
+	character:longkang_huan_017 ?= { hd_370_regency_effect = yes }
+	hd_370_ministers_effect = yes
+	hd_370_luoyang_war_effect = yes
+	# 天意青睐（名单在 zz_hd_rise_triggers.txt，带 370 闸门）
+	character:lueyang_fu_020 ?= { hd_rise_ensure_story_effect = yes }
+	debug_log = "HD_370 STAGE AFTER_LOBBY"
+}
+
+# 治所
+hd_370_capital_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				title:$COUNTY$.holder ?= this
+			}
+			set_realm_capital = title:$COUNTY$
+		}
+	}
+}
+hd_370_capitals_effect = {
+	hd_370_capital_effect = { WHO = lueyang_fu_020 COUNTY = c_uuii_p_867 }         # 长安
+	hd_370_capital_effect = { WHO = wang_meng_3 COUNTY = c_uuii_p_842 }            # 陕
+	hd_370_capital_effect = { WHO = hd_370_fu_ya COUNTY = c_uuii_p_1520 }          # 冀（秦州）
+	hd_370_capital_effect = { WHO = changli_murong_077 COUNTY = c_uuii_p_1172 }    # 邺
+	hd_370_capital_effect = { WHO = hd_370_murong_zhu COUNTY = c_uuii_p_786 }      # 金墉
+	hd_370_capital_effect = { WHO = hd_370_murong_zhuang COUNTY = c_uuii_p_351 }   # 晋阳
+	hd_370_capital_effect = { WHO = si_ma_yi_4 COUNTY = c_uuii_p_4389 }            # 建康
+	hd_370_capital_effect = { WHO = si_ma_yu_2 COUNTY = c_uuii_p_6471 }            # 山阴
+	hd_370_capital_effect = { WHO = longkang_huan_017 COUNTY = c_uuii_p_7062 }     # 广陵
+	hd_370_capital_effect = { WHO = longkang_huan_019 COUNTY = c_uuii_p_1813 }     # 江陵
+	hd_370_capital_effect = { WHO = longkang_huan_021 COUNTY = c_uuii_p_2077 }     # 寻阳
+	hd_370_capital_effect = { WHO = lujiang_zhou_007 COUNTY = c_uuii_p_4282 }      # 成都
+	hd_370_capital_effect = { WHO = chenjun_yuan_zhen COUNTY = c_uuii_p_1961 }     # 寿春
+	hd_370_capital_effect = { WHO = zhang_tian_xi COUNTY = c_uuii_p_1564 }         # 姑臧
+	hd_370_capital_effect = { WHO = tuoba_005 COUNTY = c_uuii_p_1333 }             # 云中（盛乐）
+}
+
+# 无地的史实人物进宫廷（计划第 6 节；谢安持世族头衔，是统治者，不进宫廷，计划复核建议 10）
+hd_370_courtier_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = no
+				character:$COURT$ ?= { is_alive = yes is_landed = yes }
+				NOT = { employer ?= character:$COURT$ }
+			}
+			character:$COURT$ = { add_courtier = character:$WHO$ }
+		}
+	}
+}
+hd_370_courtiers_effect = {
+	# 长安：苻氏宗室与朝臣、将领
+	hd_370_courtier_effect = { WHO = lueyang_fu_021 COURT = lueyang_fu_020 }       # 苻融
+	hd_370_courtier_effect = { WHO = lueyang_fu_024 COURT = lueyang_fu_020 }       # 苻丕
+	hd_370_courtier_effect = { WHO = lueyang_fu_039 COURT = lueyang_fu_020 }       # 苻洛
+	hd_370_courtier_effect = { WHO = lueyang_fu_040 COURT = lueyang_fu_020 }       # 苻重
+	hd_370_courtier_effect = { WHO = lueyang_fu_025 COURT = lueyang_fu_020 }       # 苻晖
+	hd_370_courtier_effect = { WHO = lueyang_fu_029 COURT = lueyang_fu_020 }       # 苻睿
+	hd_370_courtier_effect = { WHO = lueyang_fu_026 COURT = lueyang_fu_020 }       # 苻宏（太子）
+	hd_370_courtier_effect = { WHO = quan_yi_4 COURT = lueyang_fu_020 }            # 权翼
+	hd_370_courtier_effect = { WHO = wang_tong_2 COURT = lueyang_fu_020 }          # 王统
+	hd_370_courtier_effect = { WHO = lueyang_lv_002 COURT = lueyang_fu_020 }       # 吕光
+	hd_370_courtier_effect = { WHO = shaodang_yao_006 COURT = lueyang_fu_020 }     # 姚苌
+	# 随慕容垂奔秦的子侄
+	hd_370_courtier_effect = { WHO = changli_murong_041 COURT = changli_murong_038 } # 慕容宝
+	hd_370_courtier_effect = { WHO = changli_murong_040 COURT = changli_murong_038 } # 慕容农
+	hd_370_courtier_effect = { WHO = changli_murong_034 COURT = changli_murong_038 } # 慕容楷
+	hd_370_courtier_effect = { WHO = changli_murong_037 COURT = changli_murong_038 } # 慕容绍
+	hd_370_courtier_effect = { WHO = changli_murong_044 COURT = changli_murong_038 } # 慕容麟
+	# 邺：燕宗室与朝臣
+	hd_370_courtier_effect = { WHO = changli_murong_028 COURT = changli_murong_077 } # 慕容德
+	hd_370_courtier_effect = { WHO = changli_murong_072 COURT = changli_murong_077 } # 慕容臧（乐安王，领兵救洛阳）
+	hd_370_courtier_effect = { WHO = changli_murong_078 COURT = changli_murong_077 } # 慕容泓
+	hd_370_courtier_effect = { WHO = anding_huangfu_008 COURT = changli_murong_077 } # 皇甫真
+	# 建康与广陵
+	hd_370_courtier_effect = { WHO = taiyuan_wang_055 COURT = si_ma_yi_4 }         # 王坦之
+	hd_370_courtier_effect = { WHO = si_ma_yao COURT = si_ma_yu_2 }                # 司马曜随父
+	hd_370_courtier_effect = { WHO = xi_chao COURT = longkang_huan_017 }           # 郗超，桓温参军
+	hd_370_courtier_effect = { WHO = chenjun_yuan_jin COURT = chenjun_yuan_zhen }  # 袁瑾随父在寿春
+}
+
+# 储君：秦太子苻宏（357 年立）；袁真之子袁瑾
+hd_370_heir_effect = {
+	character:lueyang_fu_020 ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				character:lueyang_fu_026 ?= { is_alive = yes }
+			}
+			set_designated_heir = character:lueyang_fu_026
+		}
+	}
+	character:chenjun_yuan_zhen ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				character:chenjun_yuan_jin ?= { is_alive = yes }
+			}
+			set_designated_heir = character:chenjun_yuan_jin
+		}
+	}
+}
+
+# 年号：晋太和五年、秦建元六年、燕建熙十一年、前凉奉晋旧号升平十四年、代建国三十三年
+hd_370_era_effect = {
+	hd_nbc_set_era_effect = { WHO = si_ma_yi_4 KEY = taihe YEAR = 5 }
+	hd_nbc_set_era_effect = { WHO = lueyang_fu_020 KEY = jianyuan YEAR = 6 }
+	hd_nbc_set_era_effect = { WHO = changli_murong_077 KEY = jianxi YEAR = 11 }
+	hd_nbc_set_era_effect = { WHO = zhang_tian_xi KEY = shengping YEAR = 14 }
+	hd_nbc_set_era_effect = { WHO = tuoba_005 KEY = jianguo YEAR = 33 }
+}
+
+# 国号与称谓。一律不记到王朝上（FIXED = no）
+hd_370_realm_display_effect = {
+	hd_nbc_realm_name_effect = { WHO = si_ma_yi_4 NAME = dynn_title_jin FIXED = no }
+	hd_nbc_realm_name_effect = { WHO = lueyang_fu_020 NAME = dynn_title_qin FIXED = no }
+	hd_nbc_realm_name_effect = { WHO = changli_murong_077 NAME = dynn_title_yan FIXED = no }
+	hd_nbc_realm_name_effect = { WHO = zhang_tian_xi NAME = dynn_title_liang_west FIXED = no }
+	hd_nbc_realm_name_effect = { WHO = tuoba_005 NAME = dynn_title_dai FIXED = no }
+	hd_nbc_style_effect = { WHO = lueyang_fu_020 STYLE = tianwang }        # 大秦天王
+	hd_nbc_style_effect = { WHO = changli_murong_077 STYLE = huangdi }     # 燕帝
+	hd_nbc_style_effect = { WHO = tuoba_005 STYLE = wang }                 # 代王
+	hd_nbc_style_effect = { WHO = zhang_tian_xi STYLE = gong }             # 西平公
+	hd_nbc_style_effect = { WHO = chouchi_yang_057 STYLE = gong }          # 仇池公
+}
+
+# 挟天子：桓温为权臣兼丞相，天子固定在建康（照 hd_531_regency_effect，天子取当时的 h_china 持有者，S5 废立后再调一次）。
+# Scope：桓温
+hd_370_regency_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			is_landed = yes
+			title:h_china.holder ?= { is_alive = yes }
+			liege ?= title:h_china.holder
+		}
+		title:h_china.holder = {
+			save_scope_as = hd_370_emperor
+			set_location = {
+				location = title:c_uuii_p_4389.title_province
+				stick_to_location = yes
+			}
+		}
+		# 玩家扮演时功名补到帝国级预期，否则丞相授不上（218 实测）
+		if = {
+			limit = {
+				is_ai = no
+				merit_level < merit_level_expected_empire_value
+			}
+			while = {
+				limit = { merit_level < merit_level_expected_empire_value }
+				change_merit_level = 1
+			}
+		}
+		hd218_grant_chengxiang_effect = yes
+		WJ_install_historical_secretariat_effect = { OFFICE = e_WJ_minister_cheng_xiang POSITION = WJ_minister_cheng_xiang LAW = WJ_grand_chengxiang_law }
+		hd_court_install_regency_effect = yes
+		hd_court_set_stance_effect = { STANCE = moni }
+		scope:hd_370_emperor = {
+			if = {
+				limit = { has_diarchy_type = grand_secretariat diarch ?= character:longkang_huan_017 }
+				set_diarchy_swing = 100
+			}
+		}
+		# 终身辅政锁：天子罢免后自动补回（hd_dc_kit_ten_regent_watch）
+		title:h_china = { set_variable = { name = hd_dc_ten_qjc_regent value = character:longkang_huan_017 } }
+		# 权臣任期：标记在就不能废帝（hd_court_depose_ceremonial_decision）。照 253、531 设 12 年
+		if = {
+			limit = { NOT = { has_character_flag = hd_court_regent_tenure } }
+			add_character_flag = { flag = hd_court_regent_tenure years = 12 }
+		}
+		if = {
+			limit = { has_title = title:e_WJ_minister_cheng_xiang }
+			debug_log = "HD_370 REGENCY HUAN_WEN OK"
+		}
+		else = { debug_log = "HD_370 REGENCY HUAN_WEN NO_CHENGXIANG" }
+	}
+	else = { debug_log = "HD_370 REGENCY SKIPPED" }
+}
+
+# 朝官：只给谢安授吏部（史实 371 年前后任吏部尚书，稍早）；WJ 随机补位对 370 关闭
+hd_370_ministers_effect = {
+	title:h_china.holder ?= {
+		save_scope_as = councillor_liege
+		hd_nbc_minister_effect = { WHO = chenjun_xie_030 TITLE = e_minister_of_personnel POS = minister_personnel }   # 谢安
+	}
+}
+
+# S1 洛阳之战：太和四年十二月王猛率步骑三万攻洛阳，开局时正在围城。苻坚作攻方，目标河南郡（金墉）。
+# 王猛所部 15,000 在陕（事件兵给宣战人苻坚，由他调遣）；燕乐安王慕容臧的援军 8,000 在荥阳
+hd_370_luoyang_war_effect = {
+	if = {
+		limit = {
+			character:lueyang_fu_020 ?= { is_alive = yes is_independent_ruler = yes }
+			character:changli_murong_077 ?= { is_alive = yes is_independent_ruler = yes }
+			title:d_henan.holder ?= {
+				OR = {
+					this = character:changli_murong_077
+					top_liege = character:changli_murong_077
+				}
+			}
+		}
+		hd_nbc_start_war_effect = { ATTACKER = character:lueyang_fu_020 DEFENDER = character:changli_murong_077 TARGET = title:d_henan KIND = luoyang }
+		if = {
+			limit = { exists = scope:hd_nbc_war_luoyang }
+			set_global_variable = hd_370_luoyang_started
+			character:lueyang_fu_020 = {
+				hd_nbc_spawn_army_effect = { SIZE = 15000 WHERE = title:c_uuii_p_842 NAME = hd_370_wangmeng_army_name }
+			}
+			character:changli_murong_077 = {
+				hd_nbc_spawn_army_effect = { SIZE = 8000 WHERE = title:c_uuii_p_761 NAME = hd_370_murongzang_army_name }
+			}
+		}
+		else = {
+			set_global_variable = hd_370_luoyang_done
+			debug_log = "HD_370 S1 LUOYANG WAR_START_FAILED"
+		}
+	}
+	else = {
+		set_global_variable = hd_370_luoyang_done
+		debug_log = "HD_370 S1 LUOYANG SKIPPED"
+	}
+}
