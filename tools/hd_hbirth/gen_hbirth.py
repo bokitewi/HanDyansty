@@ -8,7 +8,7 @@ CK3 不会生成 history/characters 中开局后才出生的人物，本脚本�
     python -I tools/hd_hbirth/gen_hbirth.py "<CK3 game 目录>"
 
 名单来源：docs/人物审查/人物总表.csv
-  - 出生在 184.1.1 之后、600 年底之前；
+  - 出生在 184.1.1 之后、700 年底之前（2026-10-15 由 600 放宽）；
   - 判定为史实，或 180-280 年代段的演义人物（用户 2026-10-09 裁决纳入）。
 出场规则：
   - 正常：出生年 +16 年以 16 岁出场；
@@ -26,7 +26,7 @@ from collections import defaultdict
 MOD = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 GAME = sys.argv[1] if len(sys.argv) > 1 else r'D:/SteamLibrary/steamapps/common/Crusader Kings III/game'
 START = (184, 1, 1)
-LAST = (600, 12, 31)
+LAST = (700, 12, 31)  # 2026-10-15 随 OE 人物整合由 600 放宽到 700
 P = 'hd_hb'  # 变量/效果前缀
 
 OUT_TEMPLATES = os.path.join(MOD, 'common/scripted_character_templates/zz_hd_hbirth_templates.txt')
