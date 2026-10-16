@@ -1,0 +1,959 @@
+﻿# 22 年剧本「舂陵起兵」史实主线。只由 common/on_action/zz_hd_22_history_on_actions.txt 的 30 天心跳调用，那边带 22.11.13 闸门。
+# 计划见 /mnt/project-files/22舂陵起兵剧本_计划.md 第 10、13 节。写法照 370、531 执行后复核修订版：
+#   条件不合先等待，到截止日才跳过，跳过原因分开记日志；只有执行人死了才立即跳过；宣战失败不设 done，下次心跳重试；
+#   战争结局不用 hd_nbc_war_result_effect（它不认新场次）：先确认"守方身上已没有这一场次的战争"，再看目标县归谁；
+#   结局标记从汉军一方命名：hd_22_<场次>_han_won / _han_lost。
+#   AI 按史实选（ai_chance 100），玩家当事人都有选项。scripted effect 里不写 root，人物一律用 character:ID 或 saved scope。
+
+############################################################
+# 心跳（root：title:h_china）
+############################################################
+hd_22_pulse_effect = {
+	# A0 自然卒年：history 写在开局之后的死亡不会执行，由这里补（心跳跑到 57.1.1，复核必改 9）
+	hd_nbc_hist_death_effect = { WHO = 1900005 DATE = 24.1.1 }                  # 斯卢南解次次雄
+	hd_nbc_hist_death_effect = { WHO = hd_22_onjo DATE = 28.3.1 }               # 百济温祚王
+	hd_nbc_hist_death_effect = { WHO = gor_go_0002 DATE = 44.1.1 }              # 高句丽大武神王
+	hd_nbc_hist_death_effect = { WHO = hd_22_chanyu_yu DATE = 46.6.1 }          # 呼都而尸道皋若鞮单于舆
+	hd_nbc_hist_death_effect = { WHO = hd_22_chanyu_bi DATE = 56.6.1 }          # 比（南单于）
+	# A0 结局类卒年：只在前提成立时执行
+	hd_22_outcome_deaths_effect = yes
+	hd_22_check_nanyang_effect = yes       # S1 舂陵起兵（宛城之战）
+	hd_22_check_xiajiang_effect = yes      # S1b 下江合兵
+	hd_22_check_gengshi_effect = yes       # S2 更始称帝
+	hd_22_check_kunyang_effect = yes       # S3 昆阳之战
+	hd_22_check_xiangying_effect = yes     # S4 天下响应
+	hd_22_check_changan_effect = yes       # S5 长安陷落
+	# 起义军标记与终结乱世锁：最迟 26.1.1 解除
+	if = {
+		limit = {
+			current_date >= 26.1.1
+			NOT = { exists = global_var:hd_22_locks_cleared }
+		}
+		hd_22_clear_locks_effect = yes
+	}
+}
+
+hd_22_clear_locks_effect = {
+	set_global_variable = hd_22_locks_cleared
+	hd_22_rebel_flags_clear_effect = yes
+	if = {
+		limit = { exists = global_var:hd_22_mandate_lock }
+		remove_global_variable = hd_22_mandate_lock
+	}
+	debug_log = "HD_22 LOCKS_CLEARED"
+}
+
+############################################################
+# 工具
+############################################################
+
+# 改元（不要求原来没有年号）。Character scope
+hd_22_change_era_effect = {
+	remove_all_NianHao = yes
+	set_variable = data_nianhao_to_SG
+	set_variable = SG_nianhao_$KEY$
+	set_variable = { name = SG_NianHao_data value = $YEAR$ }
+	set_global_variable = { name = SG_nianhao_$KEY$ years = 100 value = yes }
+	add_character_flag = SanGong_NianHao_flag
+}
+
+# 被杀。电脑角色直接死；玩家角色不杀，只记日志
+hd_22_die_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = { is_alive = yes is_ai = yes }
+			death = { death_reason = $REASON$ }
+			debug_log = "HD_22 DIED $WHO$"
+		}
+		else_if = {
+			limit = { is_alive = yes }
+			debug_log = "HD_22 DIE_SKIPPED_PLAYER $WHO$"
+		}
+	}
+}
+hd_22_kill_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = { is_alive = yes is_ai = yes }
+			death = { death_reason = $REASON$ killer = $KILLER$ }
+			debug_log = "HD_22 KILLED $WHO$"
+		}
+		else_if = {
+			limit = { is_alive = yes }
+			debug_log = "HD_22 KILL_SKIPPED_PLAYER $WHO$"
+		}
+	}
+}
+
+# $NEW$ 接收 $OLD$ 的全部实地头衔（含 h_china）与封臣（照 hd_370_take_realm_effect）
+hd_22_take_realm_effect = {
+	$NEW$ = { save_scope_as = hd_22_new_ruler }
+	create_title_and_vassal_change = { type = granted save_scope_as = hd_22_take_change add_claim_on_loss = no }
+	$OLD$ = {
+		every_held_title = {
+			limit = {
+				is_noble_family_title = no
+				tgp_is_minister_title = no
+				is_landless_type_title = no
+				tier >= tier_county
+			}
+			change_title_holder = {
+				holder = scope:hd_22_new_ruler
+				change = scope:hd_22_take_change
+				take_baronies = yes
+			}
+		}
+		every_vassal = {
+			limit = { NOT = { this = scope:hd_22_new_ruler } }
+			change_liege = { liege = scope:hd_22_new_ruler change = scope:hd_22_take_change }
+		}
+	}
+	resolve_title_and_vassal_change = scope:hd_22_take_change
+}
+
+# 把郡头衔 $DUCHY$ 与其持有者手里的本郡各县交给 $TO$（scope）；$KEEP$ 是不交出的县
+hd_22_give_duchy_effect = {
+	if = {
+		limit = { exists = $DUCHY$.holder }
+		$DUCHY$.holder = { save_scope_as = hd_22_old_duke }
+		create_title_and_vassal_change = { type = granted save_scope_as = hd_22_duchy_change add_claim_on_loss = no }
+		$DUCHY$ = {
+			change_title_holder = { holder = $TO$ change = scope:hd_22_duchy_change }
+			every_de_jure_county = {
+				limit = {
+					holder ?= scope:hd_22_old_duke
+					NOT = { this = $KEEP$ }
+				}
+				change_title_holder = { holder = $TO$ change = scope:hd_22_duchy_change take_baronies = yes }
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_22_duchy_change
+	}
+}
+
+# 边境战争：$DEFENDER$ 的最高宗主没有边境战争法时补上（照 218 汉中之战）
+hd_22_border_law_effect = {
+	$DEFENDER$.top_liege = {
+		if = {
+			limit = {
+				NOT = { this = $DEFENDER$ }
+				NOT = { has_realm_law = top_liege_not_redirected_to_border_wars_law }
+			}
+			add_realm_law_skip_effects = top_liege_not_redirected_to_border_wars_law
+			debug_log = "HD_22 BORDER_LAW_ADDED"
+		}
+	}
+}
+
+# 某人身上是否还有场次为 $KIND$ 的战争（trigger 写在效果里用不了，所以由调用处直接写 any_character_war）
+
+############################################################
+# A0 结局类卒年
+############################################################
+hd_22_outcome_deaths_effect = {
+	# 刘歆、王涉、董忠：地皇四年七月谋劫王莽事泄（刘歆、王涉自杀，董忠被杀）。前提：王莽仍持 h_china
+	if = {
+		limit = {
+			current_date >= 23.8.1
+			NOT = { exists = global_var:hd_22_conspiracy_done }
+		}
+		set_global_variable = hd_22_conspiracy_done
+		if = {
+			limit = { title:h_china.holder ?= character:wang_mang }
+			hd_22_die_effect = { WHO = liu_xin_2 REASON = death_suicide }
+			hd_22_die_effect = { WHO = wang_she_2 REASON = death_suicide }
+			hd_22_kill_effect = { WHO = dong_zhong REASON = death_execution KILLER = character:wang_mang }
+		}
+		else = { debug_log = "HD_22 CONSPIRACY SKIPPED_NO_WANGMANG" }
+	}
+	# 刘縯：昆阳之后为更始所杀。前提：更始已立、刘縯是刘玄的封臣、昆阳汉军胜；电脑刘縯才死
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_22_bosheng_done }
+			current_date >= 23.7.7
+			OR = {
+				exists = global_var:hd_22_kunyang_done
+				current_date >= 24.1.1
+			}
+		}
+		set_global_variable = hd_22_bosheng_done
+		if = {
+			limit = {
+				exists = global_var:hd_22_kunyang_han_won
+				character:WJ_history_gengshi ?= { is_alive = yes has_title = title:e_hd_western_han }
+				character:liu_yan ?= { is_alive = yes top_liege = character:WJ_history_gengshi NOT = { this = character:WJ_history_gengshi } }
+			}
+			hd_22_kill_effect = { WHO = liu_yan REASON = death_execution KILLER = character:WJ_history_gengshi }
+		}
+		else = { debug_log = "HD_22 BOSHENG_DEATH SKIPPED" }
+	}
+}
+
+############################################################
+# S1 舂陵起兵：战后宛城（c_uuii_p_1733）归汉军一系即汉军胜，电脑甄阜、梁丘赐被杀
+############################################################
+hd_22_check_nanyang_effect = {
+	if = {
+		limit = {
+			exists = global_var:hd_22_nanyang_started
+			NOT = { exists = global_var:hd_22_nanyang_done }
+			NOT = { character:zhen_fu ?= { any_character_war = { OR = { var:hd_nbc_war_kind ?= flag:hd22nanyang var:hd_nbc_war_kind ?= flag:hd22wan } } } }
+			NOT = { character:liu_yan ?= { any_character_war = { OR = { var:hd_nbc_war_kind ?= flag:hd22nanyang var:hd_nbc_war_kind ?= flag:hd22wan } } } }
+			NOT = { character:WJ_history_gengshi ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:hd22wan } } }
+			NOT = { exists = global_var:hd_22_s1_transferring }
+		}
+		set_global_variable = hd_22_nanyang_done
+		if = {
+			limit = {
+				title:c_uuii_p_1733.holder ?= {
+					OR = {
+						this = character:liu_yan
+						top_liege = character:liu_yan
+						this = character:WJ_history_gengshi
+						top_liege = character:WJ_history_gengshi
+						has_character_flag = hd_22_rebel
+					}
+				}
+			}
+			set_global_variable = hd_22_nanyang_han_won
+			debug_log = "HD_22 S1 NANYANG HAN_WON"
+			hd_22_nanyang_spoils_effect = yes
+			hd_22_kill_effect = { WHO = zhen_fu REASON = death_battle KILLER = character:liu_yan }
+			hd_22_kill_effect = { WHO = liang_qiu_ci REASON = death_battle KILLER = character:liu_yan }
+		}
+		else = {
+			set_global_variable = hd_22_nanyang_han_lost
+			debug_log = "HD_22 S1 NANYANG HAN_LOST"
+		}
+	}
+}
+
+# S1 胜后：甄阜手里法理属南阳、新野两郡的县与南阳郡头衔交宛城持有者（CB 只转南阳郡法理内的县，执行后复核必改 1）。先转地、后杀甄阜
+hd_22_nanyang_spoils_effect = {
+	title:c_uuii_p_1733.holder ?= { save_scope_as = hd_22_wan_lord }
+	if = {
+		limit = {
+			exists = scope:hd_22_wan_lord
+			character:zhen_fu ?= { is_alive = yes }
+			NOT = { scope:hd_22_wan_lord = character:zhen_fu }
+		}
+		create_title_and_vassal_change = { type = conquest save_scope_as = hd_22_spoils_change add_claim_on_loss = no }
+		title:d_nanyang = {
+			if = {
+				limit = { holder ?= character:zhen_fu }
+				change_title_holder = { holder = scope:hd_22_wan_lord change = scope:hd_22_spoils_change }
+			}
+			every_de_jure_county = {
+				limit = { holder ?= character:zhen_fu }
+				change_title_holder = { holder = scope:hd_22_wan_lord change = scope:hd_22_spoils_change take_baronies = yes }
+			}
+		}
+		title:d_xinye = {
+			every_de_jure_county = {
+				limit = { holder ?= character:zhen_fu }
+				change_title_holder = { holder = scope:hd_22_wan_lord change = scope:hd_22_spoils_change take_baronies = yes }
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_22_spoils_change
+		debug_log = "HD_22 S1 SPOILS_TRANSFERRED"
+	}
+}
+
+############################################################
+# S1b 下江合兵：十二月王常率下江兵与刘縯会于宜秋
+############################################################
+hd_22_check_xiajiang_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_22_xiajiang_done }
+			current_date >= 22.12.13
+		}
+		if = {
+			limit = { current_date >= 23.6.1 }
+			set_global_variable = hd_22_xiajiang_done
+			debug_log = "HD_22 S1B XIAJIANG SKIPPED_DEADLINE"
+		}
+		else_if = {
+			limit = { NOT = { character:wang_chang_3 ?= { is_alive = yes } } }
+			set_global_variable = hd_22_xiajiang_done
+			debug_log = "HD_22 S1B XIAJIANG SKIPPED_DEAD"
+		}
+		else_if = {
+			limit = {
+				character:wang_chang_3 = { is_landed = yes is_independent_ruler = yes is_at_war = no }
+				character:liu_yan ?= { is_alive = yes any_character_war = { var:hd_nbc_war_kind ?= flag:hd22nanyang } }
+			}
+			set_global_variable = hd_22_xiajiang_done
+			character:wang_chang_3 = {
+				if = {
+					limit = { is_ai = yes }
+					hd_22_xiajiang_join_effect = yes
+				}
+				else = { trigger_event = hd_22.0110 }
+			}
+		}
+	}
+}
+# 王常入攻方，得 4,000 事件兵
+hd_22_xiajiang_join_effect = {
+	character:liu_yan ?= {
+		random_character_war = {
+			limit = { var:hd_nbc_war_kind ?= flag:hd22nanyang }
+			hd_nbc_add_attacker_effect = { WHO = wang_chang_3 }
+		}
+	}
+	character:wang_chang_3 = {
+		if = {
+			limit = { is_at_war = yes }
+			hd_nbc_spawn_army_effect = { SIZE = 4000 WHERE = title:c_uuii_p_1805 NAME = hd_22_xiajiang_army_name }
+			debug_log = "HD_22 S1B XIAJIANG JOINED"
+		}
+		else = { debug_log = "HD_22 S1B XIAJIANG JOIN_FAILED" }
+	}
+}
+
+############################################################
+# S2 更始称帝：更始元年二月辛巳朔（23.3.11），诸将共立刘玄
+############################################################
+hd_22_check_gengshi_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_22_gengshi_done }
+			current_date >= 23.3.11
+		}
+		if = {
+			limit = { current_date >= 24.1.1 }
+			set_global_variable = hd_22_gengshi_done
+			debug_log = "HD_22 S2 GENGSHI SKIPPED_DEADLINE"
+		}
+		else_if = {
+			limit = { NOT = { character:WJ_history_gengshi ?= { is_alive = yes } } }
+			set_global_variable = hd_22_gengshi_done
+			debug_log = "HD_22 S2 GENGSHI SKIPPED_DEAD"
+		}
+		else_if = {
+			limit = {
+				character:WJ_history_gengshi = { is_landed = no }
+				calc_true_if = {
+					amount >= 3
+					character:liu_yan ?= { is_alive = yes is_landed = yes is_independent_ruler = yes }
+					character:hd_22_wang_kuang ?= { is_alive = yes is_landed = yes is_independent_ruler = yes }
+					character:hd_22_chen_mu ?= { is_alive = yes is_landed = yes is_independent_ruler = yes }
+					character:wang_chang_3 ?= { is_alive = yes is_landed = yes is_independent_ruler = yes }
+				}
+			}
+			set_global_variable = hd_22_gengshi_done
+			hd_22_gengshi_enthrone_effect = yes
+		}
+	}
+}
+hd_22_gengshi_enthrone_effect = {
+	character:WJ_history_gengshi = { save_scope_as = hd_22_gengshi }
+	scope:hd_22_gengshi = {
+		if = {
+			limit = { is_imprisoned = yes }
+			release_from_prison = yes
+		}
+	}
+	# 随县（平林兵所在）交刘玄作直领；陈牧是玩家时不动他的治所，改取应山（执行后复核建议 1）
+	if = {
+		limit = {
+			title:c_uuii_p_1844.holder ?= character:hd_22_chen_mu
+			character:hd_22_chen_mu = { is_ai = yes }
+		}
+		hd_nbc_give_county_effect = { COUNTY = title:c_uuii_p_1844 TO = scope:hd_22_gengshi }
+	}
+	# 随县不在陈牧手里时，退而取应山
+	if = {
+		limit = {
+			scope:hd_22_gengshi = { is_landed = no }
+			title:c_uuii_p_1849.holder ?= { has_character_flag = hd_22_rebel }
+		}
+		hd_nbc_give_county_effect = { COUNTY = title:c_uuii_p_1849 TO = scope:hd_22_gengshi }
+	}
+	scope:hd_22_gengshi = {
+		if = {
+			limit = { is_landed = yes is_independent_ruler = no }
+			hd_nbc_become_independent_effect = yes
+		}
+	}
+	if = {
+		limit = { scope:hd_22_gengshi = { is_landed = yes } }
+		create_title_and_vassal_change = { type = created save_scope_as = hd_22_gengshi_change add_claim_on_loss = no }
+		title:e_hd_western_han = {
+			change_title_holder = { holder = scope:hd_22_gengshi change = scope:hd_22_gengshi_change }
+		}
+		resolve_title_and_vassal_change = scope:hd_22_gengshi_change
+		scope:hd_22_gengshi = {
+			set_primary_title_to = title:e_hd_western_han
+			if = {
+				limit = { NOT = { has_government = celestial_government } }
+				change_government = celestial_government
+			}
+			hd_22_change_era_effect = { KEY = gengshi YEAR = 1 }
+			add_character_flag = hd_22_rebel
+			hd_rise_ensure_story_effect = yes
+		}
+		hd_nbc_realm_name_effect = { WHO = WJ_history_gengshi NAME = dynn_title_han FIXED = no }
+		hd_nbc_style_effect = { WHO = WJ_history_gengshi STYLE = huangdi }
+		# 宛城之战：电脑刘縯先白和，由刘玄重新宣战（复核建议 11）；玩家刘縯的战争不动（执行后复核必改 2）
+		if = {
+			limit = { character:liu_yan ?= { is_ai = yes any_character_war = { var:hd_nbc_war_kind ?= flag:hd22nanyang } } }
+			set_global_variable = hd_22_s1_transferring
+			character:liu_yan = {
+				every_character_war = {
+					limit = { var:hd_nbc_war_kind ?= flag:hd22nanyang }
+					end_war = white_peace
+				}
+			}
+		}
+		# 四家奉立：电脑直接改投；玩家弹事件
+		hd_22_gengshi_offer_effect = { WHO = liu_yan }
+		hd_22_gengshi_offer_effect = { WHO = hd_22_wang_kuang }
+		hd_22_gengshi_offer_effect = { WHO = hd_22_chen_mu }
+		hd_22_gengshi_offer_effect = { WHO = wang_chang_3 }
+		if = {
+			limit = { exists = global_var:hd_22_s1_transferring }
+			hd_22_wan_war_effect = yes
+			remove_global_variable = hd_22_s1_transferring
+		}
+		debug_log = "HD_22 S2 GENGSHI ENTHRONED"
+	}
+	else = { debug_log = "HD_22 S2 GENGSHI NO_LAND" }
+}
+hd_22_gengshi_offer_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = { is_alive = yes is_landed = yes is_independent_ruler = yes }
+			if = {
+				limit = { is_ai = yes }
+				hd_nbc_swear_fealty_effect = { LIEGE = character:WJ_history_gengshi }
+			}
+			else = { trigger_event = hd_22.0120 }
+		}
+	}
+}
+# 刘玄接手宛城之战（边境战争，守方甄阜）
+hd_22_wan_war_effect = {
+	if = {
+		limit = {
+			character:WJ_history_gengshi ?= { is_alive = yes is_independent_ruler = yes }
+			character:zhen_fu ?= { is_alive = yes }
+			title:d_nanyang.holder ?= character:zhen_fu
+		}
+		hd_22_border_law_effect = { DEFENDER = character:zhen_fu }
+		hd_nbc_start_war_effect = { ATTACKER = character:WJ_history_gengshi DEFENDER = character:zhen_fu TARGET = title:d_nanyang KIND = hd22wan }
+		if = {
+			limit = { exists = scope:hd_nbc_war_hd22wan }
+			debug_log = "HD_22 S2 WAN_WAR_TAKEN_OVER"
+		}
+		else = { debug_log = "HD_22 S2 WAN_WAR_START_FAILED" }
+	}
+	else = { debug_log = "HD_22 S2 WAN_WAR_SKIPPED" }
+}
+
+############################################################
+# S3 昆阳之战：地皇四年三月王莽遣王邑、王寻南下，五月围昆阳，六月己卯（23.7.7）大败
+############################################################
+hd_22_check_kunyang_effect = {
+	# 第一步：布置（昆阳交刘秀、舞阳郡交王邑），只做一次
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_22_kunyang_setup }
+			NOT = { exists = global_var:hd_22_kunyang_done }
+			current_date >= 23.5.8
+		}
+		if = {
+			limit = { current_date >= 24.1.1 }
+			set_global_variable = hd_22_kunyang_done
+			debug_log = "HD_22 S3 KUNYANG SKIPPED_DEADLINE"
+		}
+		else_if = {
+			limit = {
+				OR = {
+					NOT = { character:wang_yi_4 ?= { is_alive = yes } }
+					NOT = { character:liu_xiu ?= { is_alive = yes } }
+					NOT = { character:wang_mang ?= { is_alive = yes } }
+				}
+			}
+			set_global_variable = hd_22_kunyang_done
+			debug_log = "HD_22 S3 KUNYANG SKIPPED_DEAD"
+		}
+		else_if = {
+			limit = {
+				title:h_china.holder ?= character:wang_mang
+				character:WJ_history_gengshi ?= { is_alive = yes has_title = title:e_hd_western_han }
+				character:liu_xiu = { is_landed = yes top_liege = character:WJ_history_gengshi }
+			}
+			set_global_variable = hd_22_kunyang_setup
+			hd_22_kunyang_setup_effect = yes
+			character:liu_xiu = {
+				if = {
+					limit = { is_ai = no }
+					trigger_event = hd_22.0130
+				}
+			}
+		}
+	}
+	# 第二步：宣战（失败则下次心跳重试，到 24.1.1 放弃）
+	if = {
+		limit = {
+			exists = global_var:hd_22_kunyang_setup
+			NOT = { exists = global_var:hd_22_kunyang_started }
+			NOT = { exists = global_var:hd_22_kunyang_done }
+		}
+		if = {
+			limit = {
+				OR = {
+					current_date >= 24.1.1
+					NOT = { character:wang_yi_4 ?= { is_alive = yes is_landed = yes } }
+					NOT = { character:liu_xiu ?= { is_alive = yes has_title = title:c_uuii_p_1646 } }
+				}
+			}
+			set_global_variable = hd_22_kunyang_done
+			hd_22_wangyi_return_effect = yes
+			debug_log = "HD_22 S3 KUNYANG WAR_NEVER_STARTED"
+		}
+		else = { hd_22_kunyang_war_effect = yes }
+	}
+	# 战后：昆阳县（c_uuii_p_1646）仍归更始一系即汉军胜
+	if = {
+		limit = {
+			exists = global_var:hd_22_kunyang_started
+			NOT = { exists = global_var:hd_22_kunyang_done }
+			NOT = { character:wang_yi_4 ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:hd22kunyang } } }
+			NOT = { character:liu_xiu ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:hd22kunyang } } }
+		}
+		set_global_variable = hd_22_kunyang_done
+		hd_22_wangyi_return_effect = yes
+		if = {
+			limit = {
+				title:c_uuii_p_1646.holder ?= {
+					OR = {
+						this = character:WJ_history_gengshi
+						top_liege = character:WJ_history_gengshi
+					}
+				}
+			}
+			set_global_variable = hd_22_kunyang_han_won
+			debug_log = "HD_22 S3 KUNYANG HAN_WON"
+			hd_22_kill_effect = { WHO = wang_xun_2 REASON = death_battle KILLER = character:liu_xiu }
+			character:wang_mang ?= {
+				if = {
+					limit = { is_alive = yes }
+					add_prestige = -500
+					add_legitimacy = { value = -100 }
+				}
+			}
+		}
+		else = {
+			set_global_variable = hd_22_kunyang_han_lost
+			debug_log = "HD_22 S3 KUNYANG HAN_LOST"
+		}
+	}
+}
+hd_22_kunyang_setup_effect = {
+	character:liu_xiu = { save_scope_as = hd_22_xiu }
+	character:wang_yi_4 = {
+		save_scope_as = hd_22_yi
+		if = {
+			limit = { is_imprisoned = yes }
+			release_from_prison = yes
+		}
+	}
+	# 昆阳归刘秀，城中八九千人
+	hd_nbc_give_county_effect = { COUNTY = title:c_uuii_p_1646 TO = scope:hd_22_xiu }
+	# 王邑持舞阳郡（原郡守留作廷臣），王寻随军为将（无地人物不能作战争参与者，复核必改 8 以此落实）
+	hd_22_give_duchy_effect = { DUCHY = title:d_yingchuan_jingzhou TO = scope:hd_22_yi KEEP = title:c_uuii_p_1646 }
+	character:wang_xun_2 ?= {
+		if = {
+			limit = { is_alive = yes is_landed = no }
+			scope:hd_22_yi = { add_courtier = character:wang_xun_2 }
+			set_knight_status = force
+		}
+	}
+	debug_log = "HD_22 S3 KUNYANG SETUP"
+}
+# 宣战：王邑暂时独立出征（封臣直接对外宣战没有先例保证成功；王莽宣战则举国压上，不合"边境战争"本意），战后改投回王莽
+hd_22_kunyang_war_effect = {
+	character:liu_xiu = { save_scope_as = hd_22_xiu }
+	character:wang_yi_4 = {
+		save_scope_as = hd_22_yi
+		if = {
+			limit = { is_independent_ruler = no }
+			hd_nbc_become_independent_effect = yes
+			set_global_variable = hd_22_wangyi_detached
+		}
+	}
+	hd_22_border_law_effect = { DEFENDER = scope:hd_22_xiu }
+	hd_nbc_start_war_effect = { ATTACKER = scope:hd_22_yi DEFENDER = scope:hd_22_xiu TARGET = title:c_uuii_p_1646 KIND = hd22kunyang }
+	if = {
+		limit = { exists = scope:hd_nbc_war_hd22kunyang }
+		set_global_variable = hd_22_kunyang_started
+		scope:hd_22_yi = { hd_nbc_spawn_army_effect = { SIZE = 30000 WHERE = title:c_uuii_p_1638 NAME = hd_22_wangyi_army_name } }
+		scope:hd_22_xiu = { hd_nbc_spawn_army_effect = { SIZE = 6000 WHERE = title:c_uuii_p_1646 NAME = hd_22_kunyang_army_name } }
+		debug_log = "HD_22 S3 KUNYANG STARTED"
+	}
+	else = { debug_log = "HD_22 S3 KUNYANG WAR_START_FAILED_RETRY" }
+}
+# 战后王邑改投回王莽（只在为出征而暂时独立过时）
+hd_22_wangyi_return_effect = {
+	if = {
+		limit = {
+			exists = global_var:hd_22_wangyi_detached
+			character:wang_yi_4 ?= { is_alive = yes is_landed = yes is_independent_ruler = yes }
+			character:wang_mang ?= { is_alive = yes has_title = title:h_china }
+		}
+		remove_global_variable = hd_22_wangyi_detached
+		character:wang_yi_4 = { hd_nbc_swear_fealty_effect = { LIEGE = character:wang_mang } }
+		debug_log = "HD_22 S3 WANGYI_RETURNED"
+	}
+}
+# 玩家刘秀弃昆阳：昆阳交王邑，白和
+hd_22_kunyang_abandon_effect = {
+	character:liu_xiu ?= {
+		every_character_war = {
+			limit = { var:hd_nbc_war_kind ?= flag:hd22kunyang }
+			end_war = white_peace
+		}
+	}
+	character:wang_yi_4 ?= {
+		if = {
+			limit = { is_alive = yes is_landed = yes }
+			save_scope_as = hd_22_yi2
+			hd_nbc_give_county_effect = { COUNTY = title:c_uuii_p_1646 TO = scope:hd_22_yi2 }
+		}
+	}
+	debug_log = "HD_22 S3 KUNYANG ABANDONED"
+}
+
+############################################################
+# S4 天下响应：23.8.1 起，王莽仍持 h_china 即触发（不绑 S3，复核必改 10）。
+# 隗嚣据天水、公孙述自立，王莽直属郡守（司隶各郡除外）各自独立。阶段转入斗争由天朝循环即时检测完成
+############################################################
+hd_22_check_xiangying_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_22_xiangying_done }
+			current_date >= 23.8.1
+		}
+		if = {
+			limit = { current_date >= 24.1.1 }
+			set_global_variable = hd_22_xiangying_done
+			debug_log = "HD_22 S4 XIANGYING SKIPPED_DEADLINE"
+		}
+		else_if = {
+			limit = { NOT = { title:h_china.holder ?= character:wang_mang } }
+			set_global_variable = hd_22_xiangying_done
+			debug_log = "HD_22 S4 XIANGYING SKIPPED_NO_WANGMANG"
+		}
+		else = {
+			set_global_variable = hd_22_xiangying_done
+			hd_22_xiangying_effect = yes
+		}
+	}
+}
+hd_22_xiangying_effect = {
+	# ① 隗嚣持天水郡自立，称上将军
+	character:hd_22_wei_xiao ?= {
+		if = {
+			limit = { is_alive = yes is_landed = no }
+			save_scope_as = hd_22_wx
+			hd_22_give_duchy_effect = { DUCHY = title:d_tianshui TO = scope:hd_22_wx KEEP = title:c_uuii_p_1646 }
+			if = {
+				limit = { is_landed = yes is_independent_ruler = no }
+				hd_nbc_become_independent_effect = yes
+			}
+			if = {
+				limit = { is_landed = yes NOT = { has_government = celestial_government } }
+				change_government = celestial_government
+			}
+			character:hd_22_wei_cui ?= { if = { limit = { is_alive = yes is_landed = no } scope:hd_22_wx = { add_courtier = character:hd_22_wei_cui } } }
+			character:hd_22_wei_yi ?= { if = { limit = { is_alive = yes is_landed = no } scope:hd_22_wx = { add_courtier = character:hd_22_wei_yi } } }
+			debug_log = "HD_22 S4 WEI_XIAO RISES"
+		}
+	}
+	# ② 公孙述：电脑自立；玩家弹事件
+	character:gong_sun_shu ?= {
+		if = {
+			limit = { is_alive = yes is_landed = yes is_independent_ruler = no }
+			if = {
+				limit = { is_ai = yes }
+				hd_nbc_become_independent_effect = yes
+				debug_log = "HD_22 S4 GONGSUN_SHU RISES"
+			}
+			else = { trigger_event = hd_22.0140 }
+		}
+	}
+	# ③ 王莽直属的电脑郡守（主头衔不在司隶）各自独立
+	character:wang_mang = {
+		every_vassal = {
+			limit = {
+				is_ai = yes
+				is_landed = yes
+				NOT = { this = character:gong_sun_shu }
+				NOT = { this = character:wang_yi_4 }
+				NOT = { capital_county.kingdom ?= title:k_uuii_sili }
+			}
+			add_to_temporary_list = hd_22_rising
+		}
+		every_in_list = {
+			list = hd_22_rising
+			hd_nbc_become_independent_effect = yes
+			# 讨逆标记（hd_dc_taoni_cb）：主头衔记 h_china，10 年内 h_china 持有者可讨（复核必改 1）
+			if = {
+				limit = { is_independent_ruler = yes exists = primary_title }
+				primary_title = { set_variable = { name = hd_dc_taoni_rebel value = title:h_china years = 10 } }
+			}
+		}
+		debug_log = "HD_22 S4 GOVERNORS_INDEPENDENT"
+		# 天子控制跌破门槛后，on_vassal_change 触发的天朝循环观察会即时转入斗争（hd_dc_can_enter_chaos_trigger）
+		if = {
+			limit = { is_ai = no }
+			trigger_event = hd_22.0145
+		}
+	}
+	debug_log = "HD_22 S4 XIANGYING DONE"
+}
+
+############################################################
+# S5 长安陷落：S4 之后，更始（或最强的起义军）攻常安；26.1.1 仍未攻下则"常安城中起事"兜底（复核必改 10）
+############################################################
+hd_22_find_executor_effect = {
+	if = {
+		limit = { character:WJ_history_gengshi ?= { is_alive = yes is_independent_ruler = yes has_title = title:e_hd_western_han } }
+		character:WJ_history_gengshi = { save_scope_as = hd_22_exec }
+	}
+	else = {
+		ordered_living_character = {
+			limit = {
+				has_character_flag = hd_22_rebel
+				is_landed = yes
+				is_independent_ruler = yes
+				NOT = { this = character:wang_mang }
+			}
+			order_by = realm_size
+			save_scope_as = hd_22_exec
+		}
+	}
+}
+hd_22_check_changan_effect = {
+	if = {
+		limit = {
+			exists = global_var:hd_22_xiangying_done
+			NOT = { exists = global_var:hd_22_changan_done }
+		}
+		if = {
+			limit = { NOT = { title:h_china.holder ?= character:wang_mang } }
+			set_global_variable = hd_22_changan_done
+			debug_log = "HD_22 S5 CHANGAN SKIPPED_NO_WANGMANG"
+		}
+		# 战后：常安（c_uuii_p_867）归执行人一系即胜
+		else_if = {
+			limit = {
+				exists = global_var:hd_22_changan_started
+				NOT = { character:wang_mang ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:hd22changan } } }
+			}
+			remove_global_variable = hd_22_changan_started
+			hd_22_find_executor_effect = yes
+			if = {
+				limit = {
+					exists = scope:hd_22_exec
+					title:c_uuii_p_867.holder ?= {
+						OR = {
+							this = scope:hd_22_exec
+							top_liege = scope:hd_22_exec
+						}
+					}
+				}
+				debug_log = "HD_22 S5 CHANGAN HAN_WON"
+				# 玩家王莽：死守还是出奔（执行后复核必改 3）；电脑王莽照史实
+				if = {
+					limit = { character:wang_mang = { is_ai = no } }
+					set_global_variable = { name = hd_22_changan_exec value = scope:hd_22_exec }
+					set_global_variable = hd_22_changan_done   # 等玩家回答期间不再重开长安之战
+					character:wang_mang = { trigger_event = hd_22.0150 }
+				}
+				else = { hd_22_changan_fall_effect = yes }
+			}
+			else = { debug_log = "HD_22 S5 CHANGAN WAR_ENDED_NOT_TAKEN" }
+		}
+		# 兜底不剥夺玩家王莽（执行后复核必改 3）
+		else_if = {
+			limit = {
+				current_date >= 26.1.1
+				character:wang_mang ?= { is_ai = no }
+			}
+			set_global_variable = hd_22_changan_done
+			hd_22_clear_locks_effect = yes
+			debug_log = "HD_22 S5 CHANGAN FALLBACK_SKIPPED_PLAYER_WANGMANG"
+		}
+		else_if = {
+			limit = { current_date >= 26.1.1 }
+			hd_22_find_executor_effect = yes
+			if = {
+				limit = { exists = scope:hd_22_exec }
+				debug_log = "HD_22 S5 CHANGAN FALLBACK_UPRISING"
+				character:wang_mang ?= {
+					every_character_war = {
+						limit = { var:hd_nbc_war_kind ?= flag:hd22changan }
+						end_war = white_peace
+					}
+				}
+				hd_22_changan_fall_effect = yes
+			}
+			else = {
+				set_global_variable = hd_22_changan_done
+				debug_log = "HD_22 S5 CHANGAN SKIPPED_NO_EXECUTOR"
+			}
+		}
+		else_if = {
+			limit = { NOT = { exists = global_var:hd_22_changan_started } }
+			hd_22_find_executor_effect = yes
+			if = {
+				limit = {
+					exists = scope:hd_22_exec
+					NOT = { exists = global_var:hd_22_changan_declined }
+				}
+				# 玩家执行人：西入武关还是暂不进兵，只问一次（执行后复核建议 3）
+				if = {
+					limit = { scope:hd_22_exec = { is_ai = no } }
+					if = {
+						limit = { NOT = { exists = global_var:hd_22_changan_asked } }
+						set_global_variable = hd_22_changan_asked
+						scope:hd_22_exec = { trigger_event = hd_22.0155 }
+					}
+				}
+				else = { hd_22_changan_war_effect = yes }
+			}
+		}
+	}
+}
+hd_22_changan_war_effect = {
+	# 上一仗白和或战败留下的停战不算破停战（执行后复核必改 4，同 370、531）
+	scope:hd_22_exec = { add_character_flag = { flag = allowed_war_declaration_sans_truce_penalties days = 1 } }
+	hd_nbc_start_war_effect = { ATTACKER = scope:hd_22_exec DEFENDER = character:wang_mang TARGET = title:d_jingzhao KIND = hd22changan }
+	if = {
+		limit = { exists = scope:hd_nbc_war_hd22changan }
+		set_global_variable = hd_22_changan_started
+		# 申屠建、李松西入武关，析人邓晔、于匡起兵响应
+		scope:hd_22_exec = { hd_nbc_spawn_army_effect = { SIZE = 15000 WHERE = title:c_uuii_p_850 NAME = hd_22_changan_army_name } }
+		debug_log = "HD_22 S5 CHANGAN WAR_STARTED"
+	}
+	else = { debug_log = "HD_22 S5 CHANGAN WAR_START_FAILED_RETRY" }
+}
+# 新亡：先放人、转头衔与封臣，再设主头衔、政体、玉玺、国号，最后杀王莽（复核必改 2、3）。Scope 无要求，执行人存在 scope:hd_22_exec
+hd_22_changan_fall_effect = {
+	set_global_variable = hd_22_changan_done
+	set_global_variable = hd_22_xin_fallen
+	character:wang_mang = { save_scope_as = hd_22_mang }
+	scope:hd_22_mang = {
+		if = {
+			limit = { is_imprisoned = yes }
+			release_from_prison = yes
+		}
+		if = {
+			limit = { has_active_diarchy = yes }
+			end_diarchy = yes
+		}
+	}
+	scope:hd_22_exec = {
+		if = {
+			limit = { is_imprisoned = yes }
+			release_from_prison = yes
+		}
+	}
+	hd_22_take_realm_effect = { NEW = scope:hd_22_exec OLD = scope:hd_22_mang }
+	scope:hd_22_exec = {
+		if = {
+			limit = { has_title = title:h_china }
+			set_primary_title_to = title:h_china
+			if = {
+				limit = { NOT = { has_government = celestial_government } }
+				change_government = celestial_government
+			}
+		}
+		if = {
+			limit = { title:c_uuii_p_867.holder ?= this }
+			set_realm_capital = title:c_uuii_p_867
+		}
+	}
+	title:h_china = {
+		set_capital_county = title:c_uuii_p_867
+		set_variable = { name = hd_court_capital_county value = title:c_uuii_p_867 }
+	}
+	scope:hd_22_mang = {
+		every_character_artifact = {
+			limit = { has_variable = han_artifact_imperial_seal }
+			set_owner = { target = scope:hd_22_exec }
+		}
+	}
+	# 引擎在易主时清掉 h_china 的自定义名（title_on_actions.txt），这里补设国号「汉」
+	scope:hd_22_exec = {
+		if = {
+			limit = { has_title = title:h_china }
+			primary_title = { set_title_name = dynn_title_han }
+		}
+	}
+	# 王莽死于渐台（商人杜吴杀之），王邑与王莽二子同死（执行后复核建议 12）
+	hd_22_die_effect = { WHO = wang_mang REASON = death_battle }
+	hd_22_die_effect = { WHO = wang_yi_4 REASON = death_battle }
+	hd_22_die_effect = { WHO = hd_22_wang_kuang_xin REASON = death_battle }
+	hd_22_die_effect = { WHO = hd_22_wang_xing_xin REASON = death_battle }
+	hd_22_clear_locks_effect = yes
+	if = {
+		limit = { title:h_china.holder ?= scope:hd_22_exec }
+		debug_log = "HD_22 S5 XIN_FALLEN H_CHINA_TRANSFERRED"
+	}
+	else = { debug_log = "HD_22 S5 XIN_FALLEN H_CHINA_CHECK_FAILED" }
+}
+
+# 玩家王莽出奔：只交 h_china（京兆已在战争中失去，仍持有就一并交出），其余州郡保留，不死（执行后复核必改 3）
+hd_22_changan_flee_effect = {
+	set_global_variable = hd_22_changan_done
+	set_global_variable = hd_22_xin_fallen
+	global_var:hd_22_changan_exec = { save_scope_as = hd_22_exec }
+	character:wang_mang = { save_scope_as = hd_22_mang }
+	scope:hd_22_mang = {
+		if = {
+			limit = { has_active_diarchy = yes }
+			end_diarchy = yes
+		}
+	}
+	if = {
+		limit = { scope:hd_22_exec = { is_alive = yes is_landed = yes } }
+		create_title_and_vassal_change = { type = granted save_scope_as = hd_22_flee_change add_claim_on_loss = no }
+		title:h_china = {
+			if = {
+				limit = { holder ?= scope:hd_22_mang }
+				change_title_holder = { holder = scope:hd_22_exec change = scope:hd_22_flee_change }
+			}
+		}
+		title:d_jingzhao = {
+			if = {
+				limit = { holder ?= scope:hd_22_mang }
+				change_title_holder = { holder = scope:hd_22_exec change = scope:hd_22_flee_change }
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_22_flee_change
+		scope:hd_22_exec = {
+			if = {
+				limit = { has_title = title:h_china }
+				set_primary_title_to = title:h_china
+				if = {
+					limit = { NOT = { has_government = celestial_government } }
+					change_government = celestial_government
+				}
+				primary_title = { set_title_name = dynn_title_han }
+			}
+		}
+		scope:hd_22_mang = {
+			every_character_artifact = {
+				limit = { has_variable = han_artifact_imperial_seal }
+				set_owner = { target = scope:hd_22_exec }
+			}
+		}
+		debug_log = "HD_22 S5 PLAYER_WANGMANG_FLED"
+	}
+	hd_22_clear_locks_effect = yes
+}

@@ -1,0 +1,446 @@
+﻿# 22 年剧本「舂陵起兵」开局效果。只由 common/on_action/zz_hd_22_startup.txt 调用，调用处已带 22.11.13 闸门。
+# 计划见 /mnt/project-files/22舂陵起兵剧本_计划.md 第 6、13 节。复用的 nbc 效果都是不分开局日期的通用效果
+# （hd_nbc_set_era_effect、hd_nbc_realm_name_effect、hd_nbc_start_war_effect、hd_nbc_add_attacker_effect、
+#   hd_nbc_spawn_army_effect、hd_nbc_minister_effect）。scripted effect 里不写 root，人物一律用 character:ID。
+
+############################################################
+# on_game_start
+############################################################
+hd_22_game_start_effect = {
+	# OE 整合带进来的 6 个重复人物：本 mod 那份才挂着 h_china 历史与 184 汉室家谱，OE 副本在 22 开局除去（计划 §3.5、复核必改 4）
+	hd_22_oe_dup_effect = yes
+	# 历史里没有可安全写政体的 3 个外围首领，在这里补设（计划 5.5）
+	hd_22_gov_fix_effect = yes
+	# 天意青睐"每月主动开战"要求讨董链已结束（184 专用变量），同 304、370、531。
+	# 它也会让战前招降、请求归附全局生效，起义军用 hd_22_rebel 标记挡住（zzzzzz_hd_submission_triggers.txt）
+	set_global_variable = { name = hd_anti_regent_chain_resolved value = yes }
+	# 终结乱世锁：长安陷落（S5）或 26.1.1 解锁（tgp_dynastic_cycle_decisions.txt，复核必改 1）
+	set_global_variable = hd_22_mandate_lock
+	# 天子京城：常安（长安）
+	title:h_china = {
+		set_capital_county = title:c_uuii_p_867
+		set_variable = { name = hd_court_capital_county value = title:c_uuii_p_867 }
+	}
+	# 传国玉玺归王莽（王莽篡汉时得自元后）。设 hd_han_treasures_initialized，184 的宝物脚本不会补发
+	character:wang_mang ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				NOT = { exists = global_var:hd_han_treasures_initialized }
+			}
+			hd_han_create_imperial_seal_effect = { OWNER = this }
+			set_global_variable = hd_han_treasures_initialized
+		}
+	}
+	hd_22_dynastic_cycle_effect = yes
+	hd_22_rebel_flags_effect = yes
+	hd_22_protect_effect = yes
+	# 国号放在大厅前（「各剧本国号修复计划」的通用写法），after_lobby 再调一次保底
+	hd_22_realm_display_effect = yes
+	debug_log = "HD_22 STAGE GAME_START"
+}
+
+# OE 副本：在世子女先改挂到本 mod 那份（只有王莽之女王捷 22 年在世），再静默除去。都只在 22 开局生效
+hd_22_oe_dup_one_effect = {
+	character:$OE$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = no
+				character:$KEEP$ ?= { is_alive = yes }
+			}
+			every_child = {
+				limit = { is_alive = yes }
+				if = {
+					limit = { NOT = { father ?= character:$KEEP$ } }
+					set_father = character:$KEEP$
+				}
+			}
+			death = { death_reason = death_vanished }
+			debug_log = "HD_22 OE_DUP_REMOVED $OE$"
+		}
+	}
+}
+hd_22_oe_dup_effect = {
+	hd_22_oe_dup_one_effect = { OE = qiguo_tian_035 KEEP = wang_mang }           # 王莽
+	hd_22_oe_dup_one_effect = { OE = pengcheng_liu20950 KEEP = liu_xiu }        # 刘秀
+	hd_22_oe_dup_one_effect = { OE = nanyang_lai_008 KEEP = lai_bao }           # 来褒（先除子，再除父）
+	hd_22_oe_dup_one_effect = { OE = nanyang_lai_005 KEEP = lai_she }           # 来歙
+	hd_22_oe_dup_one_effect = { OE = peiguo_zhu_002 KEEP = zhu_fu_2 }           # 朱浮
+	hd_22_oe_dup_one_effect = { OE = fufeng_ma_033 KEEP = ma_yan_2 }            # 马严
+}
+
+hd_22_gov_fix_one_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = yes
+				NOT = { has_government = $GOV$ }
+			}
+			change_government = $GOV$
+		}
+	}
+}
+hd_22_gov_fix_effect = {
+	hd_22_gov_fix_one_effect = { WHO = hd_22_chief_BAL_cheolli GOV = tribal_government }     # 肃慎
+	hd_22_gov_fix_one_effect = { WHO = hd_22_chief_BAL_yeojintang GOV = tribal_government }
+	hd_22_gov_fix_one_effect = { WHO = hd_22_chief_SW_qingxingan GOV = tribal_government }
+}
+
+# 天朝循环：局势紧张开局、新朝土德、进度清零（照 saas_game_start.txt 的 184 分支）。
+# 不用斗争开局；新朝之亡由 S4 天下响应推动，阶段由 hd_dc_evaluate_era_effect 即时检测
+hd_22_dynastic_cycle_effect = {
+	if = {
+		limit = {
+			has_tgp_dlc_trigger = yes
+			exists = title:h_china.holder
+			NOT = { exists = situation:dynastic_cycle }
+		}
+		start_situation = {
+			type = dynastic_cycle
+			start_phase = situation_dynastic_cycle_phase_instability
+		}
+	}
+	if = {
+		limit = {
+			has_tgp_dlc_trigger = yes
+			exists = situation:dynastic_cycle
+			NOT = { exists = global_var:saas_dynastic_cycle_initialized }
+		}
+		situation:dynastic_cycle = {
+			title:h_china = {
+				set_variable = { name = years_since_imperial_examination value = 0 }
+			}
+			title:h_china.holder ?= {
+				if = {
+					limit = { legitimacy < legitimacy_level_6 }
+					add_legitimacy = {
+						value = legitimacy_level_6
+						subtract = legitimacy
+					}
+				}
+			}
+			tgp_set_wuking_element_effect = { ELEMENT = earth }
+			every_situation_participant = {
+				recalculate_participant_group = situation:dynastic_cycle
+			}
+			hd_dc_zero_start_progress_effect = yes
+			trigger_event = { on_action = hd_22_dc_zero_progress days = 2 }
+		}
+		set_global_variable = {
+			name = saas_dynastic_cycle_initialized
+			value = yes
+		}
+		debug_log = "HD_22 DYNASTIC_CYCLE INSTABILITY EARTH"
+	}
+}
+
+# 起义军首领：不请求归附新朝、不接受战前招降（hd_submission_ai_refuses_trigger）。S5 或 26.1.1 清除
+hd_22_rebel_flag_one_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = { is_alive = yes }
+			add_character_flag = hd_22_rebel
+		}
+	}
+}
+hd_22_rebel_flags_effect = {
+	hd_22_rebel_flag_one_effect = { WHO = liu_yan }               # 刘縯
+	hd_22_rebel_flag_one_effect = { WHO = liu_xiu }               # 刘秀
+	hd_22_rebel_flag_one_effect = { WHO = hd_22_wang_kuang }      # 王匡
+	hd_22_rebel_flag_one_effect = { WHO = hd_22_chen_mu }         # 陈牧
+	hd_22_rebel_flag_one_effect = { WHO = wang_chang_3 }          # 王常
+	hd_22_rebel_flag_one_effect = { WHO = fan_chong }             # 樊崇
+	hd_22_rebel_flag_one_effect = { WHO = WJ_history_gengshi }    # 刘玄
+}
+hd_22_rebel_flags_clear_effect = {
+	every_living_character = {
+		limit = { has_character_flag = hd_22_rebel }
+		remove_character_flag = hd_22_rebel
+	}
+}
+
+# 开局人口清除不选中新朝一代的无地史实人物（保护名单生成器只覆盖无王朝者，这里补全计划 3.1、3.2 名单）
+hd_22_protect_one_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = { is_alive = yes }
+			add_character_flag = hd_popclean_protect
+		}
+	}
+}
+hd_22_protect_effect = {
+	hd_22_protect_one_effect = { WHO = WJ_history_gengshi }   # 刘玄
+	hd_22_protect_one_effect = { WHO = hd_22_wang_feng }
+	hd_22_protect_one_effect = { WHO = hd_22_li_tong }
+	hd_22_protect_one_effect = { WHO = hd_22_liu_yong }
+	hd_22_protect_one_effect = { WHO = hd_22_wei_xiao }
+	hd_22_protect_one_effect = { WHO = hd_22_wei_cui }
+	hd_22_protect_one_effect = { WHO = hd_22_wei_yi }
+	hd_22_protect_one_effect = { WHO = hd_22_dou_rong }
+	hd_22_protect_one_effect = { WHO = hd_22_wang_kuang_xin }
+	hd_22_protect_one_effect = { WHO = hd_22_wang_xing_xin }
+	hd_22_protect_one_effect = { WHO = wang_yi_4 }
+	hd_22_protect_one_effect = { WHO = wang_xun_2 }
+	hd_22_protect_one_effect = { WHO = yan_you }
+	hd_22_protect_one_effect = { WHO = chen_mao }
+	hd_22_protect_one_effect = { WHO = liang_qiu_ci }
+	hd_22_protect_one_effect = { WHO = liu_xin_2 }
+	hd_22_protect_one_effect = { WHO = wang_she_2 }
+	hd_22_protect_one_effect = { WHO = dong_zhong }
+	hd_22_protect_one_effect = { WHO = kong_ren }
+	hd_22_protect_one_effect = { WHO = li_yi_3 }
+	hd_22_protect_one_effect = { WHO = pengcheng_liu20841 }   # 刘嘉
+	hd_22_protect_one_effect = { WHO = pengcheng_liu20840 }   # 刘祉
+	hd_22_protect_one_effect = { WHO = liu_ci_2 }
+	hd_22_protect_one_effect = { WHO = liu_xin_3 }
+	hd_22_protect_one_effect = { WHO = zhu_you }
+	hd_22_protect_one_effect = { WHO = lai_she }
+	hd_22_protect_one_effect = { WHO = deng_yu }
+	hd_22_protect_one_effect = { WHO = jia_fu }
+	hd_22_protect_one_effect = { WHO = geng_yan }
+	hd_22_protect_one_effect = { WHO = shangdang_feng_0005 }  # 冯异
+	hd_22_protect_one_effect = { WHO = ma_wu }
+	hd_22_protect_one_effect = { WHO = zhu_wei }
+	hd_22_protect_one_effect = { WHO = cheng_dan }
+	hd_22_protect_one_effect = { WHO = zhang_ang }
+	hd_22_protect_one_effect = { WHO = liao_zhan }
+	hd_22_protect_one_effect = { WHO = pang_an }
+	hd_22_protect_one_effect = { WHO = xie_lu }
+	hd_22_protect_one_effect = { WHO = yang_yin }
+	hd_22_protect_one_effect = { WHO = liu_pen_zi }
+	hd_22_protect_one_effect = { WHO = shen_tu_jian }
+	hd_22_protect_one_effect = { WHO = li_song }
+	hd_22_protect_one_effect = { WHO = liu_wang }
+	hd_22_protect_one_effect = { WHO = wang_lang_2 }
+	hd_22_protect_one_effect = { WHO = liu_yang_3 }
+	hd_22_protect_one_effect = { WHO = lu_fang }
+	hd_22_protect_one_effect = { WHO = zhang_bu }
+	hd_22_protect_one_effect = { WHO = dong_xian }
+	hd_22_protect_one_effect = { WHO = qin_feng }
+	hd_22_protect_one_effect = { WHO = peng_chong }
+	hd_22_protect_one_effect = { WHO = pang_meng }
+	hd_22_protect_one_effect = { WHO = wu_han }
+	hd_22_protect_one_effect = { WHO = gai_yan }
+	hd_22_protect_one_effect = { WHO = ren_guang }
+	hd_22_protect_one_effect = { WHO = yin_li_hua }
+}
+
+# 国号与称谓。一律不记到王朝上（FIXED = no）。新的「新」由 h_china 历史 9.1.10 的 effect 设好，不重复
+hd_22_realm_display_effect = {
+	hd_nbc_realm_name_effect = { WHO = hd_22_chanyu_yu NAME = dynn_title_hd_22_xiongnu FIXED = no }   # 匈奴（主头衔 e_mongolia）
+}
+
+############################################################
+# on_game_start_after_lobby
+############################################################
+hd_22_after_lobby_effect = {
+	hd_22_capitals_effect = yes
+	hd_22_courtiers_effect = yes
+	hd_22_heir_effect = yes
+	hd_22_era_effect = yes
+	hd_22_realm_display_effect = yes
+	hd_22_ministers_effect = yes
+	hd_22_truce_effect = yes
+	hd_22_nanyang_war_effect = yes
+	# 天意青睐（名单在 zz_hd_rise_triggers.txt，带 22 闸门）。刘玄得地后由 S2 补调
+	character:liu_yan ?= { hd_rise_ensure_story_effect = yes }
+	character:liu_xiu ?= { hd_rise_ensure_story_effect = yes }
+	debug_log = "HD_22 STAGE AFTER_LOBBY"
+	hd_recommended_starting_resources_effect = yes
+}
+
+# 治所
+hd_22_capital_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				title:$COUNTY$.holder ?= this
+			}
+			set_realm_capital = title:$COUNTY$
+		}
+	}
+}
+hd_22_capitals_effect = {
+	hd_22_capital_effect = { WHO = wang_mang COUNTY = c_uuii_p_867 }          # 常安
+	hd_22_capital_effect = { WHO = zhen_fu COUNTY = c_uuii_p_1733 }           # 宛
+	hd_22_capital_effect = { WHO = liu_yan COUNTY = c_uuii_p_1800 }           # 蔡阳（舂陵）
+	hd_22_capital_effect = { WHO = hd_22_wang_kuang COUNTY = c_uuii_p_1859 }  # 石梵
+	hd_22_capital_effect = { WHO = hd_22_chen_mu COUNTY = c_uuii_p_1844 }     # 随
+	hd_22_capital_effect = { WHO = wang_chang_3 COUNTY = c_uuii_p_1805 }      # 编
+	hd_22_capital_effect = { WHO = fan_chong COUNTY = c_uuii_p_352 }          # 无盐
+	hd_22_capital_effect = { WHO = gong_sun_shu COUNTY = c_uuii_p_3269 }      # 临邛
+}
+
+# 无地的史实人物进宫廷（计划 6.2；严尤、陈茂按复核建议 3 入甄阜宫廷）
+hd_22_courtier_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = no
+				character:$COURT$ ?= { is_alive = yes is_landed = yes }
+				NOT = { employer ?= character:$COURT$ }
+			}
+			character:$COURT$ = { add_courtier = character:$WHO$ }
+		}
+	}
+}
+hd_22_courtiers_effect = {
+	# 常安：新朝将相、王莽诸子
+	hd_22_courtier_effect = { WHO = wang_yi_4 COURT = wang_mang }             # 王邑 大司空
+	hd_22_courtier_effect = { WHO = wang_xun_2 COURT = wang_mang }            # 王寻 司徒
+	hd_22_courtier_effect = { WHO = liu_xin_2 COURT = wang_mang }             # 刘歆 国师
+	hd_22_courtier_effect = { WHO = wang_she_2 COURT = wang_mang }            # 王涉 卫将军
+	hd_22_courtier_effect = { WHO = dong_zhong COURT = wang_mang }            # 董忠 大司马
+	hd_22_courtier_effect = { WHO = kong_ren COURT = wang_mang }              # 孔仁
+	hd_22_courtier_effect = { WHO = hd_22_wang_kuang_xin COURT = wang_mang }  # 王匡（新）
+	hd_22_courtier_effect = { WHO = hd_22_wang_xing_xin COURT = wang_mang }   # 王兴（新）
+	# 宛：前队大夫甄阜
+	hd_22_courtier_effect = { WHO = liang_qiu_ci COURT = zhen_fu }            # 梁丘赐 属正
+	hd_22_courtier_effect = { WHO = yan_you COURT = zhen_fu }                 # 严尤 纳言大将军
+	hd_22_courtier_effect = { WHO = chen_mao COURT = zhen_fu }                # 陈茂 秩宗大将军
+	# 舂陵兵
+	hd_22_courtier_effect = { WHO = hd_22_li_tong COURT = liu_yan }           # 李通
+	hd_22_courtier_effect = { WHO = li_yi_3 COURT = liu_yan }                 # 李轶
+	hd_22_courtier_effect = { WHO = pengcheng_liu20841 COURT = liu_yan }      # 刘嘉
+	hd_22_courtier_effect = { WHO = pengcheng_liu20840 COURT = liu_yan }      # 刘祉
+	hd_22_courtier_effect = { WHO = liu_ci_2 COURT = liu_yan }                # 刘赐
+	hd_22_courtier_effect = { WHO = zhu_you COURT = liu_yan }                 # 朱祐
+	# 新市兵
+	hd_22_courtier_effect = { WHO = hd_22_wang_feng COURT = hd_22_wang_kuang } # 王凤
+	hd_22_courtier_effect = { WHO = zhu_wei COURT = hd_22_wang_kuang }        # 朱鲔
+	hd_22_courtier_effect = { WHO = ma_wu COURT = hd_22_wang_kuang }          # 马武
+	# 平林兵
+	hd_22_courtier_effect = { WHO = liao_zhan COURT = hd_22_chen_mu }         # 廖湛
+	hd_22_courtier_effect = { WHO = WJ_history_gengshi COURT = hd_22_chen_mu } # 刘玄 安集掾
+	# 下江兵
+	hd_22_courtier_effect = { WHO = cheng_dan COURT = wang_chang_3 }          # 成丹
+	hd_22_courtier_effect = { WHO = zhang_ang COURT = wang_chang_3 }          # 张卬
+	# 赤眉
+	hd_22_courtier_effect = { WHO = pang_an COURT = fan_chong }               # 逄安
+	hd_22_courtier_effect = { WHO = xie_lu COURT = fan_chong }                # 谢禄
+	hd_22_courtier_effect = { WHO = yang_yin COURT = fan_chong }              # 杨音
+	hd_22_courtier_effect = { WHO = liu_pen_zi COURT = fan_chong }            # 刘盆子
+	# 日后群雄：留在原籍，作所在郡守的廷臣（计划 6.2）
+	hd_22_courtier_effect = { WHO = hd_22_wei_xiao COURT = hd_22_gov_tianshui }   # 隗嚣（天水成纪）
+	hd_22_courtier_effect = { WHO = hd_22_wei_cui COURT = hd_22_gov_tianshui }    # 隗崔
+	hd_22_courtier_effect = { WHO = hd_22_wei_yi COURT = hd_22_gov_tianshui }     # 隗义
+	hd_22_courtier_effect = { WHO = wang_lang_2 COURT = hd_22_gov_zhaoguo }       # 王郎（邯郸）
+	hd_22_courtier_effect = { WHO = liu_yang_3 COURT = hd_22_gov_changshan }      # 刘扬（真定）
+	hd_22_courtier_effect = { WHO = lu_fang COURT = hd_22_gov_anding }            # 卢芳（安定三水）
+	hd_22_courtier_effect = { WHO = hd_22_liu_yong COURT = hd_22_gov_liangguo }   # 刘永（睢阳）
+	hd_22_courtier_effect = { WHO = hd_22_dou_rong COURT = wang_mang }           # 窦融（强弩将军司马）
+	hd_22_courtier_effect = { WHO = peng_chong COURT = wang_mang }               # 彭宠（大司空士）
+}
+
+# 储君：王莽立王匡（新）。太子王临已于地皇二年死
+hd_22_heir_effect = {
+	character:wang_mang ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				character:hd_22_wang_kuang_xin ?= { is_alive = yes }
+			}
+			set_designated_heir = character:hd_22_wang_kuang_xin
+		}
+	}
+}
+
+# 年号：新地皇三年
+hd_22_era_effect = {
+	hd_nbc_set_era_effect = { WHO = wang_mang KEY = dihuang YEAR = 3 }
+}
+
+# 朝官：王寻司徒、王邑大司空；WJ 随机补位对 22 关闭
+hd_22_ministers_effect = {
+	title:h_china.holder ?= {
+		save_scope_as = councillor_liege
+		hd_nbc_minister_effect = { WHO = wang_xun_2 TITLE = e_minister_chancellor POS = councillor_chancellor }   # 王寻 司徒
+		hd_nbc_minister_effect = { WHO = wang_yi_4 TITLE = e_minister_of_works POS = minister_works }            # 王邑 大司空
+	}
+}
+
+# 王莽与五家起义军互给停战到 23.5.8（S3 窗口），挡住王莽以法理宣称直接用全国之兵开战（复核必改 7）。脚本宣战不受停战影响
+hd_22_truce_one_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = yes
+				character:wang_mang ?= { is_alive = yes NOT = { is_at_war_with = character:$WHO$ } }
+			}
+			character:wang_mang = {
+				add_truce_both_ways = {
+					character = character:$WHO$
+					days = 176
+					name = hd_22_truce
+				}
+			}
+		}
+	}
+}
+hd_22_truce_effect = {
+	hd_22_truce_one_effect = { WHO = liu_yan }
+	hd_22_truce_one_effect = { WHO = liu_xiu }
+	hd_22_truce_one_effect = { WHO = hd_22_wang_kuang }
+	hd_22_truce_one_effect = { WHO = hd_22_chen_mu }
+	hd_22_truce_one_effect = { WHO = wang_chang_3 }
+	hd_22_truce_one_effect = { WHO = fan_chong }
+}
+
+# S1 舂陵起兵：刘縯以边境战争打南阳郡持有者甄阜（照 218 汉中之战），王莽不当守方；新市、平林入攻方。
+# 宛（c_uuii_p_1733）归汉军即胜，胜负由心跳按宛城归属判定（zz_hd_22_history_effects.txt）
+hd_22_nanyang_war_effect = {
+	if = {
+		limit = {
+			character:liu_yan ?= { is_alive = yes is_independent_ruler = yes }
+			character:zhen_fu ?= { is_alive = yes is_landed = yes }
+			title:d_nanyang.holder ?= character:zhen_fu
+		}
+		# 守方最高宗主没有边境战争法时补上，宗主满 1095 天才能加入封臣战争
+		character:zhen_fu.top_liege = {
+			if = {
+				limit = {
+					NOT = { this = character:zhen_fu }
+					NOT = { has_realm_law = top_liege_not_redirected_to_border_wars_law }
+				}
+				add_realm_law_skip_effects = top_liege_not_redirected_to_border_wars_law
+				debug_log = "HD_22 S1 BORDER_LAW_ADDED"
+			}
+		}
+		hd_nbc_start_war_effect = { ATTACKER = character:liu_yan DEFENDER = character:zhen_fu TARGET = title:d_nanyang KIND = hd22nanyang }
+		if = {
+			limit = { exists = scope:hd_nbc_war_hd22nanyang }
+			set_global_variable = hd_22_nanyang_started
+			scope:hd_nbc_war_hd22nanyang = {
+				hd_nbc_add_attacker_effect = { WHO = hd_22_wang_kuang }
+				hd_nbc_add_attacker_effect = { WHO = hd_22_chen_mu }
+			}
+			character:liu_yan = { hd_nbc_spawn_army_effect = { SIZE = 7000 WHERE = title:c_uuii_p_1800 NAME = hd_22_chunling_army_name } }
+			character:hd_22_wang_kuang ?= {
+				if = {
+					limit = { is_alive = yes is_landed = yes }
+					hd_nbc_spawn_army_effect = { SIZE = 3000 WHERE = title:c_uuii_p_1859 NAME = hd_22_xinshi_army_name }
+				}
+			}
+			character:hd_22_chen_mu ?= {
+				if = {
+					limit = { is_alive = yes is_landed = yes }
+					hd_nbc_spawn_army_effect = { SIZE = 1500 WHERE = title:c_uuii_p_1844 NAME = hd_22_pinglin_army_name }
+				}
+			}
+			character:zhen_fu = { hd_nbc_spawn_army_effect = { SIZE = 8000 WHERE = title:c_uuii_p_1733 NAME = hd_22_qiandui_army_name } }
+		}
+		else = {
+			set_global_variable = hd_22_nanyang_done
+			debug_log = "HD_22 S1 NANYANG WAR_START_FAILED"
+		}
+	}
+	else = {
+		set_global_variable = hd_22_nanyang_done
+		debug_log = "HD_22 S1 NANYANG SKIPPED"
+	}
+}

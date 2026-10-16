@@ -420,6 +420,8 @@ hd_370_dongzheng_war_effect = {
 		hd_370_end_kind_war_effect = { WHO = lueyang_fu_020 KIND = luoyang }
 		debug_log = "HD_370 S2 LUOYANG_ENDED_FOR_DONGZHENG"
 	}
+	# 洛阳之战白和后 hd_nbc_war_cb 给苻坚加了对燕的停战；史实是燕先背约，不应扣威望（执行后复核必改 2）
+	character:lueyang_fu_020 = { add_character_flag = { flag = allowed_war_declaration_sans_truce_penalties days = 1 } }
 	hd_nbc_start_war_effect = { ATTACKER = character:lueyang_fu_020 DEFENDER = character:changli_murong_077 TARGET = title:d_weijun KIND = dongzheng }
 	if = {
 		limit = { exists = scope:hd_nbc_war_dongzheng }
@@ -451,13 +453,30 @@ hd_370_check_yanfall_effect = {
 			exists = global_var:hd_370_dongzheng_qin_won
 			NOT = { exists = global_var:hd_370_yanfall_done }
 		}
-		set_global_variable = hd_370_yanfall_done
+		# 燕主：慕容暐在世且有地就是他（被俘也算，效果开头先放人）；他已死或失地，改认燕蓟帝国的持有者（执行后复核必改 1）
+		if = {
+			limit = { character:changli_murong_077 ?= { is_alive = yes is_landed = yes } }
+			set_global_variable = { name = hd_370_yan_ruler value = character:changli_murong_077 }
+		}
+		else_if = {
+			limit = {
+				title:e_youyan.holder ?= {
+					is_alive = yes
+					is_landed = yes
+					is_independent_ruler = yes
+					NOT = { this = character:lueyang_fu_020 }
+				}
+			}
+			set_global_variable = { name = hd_370_yan_ruler value = title:e_youyan.holder }
+		}
 		if = {
 			limit = {
-				character:changli_murong_077 ?= { is_alive = yes is_landed = yes is_imprisoned = no }
+				exists = global_var:hd_370_yan_ruler
+				global_var:hd_370_yan_ruler = { is_alive = yes is_landed = yes }
 				character:lueyang_fu_020 ?= { is_alive = yes is_landed = yes }
 			}
-			character:changli_murong_077 = {
+			set_global_variable = hd_370_yanfall_done
+			global_var:hd_370_yan_ruler = {
 				if = {
 					limit = { is_ai = yes }
 					hd_370_yan_fall_effect = yes
@@ -465,17 +484,34 @@ hd_370_check_yanfall_effect = {
 				else = { trigger_event = hd_370.0130 }
 			}
 		}
-		else = { debug_log = "HD_370 S3 YANFALL SKIPPED" }
+		else_if = {
+			limit = { NOT = { character:lueyang_fu_020 ?= { is_alive = yes is_landed = yes } } }
+			set_global_variable = hd_370_yanfall_done
+			debug_log = "HD_370 S3 YANFALL SKIPPED_FUJIAN_GONE"
+		}
+		else_if = {
+			limit = { current_date >= 372.1.1 }
+			set_global_variable = hd_370_yanfall_done
+			debug_log = "HD_370 S3 YANFALL SKIPPED_DEADLINE NO_YAN_RULER"
+		}
+		else = { debug_log = "HD_370 S3 YANFALL WAITING NO_YAN_RULER" }
 	}
 }
 
 # 燕亡：慕容暐的头衔与封臣全部归苻坚；冀州、司州两个王国与魏郡交王猛（王猛为冀州牧，镇邺）；暐入苻坚宫廷；慕容评奔高句丽
 hd_370_yan_fall_effect = {
-	hd_370_take_realm_effect = { NEW = character:lueyang_fu_020 OLD = character:changli_murong_077 }
+	global_var:hd_370_yan_ruler = {
+		save_scope_as = hd_370_yan_old
+		if = {
+			limit = { is_imprisoned = yes }
+			release_from_prison = yes
+		}
+	}
+	hd_370_take_realm_effect = { NEW = character:lueyang_fu_020 OLD = scope:hd_370_yan_old }
 	character:lueyang_fu_020 = {
 		if = {
-			limit = { character:changli_murong_077 ?= { is_alive = yes is_landed = no } }
-			add_courtier = character:changli_murong_077
+			limit = { scope:hd_370_yan_old = { is_alive = yes is_landed = no } }
+			add_courtier = scope:hd_370_yan_old
 		}
 	}
 	if = {
@@ -525,7 +561,7 @@ hd_370_yan_fall_effect = {
 	}
 	set_global_variable = hd_370_yan_fallen
 	if = {
-		limit = { character:changli_murong_077 ?= { NOT = { any_vassal = { always = yes } } } }
+		limit = { scope:hd_370_yan_old = { NOT = { any_vassal = { always = yes } } } }
 		debug_log = "HD_370 S3 YANFALL OK"
 	}
 	else = { debug_log = "HD_370 S3 YANFALL CHECK_FAILED" }
