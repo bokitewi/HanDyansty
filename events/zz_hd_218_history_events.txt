@@ -410,7 +410,7 @@ hd_sg218.0110 = {
 }
 
 ############################################################
-# 12 曹丕受禅（只给 AI 曹丕，直接调现有受禅效果）。Root：曹丕
+# 12 曹丕受禅（AI 曹丕、AI 献帝，直接调受禅效果）。Root：曹丕
 ############################################################
 hd_sg218.0120 = {
 	type = character_event
@@ -421,18 +421,110 @@ hd_sg218.0120 = {
 		title:h_china.var:hd_court_regent ?= root
 	}
 	immediate = {
-		title:h_china.holder = { save_scope_as = hd_sg218_old_emperor }
-		hd_court_usurp_common_effect = { TITLE_TIER = duchy TITLE_NAME = hd_court_abdicated_title_name LEVEL = 2 }
-		debug_log = "HD218 SHOUCHAN"
-		# 受禅后曹丕应仍持魏国（e_han 处理复核）
+		hd_sg218_shouchan_effect = yes
+	}
+}
+
+############################################################
+# 12a 逼宫受禅（玩家曹丕）。Root：曹丕
+############################################################
+hd_sg218.0121 = {
+	type = character_event
+	title = hd_sg218.0121.t
+	desc = hd_sg218.0121.desc
+	theme = dynastic_cycle
+	left_portrait = { character = root animation = personality_bold }
+	right_portrait = {
+		character = title:h_china.holder
+		animation = worry
+		trigger = { exists = title:h_china.holder }
+	}
+	trigger = {
+		is_alive = yes
+		title:h_china.var:hd_court_regent ?= root
+	}
+	# 筑坛受禅
+	option = {
+		name = hd_sg218.0121.a
+		hd_sg218_shouchan_effect = yes
+		ai_chance = { base = 100 }
+	}
+	# 时机未到
+	option = {
+		name = hd_sg218.0121.b
+		custom_tooltip = hd_sg218_ask_again_tt
+		ai_chance = { base = 0 }
+	}
+}
+
+############################################################
+# 12b 献帝禅位（玩家献帝，AI 曹丕）。Root：天子
+############################################################
+hd_sg218.0122 = {
+	type = character_event
+	title = hd_sg218.0122.t
+	desc = hd_sg218.0122.desc
+	theme = dynastic_cycle
+	left_portrait = { character = root animation = grief }
+	right_portrait = {
+		character = character:cao_pi
+		animation = personality_cynical
+		trigger = { character:cao_pi ?= { is_alive = yes } }
+	}
+	trigger = {
+		is_alive = yes
+		this = title:h_china.holder
+		character:cao_pi ?= { is_alive = yes }
+		title:h_china.var:hd_court_regent ?= character:cao_pi
+	}
+	# 奉玺绶，禅位于魏
+	option = {
+		name = hd_sg218.0122.a
+		# 受禅效果要求 root 是曹丕（天命交接按 root 写），交给 0120 执行；此分支曹丕必是 AI
+		character:cao_pi = { trigger_event = hd_sg218.0120 }
+		ai_chance = { base = 100 }
+	}
+	# 不禅
+	option = {
+		name = hd_sg218.0122.b
+		character:cao_pi = { add_opinion = { target = root modifier = suspicion_opinion opinion = -40 } }
+		add_stress = major_stress_impact_gain
+		# 第二次拒绝后，下次曹丕直接夺位（hd_sg218_check_shouchan_effect）
 		if = {
-			limit = { has_title = title:e_hd218_wei }
-			debug_log = "HD218 SHOUCHAN WEI_KEPT"
+			limit = { has_global_variable = hd_sg218_xian_refusals }
+			change_global_variable = { name = hd_sg218_xian_refusals add = 1 }
 		}
-		else = { debug_log = "HD218 SHOUCHAN WEI_LOST" }
-		root = { save_scope_as = hd_news_a }
-		scope:hd_sg218_old_emperor = { save_scope_as = hd_news_b }
-		hd_world_news_send_effect = { EVENT = hd_sg218.0620 }
+		else = {
+			set_global_variable = { name = hd_sg218_xian_refusals value = 1 }
+		}
+		if = {
+			limit = { global_var:hd_sg218_xian_refusals >= 2 }
+			custom_tooltip = hd_sg218_forced_next_tt
+		}
+		else = {
+			custom_tooltip = hd_sg218_ask_again_tt
+		}
+		ai_chance = { base = 0 }
+	}
+}
+
+############################################################
+# 12c 强行夺位，天子下狱（玩家献帝拒绝两次后）。Root：旧天子
+############################################################
+hd_sg218.0123 = {
+	type = character_event
+	title = hd_sg218.0123.t
+	desc = hd_sg218.0123.desc
+	theme = dynastic_cycle
+	left_portrait = { character = root animation = grief }
+	right_portrait = {
+		character = character:cao_pi
+		animation = personality_cynical
+		trigger = { character:cao_pi ?= { is_alive = yes } }
+	}
+	option = {
+		name = hd_sg218.0123.a
+		ai_chance = { base = 100 }
 	}
 }
 
@@ -451,18 +543,49 @@ hd_sg218.0130 = {
 		trigger = { character:zhu_ge_liang ?= { is_alive = yes } }
 	}
 	trigger = { is_alive = yes }
-	# 即皇帝位于成都
+	# 即皇帝位于成都：先给践祚大典许可，大典完成时改帝号、发通报 0630（hd_sg218_jianzuo_complete_effect）
 	option = {
 		name = hd_sg218.0130.a
-		hd_sg218_liu_bei_emperor_effect = yes
-		root = { save_scope_as = hd_news_a }
-		title:h_china.holder = { save_scope_as = hd_news_b }
-		hd_world_news_send_effect = { EVENT = hd_sg218.0630 }
+		custom_tooltip = hd_sg218_jianzuo_tt
+		hidden_effect = { hd_sg218_liu_bei_emperor_effect = yes }
 		ai_chance = { base = 100 }
 	}
 	# 暂且推辞
 	option = {
 		name = hd_sg218.0130.b
+		custom_tooltip = hd_sg218_ask_again_tt
+		ai_chance = { base = 0 }
+	}
+}
+
+############################################################
+# 14 孙权称帝。Root：孙权
+############################################################
+hd_sg218.0140 = {
+	type = character_event
+	title = hd_sg218.0140.t
+	desc = hd_sg218.0140.desc
+	theme = dynastic_cycle
+	left_portrait = { character = root animation = personality_bold }
+	trigger = {
+		is_alive = yes
+		primary_title ?= { has_variable = hd218_wang_display }
+	}
+	# 即皇帝位于武昌
+	option = {
+		name = hd_sg218.0140.a
+		custom_tooltip = hd_sg218_jianzuo_tt
+		hidden_effect = {
+			set_global_variable = hd_sg218_sun_quan_emperor
+			hd_sg218_jianzuo_allow_effect = { NAME = dynn_title_wu }
+			debug_log = "HD218 SUN_QUAN_EMPEROR"
+		}
+		ai_chance = { base = 100 }
+	}
+	# 暂且推辞
+	option = {
+		name = hd_sg218.0140.b
+		custom_tooltip = hd_sg218_ask_again_tt
 		ai_chance = { base = 0 }
 	}
 }
@@ -912,6 +1035,20 @@ hd_sg218.0630 = {
 	type = character_event
 	title = hd_sg218.0630.t
 	desc = hd_sg218.0630.desc
+	theme = dynastic_cycle
+	left_portrait = { character = scope:hd_news_a animation = personality_bold }
+	right_portrait = {
+		character = scope:hd_news_b
+		animation = personality_cynical
+		trigger = { NOT = { scope:hd_news_b = scope:hd_news_a } }
+	}
+	option = { name = hd_world_news.a ai_chance = { base = 100 } }
+}
+
+hd_sg218.0640 = {
+	type = character_event
+	title = hd_sg218.0640.t
+	desc = hd_sg218.0640.desc
 	theme = dynastic_cycle
 	left_portrait = { character = scope:hd_news_a animation = personality_bold }
 	right_portrait = {
