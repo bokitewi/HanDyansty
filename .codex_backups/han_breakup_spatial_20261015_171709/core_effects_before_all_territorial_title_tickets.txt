@@ -1,0 +1,208 @@
+# Reuse the stable release key, with the original vanilla transaction pattern.
+# Never change government as a side effect of independence.
+hd_qxzl_release_ruler_effect = {
+	if = {
+		limit = { hd_hb_live_vassal_trigger = yes }
+		create_title_and_vassal_change = {
+			type = independency
+			save_scope_as = hd_hb_independence_change
+			add_claim_on_loss = no
+		}
+		becomes_independent = { change = scope:hd_hb_independence_change }
+		resolve_title_and_vassal_change = scope:hd_hb_independence_change
+		if = {
+			limit = { is_independent_ruler = yes }
+			hd_hb_clear_player_pending_effect = yes
+			debug_log = "HD_HB INDEPENDENCE_CONFIRMED"
+		}
+		else = { debug_log = "HD_HB INDEPENDENCE_NOT_CONFIRMED" }
+	}
+}
+
+# Decide everyone BEFORE applying any result. Temporary lists stay in this
+# execution chain, so no persistent per-character score/decision survives it.
+hd_hb_decide_ruler_effect = {
+	# Culture scopes have no liege accessor. Save the character's direct liege
+	# before the score's culture-heritage comparison changes scope.
+	liege = { save_temporary_scope_as = hd_hb_round_liege }
+	if = {
+		limit = {
+			hd_hb_force_independence_trigger = yes
+			NOT = { hd_hb_block_independence_trigger = yes }
+		}
+		add_to_temporary_list = hd_hb_release_targets
+	}
+	else_if = {
+		limit = {
+			hd_hb_block_independence_trigger = yes
+			NOT = { hd_hb_force_independence_trigger = yes }
+		}
+		# A D3 single-sided block also invalidates any unanswered D0 choice.
+		hd_hb_clear_player_pending_effect = yes
+	}
+	else = {
+		if = {
+			limit = { is_ai = yes }
+			random = {
+				chance = hd_hb_independence_chance
+				add_to_temporary_list = hd_hb_release_targets
+			}
+		}
+		else_if = {
+			limit = { NOT = { has_character_flag = hd_hb_choice_pending } }
+			add_to_temporary_list = hd_hb_player_targets
+		}
+	}
+}
+
+# Current round's snapshot. The duchy batch goes first, followed by higher
+# ranks, then counties. All outcomes already exist, including descendants of
+# released parents: never re-filter them by top_liege or current Han membership.
+hd_hb_apply_round_effect = {
+	every_in_list = {
+		list = hd_hb_release_targets
+		limit = { highest_held_title_tier = tier_duchy }
+		hd_qxzl_release_ruler_effect = yes
+	}
+	every_in_list = {
+		list = hd_hb_release_targets
+		limit = { highest_held_title_tier > tier_duchy }
+		hd_qxzl_release_ruler_effect = yes
+	}
+	every_in_list = {
+		list = hd_hb_release_targets
+		limit = { highest_held_title_tier = tier_county }
+		hd_qxzl_release_ruler_effect = yes
+	}
+	every_in_list = {
+		list = hd_hb_player_targets
+		limit = {
+			hd_hb_live_vassal_trigger = yes
+			NOT = { has_character_flag = hd_hb_choice_pending }
+		}
+		# The original direct liege can itself now be independent. It remains
+		# the player's direct liege unless this player was already released.
+		liege = { save_scope_as = hd_hb_choice_liege }
+		set_variable = { name = hd_hb_choice_pending_liege value = scope:hd_hb_choice_liege }
+		save_temporary_scope_as = hd_hb_pending_player
+		title:h_china = {
+			add_to_variable_list = { name = hd_hb_pending_players target = scope:hd_hb_pending_player }
+		}
+		add_character_flag = hd_hb_choice_pending
+		trigger_event = hd_qxzl.0001
+	}
+}
+
+# Stable public entry called only by the founded coalition's terminal cleanup.
+# h_china owns timers: emperor death/deposition cannot cancel them.
+hd_qxzl_begin_effect = {
+	if = {
+		limit = {
+			exists = global_var:hd_anti_regent_chain_resolved
+			NOT = { exists = global_var:hd_hb_started }
+			exists = title:h_china.holder
+		}
+		set_global_variable = hd_hb_started
+		# Keep the public start marker used by unrelated submission/person chains.
+		set_global_variable = hd_qxzl_started
+		set_global_variable = { name = hd_qxzl_start_date value = current_date }
+		title:h_china = {
+			if = { limit = { has_variable_list = hd_hb_duchy_titles } clear_variable_list = hd_hb_duchy_titles }
+		}
+		title:h_china.holder = {
+			every_vassal_or_below = {
+				limit = { hd_hb_live_vassal_trigger = yes }
+				add_to_temporary_list = hd_hb_round_targets
+				# Spatial tickets include every initial vassal's real counties,
+				# so split inheritance and D0/D3 independent parents stay covered.
+				every_held_title = {
+					limit = { tier = tier_county is_landless_type_title = no }
+					save_temporary_scope_as = hd_hb_spatial_initial_county
+					title:h_china = {
+						add_to_variable_list = { name = hd_hb_spatial_titles target = scope:hd_hb_spatial_initial_county }
+					}
+				}
+				if = {
+					limit = { highest_held_title_tier = tier_duchy }
+					# Capture every original territorial duchy, not just the primary:
+					# splitting two duchies between heirs must not hide either heir.
+					every_held_title = {
+						limit = { tier = tier_duchy is_landless_type_title = no }
+						save_temporary_scope_as = hd_hb_initial_duchy
+						title:h_china = {
+							add_to_variable_list = { name = hd_hb_duchy_titles target = scope:hd_hb_initial_duchy }
+						}
+					}
+				}
+			}
+		}
+		every_in_list = { list = hd_hb_round_targets hd_hb_decide_ruler_effect = yes }
+		hd_hb_apply_round_effect = yes
+		title:h_china = {
+			trigger_event = { on_action = hd_hb_recheck_after_three_days days = 3 }
+			trigger_event = { on_action = hd_hb_legacy_after_thirty_days days = 30 }
+		}
+		debug_log = "HD_HB D0_COMPLETED_D3_QUEUED"
+	}
+}
+
+# Title scope h_china. Only the bounded initial duchy-title list is consumed.
+# A successor/new direct liege is evaluated live; an already independent holder
+# or an unheld title is skipped. Deduplicate holders before any new decisions.
+hd_hb_recheck_duchies_effect = {
+	if = {
+		limit = { NOT = { exists = global_var:hd_hb_d3_done } }
+		set_global_variable = hd_hb_d3_done
+		if = {
+			limit = { has_variable_list = hd_hb_duchy_titles }
+			every_in_list = {
+				variable = hd_hb_duchy_titles
+				holder ?= {
+					if = {
+						limit = {
+							hd_hb_live_vassal_trigger = yes
+							NOT = { is_in_list = hd_hb_round_targets }
+						}
+						add_to_temporary_list = hd_hb_round_targets
+					}
+				}
+			}
+			clear_variable_list = hd_hb_duchy_titles
+		}
+		every_in_list = { list = hd_hb_round_targets hd_hb_decide_ruler_effect = yes }
+		hd_hb_apply_round_effect = yes
+		debug_log = "HD_HB D3_COMPLETED"
+		set_global_variable = hd_hb_d3_applied
+		title:h_china = { hd_hb_maybe_spatial_effect = yes }
+	}
+}
+
+# Player options cannot override a newly single-sided force/block result.
+# In the equality case, execute only the player's stated choice (no AI roll).
+hd_hb_player_choose_independence_effect = {
+	if = {
+		limit = {
+			hd_hb_player_choice_valid_trigger = yes
+			OR = {
+				hd_hb_force_independence_trigger = yes
+				NOT = { hd_hb_block_independence_trigger = yes }
+			}
+		}
+		hd_qxzl_release_ruler_effect = yes
+	}
+	hd_hb_clear_player_pending_effect = yes
+	title:h_china = { hd_hb_maybe_spatial_effect = yes }
+}
+
+hd_hb_player_choose_stay_effect = {
+	if = {
+		limit = {
+			hd_hb_player_choice_valid_trigger = yes
+			hd_hb_force_independence_trigger = yes
+			NOT = { hd_hb_block_independence_trigger = yes }
+		}
+		hd_qxzl_release_ruler_effect = yes
+	}
+	hd_hb_clear_player_pending_effect = yes
+	title:h_china = { hd_hb_maybe_spatial_effect = yes }
+}

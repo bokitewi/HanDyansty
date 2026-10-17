@@ -166,7 +166,7 @@ def selected(c):
     b = c['birth']
     if not b or not (START < b <= LAST):
         return False
-    if re.match(r'hd_(nbc\d+|304|370|531)_(gov|chief)', c['id']):
+    if re.match(r'hd_(nbc\d+|304|370|531|617)_(gov|chief)', c['id']):
         return False  # 各剧本的虚构郡守、外围首领，只用于本剧本开局（346/404 2026-10-14；304、370、531 2026-10-15 补）
     a = audit.get(c['id'])
     if a is None:

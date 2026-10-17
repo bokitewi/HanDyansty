@@ -1,0 +1,175 @@
+﻿# 讨董联盟解散后的历史群雄独立（见 zz_hd_hist_warlords_effects.txt）
+
+# 人物作用域。已成型：已独立，且有公国或以上的有地头衔。
+hd_hw_established_trigger = {
+	is_alive = yes
+	is_independent_ruler = yes
+	any_held_title = { tier >= tier_duchy is_landless_type_title = no }
+}
+
+# 人物作用域。领主链上有非天子的玩家。
+hd_hw_player_above_trigger = {
+	any_liege_or_above = {
+		is_ai = no
+		NOT = { title:h_china.holder ?= this }
+	}
+}
+
+# 封臣条目的原定主君有效：在世、AI、有地、独立，且不是首领本人。
+hd_hw_home_ok_trigger = {
+	exists = scope:hd_hw_home_liege
+	scope:hd_hw_home_liege = {
+		is_alive = yes
+		is_ai = yes
+		is_landed = yes
+		is_independent_ruler = yes
+		NOT = { this = scope:hd_hw_actor }
+	}
+}
+
+# 头衔作用域。在本区内：就是本区，或法理上级是本区。
+hd_hw_in_region_trigger = {
+	OR = {
+		this = scope:hd_hw_duchy
+		de_jure_liege ?= scope:hd_hw_duchy
+	}
+}
+
+# 人物作用域。持有者在可动的范围内：天子领内（或部族单县、原定主君领内），且不受保护。
+hd_hw_in_scope_holder_trigger = {
+	NOT = { this = scope:hd_hw_actor }
+	NOT = { any_liege_or_above = { this = scope:hd_hw_actor } }
+	OR = {
+		is_ai = yes
+		title:h_china.holder ?= this
+	}
+	NOT = { has_character_flag = hd_hw_leader }
+	# 已成型首领领内不碰；封臣条目可动原定主君（AI、独立）领内。
+	NOT = {
+		any_liege_or_above = {
+			has_character_flag = hd_hw_keep
+			NOT = {
+				AND = {
+					hd_hw_home_ok_trigger = yes
+					this = scope:hd_hw_home_liege
+				}
+			}
+		}
+	}
+	NOT = { hd_hw_player_above_trigger = yes }
+	OR = {
+		top_liege = { title:h_china.holder ?= this }
+		AND = {
+			has_character_flag = hd_hw_tribal
+			is_independent_ruler = yes
+			is_tributary = no
+		}
+		AND = {
+			hd_hw_home_ok_trigger = yes
+			top_liege = scope:hd_hw_home_liege
+		}
+		# boki 2026-10-16：已存在的独立势力在别处还有地时，它在本区的地可以被占。
+		top_liege = { hd_hw_split_realm_trigger = yes }
+	}
+}
+
+# 人物作用域（顶层领主）。已存在的独立势力（AI，非天子、非已成型首领），领内在候选区之外还有县。
+hd_hw_split_realm_trigger = {
+	is_ai = yes
+	is_independent_ruler = yes
+	NOT = { title:h_china.holder ?= this }
+	NOT = { has_character_flag = hd_hw_keep }
+	NOT = { this = scope:hd_hw_actor }
+	any_realm_county = {
+		NOT = { this = scope:hd_hw_cand }
+		NOT = { de_jure_liege ?= scope:hd_hw_cand }
+	}
+}
+
+# 县作用域。王国级以上统治者的首都县。
+hd_hw_royal_capital_trigger = {
+	exists = holder
+	holder = {
+		exists = capital_county
+		any_held_title = { tier >= tier_kingdom is_landless_type_title = no }
+	}
+	this = holder.capital_county
+}
+
+# 县作用域。可直接夺取：无主，或由可动范围内的虚构人物、天子持有（boki 2026-10-16：天子直辖县能夺）。天子的首都县一律不拿。
+hd_hw_grab_county_trigger = {
+	NOT = { hd_hw_royal_capital_trigger = yes }
+	NOT = {
+		AND = {
+			exists = title:h_china.holder.capital_county
+			this = title:h_china.holder.capital_county
+		}
+	}
+	OR = {
+		NOT = { exists = holder }
+		holder = {
+			hd_hw_in_scope_holder_trigger = yes
+			OR = {
+				has_character_flag = hd_hw_fict
+				title:h_china.holder ?= this
+			}
+		}
+	}
+}
+
+# 人物作用域。可收编的真实县主：县级，名下的县全在本区，尚未归接收人。
+hd_hw_vassalize_holder_trigger = {
+	hd_hw_in_scope_holder_trigger = yes
+	NOT = { has_character_flag = hd_hw_fict }
+	NOT = { title:h_china.holder ?= this }
+	NOT = { any_held_title = { tier >= tier_duchy is_landless_type_title = no } }
+	NOT = { any_held_title = { tier = tier_county is_landless_type_title = no NOT = { hd_hw_in_region_trigger = yes } } }
+	NOT = { liege ?= scope:hd_hw_recv }
+}
+
+# 郡作用域。郡头衔可接手：无主，或由可动范围内的虚构郡守持有。
+hd_hw_duchy_takeable_trigger = {
+	tier = tier_duchy
+	OR = {
+		NOT = { exists = holder }
+		holder = {
+			hd_hw_in_scope_holder_trigger = yes
+			has_character_flag = hd_hw_fict
+		}
+	}
+}
+
+# 郡（宋建为县）作用域。可用：至少有一个可直接夺取的县。
+hd_hw_duchy_usable_trigger = {
+	save_temporary_scope_as = hd_hw_cand
+	OR = {
+		AND = {
+			tier = tier_county
+			hd_hw_grab_county_trigger = yes
+		}
+		AND = {
+			tier = tier_duchy
+			any_in_de_jure_hierarchy = {
+				tier = tier_county
+				hd_hw_grab_county_trigger = yes
+			}
+		}
+	}
+}
+
+# 郡（宋建为县）作用域。首领本人或其领内已有这里的县。
+hd_hw_duchy_owned_trigger = {
+	OR = {
+		AND = {
+			tier = tier_county
+			holder ?= { OR = { this = scope:hd_hw_actor any_liege_or_above = { this = scope:hd_hw_actor } } }
+		}
+		AND = {
+			tier = tier_duchy
+			any_in_de_jure_hierarchy = {
+				tier = tier_county
+				holder ?= { OR = { this = scope:hd_hw_actor any_liege_or_above = { this = scope:hd_hw_actor } } }
+			}
+		}
+	}
+}

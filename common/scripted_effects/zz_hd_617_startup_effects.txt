@@ -1,0 +1,509 @@
+﻿# 617 年剧本「晋阳起兵」开局效果。只由 common/on_action/zz_hd_617_startup.txt 调用，调用处已带 617.6.23 闸门。
+# 计划见 /mnt/project-files/617隋末群雄剧本_计划.md 第 6、13 节。复用的 nbc 效果都是不分开局日期的通用效果
+# （hd_nbc_set_era_effect、hd_nbc_realm_name_effect、hd_nbc_style_effect、hd_nbc_primary_effect、hd_nbc_start_war_effect、
+#   hd_nbc_spawn_army_effect）。scripted effect 里不写 root，人物一律用 character:ID。
+
+############################################################
+# on_game_start
+############################################################
+hd_617_game_start_effect = {
+	hd_617_cleanup_effect = yes
+	# 衣冠南渡是 4 世纪的事，只设标记不启动（同 531）
+	set_global_variable = hd_yiguan_started
+	# 僚人入蜀 343–344 年已发生（随机规则下仍放行，计划第 13 节）
+	if = {
+		limit = { NOT = { has_game_rule = hd_liao_rule_random } }
+		set_global_variable = { name = hd_liao_migration_launched value = yes }
+	}
+	# 天意青睐"每月主动开战"要求讨董链已结束（184 专用变量），同 304、370、531。
+	# 它也会让战前招降、请求归附全局生效，群雄用 hd_617_rebel 标记挡住（zzzzzz_hd_submission_triggers.txt）
+	set_global_variable = { name = hd_anti_regent_chain_resolved value = yes }
+	# 终结乱世锁：唐建国（S8）完成或跳过、或 620.1.1 解锁（tgp_dynastic_cycle_decisions.txt）
+	set_global_variable = hd_617_mandate_lock
+	# 天子京城：江都（广陵县）。江都之变后移洛阳
+	title:h_china = {
+		set_capital_county = title:c_uuii_p_7062
+		set_variable = { name = hd_court_capital_county value = title:c_uuii_p_7062 }
+	}
+	# 传国玉玺归炀帝。设 hd_han_treasures_initialized，184 的宝物脚本不会补发
+	character:imperial_sui_2 ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				NOT = { exists = global_var:hd_han_treasures_initialized }
+			}
+			hd_han_create_imperial_seal_effect = { OWNER = this }
+			set_global_variable = hd_han_treasures_initialized
+		}
+	}
+	hd_617_dynastic_cycle_effect = yes
+	# 边境战争：群雄打隋的郡守、东都、西京时只对上被打的那一支，炀帝满 1095 天才能下场（照 22）
+	hd_617_border_law_effect = { RULER = character:imperial_sui_2 }
+	hd_617_tributaries_effect = yes
+	hd_617_rebel_flags_effect = yes
+	# 魏刀儿上谷人，库里写成乌桓（计划复核建议 12）
+	character:20193002 ?= {
+		if = {
+			limit = { is_alive = yes NOT = { culture = culture:han } }
+			set_culture = culture:han
+		}
+	}
+	hd_617_realm_display_effect = yes
+	debug_log = "HD_617 STAGE GAME_START"
+}
+
+# 静默除去（只限无地者）
+hd_617_vanish_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = { is_alive = yes is_landed = no }
+			death = { death_reason = death_vanished }
+			debug_log = "HD_617 VANISHED $WHO$"
+		}
+	}
+}
+# 重复人物：在世子女先改挂正本，再静默除去副本（照 22 的 hd_22_oe_dup_one_effect）
+hd_617_dup_effect = {
+	character:$DROP$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = no
+				character:$KEEP$ ?= { is_alive = yes }
+			}
+			if = {
+				limit = { is_female = no character:$KEEP$ = { is_female = no } }
+				every_child = {
+					limit = { is_alive = yes }
+					if = {
+						limit = { NOT = { father ?= character:$KEEP$ } }
+						set_father = character:$KEEP$
+					}
+				}
+			}
+			death = { death_reason = death_vanished }
+			debug_log = "HD_617 DUP_REMOVED $DROP$"
+		}
+	}
+}
+hd_617_cleanup_effect = {
+	# 开局在世状态写错的：宇文述卒于大业十二年十月；王须拔大业十二年南掠幽州中流矢死，部将魏刀儿代领其众
+	hd_617_vanish_effect = { WHO = puyang_yuwen_008 }
+	hd_617_vanish_effect = { WHO = 20193001 }
+	# 库中没写卒年、617 年已年过九十的人（陇西李氏 7 人、普乃恕延、程宝惠、房太公）。长生人物与王远知有意保留
+	hd_617_vanish_effect = { WHO = longxi_li_009 }
+	hd_617_vanish_effect = { WHO = longxi_li_011 }
+	hd_617_vanish_effect = { WHO = longxi_li_012 }
+	hd_617_vanish_effect = { WHO = longxi_li_013 }
+	hd_617_vanish_effect = { WHO = longxi_li_014 }
+	hd_617_vanish_effect = { WHO = longxi_li_015 }
+	hd_617_vanish_effect = { WHO = longxi_li_016 }
+	hd_617_vanish_effect = { WHO = punai_003 }
+	hd_617_vanish_effect = { WHO = xinan_cheng_012 }
+	hd_617_vanish_effect = { WHO = qinghe_fang_0000 }
+	# 617 在世的重复人物（计划 3.4；清单由 dup617.py 生成，留 OE 或有子女的一份）
+	hd_617_dup_effect = { DROP = 1416231 KEEP = han_90041 }                # 于永宁
+	hd_617_dup_effect = { DROP = han_384 KEEP = pengcheng_liu_595 }        # 刘德敏
+	hd_617_dup_effect = { DROP = han_262 KEEP = 1404990 }                  # 刘林甫
+	hd_617_dup_effect = { DROP = han_245 KEEP = 1404687 }                  # 张惠瑶
+	hd_617_dup_effect = { DROP = han_270 KEEP = danyang_li_050 }           # 李伟节
+	hd_617_dup_effect = { DROP = han_456 KEEP = longxi_li_2232 }           # 李明
+	hd_617_dup_effect = { DROP = han_450 KEEP = longxi_li_1390 }           # 李正基
+	hd_617_dup_effect = { DROP = han_420 KEEP = 1405194 }                  # 杨缄
+	hd_617_dup_effect = { DROP = han_417 KEEP = 247804 }                   # 武元庆
+	hd_617_dup_effect = { DROP = han_410 KEEP = wugong_su_117 }            # 苏亶
+	hd_617_dup_effect = { DROP = han_415 KEEP = 1409507 }                  # 裴眘
+	hd_617_dup_effect = { DROP = han_465 KEEP = jingzhao_lu_008 }          # 路元叡
+	hd_617_dup_effect = { DROP = han_379 KEEP = 1405605 }                  # 郑弼诚
+	hd_617_dup_effect = { DROP = han_336 KEEP = luoyang_zhangsun_081 }     # 长孙安业
+	hd_617_dup_effect = { DROP = han_381 KEEP = luoyang_zhangsun_082 }     # 长孙无忌（s2 那份被标成女性）
+	hd_617_dup_effect = { DROP = han_407 KEEP = 1405660 }                  # 韦玄希（先除子）
+	hd_617_dup_effect = { DROP = han_376 KEEP = 1406470 }                  # 韦琨
+	hd_617_dup_effect = { DROP = han_452 KEEP = 1406416 }                  # 韦琬
+	hd_617_dup_effect = { DROP = han_275 KEEP = bohai_gao_225 }            # 高士宁
+	hd_617_dup_effect = { DROP = han_258 KEEP = henan_dou_028 }            # 窦抗
+	hd_617_dup_effect = { DROP = han_291 KEEP = longxi_li_1294 }           # 李孝恭（年龄差超 12 年，人工补）
+	debug_log = "HD_617 CLEANUP DONE"
+}
+
+# 天朝循环：群雄逐鹿开局，五德取隋的火德，进度清零（写法同 hd_531_dynastic_cycle_effect）
+hd_617_dynastic_cycle_effect = {
+	if = {
+		limit = {
+			has_tgp_dlc_trigger = yes
+			exists = title:h_china.holder
+			NOT = { exists = situation:dynastic_cycle }
+		}
+		start_situation = {
+			type = dynastic_cycle
+			start_phase = situation_dynastic_cycle_phase_chaos
+		}
+	}
+	if = {
+		limit = {
+			has_tgp_dlc_trigger = yes
+			exists = situation:dynastic_cycle
+			NOT = { exists = global_var:saas_dynastic_cycle_initialized }
+		}
+		situation:dynastic_cycle = {
+			title:h_china = {
+				set_variable = { name = years_since_imperial_examination value = 0 }
+			}
+			tgp_set_wuking_element_effect = { ELEMENT = fire }
+			every_situation_participant = {
+				recalculate_participant_group = situation:dynastic_cycle
+			}
+			every_situation_sub_region = {
+				hd_dc_zero_phase_points_effect = { PHASE = situation_dynastic_cycle_phase_hd_standoff }
+			}
+			trigger_event = { on_action = hd_617_dc_zero_progress days = 2 }
+		}
+		set_global_variable = {
+			name = saas_dynastic_cycle_initialized
+			value = yes
+		}
+		debug_log = "HD_617 DYNASTIC_CYCLE CHAOS FIRE"
+	}
+}
+
+# 边境战争法：$RULER$ 是独立统治者且没有这条法律时补上（照 22 的 hd_22_border_law_effect，直接给统治者本人）
+hd_617_border_law_effect = {
+	$RULER$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_independent_ruler = yes
+				NOT = { has_realm_law = top_liege_not_redirected_to_border_wars_law }
+			}
+			add_realm_law_skip_effects = top_liege_not_redirected_to_border_wars_law
+			debug_log = "HD_617 BORDER_LAW_ADDED"
+		}
+	}
+}
+
+# 北方群雄称臣突厥：天朝政体的朝贡方挂游牧宗主，用 tributary_settled（原版 00_interaction_effects.txt 的游牧宗主分支，计划复核必改 4）。
+# 不调 start_tributary_interaction_effect：它结尾会加停战（531 计划复核必改 1）
+hd_617_tributary_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_independent_ruler = yes
+				is_tributary = no
+				character:ashina_016 ?= { is_alive = yes is_independent_ruler = yes has_government = nomad_government }
+			}
+			start_tributary = {
+				contract_group = tributary_settled
+				suzerain = character:ashina_016
+			}
+			if = {
+				limit = { is_tributary = yes }
+				hidden_effect = {
+					tributary_contract_set_obligation_level = { type = default_tributary_taxes level = 1 }
+					tributary_contract_set_obligation_level = { type = default_tributary_levies level = 1 }
+					tributary_contract_set_obligation_level = { type = default_tributary_prestige level = 1 }
+				}
+				debug_log = "HD_617 TRIBUTARY $WHO$"
+			}
+			else = { debug_log = "HD_617 TRIBUTARY_FAILED $WHO$" }
+		}
+	}
+}
+hd_617_tributaries_effect = {
+	hd_617_tributary_effect = { WHO = 20192001 }   # 刘武周，定杨可汗
+	hd_617_tributary_effect = { WHO = 20191001 }   # 梁师都，大度毗伽可汗
+	hd_617_tributary_effect = { WHO = 20230001 }   # 郭子和
+	hd_617_tributary_effect = { WHO = 20240200 }   # 张长逊
+}
+
+# 群雄首领：不请求归附隋、不接受战前招降（hd_submission_ai_refuses_trigger）。江都之变或 619.1.1 清除
+hd_617_rebel_flag_one_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = { is_alive = yes }
+			add_character_flag = hd_617_rebel
+		}
+	}
+}
+hd_617_rebel_flags_effect = {
+	hd_617_rebel_flag_one_effect = { WHO = han_268 }            # 李渊
+	hd_617_rebel_flag_one_effect = { WHO = han_377 }            # 李世民
+	hd_617_rebel_flag_one_effect = { WHO = 1406323 }            # 李密
+	hd_617_rebel_flag_one_effect = { WHO = 20196002 }           # 翟让
+	hd_617_rebel_flag_one_effect = { WHO = zhangnan_dou_001 }   # 窦建德
+	hd_617_rebel_flag_one_effect = { WHO = 20192001 }           # 刘武周
+	hd_617_rebel_flag_one_effect = { WHO = 20191001 }           # 梁师都
+	hd_617_rebel_flag_one_effect = { WHO = 20230001 }           # 郭子和
+	hd_617_rebel_flag_one_effect = { WHO = 20240200 }           # 张长逊
+	hd_617_rebel_flag_one_effect = { WHO = 20220001 }           # 薛举
+	hd_617_rebel_flag_one_effect = { WHO = 20220002 }           # 薛仁杲
+	hd_617_rebel_flag_one_effect = { WHO = 20199001 }           # 杜伏威
+	hd_617_rebel_flag_one_effect = { WHO = 20200001 }           # 李子通
+	hd_617_rebel_flag_one_effect = { WHO = 20208001 }           # 林士弘
+	hd_617_rebel_flag_one_effect = { WHO = xinan_wang_017 }     # 汪华
+	hd_617_rebel_flag_one_effect = { WHO = 20207001 }           # 朱粲
+	hd_617_rebel_flag_one_effect = { WHO = 20193002 }           # 魏刀儿
+	hd_617_rebel_flag_one_effect = { WHO = 20240001 }           # 高开道
+	hd_617_rebel_flag_one_effect = { WHO = 20240712 }           # 王薄
+	hd_617_rebel_flag_one_effect = { WHO = 20240710 }           # 綦公顺
+	hd_617_rebel_flag_one_effect = { WHO = 20240400 }           # 臧君相
+	hd_617_rebel_flag_one_effect = { WHO = 20195001 }           # 徐圆朗
+	hd_617_rebel_flag_one_effect = { WHO = 20241200 }           # 孟海公
+}
+hd_617_rebel_flags_clear_effect = {
+	every_living_character = {
+		limit = { has_character_flag = hd_617_rebel }
+		remove_character_flag = hd_617_rebel
+	}
+}
+
+# 国号与称谓。一律不记到王朝上（FIXED = no，计划复核必改 10）。隋的国号在 h_china 上
+hd_617_realm_display_effect = {
+	hd_nbc_realm_name_effect = { WHO = imperial_sui_2 NAME = dynn_title_sui FIXED = no }
+	hd_nbc_realm_name_effect = { WHO = 1406323 NAME = dynn_title_wei FIXED = no }       # 魏公李密
+	hd_nbc_realm_name_effect = { WHO = 20220001 NAME = dynn_title_qin FIXED = no }      # 西秦霸王薛举
+	hd_nbc_realm_name_effect = { WHO = 20191001 NAME = dynn_title_liang FIXED = no }    # 梁帝梁师都
+	hd_nbc_realm_name_effect = { WHO = 20208001 NAME = dynn_title_chu FIXED = no }      # 楚帝林士弘
+	hd_nbc_style_effect = { WHO = han_268 STYLE = gong }             # 唐国公
+	hd_nbc_style_effect = { WHO = 1406323 STYLE = gong }             # 魏公
+	hd_nbc_style_effect = { WHO = zhangnan_dou_001 STYLE = wang }    # 长乐王
+	hd_nbc_style_effect = { WHO = 20220001 STYLE = wang }            # 西秦霸王
+	hd_nbc_style_effect = { WHO = 20192001 STYLE = huangdi }         # 定杨，称帝改元天兴
+	hd_nbc_style_effect = { WHO = 20191001 STYLE = huangdi }         # 梁帝
+	hd_nbc_style_effect = { WHO = 20208001 STYLE = huangdi }         # 楚帝
+	hd_nbc_style_effect = { WHO = 20230001 STYLE = wang }            # 永乐王
+}
+
+############################################################
+# on_game_start_after_lobby
+############################################################
+hd_617_after_lobby_effect = {
+	hd_617_capitals_effect = yes
+	hd_617_courtiers_effect = yes
+	hd_617_heir_effect = yes
+	hd_617_era_effect = yes
+	hd_617_realm_display_effect = yes
+	hd_617_truce_effect = yes
+	hd_617_xihe_war_effect = yes
+	hd_617_luoyang_war_effect = yes
+	# 天意青睐（名单在 zz_hd_rise_triggers.txt，带 617 闸门）
+	character:han_268 ?= { hd_rise_ensure_story_effect = yes }
+	debug_log = "HD_617 STAGE AFTER_LOBBY"
+	hd_recommended_starting_resources_effect = yes
+}
+
+# 治所
+hd_617_capital_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				title:$COUNTY$.holder ?= this
+			}
+			set_realm_capital = title:$COUNTY$
+		}
+	}
+}
+hd_617_capitals_effect = {
+	hd_617_capital_effect = { WHO = imperial_sui_2 COUNTY = c_uuii_p_7062 }     # 江都
+	hd_617_capital_effect = { WHO = imperial_sui_5 COUNTY = c_luoyang }         # 东都
+	hd_617_capital_effect = { WHO = imperial_sui_4 COUNTY = c_uuii_p_867 }      # 西京大兴
+	hd_617_capital_effect = { WHO = han_268 COUNTY = c_uuii_p_351 }             # 晋阳
+	hd_617_capital_effect = { WHO = 1406323 COUNTY = c_uuii_p_776 }             # 洛口（巩）
+	hd_617_capital_effect = { WHO = zhangnan_dou_001 COUNTY = c_uuii_p_4419 }   # 乐寿
+	hd_617_capital_effect = { WHO = 20192001 COUNTY = c_uuii_p_1270 }           # 马邑
+	hd_617_capital_effect = { WHO = 20191001 COUNTY = c_uuii_p_1432 }           # 统万
+	hd_617_capital_effect = { WHO = 20220001 COUNTY = c_uuii_p_1546 }           # 金城
+	hd_617_capital_effect = { WHO = 20199001 COUNTY = c_uuii_p_1984 }           # 历阳
+	hd_617_capital_effect = { WHO = 20208001 COUNTY = c_uuii_p_4980 }           # 豫章
+	hd_617_capital_effect = { WHO = yongzhou_qutu_001 COUNTY = c_uuii_p_980 }   # 蒲阪
+	hd_617_capital_effect = { WHO = 20250901 COUNTY = c_uuii_p_1052 }           # 霍邑
+	hd_617_capital_effect = { WHO = 20250001 COUNTY = c_uuii_p_2547 }           # 蓟
+	hd_617_capital_effect = { WHO = 20193002 COUNTY = c_uuii_p_173 }            # 深泽
+	hd_617_capital_effect = { WHO = 20240001 COUNTY = c_uuii_p_3489 }           # 临渝
+	hd_617_capital_effect = { WHO = xinan_wang_017 COUNTY = c_uuii_p_5708 }     # 歙
+}
+
+# 无地的史实人物进宫廷（计划 6.2）
+hd_617_courtier_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = no
+				character:$COURT$ ?= { is_alive = yes is_landed = yes }
+				NOT = { employer ?= character:$COURT$ }
+			}
+			character:$COURT$ = { add_courtier = character:$WHO$ }
+		}
+	}
+}
+hd_617_courtiers_effect = {
+	# 江都：炀帝左右
+	hd_617_courtier_effect = { WHO = puyang_yuwen_015 COURT = imperial_sui_2 }   # 宇文化及
+	hd_617_courtier_effect = { WHO = puyang_yuwen_016 COURT = imperial_sui_2 }   # 宇文智及
+	hd_617_courtier_effect = { WHO = nanyang_lai_026 COURT = imperial_sui_2 }    # 来护儿
+	hd_617_courtier_effect = { WHO = kuaiji_yu_038 COURT = imperial_sui_2 }      # 虞世基
+	hd_617_courtier_effect = { WHO = 20201001 COURT = imperial_sui_2 }           # 陈稜
+	hd_617_courtier_effect = { WHO = 247761 COURT = imperial_sui_2 }             # 杨浩
+	hd_617_courtier_effect = { WHO = 247759 COURT = imperial_sui_2 }             # 杨倓
+	hd_617_courtier_effect = { WHO = 247758 COURT = imperial_sui_2 }             # 杨杲
+	# 东都、西京
+	hd_617_courtier_effect = { WHO = wuwei_duan_055 COURT = imperial_sui_5 }     # 段达
+	hd_617_courtier_effect = { WHO = 1416351 COURT = imperial_sui_5 }            # 元文都
+	hd_617_courtier_effect = { WHO = 20251301 COURT = imperial_sui_4 }           # 阴世师
+	hd_617_courtier_effect = { WHO = danyang_li_011 COURT = imperial_sui_4 }     # 李靖
+	hd_617_courtier_effect = { WHO = 247852 COURT = imperial_sui_4 }             # 柴绍
+	hd_617_courtier_effect = { WHO = 1400391 COURT = imperial_sui_4 }            # 杜如晦
+	# 晋阳
+	hd_617_courtier_effect = { WHO = han_338 COURT = han_268 }                   # 李建成
+	hd_617_courtier_effect = { WHO = han_406 COURT = han_268 }                   # 李元吉
+	hd_617_courtier_effect = { WHO = sangquan_pei_001 COURT = han_268 }          # 裴寂
+	hd_617_courtier_effect = { WHO = jingzhao_liu_003 COURT = han_268 }          # 刘文静
+	hd_617_courtier_effect = { WHO = luoyang_zhangsun_203 COURT = han_268 }      # 长孙顺德
+	hd_617_courtier_effect = { WHO = yongzhou_liu_0001 COURT = han_268 }         # 刘弘基
+	hd_617_courtier_effect = { WHO = longxi_li_1695 COURT = han_268 }            # 李神通
+	hd_617_courtier_effect = { WHO = longxi_li_1294 COURT = han_268 }            # 李孝恭
+	hd_617_courtier_effect = { WHO = luoyang_zhangsun_082 COURT = han_268 }      # 长孙无忌
+	# 洛口
+	hd_617_courtier_effect = { WHO = 20196101 COURT = 1406323 }                  # 王伯当
+	hd_617_courtier_effect = { WHO = 20196301 COURT = 1406323 }                  # 单雄信
+	hd_617_courtier_effect = { WHO = 20196201 COURT = 1406323 }                  # 徐世勣
+	hd_617_courtier_effect = { WHO = 20196303 COURT = 1406323 }                  # 裴仁基
+	hd_617_courtier_effect = { WHO = 20196304 COURT = 1406323 }                  # 裴行俨
+	hd_617_courtier_effect = { WHO = licheng_qin_0001 COURT = 1406323 }          # 秦叔宝
+	hd_617_courtier_effect = { WHO = donge_cheng_0016 COURT = 1406323 }          # 程知节
+	hd_617_courtier_effect = { WHO = 20250002 COURT = 1406323 }                  # 罗士信
+	# 其余
+	hd_617_courtier_effect = { WHO = 20193003 COURT = 20192001 }                 # 宋金刚
+	hd_617_courtier_effect = { WHO = xifang_yuchi_053 COURT = 20192001 }         # 尉迟敬德
+	hd_617_courtier_effect = { WHO = 20220004 COURT = 20220001 }                 # 宗罗睺
+	hd_617_courtier_effect = { WHO = 20199002 COURT = 20199001 }                 # 辅公祏
+	hd_617_courtier_effect = { WHO = dunhuang_xue_003 COURT = 20250001 }         # 薛世雄
+	hd_617_courtier_effect = { WHO = julu_wei_044 COURT = 20240602 }             # 魏徵（武阳郡丞元宝藏掌书记）
+	hd_617_courtier_effect = { WHO = 247900 COURT = hd_617_gao_deru }            # 房玄龄（隰城尉，属西河郡）
+	hd_617_courtier_effect = { WHO = 20190001 COURT = hd_617_gov_wuwei }         # 李轨（武威鹰扬府司马）
+}
+
+# 储君：李渊立世子李建成
+hd_617_heir_effect = {
+	character:han_268 ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				character:han_338 ?= { is_alive = yes }
+			}
+			set_designated_heir = character:han_338
+		}
+	}
+}
+
+# 年号：隋大业十三年、魏永平元年、长乐丁丑元年、定杨天兴元年、梁永隆元年、秦秦兴元年、楚太平二年
+hd_617_era_effect = {
+	hd_nbc_set_era_effect = { WHO = imperial_sui_2 KEY = daye YEAR = 13 }
+	hd_nbc_set_era_effect = { WHO = 1406323 KEY = yongping YEAR = 1 }
+	hd_nbc_set_era_effect = { WHO = zhangnan_dou_001 KEY = dingchou YEAR = 1 }
+	hd_nbc_set_era_effect = { WHO = 20192001 KEY = tianxing YEAR = 1 }
+	hd_nbc_set_era_effect = { WHO = 20191001 KEY = yonglong YEAR = 1 }
+	hd_nbc_set_era_effect = { WHO = 20220001 KEY = qinxing YEAR = 1 }
+	hd_nbc_set_era_effect = { WHO = 20208001 KEY = taiping YEAR = 2 }
+}
+
+# 炀帝与群雄首领互给停战到 618.4.11（江都之变）；之后由心跳按月续期到江都之变（计划复核必改 5）
+hd_617_truce_one_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = yes
+				character:imperial_sui_2 ?= { is_alive = yes NOT = { this = character:$WHO$ } NOT = { is_at_war_with = character:$WHO$ } }
+			}
+			character:imperial_sui_2 = {
+				add_truce_both_ways = {
+					character = character:$WHO$
+					days = $DAYS$
+					name = hd_617_truce
+				}
+			}
+		}
+	}
+}
+hd_617_truce_effect = {
+	hd_617_truce_one_effect = { WHO = han_268 DAYS = 292 }
+	hd_617_truce_one_effect = { WHO = 1406323 DAYS = 292 }
+	hd_617_truce_one_effect = { WHO = zhangnan_dou_001 DAYS = 292 }
+	hd_617_truce_one_effect = { WHO = 20192001 DAYS = 292 }
+	hd_617_truce_one_effect = { WHO = 20191001 DAYS = 292 }
+	hd_617_truce_one_effect = { WHO = 20230001 DAYS = 292 }
+	hd_617_truce_one_effect = { WHO = 20240200 DAYS = 292 }
+	hd_617_truce_one_effect = { WHO = 20220001 DAYS = 292 }
+	hd_617_truce_one_effect = { WHO = 20199001 DAYS = 292 }
+	hd_617_truce_one_effect = { WHO = 20200001 DAYS = 292 }
+	hd_617_truce_one_effect = { WHO = 20208001 DAYS = 292 }
+	hd_617_truce_one_effect = { WHO = xinan_wang_017 DAYS = 292 }
+	hd_617_truce_one_effect = { WHO = 20207001 DAYS = 292 }
+	hd_617_truce_one_effect = { WHO = 20193002 DAYS = 292 }
+	hd_617_truce_one_effect = { WHO = 20240001 DAYS = 292 }
+	hd_617_truce_one_effect = { WHO = 20240712 DAYS = 292 }
+	hd_617_truce_one_effect = { WHO = 20240710 DAYS = 292 }
+	hd_617_truce_one_effect = { WHO = 20240400 DAYS = 292 }
+	hd_617_truce_one_effect = { WHO = 20195001 DAYS = 292 }
+	hd_617_truce_one_effect = { WHO = 20241200 DAYS = 292 }
+}
+
+# S0a 西河之战：郡丞高德儒不从，六月李建成、李世民攻西河，执而斩之。李渊以边境战争打西河郡守（炀帝开局已有边境战争法）。
+# 兹氏（c_uuii_p_1505）归李渊一系即胜，胜负由心跳判定（zz_hd_617_history_effects.txt）
+hd_617_xihe_war_effect = {
+	if = {
+		limit = {
+			character:han_268 ?= { is_alive = yes is_independent_ruler = yes }
+			character:hd_617_gao_deru ?= { is_alive = yes is_landed = yes }
+			title:d_xihe.holder ?= character:hd_617_gao_deru
+		}
+		hd_617_border_law_effect = { RULER = character:imperial_sui_2 }
+		hd_nbc_start_war_effect = { ATTACKER = character:han_268 DEFENDER = character:hd_617_gao_deru TARGET = title:d_xihe KIND = hd617xihe }
+		if = {
+			limit = { exists = scope:hd_nbc_war_hd617xihe }
+			set_global_variable = hd_617_xihe_started
+			character:han_268 = { hd_nbc_spawn_army_effect = { SIZE = 30000 WHERE = title:c_uuii_p_351 NAME = hd_617_jinyang_army_name } }
+			character:hd_617_gao_deru = { hd_nbc_spawn_army_effect = { SIZE = 4000 WHERE = title:c_uuii_p_1505 NAME = hd_617_xihe_army_name } }
+		}
+		else = {
+			set_global_variable = hd_617_xihe_done
+			# 宣战不成也给李渊起兵的三万人
+			character:han_268 = { hd_nbc_spawn_army_effect = { SIZE = 30000 WHERE = title:c_uuii_p_351 NAME = hd_617_jinyang_army_name } }
+			debug_log = "HD_617 S0A XIHE WAR_START_FAILED"
+		}
+	}
+	else = {
+		set_global_variable = hd_617_xihe_done
+		debug_log = "HD_617 S0A XIHE SKIPPED"
+	}
+}
+
+# S0b 东都之围：李密据洛口、回洛二仓，逼东都。李密对越王杨侗宣战，目标河南郡；洛阳（c_luoyang）归李密一系即胜
+hd_617_luoyang_war_effect = {
+	if = {
+		limit = {
+			character:1406323 ?= { is_alive = yes is_independent_ruler = yes }
+			character:imperial_sui_5 ?= { is_alive = yes is_landed = yes }
+			title:d_henan.holder ?= character:imperial_sui_5
+		}
+		hd_617_border_law_effect = { RULER = character:imperial_sui_2 }
+		hd_nbc_start_war_effect = { ATTACKER = character:1406323 DEFENDER = character:imperial_sui_5 TARGET = title:d_henan KIND = hd617luoyang }
+		if = {
+			limit = { exists = scope:hd_nbc_war_hd617luoyang }
+			set_global_variable = hd_617_luoyang_started
+			character:1406323 = { hd_nbc_spawn_army_effect = { SIZE = 20000 WHERE = title:c_uuii_p_776 NAME = hd_617_wagang_army_name } }
+			character:imperial_sui_5 = { hd_nbc_spawn_army_effect = { SIZE = 15000 WHERE = title:c_luoyang NAME = hd_617_dongdu_army_name } }
+		}
+		else = {
+			set_global_variable = hd_617_luoyang_done
+			debug_log = "HD_617 S0B LUOYANG WAR_START_FAILED"
+		}
+	}
+	else = {
+		set_global_variable = hd_617_luoyang_done
+		debug_log = "HD_617 S0B LUOYANG SKIPPED"
+	}
+}

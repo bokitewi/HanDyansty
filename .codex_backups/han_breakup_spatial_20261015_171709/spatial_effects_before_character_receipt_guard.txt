@@ -1,0 +1,200 @@
+# One additional spatial phase, after D3 AND all still-valid player choices.
+# All county tickets are captured at D0 from vassals (never Han's direct domain).
+# Timed retries below only wait for choices; they do not repeat spatial judgment.
+hd_hb_clear_player_pending_effect = {
+	remove_character_flag = hd_hb_choice_pending
+	remove_variable = hd_hb_choice_pending_liege
+}
+
+# Title scope h_china. No global ruler scan; inheritance resolves county tickets.
+hd_hb_maybe_spatial_effect = {
+	if = {
+		limit = {
+			exists = global_var:hd_hb_d3_applied
+			NOT = { exists = global_var:hd_hb_spatial_started }
+		}
+		if = {
+			limit = { has_variable_list = hd_hb_spatial_titles }
+			every_in_list = {
+				variable = hd_hb_spatial_titles
+				holder ?= {
+					if = {
+						limit = { has_character_flag = hd_hb_choice_pending }
+						if = {
+							limit = {
+								hd_hb_live_vassal_trigger = yes
+								is_ai = no
+								exists = var:hd_hb_choice_pending_liege
+								liege = var:hd_hb_choice_pending_liege
+							}
+							add_to_temporary_list = hd_hb_spatial_waiting_players
+						}
+						else = { hd_hb_clear_player_pending_effect = yes }
+					}
+				}
+			}
+		}
+		if = {
+			limit = { any_in_list = { list = hd_hb_spatial_waiting_players always = yes } }
+			if = {
+				limit = { NOT = { has_variable = hd_hb_spatial_wait_queued } }
+				set_variable = hd_hb_spatial_wait_queued
+				trigger_event = { on_action = hd_hb_spatial_wait_for_choices days = 1 }
+			}
+		}
+		else = { hd_hb_spatial_cleanup_effect = yes }
+	}
+}
+
+# Character scope. The actor scope is saved anew before each preflight/apply.
+# Preserve native interaction legality; do not rely on an engine bypass.
+# Character scope. Save the entire original tuple before any actor is released.
+# Any connected COUNTY IN THE WHOLE SUB-REALM preserves this actor's whole realm.
+# The reference capital is the original DIRECT liege's capital, even when tribute
+# later falls back to the original independent top liege.
+hd_hb_spatial_snapshot_actor_effect = {
+	save_temporary_scope_as = hd_hb_spatial_actor
+	if = {
+		limit = {
+			hd_hb_live_vassal_trigger = yes
+			is_tributary = no
+			exists = liege.capital_county
+			exists = top_liege
+			any_sub_realm_title = { tier = tier_county is_landless_type_title = no }
+		}
+		set_variable = { name = hd_hb_spatial_direct value = liege }
+		set_variable = { name = hd_hb_spatial_top value = top_liege }
+		set_variable = { name = hd_hb_spatial_capital value = liege.capital_county }
+		if = {
+			limit = { liege = { is_independent_ruler = yes } }
+			set_variable = { name = hd_hb_spatial_suzerain value = liege }
+		}
+		else = { set_variable = { name = hd_hb_spatial_suzerain value = top_liege } }
+		var:hd_hb_spatial_capital = { save_temporary_scope_as = hd_hb_spatial_capital }
+		if = {
+			limit = {
+				NOT = {
+					any_sub_realm_title = {
+						tier = tier_county
+						is_landless_type_title = no
+						is_connected_to = { target = scope:hd_hb_spatial_capital }
+					}
+				}
+			}
+			if = {
+				limit = { hd_hb_spatial_suzerain_valid_trigger = yes }
+				add_to_temporary_list = hd_hb_spatial_release_targets
+			}
+			else = { debug_log = "HD_HB SPATIAL_SKIPPED_NO_LEGAL_SUZERAIN" }
+		}
+	}
+}
+
+# Restore the original direct relationship if the native tributary effect fails.
+# This is a failure rollback only, using the mod's existing swear_fealty pattern.
+hd_hb_spatial_rollback_effect = {
+	if = {
+		limit = {
+			is_independent_ruler = yes
+			is_tributary = no
+			exists = var:hd_hb_spatial_direct
+			var:hd_hb_spatial_direct = {
+				is_alive = yes
+				is_ruler = yes
+				highest_held_title_tier > scope:hd_hb_spatial_actor.highest_held_title_tier
+				NOT = { is_vassal_or_below_of = scope:hd_hb_spatial_actor }
+			}
+		}
+		create_title_and_vassal_change = {
+			type = swear_fealty
+			save_scope_as = hd_hb_spatial_rollback
+			add_claim_on_loss = no
+		}
+		change_liege = { liege = var:hd_hb_spatial_direct change = scope:hd_hb_spatial_rollback }
+		resolve_title_and_vassal_change = scope:hd_hb_spatial_rollback
+		if = {
+			limit = { exists = liege liege = var:hd_hb_spatial_direct }
+			debug_log = "HD_HB SPATIAL_TRIBUTE_FAILED_ORIGINAL_LIEGE_RESTORED"
+		}
+		else = { debug_log = "HD_HB SPATIAL_ROLLBACK_NOT_CONFIRMED" }
+	}
+	else = { debug_log = "HD_HB SPATIAL_TRIBUTE_FAILED_ROLLBACK_UNAVAILABLE" }
+}
+
+hd_hb_spatial_release_actor_effect = {
+	save_temporary_scope_as = hd_hb_spatial_actor
+	if = {
+		limit = {
+			hd_hb_live_vassal_trigger = yes
+			is_tributary = no
+			exists = var:hd_hb_spatial_direct
+			liege = var:hd_hb_spatial_direct
+			hd_hb_spatial_suzerain_valid_trigger = yes
+		}
+		hd_qxzl_release_ruler_effect = yes
+		if = {
+			limit = { is_independent_ruler = yes is_tributary = no }
+			# Recheck after independence: native on_actions may invalidate the saved suzerain.
+			if = {
+				limit = { hd_hb_spatial_suzerain_valid_trigger = yes }
+				# Contract validity is checked against the SAVED suzerain, not
+				# the actor's now-self top_liege. No forced government conversion.
+				if = {
+					limit = {
+						var:hd_hb_spatial_suzerain = {
+							highest_held_title_tier = tier_hegemony
+							has_government = celestial_government
+						}
+					}
+					start_tributary = { contract_group = tributary_celestial suzerain = var:hd_hb_spatial_suzerain }
+				}
+				else = {
+					# Generic existing contract has no celestial/hegemony condition.
+					start_tributary = { contract_group = tributary_subjugated suzerain = var:hd_hb_spatial_suzerain }
+				}
+			}
+			if = {
+				limit = { exists = var:hd_hb_spatial_suzerain is_tributary_of = var:hd_hb_spatial_suzerain }
+				debug_log = "HD_HB SPATIAL_TRIBUTE_CONFIRMED"
+			}
+			else = { hd_hb_spatial_rollback_effect = yes }
+		}
+	}
+}
+
+hd_hb_spatial_clear_snapshot_effect = {
+	remove_variable = hd_hb_spatial_direct
+	remove_variable = hd_hb_spatial_top
+	remove_variable = hd_hb_spatial_capital
+	remove_variable = hd_hb_spatial_suzerain
+}
+
+# Title scope h_china. Snapshot -> classify ALL -> release ALL -> clear.
+# No rerun until stable: one pass cannot manufacture a chain of new exclaves.
+hd_hb_spatial_cleanup_effect = {
+	if = {
+		limit = { NOT = { exists = global_var:hd_hb_spatial_started } }
+		set_global_variable = hd_hb_spatial_started
+		if = {
+			limit = { has_variable_list = hd_hb_spatial_titles }
+			every_in_list = {
+				variable = hd_hb_spatial_titles
+				holder ?= {
+					if = {
+						limit = {
+							hd_hb_live_vassal_trigger = yes
+							NOT = { is_in_list = hd_hb_spatial_candidates }
+						}
+						add_to_temporary_list = hd_hb_spatial_candidates
+					}
+				}
+			}
+			clear_variable_list = hd_hb_spatial_titles
+		}
+		every_in_list = { list = hd_hb_spatial_candidates hd_hb_spatial_snapshot_actor_effect = yes }
+		every_in_list = { list = hd_hb_spatial_release_targets hd_hb_spatial_release_actor_effect = yes }
+		every_in_list = { list = hd_hb_spatial_candidates hd_hb_spatial_clear_snapshot_effect = yes }
+		set_global_variable = hd_hb_spatial_done
+		debug_log = "HD_HB SPATIAL_ONCE_COMPLETED"
+	}
+}

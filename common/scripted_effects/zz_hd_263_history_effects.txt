@@ -1,0 +1,1286 @@
+﻿# 263「钟会伐蜀」剧本史实主线（boki 10-16：做到魏晋禅代、吴蜀不结盟）。计划第 10、15、16 节。
+# 只由 common/on_action/zz_hd_263_startup.txt 调用（带 263.9.20 闸门）。事件在 events/zz_hd_263_events.txt。
+# 惯例：电脑照史实，玩家当事人可拒绝；条件不合先等，到截止日才跳过（日志记原因）；替电脑结束战争才判 is_ai；
+# 转头衔一律先结束战争 → 一个 change 里先转头衔后改投封臣 → 设主头衔 → 最后才死亡或囚禁。
+# 依赖：S2–S4 依赖 S1；S5–S8 只看"司马昭／司马炎是权臣、曹奂在位"，与伐蜀成败无关。
+# 伐蜀战争复用 hd253_history_war_cb 与 hd253_start_history_war_effect（KIND = fashu），结局标记 hd253_fashu_*（253 的心跳只在 253 闸门下跑）。
+
+############################################################
+# 心跳（每 30 天）
+############################################################
+hd263_pulse_effect = {
+	hd263_s1_watch_effect = yes
+	hd263_s1_try_effect = yes
+	hd263_s2_check_effect = yes
+	hd263_s3_check_effect = yes
+	hd263_s4_check_effect = yes
+	hd263_s5_check_effect = yes
+	hd263_s6_check_effect = yes
+	hd263_s7_check_effect = yes
+	hd263_s8_check_effect = yes
+	hd263_tenure_renew_effect = yes
+}
+
+# 找到进行中的伐蜀之战，存为 scope:hd263_war
+hd263_find_war_effect = {
+	title:h_china.holder ?= {
+		random_character_war = {
+			limit = {
+				using_cb = hd253_history_war_cb
+				var:hd253_war_kind ?= flag:fashu
+			}
+			save_scope_as = hd263_war
+		}
+	}
+}
+
+# 世界通报（两人）
+hd263_news_effect = {
+	$A$ = { save_scope_as = hd_news_a }
+	$B$ = { save_scope_as = hd_news_b }
+	hd_world_news_send_effect = { EVENT = $EVENT$ }
+}
+
+# 起兵：以独立战争攻其主君，另给 $LEVIES$ 事件兵（照 hd253_rebel_effect，兵数做成参数）。Root：起兵者
+hd263_rebel_effect = {
+	save_scope_as = hd263_rebel
+	liege = { save_scope_as = hd263_rebel_target }
+	start_war = {
+		cb = independence_war
+		target = scope:hd263_rebel_target
+	}
+	random_character_war = {
+		limit = {
+			primary_attacker = scope:hd263_rebel
+			using_cb = independence_war
+		}
+		save_scope_as = hd263_rebel_war
+	}
+	if = {
+		limit = { exists = scope:hd263_rebel_war }
+		spawn_army = {
+			levies = $LEVIES$
+			location = capital_province
+			origin = capital_province
+			inheritable = yes
+			uses_supply = yes
+			war = scope:hd263_rebel_war
+			name = hd263_rebel_army_name
+		}
+		debug_log = "HD263 REBEL_WAR OK"
+	}
+	else = { debug_log = "HD263 REBEL_WAR FAILED" }
+}
+
+############################################################
+# S1 伐蜀（after_lobby 起；失败或白和、战败、失效后 264.1.16 前可再宣一次）
+############################################################
+hd263_s1_try_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd263_s1_cancel }
+			NOT = { exists = global_var:hd263_s1_asked }
+			NOT = { exists = global_var:hd263_s2_done }
+			NOT = { exists = global_var:hd253_fashu_active }
+			NOT = { exists = global_var:hd253_fashu_won }
+			current_date < 264.1.16
+			OR = {
+				NOT = { exists = global_var:hd263_s1_tries }
+				global_var:hd263_s1_tries < 2
+			}
+			exists = title:h_china.holder
+			title:e_bashu.holder ?= {
+				is_alive = yes
+				is_independent_ruler = yes
+				NOT = { is_at_war_with = title:h_china.holder }
+			}
+		}
+		set_global_variable = hd263_s1_asked
+		if = {
+			limit = {
+				character:si_ma_zhao ?= {
+					is_alive = yes
+					is_ai = no
+					title:h_china.var:hd_court_regent ?= this
+				}
+			}
+			character:si_ma_zhao = { trigger_event = hd263.0100 }
+		}
+		else = { hd263_s1_ask_emperor_effect = yes }
+	}
+}
+
+# 天子是玩家时先问天子（大将军请伐蜀），否则直接宣战
+hd263_s1_ask_emperor_effect = {
+	if = {
+		limit = { title:h_china.holder ?= { is_ai = no } }
+		title:h_china.holder = { trigger_event = hd263.0105 }
+	}
+	else = { hd263_s1_war_effect = yes }
+}
+
+# 宣战：魏天子对汉帝，目标益州（全国之战）；钟会、邓艾、诸葛绪加入攻方并各给事件兵
+hd263_s1_war_effect = {
+	title:h_china.holder = {
+		save_scope_as = hd263_att
+		add_character_flag = { flag = allowed_war_declaration_sans_truce_penalties days = 1 }
+	}
+	title:e_bashu.holder = { save_scope_as = hd263_def }
+	hd253_start_history_war_effect = { ATTACKER = scope:hd263_att DEFENDER = scope:hd263_def TARGET = title:k_uuii_yizhou KIND = fashu }
+	if = {
+		limit = { exists = scope:hd253_war_fashu }
+		if = {
+			limit = { exists = global_var:hd263_s1_tries }
+			change_global_variable = { name = hd263_s1_tries add = 1 }
+		}
+		else = { set_global_variable = { name = hd263_s1_tries value = 1 } }
+		set_global_variable = { name = hd263_s1_pulses value = 0 }
+		hd263_s1_general_effect = { WHO = yingchuan_zhong_024 }
+		hd263_s1_general_effect = { WHO = deng_ai }
+		hd263_s1_general_effect = { WHO = zhu_ge_xu }
+		hd263_news_effect = { A = scope:hd263_att B = scope:hd263_def EVENT = hd263.0900 }
+		debug_log = "HD263 S1 WAR OK"
+	}
+	else = {
+		remove_global_variable = hd263_s1_asked   # 下个月重试
+		debug_log = "HD263 S1 WAR_START_FAILED"
+	}
+}
+
+# 三路将领：玩家先问"受命／称疾"，电脑直接加入
+hd263_s1_general_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = { is_alive = yes is_ai = no }
+			trigger_event = hd263.0110
+		}
+		else = { hd263_s1_join_effect = yes }
+	}
+}
+
+# 加入攻方并在首府给事件兵：钟会二万五千、邓艾一万、诸葛绪一万；加入失败则兵给天子。Scope：将领
+hd263_s1_join_effect = {
+	save_scope_as = hd263_gen
+	hd263_find_war_effect = yes
+	if = {
+		limit = {
+			exists = scope:hd263_war
+			is_alive = yes
+			is_landed = yes
+			is_independent_ruler = no
+			NOT = { is_attacker_in_war = scope:hd263_war }
+		}
+		scope:hd263_war = { add_attacker = scope:hd263_gen }
+	}
+	if = {
+		limit = { exists = scope:hd263_war is_attacker_in_war = scope:hd263_war }
+		hd263_s1_spawn_effect = { WHO = scope:hd263_gen }
+		debug_log = "HD263 S1 JOIN_OK"
+	}
+	else_if = {
+		limit = { exists = scope:hd263_war }
+		hd263_s1_spawn_effect = { WHO = title:h_china.holder }
+		debug_log = "HD263 S1 JOIN_FAILED_LEVIES_TO_EMPEROR"
+	}
+}
+# 称疾：兵给天子。Scope：将领
+hd263_s1_decline_effect = {
+	save_scope_as = hd263_gen
+	hd263_find_war_effect = yes
+	if = {
+		limit = { exists = scope:hd263_war }
+		hd263_s1_spawn_effect = { WHO = title:h_china.holder }
+	}
+	debug_log = "HD263 S1 GENERAL_DECLINED"
+}
+# 按 scope:hd263_gen 是谁定兵数，在 $WHO$ 的首府生成
+hd263_s1_spawn_effect = {
+	$WHO$ = {
+		if = {
+			limit = { scope:hd263_gen = { this = character:yingchuan_zhong_024 } }
+			spawn_army = { levies = 25000 location = capital_province origin = capital_province inheritable = yes uses_supply = yes war = scope:hd263_war name = hd263_zhonghui_army_name }
+		}
+		else_if = {
+			limit = { scope:hd263_gen = { this = character:deng_ai } }
+			spawn_army = { levies = 10000 location = capital_province origin = capital_province inheritable = yes uses_supply = yes war = scope:hd263_war name = hd263_dengai_army_name }
+		}
+		else = {
+			spawn_army = { levies = 10000 location = capital_province origin = capital_province inheritable = yes uses_supply = yes war = scope:hd263_war name = hd263_zhugexu_army_name }
+		}
+	}
+}
+
+# 战争计数与结局：白和、战败、失效后允许重宣（264.1.16 前），过期则 S1–S4 作罢
+hd263_s1_watch_effect = {
+	if = {
+		limit = { hd263_s1_war_active_trigger = yes }
+		change_global_variable = { name = hd263_s1_pulses add = 1 }
+	}
+	hd263_s1_end_kind_effect = { RESULT = white }
+	hd263_s1_end_kind_effect = { RESULT = lost }
+	hd263_s1_end_kind_effect = { RESULT = invalid }
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd263_s1_cancel }
+			NOT = { exists = global_var:hd263_s2_done }
+			NOT = { exists = global_var:hd253_fashu_won }
+			NOT = { hd263_s1_war_active_trigger = yes }
+			current_date >= 264.1.16
+		}
+		set_global_variable = hd263_s1_cancel
+		debug_log = "HD263 S1 GIVEN_UP"
+	}
+}
+hd263_s1_end_kind_effect = {
+	if = {
+		limit = { exists = global_var:hd253_fashu_$RESULT$ }
+		remove_global_variable = hd253_fashu_$RESULT$
+		if = {
+			limit = { exists = global_var:hd263_s1_asked }
+			remove_global_variable = hd263_s1_asked
+		}
+		debug_log = "HD263 S1 ENDED_$RESULT$"
+	}
+}
+
+############################################################
+# S2 刘禅出降：S1 打满 60 天后攻方战分 ≥ 50 或占涪、绵竹、雒、成都任一县；或 S1 已胜；264.1.16 兜底
+############################################################
+hd263_s2_check_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd263_s2_done }
+			NOT = { exists = global_var:hd263_s1_cancel }
+			OR = {
+				exists = global_var:hd253_fashu_won
+				AND = {
+					hd263_s1_war_active_trigger = yes
+					OR = {
+						current_date >= 264.1.16
+						AND = {
+							global_var:hd263_s1_pulses >= 2
+							OR = {
+								title:c_uuii_p_3629.title_province = { is_occupied = yes }
+								title:c_uuii_p_3295.title_province = { is_occupied = yes }
+								title:c_uuii_p_3282.title_province = { is_occupied = yes }
+								title:c_uuii_p_4282.title_province = { is_occupied = yes }
+								title:h_china.holder = {
+									any_character_war = {
+										using_cb = hd253_history_war_cb
+										var:hd253_war_kind ?= flag:fashu
+										attacker_war_score >= 50
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		set_global_variable = hd263_s2_done
+		if = {
+			limit = { title:e_bashu.holder ?= { is_alive = yes is_ai = no } }
+			title:e_bashu.holder = { trigger_event = hd263.0200 }
+		}
+		else = { hd263_s2_surrender_effect = yes }
+	}
+}
+
+# 出降：①以攻方胜结束 S1（on_victory 把益州交天子）②汉帝头衔归天子、封臣改投（姜维降钟会）③益州与蜀郡、蜀地郡守交邓艾 ④绵竹诸将与刘谌之死（只限电脑）
+hd263_s2_surrender_effect = {
+	hd263_find_war_effect = yes
+	if = {
+		limit = { exists = scope:hd263_war }
+		scope:hd263_war = { end_war = attacker }
+	}
+	title:e_bashu.holder ?= { save_scope_as = hd263_shu }
+	title:h_china.holder ?= { save_scope_as = hd263_wei }
+	if = {
+		limit = { exists = scope:hd263_shu exists = scope:hd263_wei }
+		# ② 汉帝的头衔与封臣
+		create_title_and_vassal_change = { type = conquest save_scope_as = hd263_s2_change add_claim_on_loss = no }
+		scope:hd263_shu = {
+			every_held_title = {
+				limit = { is_noble_family_title = no is_landless_type_title = no }
+				change_title_holder = { holder = scope:hd263_wei change = scope:hd263_s2_change take_baronies = yes }
+			}
+			every_vassal = {
+				change_liege = { liege = scope:hd263_wei change = scope:hd263_s2_change }
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd263_s2_change
+		# 刘禅仍持本族世族头衔时仍是统治者，不能 set_employer：改为向魏帝称臣（安乐公，同 253 的出降）
+		scope:hd263_shu = {
+			if = {
+				limit = { is_alive = yes is_ruler = no NOT = { is_courtier_of = scope:hd263_wei } }
+				set_employer = scope:hd263_wei
+			}
+			else_if = {
+				limit = { is_alive = yes is_ruler = yes NOT = { liege ?= scope:hd263_wei } }
+				create_title_and_vassal_change = { type = swear_fealty save_scope_as = hd263_s2_fealty add_claim_on_loss = no }
+				change_liege = { liege = scope:hd263_wei change = scope:hd263_s2_fealty }
+				resolve_title_and_vassal_change = scope:hd263_s2_fealty
+			}
+		}
+		# 姜维（上一步已随众改投天子）：电脑再降钟会；玩家先问（hd263.0210：降钟会／拒命）
+		character:jiang_wei ?= {
+			if = {
+				limit = { is_alive = yes is_landed = yes is_ai = no }
+				trigger_event = hd263.0210
+			}
+			else_if = {
+				limit = { is_alive = yes is_landed = yes }
+				hd263_jiang_wei_submit_effect = yes
+			}
+		}
+		# ③ 益州交邓艾
+		hd263_s2_dengai_yizhou_effect = yes
+		# ④ 绵竹之战与刘谌（只限电脑）
+		hd263_die_effect = { WHO = zhu_ge_zhan REASON = death_battle }
+		hd263_die_effect = { WHO = zhu_ge_shang REASON = death_battle }
+		hd263_die_effect = { WHO = huang_chong REASON = death_battle }
+		hd263_die_effect = { WHO = li_qiu REASON = death_battle }
+		hd263_die_effect = { WHO = zhang_zun_2 REASON = death_battle }
+		hd263_die_effect = { WHO = fu_qian REASON = death_battle }
+		hd263_die_effect = { WHO = liu_chen REASON = death_suicide }
+		hd263_news_effect = { A = scope:hd263_shu B = scope:hd263_wei EVENT = hd263.0910 }
+		if = {
+			limit = {
+				scope:hd263_shu = {
+					is_landed = no
+					OR = { is_courtier_of = scope:hd263_wei liege ?= scope:hd263_wei }
+				}
+				title:k_uuii_yizhou.holder ?= { NOT = { this = scope:hd263_shu } }
+			}
+			debug_log = "HD263 S2 TRANSFER_OK"
+		}
+		else = { debug_log = "HD263 S2 TRANSFER_BAD" }
+	}
+	else = { debug_log = "HD263 S2 SKIPPED_NO_RULER" }
+}
+
+# 只杀电脑角色；玩家角色不杀，只记日志
+hd263_die_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = { is_alive = yes is_ai = yes }
+			death = { death_reason = $REASON$ }
+		}
+		else_if = {
+			limit = { is_alive = yes }
+			debug_log = "HD263 PLAYER_SPARED $WHO$"
+		}
+	}
+}
+
+# 姜维降钟会（史实降于涪）；钟会不在或不是天子封臣则降天子。Scope：任意
+hd263_jiang_wei_submit_effect = {
+	# 汉已亡，姜维的都督区（开局建在梁州上）先解散
+	title:k_liaozhou = {
+		if = {
+			limit = { has_variable = wj_dd_core }
+			WJ_dd_dissolve_core_effect = yes
+			debug_log = "HD263 S2 DISTRICT_DISSOLVED"
+		}
+	}
+	character:jiang_wei ?= {
+		if = {
+			limit = { is_alive = yes is_landed = yes }
+			if = {
+				limit = {
+					character:yingchuan_zhong_024 ?= {
+						is_alive = yes
+						is_landed = yes
+						liege ?= title:h_china.holder
+					}
+				}
+				# 封臣须低于主君：梁州（王国）先交钟会，再让姜维、张翼、廖化改投钟会（执行后复核必改 1）
+				character:yingchuan_zhong_024 = { save_scope_as = hd263_zh }
+				create_title_and_vassal_change = { type = granted save_scope_as = hd263_jw_change add_claim_on_loss = no }
+				title:k_liaozhou = {
+					if = {
+						limit = { holder ?= character:jiang_wei }
+						change_title_holder = { holder = scope:hd263_zh change = scope:hd263_jw_change }
+					}
+				}
+				character:zhang_yi_4 ?= {
+					if = {
+						limit = { is_alive = yes is_landed = yes liege ?= character:jiang_wei }
+						change_liege = { liege = scope:hd263_zh change = scope:hd263_jw_change }
+					}
+				}
+				character:liao_hua ?= {
+					if = {
+						limit = { is_alive = yes is_landed = yes liege ?= character:jiang_wei }
+						change_liege = { liege = scope:hd263_zh change = scope:hd263_jw_change }
+					}
+				}
+				change_liege = { liege = scope:hd263_zh change = scope:hd263_jw_change }
+				resolve_title_and_vassal_change = scope:hd263_jw_change
+				if = {
+					limit = { has_title = title:d_hanzhong }
+					set_primary_title_to = title:d_hanzhong
+				}
+				scope:hd263_zh = {
+					if = {
+						limit = { has_title = title:k_liaozhou NOT = { has_title = title:k_uuii_yizhou } }
+						set_primary_title_to = title:k_liaozhou
+					}
+				}
+				if = {
+					limit = {
+						liege ?= scope:hd263_zh
+						highest_held_title_tier <= tier_duchy
+						scope:hd263_zh = { highest_held_title_tier >= tier_kingdom }
+					}
+					debug_log = "HD263 S2 TIER_OK"
+				}
+				else = { debug_log = "HD263 S2 TIER_BAD" }
+				debug_log = "HD263 S2 JIANG_WEI -> ZHONG_HUI"
+			}
+			else_if = {
+				limit = { NOT = { liege ?= title:h_china.holder } }
+				create_title_and_vassal_change = { type = swear_fealty save_scope_as = hd263_jw_change add_claim_on_loss = no }
+				change_liege = { liege = title:h_china.holder change = scope:hd263_jw_change }
+				resolve_title_and_vassal_change = scope:hd263_jw_change
+				debug_log = "HD263 S2 JIANG_WEI -> EMPEROR"
+			}
+		}
+	}
+}
+
+# 益州州头衔、蜀郡（成都）与益州法理诸郡的郡守交邓艾；罗宪、霍弋与宁州诸郡守留天子
+hd263_s2_dengai_yizhou_effect = {
+	if = {
+		limit = {
+			character:deng_ai ?= { is_alive = yes is_landed = yes liege ?= title:h_china.holder }
+			title:k_uuii_yizhou.holder ?= title:h_china.holder
+		}
+		title:h_china.holder = { save_scope_as = hd263_wei }
+		character:deng_ai = { save_scope_as = hd263_ai }
+		create_title_and_vassal_change = { type = granted save_scope_as = hd263_s2b_change add_claim_on_loss = no }
+		title:k_uuii_yizhou = { change_title_holder = { holder = scope:hd263_ai change = scope:hd263_s2b_change } }
+		title:d_shujun = {
+			if = {
+				limit = { holder ?= scope:hd263_wei }
+				change_title_holder = { holder = scope:hd263_ai change = scope:hd263_s2b_change }
+			}
+			every_in_de_jure_hierarchy = {
+				limit = { tier = tier_county holder ?= scope:hd263_wei }
+				change_title_holder = { holder = scope:hd263_ai change = scope:hd263_s2b_change take_baronies = yes }
+			}
+		}
+		scope:hd263_wei = {
+			every_vassal = {
+				limit = {
+					NOT = { this = scope:hd263_ai }
+					NOT = { this = character:luo_xian }
+					primary_title = { hd263_yizhou_duchy_trigger = yes }
+				}
+				change_liege = { liege = scope:hd263_ai change = scope:hd263_s2b_change }
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd263_s2b_change
+		# 校正：罗宪、霍弋若随益州被引擎改投邓艾，改回天子（第 16.3 节要求留天子名下）
+		create_title_and_vassal_change = { type = swear_fealty save_scope_as = hd263_s2_fix add_claim_on_loss = no }
+		hd263_s2_unpull_effect = { WHO = luo_xian }
+		hd263_s2_unpull_effect = { WHO = huo_yi }
+		resolve_title_and_vassal_change = scope:hd263_s2_fix
+		if = {
+			limit = { character:deng_ai = { has_title = title:k_uuii_yizhou } }
+			debug_log = "HD263 S2 DENG_AI YIZHOU OK"
+		}
+		else = { debug_log = "HD263 S2 DENG_AI YIZHOU BAD" }
+	}
+	else = { debug_log = "HD263 S2 DENG_AI YIZHOU SKIPPED" }
+}
+
+############################################################
+# S3 邓艾被收（S2 后满 30 天，邓艾仍持益州、钟会在世有地；截止 264.6.1）
+############################################################
+hd263_s3_check_effect = {
+	if = {
+		limit = {
+			exists = global_var:hd263_s2_done
+			NOT = { exists = global_var:hd263_s34_skip }
+			NOT = { exists = global_var:hd263_s3_done }
+		}
+		if = {
+			limit = { exists = global_var:hd263_s3_pending }
+			# 等玩家选择；到期仍未选则作罢（执行后复核建议 5）
+			if = {
+				limit = { current_date >= 264.6.1 }
+				set_global_variable = hd263_s3_done
+				set_global_variable = hd263_s34_skip
+				debug_log = "HD263 S3 EXPIRED_PENDING"
+			}
+		}
+		else_if = {
+			limit = { NOT = { exists = global_var:hd263_s3_wait } }
+			set_global_variable = hd263_s3_wait   # 先等一个心跳（约 30 天）
+		}
+		else_if = {
+			limit = { current_date >= 264.6.1 }
+			set_global_variable = hd263_s3_done
+			set_global_variable = hd263_s34_skip
+			debug_log = "HD263 S3 EXPIRED"
+		}
+		else_if = {
+			limit = {
+				character:deng_ai ?= { is_alive = yes has_title = title:k_uuii_yizhou liege ?= title:h_china.holder }
+				character:yingchuan_zhong_024 ?= { is_alive = yes is_landed = yes liege ?= title:h_china.holder }
+			}
+			set_global_variable = hd263_s3_pending
+			hd263_s3_route_effect = yes
+		}
+		else_if = {
+			limit = {
+				OR = {
+					character:deng_ai ?= { is_alive = no }
+					character:yingchuan_zhong_024 ?= { is_alive = no }
+				}
+			}
+			set_global_variable = hd263_s3_done
+			set_global_variable = hd263_s34_skip
+			debug_log = "HD263 S3 SKIPPED_DEAD"
+		}
+	}
+}
+
+# 依次问玩家钟会（密告）、玩家司马昭（准）、玩家邓艾（束手），都过了才执行
+hd263_s3_route_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd263_s3_ok_zh }
+			character:yingchuan_zhong_024 ?= { is_ai = no }
+		}
+		character:yingchuan_zhong_024 = { trigger_event = hd263.0300 }
+	}
+	else_if = {
+		limit = {
+			NOT = { exists = global_var:hd263_s3_ok_sm }
+			character:si_ma_zhao ?= { is_alive = yes is_ai = no }
+		}
+		character:si_ma_zhao = { trigger_event = hd263.0305 }
+	}
+	else_if = {
+		limit = {
+			NOT = { exists = global_var:hd263_s3_ok_da }
+			character:deng_ai ?= { is_ai = no }
+		}
+		character:deng_ai = { trigger_event = hd263.0310 }
+	}
+	else = { hd263_s3_effect = yes }
+}
+
+# 收邓艾：益州与蜀地封臣交钟会，陇右、凉州与其余封臣交天子；邓艾、邓忠交出头衔后囚于钟会
+hd263_s3_effect = {
+	set_global_variable = hd263_s3_done
+	title:h_china.holder = { save_scope_as = hd263_wei }
+	character:deng_ai = { save_scope_as = hd263_ai }
+	character:yingchuan_zhong_024 = { save_scope_as = hd263_zh }
+	create_title_and_vassal_change = { type = revoked save_scope_as = hd263_s3_change add_claim_on_loss = no }
+	scope:hd263_ai = {
+		every_held_title = {
+			limit = { is_noble_family_title = no is_landless_type_title = no }
+			if = {
+				limit = {
+					OR = {
+						this = title:k_uuii_yizhou
+						hd263_yizhou_duchy_trigger = yes
+						duchy ?= { hd263_yizhou_duchy_trigger = yes }
+					}
+				}
+				change_title_holder = { holder = scope:hd263_zh change = scope:hd263_s3_change take_baronies = yes }
+			}
+			else = {
+				change_title_holder = { holder = scope:hd263_wei change = scope:hd263_s3_change take_baronies = yes }
+			}
+		}
+		every_vassal = {
+			if = {
+				limit = { primary_title = { hd263_yizhou_duchy_trigger = yes } }
+				change_liege = { liege = scope:hd263_zh change = scope:hd263_s3_change }
+			}
+			else = {
+				change_liege = { liege = scope:hd263_wei change = scope:hd263_s3_change }
+			}
+		}
+	}
+	resolve_title_and_vassal_change = scope:hd263_s3_change
+	# 邓艾仍持本族世族头衔时仍是统治者，不能 set_employer：改为钟会的封臣，钟会才能囚他
+	scope:hd263_ai = {
+		if = {
+			limit = { is_ruler = no NOT = { is_courtier_of = scope:hd263_zh } }
+			set_employer = scope:hd263_zh
+		}
+		else_if = {
+			limit = { is_ruler = yes NOT = { liege ?= scope:hd263_zh } }
+			create_title_and_vassal_change = { type = swear_fealty save_scope_as = hd263_s3_fealty add_claim_on_loss = no }
+			change_liege = { liege = scope:hd263_zh change = scope:hd263_s3_fealty }
+			resolve_title_and_vassal_change = scope:hd263_s3_fealty
+		}
+	}
+	scope:hd263_zh = {
+		if = {
+			limit = { scope:hd263_ai = { is_alive = yes is_imprisoned = no } }
+			imprison = { target = scope:hd263_ai type = dungeon }
+		}
+		character:deng_zhong ?= {
+			if = {
+				limit = { is_alive = yes is_imprisoned = no is_ruler = no }
+				if = {
+					limit = { NOT = { is_courtier_of = scope:hd263_zh } }
+					set_employer = scope:hd263_zh
+				}
+				scope:hd263_zh = { imprison = { target = character:deng_zhong type = dungeon } }
+			}
+		}
+	}
+	scope:hd263_zh = {
+		if = {
+			limit = { has_title = title:k_uuii_yizhou }
+			set_primary_title_to = title:k_uuii_yizhou
+		}
+	}
+	# 姜维（郡级）须低于钟会（王国）
+	character:jiang_wei ?= {
+		if = {
+			limit = { is_alive = yes liege ?= scope:hd263_zh }
+			if = {
+				limit = { highest_held_title_tier <= tier_duchy }
+				debug_log = "HD263 S3 TIER_OK"
+			}
+			else = { debug_log = "HD263 S3 TIER_BAD" }
+		}
+	}
+	hd263_news_effect = { A = scope:hd263_zh B = scope:hd263_ai EVENT = hd263.0920 }
+	if = {
+		limit = { scope:hd263_zh = { has_title = title:k_uuii_yizhou } scope:hd263_ai = { is_landed = no is_imprisoned = yes } }
+		debug_log = "HD263 S3 TRANSFER_OK"
+	}
+	else = { debug_log = "HD263 S3 TRANSFER_BAD" }
+}
+
+############################################################
+# S4 钟会之乱（S3 后满 30 天，钟会持益州、不在战中；截止 264.9.1）
+############################################################
+hd263_s4_check_effect = {
+	if = {
+		limit = {
+			exists = global_var:hd263_s3_done
+			NOT = { exists = global_var:hd263_s34_skip }
+			NOT = { exists = global_var:hd263_s4_done }
+		}
+		if = {
+			limit = { NOT = { exists = global_var:hd263_s4_wait } }
+			set_global_variable = hd263_s4_wait
+		}
+		else_if = {
+			limit = { current_date >= 264.9.1 }
+			set_global_variable = hd263_s4_done
+			debug_log = "HD263 S4 EXPIRED"
+		}
+		else_if = {
+			limit = {
+				character:yingchuan_zhong_024 ?= {
+					is_alive = yes
+					has_title = title:k_uuii_yizhou
+					is_independent_ruler = no
+					is_at_war = no
+				}
+			}
+			set_global_variable = hd263_s4_done
+			if = {
+				limit = { character:yingchuan_zhong_024 = { is_ai = no } }
+				character:yingchuan_zhong_024 = { trigger_event = hd263.0400 }
+			}
+			else_if = {
+				limit = { character:jiang_wei ?= { is_alive = yes is_ai = no } }
+				character:jiang_wei = { trigger_event = hd263.0410 }
+			}
+			else = { hd263_s4_mutiny_effect = yes }
+		}
+		else_if = {
+			limit = { character:yingchuan_zhong_024 ?= { is_alive = no } }
+			set_global_variable = hd263_s4_done
+			debug_log = "HD263 S4 SKIPPED_DEAD"
+		}
+	}
+}
+
+# 电脑钟会起兵即败：胡烈、丘建兵变。先把钟会、姜维（电脑）、邓艾（若仍有地）的头衔交天子、封臣改投天子，再杀
+hd263_s4_mutiny_effect = {
+	title:h_china.holder = { save_scope_as = hd263_wei }
+	create_title_and_vassal_change = { type = revoked save_scope_as = hd263_s4_change add_claim_on_loss = no }
+	hd263_s4_strip_effect = { WHO = yingchuan_zhong_024 }
+	character:jiang_wei ?= {
+		if = {
+			limit = { is_ai = yes }
+			hd263_s4_strip_effect = { WHO = jiang_wei }
+		}
+	}
+	hd263_s4_strip_effect = { WHO = deng_ai }
+	resolve_title_and_vassal_change = scope:hd263_s4_change
+	if = {
+		limit = { character:yingchuan_zhong_024 ?= { is_landed = no } }
+		debug_log = "HD263 S4 TRANSFER_OK"
+	}
+	else = { debug_log = "HD263 S4 TRANSFER_BAD" }
+	character:anding_hu_018 ?= { save_scope_as = hd263_killer }
+	character:tian_xu ?= { save_scope_as = hd263_killer_tx }
+	hd263_s4_kill_effect = { WHO = yingchuan_zhong_024 KILLER = hd263_killer }
+	hd263_s4_kill_effect = { WHO = jiang_wei KILLER = hd263_killer }
+	hd263_s4_kill_effect = { WHO = jiang_bin KILLER = hd263_killer }
+	hd263_s4_kill_effect = { WHO = zhuojun_liu_005 KILLER = hd263_killer }
+	hd263_s4_kill_effect = { WHO = deng_ai KILLER = hd263_killer_tx }
+	hd263_s4_kill_effect = { WHO = deng_zhong KILLER = hd263_killer_tx }
+	character:yingchuan_zhong_024 ?= { save_scope_as = hd_news_b }
+	scope:hd263_wei = { save_scope_as = hd_news_a }
+	hd_world_news_send_effect = { EVENT = hd263.0930 }
+	debug_log = "HD263 S4 MUTINY DONE"
+}
+# 在 scope:hd263_s4_change 里：$WHO$ 的头衔交天子，封臣改投天子
+hd263_s4_strip_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = { is_alive = yes is_landed = yes NOT = { this = scope:hd263_wei } }
+			every_held_title = {
+				limit = { is_noble_family_title = no is_landless_type_title = no }
+				change_title_holder = { holder = scope:hd263_wei change = scope:hd263_s4_change take_baronies = yes }
+			}
+			every_vassal = {
+				change_liege = { liege = scope:hd263_wei change = scope:hd263_s4_change }
+			}
+		}
+	}
+}
+# 电脑才杀（被杀者有凶手时记凶手）
+hd263_s4_kill_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = { is_alive = yes is_ai = yes }
+			if = {
+				limit = { exists = scope:$KILLER$ scope:$KILLER$ = { is_alive = yes } }
+				death = { death_reason = death_murder_known killer = scope:$KILLER$ }
+			}
+			else = { death = { death_reason = death_murder } }
+		}
+	}
+}
+
+# 玩家钟会起兵：独立战争（二万），姜维（电脑、在其帐下）随之
+hd263_s4_zhonghui_rebel_effect = {
+	character:yingchuan_zhong_024 = {
+		hd263_rebel_effect = { LEVIES = 20000 }
+	}
+	hd263_news_effect = { A = character:yingchuan_zhong_024 B = title:h_china.holder EVENT = hd263.0935 }
+}
+
+############################################################
+# S5 晋公（263.11.18 十月朔起；司马昭是权臣、曹奂在位）
+############################################################
+hd263_s5_check_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd263_s5_done }
+			current_date >= 263.11.18
+			character:si_ma_zhao ?= {
+				is_alive = yes
+				is_landed = yes
+				title:h_china.var:hd_court_regent ?= this
+			}
+			title:h_china.holder ?= { this = character:cao_huan }
+		}
+		set_global_variable = hd263_s5_done
+		if = {
+			limit = { character:si_ma_zhao = { is_ai = no } }
+			character:si_ma_zhao = { trigger_event = hd263.0500 }
+		}
+		else = { hd263_s5_ask_emperor_effect = yes }
+	}
+}
+hd263_s5_ask_emperor_effect = {
+	if = {
+		limit = { title:h_china.holder ?= { is_ai = no } }
+		title:h_china.holder = { trigger_event = hd263.0505 }
+	}
+	else = { hd263_s5_effect = yes }
+}
+
+# 封晋公：并州州头衔授司马昭（改名"晋"），并州本部七郡改归他（天子直持的连县带郡交他，郡守改投他）；冯翊、安定、新平、平凉与刘豹不动
+hd263_s5_effect = {
+	set_global_variable = hd263_s5_ok
+	character:si_ma_zhao = { save_scope_as = hd263_zhao }
+	title:h_china.holder = { save_scope_as = hd263_wei }
+	create_title_and_vassal_change = { type = granted save_scope_as = hd263_s5_change add_claim_on_loss = no }
+	title:k_uuii_bingzhou = {
+		if = {
+			limit = { holder ?= scope:hd263_wei }
+			change_title_holder = { holder = scope:hd263_zhao change = scope:hd263_s5_change }
+		}
+	}
+	hd263_s5_duchy_effect = { DUCHY = d_taiyuan }
+	hd263_s5_duchy_effect = { DUCHY = d_shangdang }
+	hd263_s5_duchy_effect = { DUCHY = d_shangdang_sili }
+	hd263_s5_duchy_effect = { DUCHY = d_xinxing }
+	hd263_s5_duchy_effect = { DUCHY = d_yanmen_youzhou }
+	hd263_s5_duchy_effect = { DUCHY = d_wuxiang }
+	hd263_s5_duchy_effect = { DUCHY = d_jianxing }
+	resolve_title_and_vassal_change = scope:hd263_s5_change
+	# 校正（执行后复核必改 2）：冯翊、安定、新平、平凉郡守与刘豹若随并州被引擎改投司马昭，改回天子
+	create_title_and_vassal_change = { type = swear_fealty save_scope_as = hd263_s5_fix add_claim_on_loss = no }
+	hd263_s5_unpull_effect = { WHO = title:d_fengyi.holder TAG = d_fengyi }
+	hd263_s5_unpull_effect = { WHO = title:d_anding.holder TAG = d_anding }
+	hd263_s5_unpull_effect = { WHO = title:d_xinping.holder TAG = d_xinping }
+	hd263_s5_unpull_effect = { WHO = title:d_pingliang.holder TAG = d_pingliang }
+	hd263_s5_unpull_effect = { WHO = character:xiongnu_liu_010 TAG = liu_bao }
+	resolve_title_and_vassal_change = scope:hd263_s5_fix
+	scope:hd263_zhao = {
+		if = {
+			limit = { has_title = title:k_uuii_bingzhou }
+			set_primary_title_to = title:k_uuii_bingzhou
+			title:k_uuii_bingzhou = { set_title_name = hd263_jin_state_name }
+			hd_nbc_style_effect = { WHO = si_ma_zhao STYLE = gong }
+			title:h_china = { set_variable = { name = hd_court_regent_title value = scope:hd263_zhao.primary_title } }
+			add_prestige = 500
+			debug_log = "HD263 S5 JIN_GONG OK"
+		}
+		else = { debug_log = "HD263 S5 JIN_GONG BAD" }
+	}
+	hd263_news_effect = { A = scope:hd263_zhao B = scope:hd263_wei EVENT = hd263.0950 }
+}
+hd263_s5_duchy_effect = {
+	title:$DUCHY$ = {
+		if = {
+			limit = { holder ?= scope:hd263_wei }
+			every_in_de_jure_hierarchy = {
+				limit = { tier = tier_county holder ?= scope:hd263_wei }
+				change_title_holder = { holder = scope:hd263_zhao change = scope:hd263_s5_change take_baronies = yes }
+			}
+			change_title_holder = { holder = scope:hd263_zhao change = scope:hd263_s5_change }
+		}
+		else_if = {
+			limit = {
+				holder ?= {
+					NOT = { this = scope:hd263_zhao }
+					liege ?= scope:hd263_wei
+				}
+			}
+			holder = { change_liege = { liege = scope:hd263_zhao change = scope:hd263_s5_change } }
+		}
+	}
+}
+
+############################################################
+# S6 晋王（264.5.2 起，咸熙元年三月己卯；S5 已封）：称谓改王，魏改元咸熙
+############################################################
+hd263_s6_check_effect = {
+	if = {
+		limit = {
+			exists = global_var:hd263_s5_ok
+			NOT = { exists = global_var:hd263_s6_done }
+			current_date >= 264.5.2
+			character:si_ma_zhao ?= { is_alive = yes has_title = title:k_uuii_bingzhou }
+		}
+		set_global_variable = hd263_s6_done
+		if = {
+			limit = { character:si_ma_zhao = { is_ai = no } }
+			character:si_ma_zhao = { trigger_event = hd263.0600 }
+		}
+		else = { hd263_s6_effect = yes }
+	}
+}
+hd263_s6_effect = {
+	character:si_ma_zhao = {
+		if = {
+			limit = { NOT = { primary_title ?= title:k_uuii_bingzhou } }
+			set_primary_title_to = title:k_uuii_bingzhou
+		}
+		hd_nbc_style_effect = { WHO = si_ma_zhao STYLE = wang }
+		add_prestige = 500
+	}
+	title:h_china.holder ?= {
+		if = {
+			limit = { is_independent_ruler = yes }
+			hd_22_change_era_effect = { KEY = xianxi YEAR = 1 }
+		}
+	}
+	hd263_news_effect = { A = character:si_ma_zhao B = title:h_china.holder EVENT = hd263.0960 }
+	debug_log = "HD263 S6 JIN_WANG"
+}
+
+############################################################
+# S7 司马昭病逝（265.9.6，咸熙二年八月辛卯；只对电脑到日去世）。任何时候死都由 on_death 交接给司马炎
+############################################################
+hd263_s7_check_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd263_zhao_dead }
+			current_date >= 265.9.6
+			character:si_ma_zhao ?= { is_alive = yes is_ai = yes }
+			character:si_ma_yan ?= { is_alive = yes }
+		}
+		hd263_s7_pass_effect = yes
+		character:si_ma_zhao = { death = { death_reason = death_natural_causes } }
+	}
+}
+
+# 生前交接：晋（并州）、河内与其余领地、封臣交司马炎
+hd263_s7_pass_effect = {
+	character:si_ma_yan = { save_scope_as = hd263_yan }
+	# 先把辅政锁指向司马炎（免得转移中拜官把晋国郡守收归天子）；丞相官职不随领地转，接任时再授
+	title:h_china = { set_variable = { name = hd_dc_ten_qjc_regent value = scope:hd263_yan } }
+	create_title_and_vassal_change = { type = granted save_scope_as = hd263_s7_change add_claim_on_loss = no }
+	character:si_ma_zhao = {
+		every_held_title = {
+			limit = {
+				is_noble_family_title = no
+				is_landless_type_title = no
+				NOT = { this = title:e_WJ_minister_cheng_xiang }
+			}
+			change_title_holder = { holder = scope:hd263_yan change = scope:hd263_s7_change take_baronies = yes }
+		}
+		every_vassal = {
+			limit = { NOT = { this = scope:hd263_yan } }
+			change_liege = { liege = scope:hd263_yan change = scope:hd263_s7_change }
+		}
+	}
+	resolve_title_and_vassal_change = scope:hd263_s7_change
+	scope:hd263_yan = {
+		if = {
+			limit = { NOT = { liege ?= title:h_china.holder } is_independent_ruler = no }
+			create_title_and_vassal_change = { type = swear_fealty save_scope_as = hd263_s7_fix add_claim_on_loss = no }
+			change_liege = { liege = title:h_china.holder change = scope:hd263_s7_fix }
+			resolve_title_and_vassal_change = scope:hd263_s7_fix
+		}
+		if = {
+			limit = { has_title = title:k_uuii_bingzhou }
+			set_primary_title_to = title:k_uuii_bingzhou
+		}
+	}
+	debug_log = "HD263 S7 PASS_TO_YAN"
+}
+
+# 司马昭死后第 3 天：头衔若已被任命给别人就收回交司马炎，再走接任（天子是玩家问天子，司马炎是玩家问他）
+hd263_yan_succession_route_effect = {
+	if = {
+		limit = { character:si_ma_yan ?= { is_alive = yes } }
+		character:si_ma_yan = { save_scope_as = hd263_yan }
+		title:h_china.holder ?= { save_scope_as = hd263_wei }
+		create_title_and_vassal_change = { type = granted save_scope_as = hd263_s7r_change add_claim_on_loss = no }
+		title:k_uuii_bingzhou = {
+			if = {
+				limit = { exists = global_var:hd263_s5_ok NOT = { holder ?= scope:hd263_yan } NOT = { holder ?= { is_ai = no } } }   # 玩家继承人的头衔不收（执行后复核建议 8）
+				change_title_holder = { holder = scope:hd263_yan change = scope:hd263_s7r_change }
+			}
+		}
+		title:d_henei = {
+			if = {
+				limit = { exists = holder NOT = { holder ?= scope:hd263_yan } NOT = { holder ?= { is_ai = no } } }
+				holder = { save_scope_as = hd263_henei_old }
+				every_in_de_jure_hierarchy = {
+					limit = { tier = tier_county holder ?= scope:hd263_henei_old }
+					change_title_holder = { holder = scope:hd263_yan change = scope:hd263_s7r_change take_baronies = yes }
+				}
+				change_title_holder = { holder = scope:hd263_yan change = scope:hd263_s7r_change }
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd263_s7r_change
+		# 晋国郡守改投司马炎
+		if = {
+			limit = { exists = global_var:hd263_s5_ok }
+			create_title_and_vassal_change = { type = swear_fealty save_scope_as = hd263_s7v_change add_claim_on_loss = no }
+			hd263_s7_duchy_liege_effect = { DUCHY = d_taiyuan }
+			hd263_s7_duchy_liege_effect = { DUCHY = d_shangdang }
+			hd263_s7_duchy_liege_effect = { DUCHY = d_shangdang_sili }
+			hd263_s7_duchy_liege_effect = { DUCHY = d_xinxing }
+			hd263_s7_duchy_liege_effect = { DUCHY = d_yanmen_youzhou }
+			hd263_s7_duchy_liege_effect = { DUCHY = d_wuxiang }
+			hd263_s7_duchy_liege_effect = { DUCHY = d_jianxing }
+			resolve_title_and_vassal_change = scope:hd263_s7v_change
+		}
+		scope:hd263_yan = {
+			if = {
+				limit = { has_title = title:k_uuii_bingzhou }
+				set_primary_title_to = title:k_uuii_bingzhou
+				if = {
+					limit = { exists = global_var:hd263_s6_done }
+					hd_nbc_style_effect = { WHO = si_ma_yan STYLE = wang }
+				}
+				else = { hd_nbc_style_effect = { WHO = si_ma_yan STYLE = gong } }
+			}
+		}
+		if = {
+			limit = { scope:hd263_yan = { is_landed = yes } }
+			debug_log = "HD263 S7 YAN_LANDED OK"
+		}
+		else = { debug_log = "HD263 S7 YAN_LANDED BAD" }
+		# 接任
+		if = {
+			limit = { title:h_china.holder ?= { is_ai = no } }
+			title:h_china.holder = { trigger_event = hd263.0700 }
+		}
+		else_if = {
+			limit = { character:si_ma_yan = { is_ai = no } }
+			character:si_ma_yan = { trigger_event = hd263.0710 }
+		}
+		else = { hd263_yan_regency_effect = yes }
+	}
+	else = { debug_log = "HD263 S7 NO_YAN" }
+}
+hd263_s7_duchy_liege_effect = {
+	title:$DUCHY$.holder ?= {
+		if = {
+			limit = {
+				NOT = { this = scope:hd263_yan }
+				NOT = { this = scope:hd263_wei }
+				NOT = { liege ?= scope:hd263_yan }
+				top_liege ?= scope:hd263_wei
+			}
+			change_liege = { liege = scope:hd263_yan change = scope:hd263_s7v_change }
+		}
+	}
+}
+
+# 司马炎接任权臣：先设辅政锁（免得授丞相时晋国郡守被收归天子），再授丞相、秘书省、装权臣
+hd263_yan_regency_effect = {
+	character:si_ma_yan ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = yes
+				title:h_china.holder ?= { NOT = { this = character:si_ma_yan } }
+				liege ?= title:h_china.holder
+			}
+			title:h_china = { set_variable = { name = hd_dc_ten_qjc_regent value = character:si_ma_yan } }
+			hd218_grant_chengxiang_effect = yes
+			WJ_install_historical_secretariat_effect = { OFFICE = e_WJ_minister_cheng_xiang POSITION = WJ_minister_cheng_xiang LAW = WJ_grand_chengxiang_law }
+			hd_court_install_regency_effect = yes
+			hd_court_set_stance_effect = { STANCE = moni }
+			# 权臣任期到 266.3.1
+			if = {
+				limit = { current_date < 265.3.1 }
+				add_character_flag = { flag = hd_court_regent_tenure days = 365 }
+			}
+			else_if = {
+				limit = { current_date < 266.3.1 }
+				add_character_flag = { flag = hd_court_regent_tenure days = 180 }
+			}
+			if = {
+				limit = { title:h_china.var:hd_court_regent ?= this }
+				debug_log = "HD263 S7 YAN_REGENCY OK"
+			}
+			else = { debug_log = "HD263 S7 YAN_REGENCY BAD" }
+			if = {
+				limit = {
+					OR = {
+						NOT = { exists = global_var:hd263_s5_ok }
+						title:d_taiyuan.holder ?= { OR = { this = character:si_ma_yan liege ?= character:si_ma_yan } }
+					}
+				}
+				debug_log = "HD263 S7 JIN_VASSALS OK"
+			}
+			else = { debug_log = "HD263 S7 JIN_VASSALS BAD" }
+		}
+		else = { debug_log = "HD263 S7 YAN_REGENCY SKIPPED" }
+	}
+}
+
+############################################################
+# S8 魏晋禅代（266.2.8 起，泰始元年十二月丙寅；司马炎或在世的玩家司马昭是权臣、曹奂在位）
+############################################################
+hd263_s8_check_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd263_s8_done }
+			current_date >= 266.2.8
+			title:h_china.holder ?= { this = character:cao_huan }
+			title:h_china.var:hd_court_regent ?= {
+				is_alive = yes
+				is_landed = yes
+				OR = {
+					this = character:si_ma_yan
+					AND = { this = character:si_ma_zhao is_ai = no }
+				}
+			}
+		}
+		set_global_variable = hd263_s8_done
+		title:h_china.var:hd_court_regent = { save_scope_as = hd263_new_emp }
+		if = {
+			limit = { scope:hd263_new_emp = { is_ai = no } }
+			scope:hd263_new_emp = { trigger_event = hd263.0800 }
+		}
+		else_if = {
+			limit = { title:h_china.holder = { is_ai = no } }
+			title:h_china.holder = { trigger_event = hd263.0805 }
+		}
+		else = { scope:hd263_new_emp = { hd263_shandai_effect = yes } }
+	}
+}
+
+# 禅代。Root：受禅者（司马炎，或玩家司马昭）
+hd263_shandai_effect = {
+	save_scope_as = hd263_new
+	title:h_china.holder = { save_scope_as = hd263_old }
+	# ① 结束二元统治、清权臣记录与立场
+	scope:hd263_old = {
+		if = {
+			limit = { has_active_diarchy = yes }
+			end_diarchy = yes
+		}
+	}
+	hd_court_release_effect = yes
+	title:h_china = { remove_variable = hd_dc_ten_qjc_regent }
+	scope:hd263_new = {
+		remove_variable = hd_court_stance
+		remove_character_modifier = hd_court_stance_zunhan_modifier
+		remove_character_modifier = hd_court_stance_moni_modifier
+		remove_character_flag = hd_court_regent_tenure
+	}
+	# ② 受禅者先脱离曹奂独立
+	scope:hd263_new = {
+		if = {
+			limit = { exists = liege }
+			create_title_and_vassal_change = { type = independency save_scope_as = hd263_s8_free add_claim_on_loss = no }
+			becomes_independent = { change = scope:hd263_s8_free }
+			resolve_title_and_vassal_change = scope:hd263_s8_free
+		}
+	}
+	# ③ 曹奂的头衔（不含世族）与封臣尽归新帝
+	create_title_and_vassal_change = { type = usurped save_scope_as = hd263_s8_change add_claim_on_loss = no }
+	scope:hd263_old = {
+		every_held_title = {
+			limit = { is_noble_family_title = no }
+			change_title_holder = { holder = scope:hd263_new change = scope:hd263_s8_change take_baronies = yes }
+		}
+		every_vassal = {
+			limit = { NOT = { this = scope:hd263_new } }
+			change_liege = { liege = scope:hd263_new change = scope:hd263_s8_change }
+		}
+	}
+	resolve_title_and_vassal_change = scope:hd263_s8_change
+	# ④ 新帝主头衔、政体、京城
+	scope:hd263_new = {
+		if = {
+			limit = { has_title = title:h_china }
+			set_primary_title_to = title:h_china
+			if = {
+				limit = { NOT = { has_government = celestial_government } }
+				change_government = celestial_government
+			}
+			if = {
+				limit = { title:c_luoyang.holder ?= this }
+				set_realm_capital = title:c_luoyang
+			}
+		}
+	}
+	title:h_china = {
+		set_capital_county = title:c_luoyang
+		set_variable = { name = hd_court_capital_county value = title:c_luoyang }
+	}
+	# ⑤ 玉玺；曹奂为陈留王，入新帝宫中
+	scope:hd263_old = {
+		every_character_artifact = {
+			limit = { has_variable = han_artifact_imperial_seal }
+			set_owner = { target = scope:hd263_new }
+		}
+		if = {
+			limit = { is_alive = yes is_ruler = no NOT = { is_courtier_of = scope:hd263_new } }
+			set_employer = scope:hd263_new
+		}
+	}
+	# ⑥ 国号"晋"（记到王朝上）；并州的"晋"名清掉；第 2 天复查
+	title:k_uuii_bingzhou = { reset_title_name = yes }
+	hd263_jin_name_effect = yes
+	title:h_china = { trigger_event = { on_action = hd263_jin_name_recheck days = 2 } }
+	# ⑦ 年号泰始元年；正统 6 级（禅让，不调篡位钩子）
+	scope:hd263_new = {
+		hd_22_change_era_effect = { KEY = taishi YEAR = 1 }
+		if = {
+			limit = {
+				use_general_legitimacy = yes
+				legitimacy < legitimacy_level_6
+			}
+			add_legitimacy = {
+				value = legitimacy_level_6
+				subtract = legitimacy
+				add = 1
+			}
+		}
+		add_prestige = 1000
+	}
+	# 丞相：天子不能兼任（218 实测会被引擎辞掉销毁），交贾充；贾充不在就交引擎处理
+	scope:hd263_new = {
+		if = {
+			limit = { has_title = title:e_WJ_minister_cheng_xiang }
+			if = {
+				limit = { character:jia_chong ?= { is_alive = yes NOT = { this = scope:hd263_new } } }
+				character:jia_chong = { hd218_grant_chengxiang_effect = yes }
+				debug_log = "HD263 S8 CHENGXIANG -> JIA_CHONG"
+			}
+			else = { debug_log = "HD263 S8 CHENGXIANG LEFT_TO_ENGINE" }
+		}
+	}
+	hd263_news_effect = { A = scope:hd263_new B = scope:hd263_old EVENT = hd263.0980 }
+	if = {
+		limit = {
+			scope:hd263_new = { has_title = title:h_china is_independent_ruler = yes }
+			scope:hd263_old = { is_landed = no }
+		}
+		debug_log = "HD263 S8 OK"
+	}
+	else = { debug_log = "HD263 S8 BAD" }
+}
+
+# 国号"晋"：h_china 持有者是司马氏时设名并记到王朝上（照 hd_nbc_realm_name_effect，FIXED = yes）
+hd263_jin_name_effect = {
+	title:h_china.holder ?= {
+		if = {
+			limit = { dynasty ?= character:si_ma_yan.dynasty }
+			primary_title = { set_title_name = dynn_title_jin }
+			dynasty ?= {
+				remove_variable = hd_fixed_realm_title
+				set_variable = { name = hd_fixed_realm_name value = flag:dynn_title_jin }
+			}
+		}
+	}
+}
+
+# S5 校正：$WHO$ 若已改投司马昭，改回天子
+hd263_s5_unpull_effect = {
+	$WHO$ ?= {
+		if = {
+			limit = { liege ?= scope:hd263_zhao }
+			change_liege = { liege = scope:hd263_wei change = scope:hd263_s5_fix }
+			debug_log = "HD263 S5 DEJURE_PULL_FIXED $TAG$"
+		}
+	}
+}
+# S2 校正：$WHO$ 若已改投邓艾，改回天子
+hd263_s2_unpull_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = { is_alive = yes liege ?= scope:hd263_ai }
+			change_liege = { liege = scope:hd263_wei change = scope:hd263_s2_fix }
+			debug_log = "HD263 S2 DEJURE_PULL_FIXED $WHO$"
+		}
+	}
+}
+
+# 权臣任期续期（执行后复核建议 1）：266.3.1 前、禅代前，每次心跳给当前权臣补 60 天任期，免得废立决议抢在禅代之前
+hd263_tenure_renew_effect = {
+	if = {
+		limit = {
+			current_date < 266.3.1
+			NOT = { exists = global_var:hd263_s8_done }
+			exists = title:h_china.var:hd_court_regent
+		}
+		title:h_china.var:hd_court_regent = {
+			if = {
+				limit = { OR = { this = character:si_ma_zhao this = character:si_ma_yan } }
+				add_character_flag = { flag = hd_court_regent_tenure days = 60 }
+			}
+		}
+	}
+}

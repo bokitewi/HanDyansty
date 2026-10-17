@@ -1,0 +1,1274 @@
+﻿# 617 年剧本「晋阳起兵」史实主线。只由 common/on_action/zz_hd_617_history_on_actions.txt 的 30 天心跳调用，那边带 617.6.23 闸门。
+# 计划见 /mnt/project-files/617隋末群雄剧本_计划.md 第 6.4、10、13 节。写法照 22、370、531 执行后复核修订版：
+#   条件不合先等待，到截止日才跳过，跳过原因分开记日志；只有执行人死了才立即跳过；宣战失败不设 done，下次心跳重试；
+#   战争结局不用 hd_nbc_war_result_effect（它不认新场次）：先确认"双方都已没有这一场次的战争"，再看目标县归谁；
+#   结局标记从李渊、李密一方命名：hd_617_<场次>_won / _lost。节点条件不要求当事人未被俘，转头衔前先放人。
+#   AI 按史实选（ai_chance 100），玩家当事人都有选项。scripted effect 里不写 root，人物一律用 character:ID 或 saved scope。
+
+############################################################
+# 心跳（root：title:h_china）
+############################################################
+hd_617_pulse_effect = {
+	# A0 自然卒年：history 写在开局之后的死亡不会执行，由这里补
+	hd_nbc_hist_death_effect = { WHO = dunhuang_xue_003 DATE = 617.9.1 }        # 薛世雄（七里井败后卒）
+	hd_nbc_hist_death_effect = { WHO = 20220001 DATE = 618.9.1 }                # 薛举（武德元年八月病卒）
+	hd_nbc_hist_death_effect = { WHO = korean_go_goguryeo_6 DATE = 618.9.1 }    # 高句丽婴阳王
+	hd_nbc_hist_death_effect = { WHO = ashina_067 DATE = 618.12.1 }             # 西突厥射匮可汗
+	hd_nbc_hist_death_effect = { WHO = ashina_016 DATE = 619.5.31 }             # 东突厥始毕可汗
+	hd_nbc_hist_death_effect = { WHO = ashina_017 DATE = 620.10.1 }             # 东突厥处罗可汗
+	# A0 结局类卒年：只在前提成立时执行
+	hd_617_outcome_deaths_effect = yes
+	hd_617_check_xihe_effect = yes          # S0a 西河之战
+	hd_617_check_luoyang_effect = yes       # S0b 东都之围
+	hd_617_check_jiudongdu_effect = yes     # S1 王世充救东都
+	hd_617_check_changan_effect = yes       # S2 西进关中
+	hd_617_check_xiangying_effect = yes     # S3 天下响应（李轨、萧铣）
+	hd_617_check_titles_effect = yes        # S4、S5 称号（薛举称帝、窦建德称夏王、萧铣称帝）
+	hd_617_check_zhairang_effect = yes      # S6 翟让之死
+	hd_617_check_jiangdu_effect = yes       # S7 江都之变
+	hd_617_check_tang_effect = yes          # S8 唐建国
+	hd_617_check_zheng_effect = yes         # S9 王世充篡位
+	# 停战续期：618.3.10 以后江都之变还没发生，就每次心跳给炀帝与群雄续 45 天（计划复核必改 5；执行后复核必改 1：盖住 618.4.11 开局停战到期前后）
+	if = {
+		limit = {
+			current_date >= 618.3.10
+			current_date < 619.1.1
+			NOT = { exists = global_var:hd_617_jiangdu_done }
+			title:h_china.holder ?= character:imperial_sui_2
+		}
+		hd_617_truce_renew_effect = yes
+	}
+	# 起义标记：江都之变或 619.1.1 解除；终结乱世锁：唐建国完成或跳过、或 620.1.1 解除
+	if = {
+		limit = {
+			current_date >= 619.1.1
+			NOT = { exists = global_var:hd_617_rebel_cleared }
+		}
+		hd_617_clear_rebel_effect = yes
+	}
+	if = {
+		limit = {
+			exists = global_var:hd_617_mandate_lock
+			OR = {
+				exists = global_var:hd_617_tang_done
+				current_date >= 620.1.1
+			}
+		}
+		remove_global_variable = hd_617_mandate_lock
+		debug_log = "HD_617 MANDATE_LOCK_CLEARED"
+	}
+}
+
+hd_617_clear_rebel_effect = {
+	set_global_variable = hd_617_rebel_cleared
+	hd_617_rebel_flags_clear_effect = yes
+	debug_log = "HD_617 REBEL_FLAGS_CLEARED"
+}
+
+hd_617_truce_renew_effect = {
+	character:imperial_sui_2 = {
+		every_living_character = {
+			limit = {
+				has_character_flag = hd_617_rebel
+				is_landed = yes
+				is_independent_ruler = yes
+				NOT = { this = character:imperial_sui_2 }
+				NOT = { is_at_war_with = character:imperial_sui_2 }
+			}
+			add_to_temporary_list = hd_617_truce_list
+		}
+		every_in_list = {
+			list = hd_617_truce_list
+			save_scope_as = hd_617_truce_target
+			character:imperial_sui_2 = {
+				add_truce_both_ways = {
+					character = scope:hd_617_truce_target
+					days = 45
+					name = hd_617_truce
+				}
+			}
+		}
+	}
+}
+
+############################################################
+# 工具
+############################################################
+
+# 改元（不要求原来没有年号）。Character scope
+hd_617_change_era_effect = {
+	remove_all_NianHao = yes
+	set_variable = data_nianhao_to_SG
+	set_variable = SG_nianhao_$KEY$
+	set_variable = { name = SG_NianHao_data value = $YEAR$ }
+	set_global_variable = { name = SG_nianhao_$KEY$ years = 100 value = yes }
+	add_character_flag = SanGong_NianHao_flag
+}
+
+# 被杀或病死。电脑角色直接死；玩家角色不杀，只记日志
+hd_617_die_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = { is_alive = yes is_ai = yes }
+			death = { death_reason = $REASON$ }
+			debug_log = "HD_617 DIED $WHO$"
+		}
+		else_if = {
+			limit = { is_alive = yes }
+			debug_log = "HD_617 DIE_SKIPPED_PLAYER $WHO$"
+		}
+	}
+}
+hd_617_kill_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = { is_alive = yes is_ai = yes }
+			death = { death_reason = $REASON$ killer = $KILLER$ }
+			debug_log = "HD_617 KILLED $WHO$"
+		}
+		else_if = {
+			limit = { is_alive = yes }
+			debug_log = "HD_617 KILL_SKIPPED_PLAYER $WHO$"
+		}
+	}
+}
+
+# 放人（被俘的人先放出来，计划第 10 节总则）
+hd_617_release_effect = {
+	$WHO$ ?= {
+		if = {
+			limit = { is_imprisoned = yes }
+			release_from_prison = yes
+		}
+	}
+}
+
+# $NEW$ 接收 $OLD$ 的全部实地头衔（含 h_china）与封臣：同一个 change 里先转头衔、后改投（照 hd_22_take_realm_effect）
+hd_617_take_realm_effect = {
+	$NEW$ = { save_scope_as = hd_617_new_ruler }
+	create_title_and_vassal_change = { type = granted save_scope_as = hd_617_take_change add_claim_on_loss = no }
+	$OLD$ = {
+		every_held_title = {
+			limit = {
+				is_noble_family_title = no
+				tgp_is_minister_title = no
+				is_landless_type_title = no
+				tier >= tier_county
+			}
+			change_title_holder = {
+				holder = scope:hd_617_new_ruler
+				change = scope:hd_617_take_change
+				take_baronies = yes
+			}
+		}
+		every_vassal = {
+			limit = { NOT = { this = scope:hd_617_new_ruler } }
+			change_liege = { liege = scope:hd_617_new_ruler change = scope:hd_617_take_change }
+		}
+	}
+	resolve_title_and_vassal_change = scope:hd_617_take_change
+}
+
+# 把郡头衔 $DUCHY$ 与其持有者手里的本郡各县交给 $TO$（scope）；$KEEP$ 是不交出的县（照 hd_22_give_duchy_effect，计划复核必改 7）
+hd_617_give_duchy_effect = {
+	if = {
+		limit = { exists = $DUCHY$.holder }
+		$DUCHY$.holder = { save_scope_as = hd_617_old_duke }
+		create_title_and_vassal_change = { type = granted save_scope_as = hd_617_duchy_change add_claim_on_loss = no }
+		$DUCHY$ = {
+			if = {
+				limit = { NOT = { holder ?= $TO$ } }
+				change_title_holder = { holder = $TO$ change = scope:hd_617_duchy_change }
+			}
+			every_de_jure_county = {
+				limit = {
+					holder ?= scope:hd_617_old_duke
+					NOT = { this = $KEEP$ }
+					NOT = { holder ?= $TO$ }
+				}
+				change_title_holder = { holder = $TO$ change = scope:hd_617_duchy_change take_baronies = yes }
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_617_duchy_change
+	}
+}
+
+# 新主的主头衔、天朝政体、边境战争法（计划复核必改 6 清单第 4、5 步）。$WHO$ 是 scope
+hd_617_new_sovereign_effect = {
+	$WHO$ = {
+		if = {
+			limit = { has_title = title:h_china }
+			set_primary_title_to = title:h_china
+		}
+		if = {
+			limit = { NOT = { has_government = celestial_government } }
+			change_government = celestial_government
+		}
+	}
+	hd_617_border_law_effect = { RULER = $WHO$ }
+}
+
+# 权臣：王世充任丞相，挟皇泰主（照 hd_531_gaohuan_regency_effect）。Scope：王世充
+hd_617_wang_regency_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			is_landed = yes
+			liege ?= title:h_china.holder
+		}
+		# 玩家扮演时功名补到帝国级预期，否则丞相授不上（531 执行后复核必改 5）
+		if = {
+			limit = {
+				is_ai = no
+				merit_level < merit_level_expected_empire_value
+			}
+			while = {
+				limit = { merit_level < merit_level_expected_empire_value }
+				change_merit_level = 1
+			}
+		}
+		hd218_grant_chengxiang_effect = yes
+		WJ_install_historical_secretariat_effect = { OFFICE = e_WJ_minister_cheng_xiang POSITION = WJ_minister_cheng_xiang LAW = WJ_grand_chengxiang_law }
+		hd_court_install_regency_effect = yes
+		hd_court_set_stance_effect = { STANCE = moni }
+		title:h_china.holder = {
+			if = {
+				limit = { has_diarchy_type = grand_secretariat diarch ?= character:hd_617_wang_shichong }
+				set_diarchy_swing = 100
+			}
+		}
+		title:h_china = { set_variable = { name = hd_dc_ten_qjc_regent value = character:hd_617_wang_shichong } }
+		# 皇泰二年四月即篡，任期取 1 年
+		add_character_flag = { flag = hd_court_regent_tenure years = 1 }
+		debug_log = "HD_617 REGENCY WANG_SHICHONG"
+	}
+	else = { debug_log = "HD_617 REGENCY WANG_SHICHONG SKIPPED" }
+}
+
+############################################################
+# A0 结局类卒年
+############################################################
+hd_617_outcome_deaths_effect = {
+	# 宋老生：八月辛巳霍邑之战，李渊斩之。前提：西进关中已开战、宋老生仍守霍邑
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_617_songlaosheng_done }
+			current_date >= 617.9.13
+			OR = {
+				exists = global_var:hd_617_changan_started
+				exists = global_var:hd_617_changan_done
+				current_date >= 618.6.1
+			}
+		}
+		set_global_variable = hd_617_songlaosheng_done
+		if = {
+			limit = {
+				exists = global_var:hd_617_changan_started
+				character:han_268 ?= { is_alive = yes }
+				character:20250901 ?= { is_alive = yes }
+			}
+			hd_617_kill_effect = { WHO = 20250901 REASON = death_battle KILLER = character:han_268 }
+		}
+		else = { debug_log = "HD_617 SONGLAOSHENG_DEATH SKIPPED" }
+	}
+	# 杨侗：王世充篡位后（S9），皇泰二年五月遇鸩。前提：S9 已执行、杨侗已无地
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_617_yangtong_done }
+			current_date >= 619.6.23
+			OR = {
+				exists = global_var:hd_617_zheng_done
+				current_date >= 620.1.1
+			}
+		}
+		set_global_variable = hd_617_yangtong_done
+		if = {
+			limit = {
+				exists = global_var:hd_617_zheng_usurped
+				character:imperial_sui_5 ?= { is_alive = yes is_landed = no }
+				character:hd_617_wang_shichong ?= { is_alive = yes }
+			}
+			hd_617_kill_effect = { WHO = imperial_sui_5 REASON = death_poison KILLER = character:hd_617_wang_shichong }
+		}
+		else = { debug_log = "HD_617 YANGTONG_DEATH SKIPPED" }
+	}
+	# 杨侑：禅位后封酅国公，武德二年五月卒。前提：S8 受禅已执行、杨侑无地
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_617_yangyou_done }
+			current_date >= 619.9.14
+		}
+		set_global_variable = hd_617_yangyou_done
+		if = {
+			limit = {
+				exists = global_var:hd_617_tang_founded
+				character:imperial_sui_4 ?= { is_alive = yes is_landed = no }
+			}
+			hd_617_die_effect = { WHO = imperial_sui_4 REASON = death_natural_causes }
+		}
+		else = { debug_log = "HD_617 YANGYOU_DEATH SKIPPED" }
+	}
+}
+
+############################################################
+# S0a 西河之战：战后兹氏（c_uuii_p_1505）归李渊一系即胜；胜后西河郡头衔与高德儒本郡各县交李渊，再斩高德儒
+############################################################
+hd_617_check_xihe_effect = {
+	if = {
+		limit = {
+			exists = global_var:hd_617_xihe_started
+			NOT = { exists = global_var:hd_617_xihe_done }
+			NOT = { character:han_268 ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:hd617xihe } } }
+			NOT = { character:hd_617_gao_deru ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:hd617xihe } } }
+		}
+		set_global_variable = hd_617_xihe_done
+		if = {
+			limit = {
+				title:c_uuii_p_1505.holder ?= {
+					OR = {
+						this = character:han_268
+						top_liege = character:han_268
+					}
+				}
+			}
+			set_global_variable = hd_617_xihe_won
+			debug_log = "HD_617 S0A XIHE WON"
+			character:han_268 = { save_scope_as = hd_617_liyuan }
+			hd_617_give_duchy_effect = { DUCHY = title:d_xihe TO = scope:hd_617_liyuan KEEP = title:c_uuii_p_351 }
+			hd_617_kill_effect = { WHO = hd_617_gao_deru REASON = death_execution KILLER = character:han_268 }
+		}
+		else = {
+			set_global_variable = hd_617_xihe_lost
+			debug_log = "HD_617 S0A XIHE LOST"
+		}
+	}
+}
+
+############################################################
+# S0b 东都之围：战后洛阳（c_luoyang）归李密一系即胜；胜后河南郡头衔与杨侗一系手里的本郡各县交李密（偃师若属王世充一并交出）
+############################################################
+hd_617_check_luoyang_effect = {
+	if = {
+		limit = {
+			exists = global_var:hd_617_luoyang_started
+			NOT = { exists = global_var:hd_617_luoyang_done }
+			NOT = { character:1406323 ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:hd617luoyang } } }
+			NOT = { character:imperial_sui_5 ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:hd617luoyang } } }
+		}
+		set_global_variable = hd_617_luoyang_done
+		if = {
+			limit = {
+				title:c_luoyang.holder ?= {
+					OR = {
+						this = character:1406323
+						top_liege = character:1406323
+					}
+				}
+			}
+			set_global_variable = hd_617_luoyang_won
+			debug_log = "HD_617 S0B LUOYANG WON"
+			character:1406323 = { save_scope_as = hd_617_limi }
+			hd_617_give_duchy_effect = { DUCHY = title:d_henan TO = scope:hd_617_limi KEEP = title:c_uuii_p_776 }
+			# 偃师：S1 后属王世充，杨侗以外的持有者 give_duchy 不会转，单独交出
+			title:c_uuii_p_784.holder ?= {
+				if = {
+					limit = { this = character:hd_617_wang_shichong }
+					hd_nbc_give_county_effect = { COUNTY = title:c_uuii_p_784 TO = scope:hd_617_limi }
+				}
+			}
+		}
+		else = {
+			set_global_variable = hd_617_luoyang_lost
+			debug_log = "HD_617 S0B LUOYANG LOST"
+		}
+	}
+}
+
+############################################################
+# S1 王世充救东都：大业十三年七月，炀帝诏王世充率江淮劲卒救东都
+############################################################
+hd_617_check_jiudongdu_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_617_jiudongdu_done }
+			current_date >= 617.8.7
+		}
+		if = {
+			limit = { current_date >= 618.4.1 }
+			set_global_variable = hd_617_jiudongdu_done
+			debug_log = "HD_617 S1 JIUDONGDU SKIPPED_DEADLINE"
+		}
+		else_if = {
+			limit = { NOT = { character:hd_617_wang_shichong ?= { is_alive = yes } } }
+			set_global_variable = hd_617_jiudongdu_done
+			debug_log = "HD_617 S1 JIUDONGDU SKIPPED_DEAD"
+		}
+		else_if = {
+			limit = {
+				character:hd_617_wang_shichong = { has_title = title:c_uuii_p_2863 }
+				character:imperial_sui_5 ?= { is_alive = yes has_title = title:c_luoyang }
+				title:c_uuii_p_784.holder ?= character:imperial_sui_5
+			}
+			set_global_variable = hd_617_jiudongdu_done
+			character:hd_617_wang_shichong = {
+				if = {
+					limit = { is_ai = yes }
+					hd_617_jiudongdu_effect = yes
+				}
+				else = { trigger_event = hd_617.0110 }
+			}
+		}
+	}
+}
+# 王世充得偃师作杨侗封臣，江都县交还炀帝；江淮兵 10,000 记在东都名下（封臣自己的军队不能单独出战）
+hd_617_jiudongdu_effect = {
+	character:hd_617_wang_shichong = { save_scope_as = hd_617_wsc }
+	hd_617_release_effect = { WHO = scope:hd_617_wsc }
+	hd_nbc_give_county_effect = { COUNTY = title:c_uuii_p_784 TO = scope:hd_617_wsc }
+	character:imperial_sui_2 ?= {
+		if = {
+			limit = { is_alive = yes is_landed = yes }
+			save_scope_as = hd_617_yg
+			hd_nbc_give_county_effect = { COUNTY = title:c_uuii_p_2863 TO = scope:hd_617_yg }
+		}
+	}
+	scope:hd_617_wsc = { hd_nbc_swear_fealty_effect = { LIEGE = character:imperial_sui_5 } }
+	character:imperial_sui_5 = { hd_nbc_spawn_army_effect = { SIZE = 10000 WHERE = title:c_uuii_p_784 NAME = hd_617_jianghuai_army_name } }
+	debug_log = "HD_617 S1 JIUDONGDU DONE"
+}
+
+############################################################
+# S2 西进关中：七月壬子李渊誓师西进；十一月丙辰克长安，立代王为帝（恭帝），自为大丞相、唐王
+############################################################
+hd_617_check_changan_effect = {
+	# 第一步：宣战（失败则下次心跳重试，到 618.6.1 放弃）
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_617_changan_started }
+			NOT = { exists = global_var:hd_617_changan_done }
+			current_date >= 617.8.10
+		}
+		if = {
+			limit = { current_date >= 618.6.1 }
+			set_global_variable = hd_617_changan_done
+			debug_log = "HD_617 S2 CHANGAN SKIPPED_DEADLINE"
+		}
+		else_if = {
+			limit = {
+				OR = {
+					NOT = { character:han_268 ?= { is_alive = yes } }
+					NOT = { character:imperial_sui_4 ?= { is_alive = yes } }
+				}
+			}
+			set_global_variable = hd_617_changan_done
+			debug_log = "HD_617 S2 CHANGAN SKIPPED_DEAD"
+		}
+		else_if = {
+			limit = {
+				character:han_268 = { is_landed = yes is_independent_ruler = yes has_title = title:c_uuii_p_351 }
+				title:d_jingzhao.holder ?= character:imperial_sui_4
+				NOT = { exists = global_var:hd_617_changan_declined }
+			}
+			character:han_268 = {
+				if = {
+					limit = { is_ai = yes }
+					hd_617_changan_war_effect = yes
+				}
+				else_if = {
+					limit = { NOT = { exists = global_var:hd_617_changan_asked } }
+					set_global_variable = hd_617_changan_asked
+					trigger_event = hd_617.0120
+				}
+			}
+		}
+	}
+	# 战后：长安（c_uuii_p_867）归李渊一系即胜
+	if = {
+		limit = {
+			exists = global_var:hd_617_changan_started
+			NOT = { exists = global_var:hd_617_changan_done }
+			NOT = { character:han_268 ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:hd617changan } } }
+			NOT = { character:imperial_sui_4 ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:hd617changan } } }
+		}
+		set_global_variable = hd_617_changan_done
+		if = {
+			limit = {
+				title:c_uuii_p_867.holder ?= {
+					OR = {
+						this = character:han_268
+						top_liege = character:han_268
+					}
+				}
+			}
+			hd_617_changan_win_effect = yes
+		}
+		else = {
+			set_global_variable = hd_617_changan_lost
+			debug_log = "HD_617 S2 CHANGAN LOST"
+		}
+	}
+}
+hd_617_changan_war_effect = {
+	hd_617_border_law_effect = { RULER = character:imperial_sui_2 }
+	character:han_268 = { add_character_flag = { flag = allowed_war_declaration_sans_truce_penalties days = 1 } }
+	hd_nbc_start_war_effect = { ATTACKER = character:han_268 DEFENDER = character:imperial_sui_4 TARGET = title:d_jingzhao KIND = hd617changan }
+	if = {
+		limit = { exists = scope:hd_nbc_war_hd617changan }
+		set_global_variable = hd_617_changan_started
+		character:han_268 = {
+			hd_nbc_spawn_army_effect = { SIZE = 20000 WHERE = title:c_uuii_p_351 NAME = hd_617_xijin_army_name }
+			# 平阳公主、李神通起兵于鄠县，响应者七万（取 10,000）
+			hd_nbc_spawn_army_effect = { SIZE = 10000 WHERE = title:c_uuii_p_871 NAME = hd_617_niangzi_army_name }
+		}
+		# 代王开城（玩家杨侑可选）
+		character:imperial_sui_4 = {
+			if = {
+				limit = { is_ai = no }
+				trigger_event = hd_617.0121
+			}
+		}
+		debug_log = "HD_617 S2 CHANGAN WAR_STARTED"
+	}
+	else = {
+		# 玩家点了西进但宣战不成，下次心跳再问（执行后复核建议 2）
+		if = {
+			limit = { exists = global_var:hd_617_changan_asked }
+			remove_global_variable = hd_617_changan_asked
+		}
+		debug_log = "HD_617 S2 CHANGAN WAR_START_FAILED_RETRY"
+	}
+}
+# 胜：杨侑名下头衔与封臣转李渊（屈突通、宋老生随之），杨侑入李渊宫廷；李渊称唐王，国号唐（不固定，计划复核必改 10）
+hd_617_changan_win_effect = {
+	set_global_variable = hd_617_changan_won
+	character:han_268 = { save_scope_as = hd_617_liyuan }
+	character:imperial_sui_4 = { save_scope_as = hd_617_yangyou }
+	hd_617_release_effect = { WHO = scope:hd_617_yangyou }
+	scope:hd_617_yangyou = {
+		if = {
+			limit = { has_active_diarchy = yes }
+			end_diarchy = yes
+		}
+	}
+	if = {
+		limit = { scope:hd_617_yangyou = { is_alive = yes is_landed = yes } }
+		hd_617_take_realm_effect = { NEW = scope:hd_617_liyuan OLD = scope:hd_617_yangyou }
+	}
+	scope:hd_617_liyuan = {
+		if = {
+			limit = { scope:hd_617_yangyou = { is_alive = yes is_landed = no } }
+			add_courtier = scope:hd_617_yangyou
+		}
+		if = {
+			limit = { has_title = title:k_uuii_sili }
+			set_primary_title_to = title:k_uuii_sili
+		}
+		if = {
+			limit = { title:c_uuii_p_867.holder ?= this }
+			set_realm_capital = title:c_uuii_p_867
+		}
+	}
+	hd_nbc_realm_name_effect = { WHO = han_268 NAME = dynn_title_tang FIXED = no }
+	hd_nbc_style_effect = { WHO = han_268 STYLE = wang }
+	# 京兆郡丞骨仪、阴世师坐拒义师被斩
+	hd_617_kill_effect = { WHO = 20251301 REASON = death_execution KILLER = character:han_268 }
+	debug_log = "HD_617 S2 CHANGAN WON"
+}
+# 玩家杨侑开城：按长安已克处理，先白和
+hd_617_changan_surrender_effect = {
+	character:imperial_sui_4 ?= {
+		every_character_war = {
+			limit = { var:hd_nbc_war_kind ?= flag:hd617changan }
+			end_war = white_peace
+		}
+	}
+	set_global_variable = hd_617_changan_done
+	hd_617_changan_win_effect = yes
+	debug_log = "HD_617 S2 CHANGAN SURRENDERED"
+}
+
+############################################################
+# S3 天下响应：七月李轨起兵武威，称河西大凉王；十月萧铣起兵巴陵，称梁公
+############################################################
+hd_617_check_xiangying_effect = {
+	# ① 李轨
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_617_ligui_done }
+			current_date >= 617.8.14
+		}
+		if = {
+			limit = { current_date >= 618.3.1 }
+			set_global_variable = hd_617_ligui_done
+			debug_log = "HD_617 S3 LIGUI SKIPPED_DEADLINE"
+		}
+		else_if = {
+			limit = { NOT = { character:20190001 ?= { is_alive = yes } } }
+			set_global_variable = hd_617_ligui_done
+			debug_log = "HD_617 S3 LIGUI SKIPPED_DEAD"
+		}
+		else_if = {
+			limit = {
+				character:20190001 = { is_independent_ruler = no }
+				title:d_wuwei.holder ?= { NOT = { has_character_flag = hd_617_rebel } }
+			}
+			set_global_variable = hd_617_ligui_done
+			hd_617_ligui_rise_effect = yes
+		}
+	}
+	# ② 萧铣
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_617_xiaoxian_done }
+			current_date >= 617.11.4
+		}
+		if = {
+			limit = { current_date >= 618.3.1 }
+			set_global_variable = hd_617_xiaoxian_done
+			debug_log = "HD_617 S3 XIAOXIAN SKIPPED_DEADLINE"
+		}
+		else_if = {
+			limit = { NOT = { character:1402780 ?= { is_alive = yes } } }
+			set_global_variable = hd_617_xiaoxian_done
+			debug_log = "HD_617 S3 XIAOXIAN SKIPPED_DEAD"
+		}
+		else_if = {
+			limit = {
+				character:1402780 = { is_landed = yes is_independent_ruler = no has_title = title:c_uuii_p_5977 }
+			}
+			set_global_variable = hd_617_xiaoxian_done
+			character:1402780 = {
+				if = {
+					limit = { is_ai = yes }
+					hd_617_xiaoxian_rise_effect = yes
+				}
+				else = { trigger_event = hd_617.0130 }
+			}
+		}
+	}
+}
+# 起兵后的共同步骤：独立、起义标记、与炀帝停战到 618.4.11（之后由心跳续期）。Scope：起兵者
+hd_617_rise_common_effect = {
+	if = {
+		limit = { is_landed = yes is_independent_ruler = no }
+		hd_nbc_become_independent_effect = yes
+	}
+	if = {
+		limit = { is_landed = yes NOT = { has_government = celestial_government } }
+		change_government = celestial_government
+	}
+	add_character_flag = hd_617_rebel
+	save_scope_as = hd_617_riser
+	character:imperial_sui_2 ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				NOT = { this = scope:hd_617_riser }
+				NOT = { is_at_war_with = scope:hd_617_riser }
+			}
+			add_truce_both_ways = {
+				character = scope:hd_617_riser
+				days = $DAYS$
+				name = hd_617_truce
+			}
+		}
+	}
+}
+hd_617_ligui_rise_effect = {
+	character:20190001 = { save_scope_as = hd_617_lg }
+	hd_617_release_effect = { WHO = scope:hd_617_lg }
+	title:d_wuwei.holder ?= { save_scope_as = hd_617_wuwei_old }
+	hd_617_give_duchy_effect = { DUCHY = title:d_wuwei TO = scope:hd_617_lg KEEP = title:c_uuii_p_351 }
+	scope:hd_617_lg = {
+		if = {
+			limit = { is_landed = yes }
+			hd_617_rise_common_effect = { DAYS = 240 }
+			if = {
+				limit = { title:c_uuii_p_1564.holder ?= this }
+				set_realm_capital = title:c_uuii_p_1564
+			}
+			hd_nbc_spawn_army_effect = { SIZE = 5000 WHERE = title:c_uuii_p_1564 NAME = hd_617_hexi_army_name }
+			hd_617_change_era_effect = { KEY = anle YEAR = 1 }
+			# 原武威郡守进李轨宫廷（计划复核建议 10）
+			scope:hd_617_wuwei_old ?= {
+				if = {
+					limit = { is_alive = yes is_landed = no }
+					scope:hd_617_lg = { add_courtier = scope:hd_617_wuwei_old }
+				}
+			}
+			debug_log = "HD_617 S3 LIGUI RISES"
+		}
+		else = { debug_log = "HD_617 S3 LIGUI NO_LAND" }
+	}
+	hd_nbc_realm_name_effect = { WHO = 20190001 NAME = dynn_title_liang_west FIXED = no }
+	hd_nbc_style_effect = { WHO = 20190001 STYLE = wang }
+}
+hd_617_xiaoxian_rise_effect = {
+	character:1402780 = { save_scope_as = hd_617_xx }
+	hd_617_release_effect = { WHO = scope:hd_617_xx }
+	title:d_changsha.holder ?= { save_scope_as = hd_617_changsha_old }
+	hd_617_give_duchy_effect = { DUCHY = title:d_changsha TO = scope:hd_617_xx KEEP = title:c_uuii_p_5977 }
+	scope:hd_617_xx = {
+		hd_617_rise_common_effect = { DAYS = 150 }
+		if = {
+			limit = { title:c_uuii_p_5977.holder ?= this }
+			set_realm_capital = title:c_uuii_p_5977
+		}
+		hd_nbc_spawn_army_effect = { SIZE = 10000 WHERE = title:c_uuii_p_5977 NAME = hd_617_baling_army_name }
+		scope:hd_617_changsha_old ?= {
+			if = {
+				limit = { is_alive = yes is_landed = no NOT = { this = scope:hd_617_xx } }
+				scope:hd_617_xx = { add_courtier = scope:hd_617_changsha_old }
+			}
+		}
+	}
+	hd_nbc_realm_name_effect = { WHO = 1402780 NAME = dynn_title_liang FIXED = no }
+	hd_nbc_style_effect = { WHO = 1402780 STYLE = gong }
+	debug_log = "HD_617 S3 XIAOXIAN RISES"
+}
+
+############################################################
+# S4、S5 称号：薛举七月称帝；窦建德大业十四年正月称夏王、改元五凤；萧铣武德元年四月称帝、改元鸣凤
+############################################################
+hd_617_check_titles_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_617_xueju_title_done }
+			current_date >= 617.8.7
+		}
+		set_global_variable = hd_617_xueju_title_done
+		if = {
+			limit = { character:20220001 ?= { is_alive = yes is_independent_ruler = yes } }
+			hd_nbc_style_effect = { WHO = 20220001 STYLE = huangdi }
+			debug_log = "HD_617 S4 XUEJU EMPEROR"
+		}
+		else = { debug_log = "HD_617 S4 XUEJU SKIPPED" }
+	}
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_617_xia_title_done }
+			current_date >= 618.2.1
+		}
+		set_global_variable = hd_617_xia_title_done
+		if = {
+			limit = { character:zhangnan_dou_001 ?= { is_alive = yes is_independent_ruler = yes } }
+			hd_nbc_realm_name_effect = { WHO = zhangnan_dou_001 NAME = dynn_title_xia FIXED = no }
+			hd_nbc_style_effect = { WHO = zhangnan_dou_001 STYLE = wang }
+			character:zhangnan_dou_001 = { hd_617_change_era_effect = { KEY = wufeng YEAR = 1 } }
+			debug_log = "HD_617 S5 XIA_KING"
+		}
+		else = { debug_log = "HD_617 S5 XIA SKIPPED" }
+	}
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_617_liang_title_done }
+			current_date >= 618.5.1
+		}
+		set_global_variable = hd_617_liang_title_done
+		if = {
+			limit = { character:1402780 ?= { is_alive = yes is_independent_ruler = yes has_character_flag = hd_617_rebel } }
+			hd_nbc_style_effect = { WHO = 1402780 STYLE = huangdi }
+			character:1402780 = { hd_617_change_era_effect = { KEY = mingfeng YEAR = 1 } }
+			debug_log = "HD_617 S5 LIANG_EMPEROR"
+		}
+		else = { debug_log = "HD_617 S5 LIANG SKIPPED" }
+	}
+}
+
+############################################################
+# S6 翟让之死：大业十三年十一月，李密宴翟让，伏壮士杀之
+############################################################
+hd_617_check_zhairang_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_617_zhairang_done }
+			current_date >= 617.12.4
+		}
+		if = {
+			limit = { current_date >= 618.6.1 }
+			set_global_variable = hd_617_zhairang_done
+			debug_log = "HD_617 S6 ZHAIRANG SKIPPED_DEADLINE"
+		}
+		else_if = {
+			limit = {
+				OR = {
+					NOT = { character:20196002 ?= { is_alive = yes } }
+					NOT = { character:1406323 ?= { is_alive = yes } }
+				}
+			}
+			set_global_variable = hd_617_zhairang_done
+			debug_log = "HD_617 S6 ZHAIRANG SKIPPED_DEAD"
+		}
+		else_if = {
+			limit = { character:20196002 = { is_ai = no } }
+			set_global_variable = hd_617_zhairang_done
+			debug_log = "HD_617 S6 ZHAIRANG SKIPPED_PLAYER_ZHAIRANG"
+		}
+		else_if = {
+			limit = { character:20196002 = { liege ?= character:1406323 } }
+			set_global_variable = hd_617_zhairang_done
+			character:1406323 = {
+				if = {
+					limit = { is_ai = yes }
+					hd_617_zhairang_effect = yes
+				}
+				else = { trigger_event = hd_617.0160 }
+			}
+		}
+	}
+}
+hd_617_zhairang_county_effect = {
+	if = {
+		limit = { title:$COUNTY$.holder ?= character:20196002 }
+		hd_nbc_give_county_effect = { COUNTY = title:$COUNTY$ TO = scope:hd_617_limi }
+	}
+}
+# 翟让的县先收归李密，再杀
+hd_617_zhairang_effect = {
+	character:1406323 = { save_scope_as = hd_617_limi }
+	hd_617_zhairang_county_effect = { COUNTY = c_uuii_p_684 }   # 白马
+	hd_617_zhairang_county_effect = { COUNTY = c_uuii_p_669 }   # 燕
+	hd_617_zhairang_county_effect = { COUNTY = c_uuii_p_686 }   # 濮阳
+	hd_617_kill_effect = { WHO = 20196002 REASON = death_murder_feast KILLER = character:1406323 }
+	debug_log = "HD_617 S6 ZHAIRANG KILLED"
+}
+
+############################################################
+# S7 江都之变：大业十四年三月丙辰（618.4.11），宇文化及、司马德戡以骁果作乱，缢炀帝，立秦王浩
+############################################################
+hd_617_check_jiangdu_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_617_jiangdu_done }
+			current_date >= 618.4.11
+		}
+		if = {
+			limit = { current_date >= 619.1.1 }
+			set_global_variable = hd_617_jiangdu_done
+			debug_log = "HD_617 S7 JIANGDU SKIPPED_DEADLINE"
+		}
+		else_if = {
+			limit = {
+				OR = {
+					NOT = { character:imperial_sui_2 ?= { is_alive = yes } }
+					NOT = { character:puyang_yuwen_015 ?= { is_alive = yes } }
+				}
+			}
+			set_global_variable = hd_617_jiangdu_done
+			debug_log = "HD_617 S7 JIANGDU SKIPPED_DEAD"
+		}
+		else_if = {
+			limit = {
+				character:imperial_sui_2 = { has_title = title:h_china has_title = title:c_uuii_p_7062 }
+			}
+			set_global_variable = hd_617_jiangdu_done
+			character:imperial_sui_2 = {
+				if = {
+					limit = { is_ai = yes }
+					hd_617_jiangdu_effect = yes
+				}
+				else = { trigger_event = hd_617.0170 }
+			}
+		}
+	}
+}
+# 宇文化及得江都（广陵郡与江都县）、独立，得骁果 20,000，立秦王杨浩。Scope 无要求
+hd_617_yuwen_rise_effect = {
+	character:puyang_yuwen_015 = { save_scope_as = hd_617_hj }
+	hd_617_release_effect = { WHO = scope:hd_617_hj }
+	hd_617_give_duchy_effect = { DUCHY = title:d_guangling TO = scope:hd_617_hj KEEP = title:c_uuii_p_351 }
+	title:c_uuii_p_2863.holder ?= {
+		if = {
+			limit = { this = character:imperial_sui_2 }
+			hd_nbc_give_county_effect = { COUNTY = title:c_uuii_p_2863 TO = scope:hd_617_hj }
+		}
+	}
+	scope:hd_617_hj = {
+		if = {
+			limit = { is_landed = yes }
+			hd_nbc_become_independent_effect = yes
+			if = {
+				limit = { NOT = { has_government = celestial_government } }
+				change_government = celestial_government
+			}
+			if = {
+				limit = { title:c_uuii_p_7062.holder ?= this }
+				set_realm_capital = title:c_uuii_p_7062
+			}
+			hd_nbc_spawn_army_effect = { SIZE = 20000 WHERE = title:c_uuii_p_7062 NAME = hd_617_xiaoguo_army_name }
+			character:puyang_yuwen_016 ?= { if = { limit = { is_alive = yes is_landed = no } scope:hd_617_hj = { add_courtier = character:puyang_yuwen_016 } } }
+			character:247761 ?= { if = { limit = { is_alive = yes is_landed = no } scope:hd_617_hj = { add_courtier = character:247761 } } }
+			debug_log = "HD_617 S7 YUWEN RISES"
+		}
+		else = { debug_log = "HD_617 S7 YUWEN NO_LAND" }
+	}
+}
+# 电脑炀帝：交接清单按计划复核必改 6 的顺序
+hd_617_jiangdu_effect = {
+	character:imperial_sui_2 = { save_scope_as = hd_617_yg }
+	# 1 放人
+	hd_617_release_effect = { WHO = scope:hd_617_yg }
+	hd_617_release_effect = { WHO = character:imperial_sui_5 }
+	hd_617_release_effect = { WHO = character:imperial_sui_4 }
+	# 宇文化及据江都（先于交接，免得广陵随天下一同转出）
+	hd_617_yuwen_rise_effect = yes
+	# 2 结束二元统治
+	scope:hd_617_yg = {
+		if = {
+			limit = { has_active_diarchy = yes }
+			end_diarchy = yes
+		}
+	}
+	# 继位者：越王杨侗；西进未成、代王仍持京兆时取杨侑；都不在就按继承法（计划复核建议 8）
+	if = {
+		limit = {
+			character:imperial_sui_5 ?= { is_alive = yes is_landed = yes top_liege = scope:hd_617_yg }
+		}
+		character:imperial_sui_5 = { save_scope_as = hd_617_heir }
+	}
+	else_if = {
+		limit = {
+			NOT = { exists = global_var:hd_617_changan_won }
+			character:imperial_sui_4 ?= { is_alive = yes is_landed = yes top_liege = scope:hd_617_yg has_title = title:d_jingzhao }
+		}
+		character:imperial_sui_4 = { save_scope_as = hd_617_heir }
+	}
+	if = {
+		limit = { exists = scope:hd_617_heir }
+		# 继位者原是炀帝的封臣：先带着本部独立，再接收天下（免得天子头衔落到封臣手里）
+		scope:hd_617_heir = { hd_nbc_become_independent_effect = yes }
+		# 3 同一个 change 里先转头衔、后改投封臣
+		hd_617_take_realm_effect = { NEW = scope:hd_617_heir OLD = scope:hd_617_yg }
+		# 4、5 主头衔、天朝政体、边境战争法
+		hd_617_new_sovereign_effect = { WHO = scope:hd_617_heir }
+		scope:hd_617_yg = {
+			every_character_artifact = {
+				limit = { has_variable = han_artifact_imperial_seal }
+				set_owner = { target = scope:hd_617_heir }
+			}
+		}
+		scope:hd_617_heir = {
+			if = {
+				limit = { has_title = title:h_china }
+				primary_title = { set_title_name = dynn_title_sui }
+			}
+			hd_617_change_era_effect = { KEY = huangtai YEAR = 1 }
+		}
+		if = {
+			limit = { scope:hd_617_heir = { has_title = title:c_luoyang } }
+			title:h_china = {
+				set_capital_county = title:c_luoyang
+				set_variable = { name = hd_court_capital_county value = title:c_luoyang }
+			}
+		}
+		# 6 王世充任丞相（在皇泰主国内才任；玩家先补功名）
+		character:hd_617_wang_shichong ?= {
+			if = {
+				limit = { is_alive = yes is_landed = yes top_liege = scope:hd_617_heir NOT = { this = scope:hd_617_heir } }
+				if = {
+					limit = { NOT = { liege ?= scope:hd_617_heir } }
+					hd_nbc_swear_fealty_effect = { LIEGE = scope:hd_617_heir }
+				}
+				hd_617_wang_regency_effect = yes
+			}
+		}
+		# 远方的隋臣各自为政：罗艺据幽州、沈法兴据吴兴、冯盎据岭南
+		hd_617_indep_effect = { WHO = 20250001 }
+		hd_617_indep_effect = { WHO = 1802347 }
+		hd_617_indep_effect = { WHO = gaoliang_feng_0008 }
+		# 7 日志核对
+		if = {
+			limit = {
+				title:h_china.holder ?= scope:hd_617_heir
+				scope:hd_617_yg = { NOT = { any_vassal = { always = yes } } }
+			}
+			debug_log = "HD_617 S7 JIANGDU TRANSFER OK"
+		}
+		else = { debug_log = "HD_617 S7 JIANGDU TRANSFER CHECK_FAILED" }
+	}
+	else = { debug_log = "HD_617 S7 JIANGDU NO_HEIR_INHERITANCE" }
+	# 缢炀帝；燕王倓、赵王杲、虞世基、来护儿同遇害
+	hd_617_kill_effect = { WHO = imperial_sui_2 REASON = death_strangled KILLER = character:puyang_yuwen_015 }
+	hd_617_kill_effect = { WHO = 247759 REASON = death_murder_known KILLER = character:puyang_yuwen_015 }
+	hd_617_kill_effect = { WHO = 247758 REASON = death_murder_known KILLER = character:puyang_yuwen_015 }
+	hd_617_kill_effect = { WHO = kuaiji_yu_038 REASON = death_murder_known KILLER = character:puyang_yuwen_015 }
+	hd_617_kill_effect = { WHO = nanyang_lai_026 REASON = death_murder_known KILLER = character:puyang_yuwen_015 }
+	hd_617_clear_rebel_effect = yes
+	debug_log = "HD_617 S7 JIANGDU DONE"
+}
+hd_617_indep_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = { is_alive = yes is_ai = yes is_landed = yes is_independent_ruler = no }
+			hd_nbc_become_independent_effect = yes
+			debug_log = "HD_617 S7 INDEPENDENT $WHO$"
+		}
+	}
+}
+# 玩家炀帝：骁果照样作乱，宇文化及据江都县独立并对炀帝宣战，炀帝不被杀
+hd_617_jiangdu_player_effect = {
+	character:puyang_yuwen_015 = { save_scope_as = hd_617_hj }
+	hd_617_release_effect = { WHO = scope:hd_617_hj }
+	if = {
+		limit = { title:c_uuii_p_2863.holder ?= character:imperial_sui_2 }
+		hd_nbc_give_county_effect = { COUNTY = title:c_uuii_p_2863 TO = scope:hd_617_hj }
+	}
+	# 江都县不在炀帝手里（玩家王世充留在江都）时，退而交出广陵县（执行后复核建议 5）
+	else_if = {
+		limit = { title:c_uuii_p_7062.holder ?= character:imperial_sui_2 }
+		hd_nbc_give_county_effect = { COUNTY = title:c_uuii_p_7062 TO = scope:hd_617_hj }
+	}
+	else = { debug_log = "HD_617 S7 JIANGDU PLAYER_NO_COUNTY_FOR_YUWEN" }
+	scope:hd_617_hj = {
+		if = {
+			limit = { is_landed = yes }
+			hd_nbc_become_independent_effect = yes
+			if = {
+				limit = { NOT = { has_government = celestial_government } }
+				change_government = celestial_government
+			}
+			hd_nbc_spawn_army_effect = { SIZE = 20000 WHERE = title:c_uuii_p_7062 NAME = hd_617_xiaoguo_army_name }
+			add_character_flag = { flag = allowed_war_declaration_sans_truce_penalties days = 1 }
+		}
+	}
+	if = {
+		limit = { scope:hd_617_hj = { is_landed = yes is_independent_ruler = yes } }
+		hd_nbc_start_war_effect = { ATTACKER = scope:hd_617_hj DEFENDER = character:imperial_sui_2 TARGET = title:d_guangling KIND = hd617jiangdu }
+	}
+	hd_617_clear_rebel_effect = yes
+	debug_log = "HD_617 S7 JIANGDU PLAYER_YANGGUANG"
+}
+
+############################################################
+# S8 唐建国：武德元年五月甲子（618.6.18），恭帝禅位，李渊即皇帝位于太极殿。h_china 转李渊（拍板项 6 推荐）
+############################################################
+hd_617_check_tang_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_617_tang_done }
+			current_date >= 618.6.18
+		}
+		if = {
+			limit = { current_date >= 619.6.1 }
+			set_global_variable = hd_617_tang_done
+			debug_log = "HD_617 S8 TANG SKIPPED_DEADLINE"
+		}
+		else_if = {
+			limit = { NOT = { character:han_268 ?= { is_alive = yes } } }
+			set_global_variable = hd_617_tang_done
+			debug_log = "HD_617 S8 TANG SKIPPED_DEAD"
+		}
+		else_if = {
+			limit = {
+				character:han_268 = { is_landed = yes is_independent_ruler = yes has_title = title:c_uuii_p_867 }
+				exists = title:h_china.holder
+				NOT = { title:h_china.holder ?= character:han_268 }
+				NOT = { exists = global_var:hd_617_tang_declined }
+			}
+			character:han_268 = {
+				if = {
+					limit = { is_ai = yes }
+					set_global_variable = hd_617_tang_done
+					hd_617_tang_effect = yes
+				}
+				else_if = {
+					limit = { NOT = { exists = global_var:hd_617_tang_asked } }
+					set_global_variable = hd_617_tang_asked
+					trigger_event = hd_617.0180
+				}
+			}
+		}
+	}
+}
+# 只转 h_china：原持有者的封臣不动，原持有者以所持最高王国为主头衔、仍称皇帝
+hd_617_tang_effect = {
+	set_global_variable = hd_617_tang_done
+	set_global_variable = hd_617_tang_founded
+	character:han_268 = { save_scope_as = hd_617_liyuan }
+	title:h_china.holder = { save_scope_as = hd_617_old_tianzi }
+	hd_617_release_effect = { WHO = scope:hd_617_liyuan }
+	# 天命离开皇泰主之前先清王世充的权臣记录（执行后复核必改 4，照 531 :636-643）
+	if = {
+		limit = { exists = title:h_china.var:hd_court_regent }
+		hd_court_release_effect = yes
+	}
+	title:h_china = { remove_variable = hd_dc_ten_qjc_regent }
+	character:hd_617_wang_shichong ?= { remove_character_flag = hd_court_regent_tenure }
+	scope:hd_617_old_tianzi = {
+		if = {
+			limit = { has_active_diarchy = yes }
+			end_diarchy = yes
+		}
+	}
+	create_title_and_vassal_change = { type = granted save_scope_as = hd_617_tang_change add_claim_on_loss = no }
+	title:h_china = {
+		change_title_holder = { holder = scope:hd_617_liyuan change = scope:hd_617_tang_change }
+	}
+	resolve_title_and_vassal_change = scope:hd_617_tang_change
+	scope:hd_617_old_tianzi = {
+		if = {
+			limit = { is_alive = yes is_landed = yes }
+			if = {
+				limit = { has_title = title:e_zhongyuan }
+				title:e_zhongyuan = { save_scope_as = hd_617_old_primary }
+			}
+			else_if = {
+				limit = { has_title = title:k_luozhou }
+				title:k_luozhou = { save_scope_as = hd_617_old_primary }
+			}
+			else = {
+				random_held_title = {
+					limit = { tier = tier_kingdom }
+					save_scope_as = hd_617_old_primary
+				}
+			}
+			if = {
+				limit = { exists = scope:hd_617_old_primary }
+				set_primary_title_to = scope:hd_617_old_primary
+				primary_title = { set_title_name = dynn_title_sui }
+				primary_title = { set_variable = { name = hd_nbc_style value = flag:huangdi } }
+			}
+			every_character_artifact = {
+				limit = { has_variable = han_artifact_imperial_seal }
+				set_owner = { target = scope:hd_617_liyuan }
+			}
+		}
+	}
+	hd_617_new_sovereign_effect = { WHO = scope:hd_617_liyuan }
+	scope:hd_617_liyuan = {
+		primary_title = { set_title_name = dynn_title_tang }
+		hd_617_change_era_effect = { KEY = wude YEAR = 1 }
+		if = {
+			limit = { title:c_uuii_p_867.holder ?= this }
+			set_realm_capital = title:c_uuii_p_867
+		}
+	}
+	title:h_china = {
+		set_capital_county = title:c_uuii_p_867
+		set_variable = { name = hd_court_capital_county value = title:c_uuii_p_867 }
+	}
+	if = {
+		limit = { title:h_china.holder ?= scope:hd_617_liyuan }
+		debug_log = "HD_617 S8 TANG FOUNDED H_CHINA_TRANSFERRED"
+	}
+	else = { debug_log = "HD_617 S8 TANG H_CHINA_CHECK_FAILED" }
+}
+
+############################################################
+# S9 王世充篡位：皇泰二年四月，王世充废皇泰主自立，国号郑，改元开明
+############################################################
+hd_617_check_zheng_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_617_zheng_done }
+			current_date >= 619.5.1
+		}
+		if = {
+			limit = { current_date >= 620.1.1 }
+			set_global_variable = hd_617_zheng_done
+			debug_log = "HD_617 S9 ZHENG SKIPPED_DEADLINE"
+		}
+		else_if = {
+			limit = {
+				OR = {
+					NOT = { character:hd_617_wang_shichong ?= { is_alive = yes } }
+					NOT = { character:imperial_sui_5 ?= { is_alive = yes } }
+				}
+			}
+			set_global_variable = hd_617_zheng_done
+			debug_log = "HD_617 S9 ZHENG SKIPPED_DEAD"
+		}
+		else_if = {
+			limit = {
+				character:hd_617_wang_shichong = { is_landed = yes liege ?= character:imperial_sui_5 }
+				character:imperial_sui_5 = { has_title = title:c_luoyang }
+			}
+			set_global_variable = hd_617_zheng_done
+			if = {
+				limit = { character:hd_617_wang_shichong = { is_ai = no } }
+				character:hd_617_wang_shichong = { trigger_event = hd_617.0191 }
+			}
+			else_if = {
+				limit = { character:imperial_sui_5 = { is_ai = no } }
+				character:imperial_sui_5 = { trigger_event = hd_617.0190 }
+			}
+			else = { hd_617_zheng_effect = yes }
+		}
+	}
+}
+# 废立：皇泰主全部头衔与封臣转王世充（先转后改投），结束二元统治，确认主头衔与政体，国号郑
+hd_617_zheng_effect = {
+	set_global_variable = hd_617_zheng_usurped
+	character:hd_617_wang_shichong = { save_scope_as = hd_617_wsc }
+	character:imperial_sui_5 = { save_scope_as = hd_617_tong }
+	hd_617_release_effect = { WHO = scope:hd_617_wsc }
+	hd_617_release_effect = { WHO = scope:hd_617_tong }
+	hd_court_release_effect = yes
+	if = { limit = { title:h_china.var:hd_dc_ten_qjc_regent ?= scope:hd_617_wsc } title:h_china = { remove_variable = hd_dc_ten_qjc_regent } }
+	scope:hd_617_wsc = { remove_character_flag = hd_court_regent_tenure }
+	scope:hd_617_tong = {
+		if = {
+			limit = { has_active_diarchy = yes }
+			end_diarchy = yes
+		}
+	}
+	# 王世充原是皇泰主的封臣：先独立，再接收其全部头衔与封臣
+	scope:hd_617_wsc = { hd_nbc_become_independent_effect = yes }
+	hd_617_take_realm_effect = { NEW = scope:hd_617_wsc OLD = scope:hd_617_tong }
+	hd_617_new_sovereign_effect = { WHO = scope:hd_617_wsc }
+	scope:hd_617_tong = {
+		every_character_artifact = {
+			limit = { has_variable = han_artifact_imperial_seal }
+			set_owner = { target = scope:hd_617_wsc }
+		}
+	}
+	scope:hd_617_wsc = {
+		# 不持天命时，主头衔取关东帝国，没有再取洛州（执行后复核建议 1）
+		if = {
+			limit = { NOT = { has_title = title:h_china } has_title = title:e_zhongyuan }
+			set_primary_title_to = title:e_zhongyuan
+		}
+		else_if = {
+			limit = { NOT = { has_title = title:h_china } has_title = title:k_luozhou }
+			set_primary_title_to = title:k_luozhou
+		}
+		primary_title = { set_title_name = dynn_title_zheng }
+		if = {
+			limit = { NOT = { has_title = title:h_china } }
+			primary_title = { set_variable = { name = hd_nbc_style value = flag:huangdi } }
+		}
+		hd_617_change_era_effect = { KEY = kaiming YEAR = 1 }
+		if = {
+			limit = { scope:hd_617_tong = { is_alive = yes is_landed = no } }
+			add_courtier = scope:hd_617_tong
+		}
+		if = {
+			limit = { title:c_luoyang.holder ?= this }
+			set_realm_capital = title:c_luoyang
+		}
+	}
+	if = {
+		limit = { scope:hd_617_tong = { NOT = { any_vassal = { always = yes } } is_landed = no } }
+		debug_log = "HD_617 S9 ZHENG USURPED OK"
+	}
+	else = { debug_log = "HD_617 S9 ZHENG CHECK_FAILED" }
+}
+# 玩家杨侗拒绝禅位：王世充独立并以篡位开战，目标河南郡
+hd_617_zheng_refused_effect = {
+	character:hd_617_wang_shichong ?= {
+		if = {
+			limit = { is_alive = yes is_landed = yes }
+			save_scope_as = hd_617_wsc
+			hd_court_release_effect = yes
+			if = { limit = { title:h_china.var:hd_dc_ten_qjc_regent ?= scope:hd_617_wsc } title:h_china = { remove_variable = hd_dc_ten_qjc_regent } }
+			remove_character_flag = hd_court_regent_tenure
+			hd_nbc_become_independent_effect = yes
+			add_character_flag = { flag = allowed_war_declaration_sans_truce_penalties days = 1 }
+			if = {
+				limit = { title:d_henan.holder ?= character:imperial_sui_5 }
+				hd_nbc_start_war_effect = { ATTACKER = scope:hd_617_wsc DEFENDER = character:imperial_sui_5 TARGET = title:d_henan KIND = hd617zheng }
+			}
+		}
+	}
+	debug_log = "HD_617 S9 ZHENG REFUSED"
+}
