@@ -222,7 +222,10 @@ hd_sg218_pulse_effect = {
 	hd_sg218_check_xiangfan_effect = yes
 	hd_sg218_check_flood_effect = yes
 	hd_sg218_check_baiyi_effect = yes
+	hd_sg218_check_lv_meng_effect = yes
+	hd_sg218_check_guagu_effect = yes
 	hd_sg218_check_maicheng_effect = yes
+	hd_sg218_check_cao_cao_frail_effect = yes
 	hd_sg218_check_shouchan_effect = yes
 	hd_sg218_check_emperor_effect = yes
 	hd_sg218_check_sun_quan_effect = yes
@@ -363,26 +366,21 @@ hd_sg218_check_dingjunshan_effect = {
 			character:xia_hou_yuan ?= { is_alive = yes }
 		}
 		hd_sg218_find_war_effect = { WHO = global_var:hd218_hanzhong_title.holder KIND = hanzhong }
+		# boki 10-18 改为放宽：不再要求黄忠、夏侯渊同时在军中；玩家夏侯渊不由脚本处死
 		if = {
 			limit = {
 				exists = scope:hd_sg218_war_hanzhong
-				character:huang_zhong = { hd_sg218_in_army_for_trigger = { SIDE = scope:hd_sg218_att_hanzhong } }
-				character:xia_hou_yuan = { hd_sg218_in_army_for_trigger = { SIDE = scope:hd_sg218_def_hanzhong } }
+				character:xia_hou_yuan = { is_ai = yes }
 			}
 			set_global_variable = hd_sg218_dingjunshan_done
 			scope:hd_sg218_att_hanzhong = { trigger_event = hd_sg218.0050 }
 		}
-		# 诊断：每次心跳记下卡在哪一条（boki 10-13 选"不放宽条件，只加日志"）
 		else_if = {
 			limit = { NOT = { exists = scope:hd_sg218_war_hanzhong } }
 			debug_log = "HD218 DINGJUNSHAN WAIT no_war_found"
 		}
-		else_if = {
-			limit = { NOT = { character:huang_zhong = { hd_sg218_in_army_for_trigger = { SIDE = scope:hd_sg218_att_hanzhong } } } }
-			debug_log = "HD218 DINGJUNSHAN WAIT huang_zhong_not_in_army"
-		}
 		else = {
-			debug_log = "HD218 DINGJUNSHAN WAIT xia_hou_yuan_not_in_army"
+			debug_log = "HD218 DINGJUNSHAN WAIT xia_hou_yuan_is_player"
 		}
 	}
 }
@@ -418,27 +416,81 @@ hd_sg218_check_hanzhong_result_effect = {
 	}
 }
 
-# 汉中之战作废兜底（boki 10-13）：战争由夏侯渊的主继承人接手，但天朝制郡守按任命继承，汉中郡可能另派他人，
-# 接战者手里没有汉中的县，战争即判 invalid。夏侯渊已死时视为刘备胜：汉中郡里属魏国一方的县直接归蜀主，
-# 再设 hd_sg218_hanzhong_won，同一次心跳里接着走汉中归属（0060）和夺取东三郡。夏侯渊没死就照常作废
+# 汉中之战白和、作废兜底（boki 10-13 作废、10-18 扩到白和且不论夏侯渊死活）：视为刘备胜，汉中郡里属魏国一方的县直接归蜀主，
+# 再设 hd_sg218_hanzhong_won，下次心跳走汉中归属（0060）和夺取东三郡。
+# 魏王是玩家时发 0066 让他选割让或拒绝；魏国一方有玩家持汉中的县时不兜底。不兜底就按刘备未胜处理，改走吕蒙袭荆州（E）
 hd_sg218_check_hanzhong_invalid_effect = {
 	if = {
 		limit = {
-			has_global_variable = hd_sg218_hanzhong_invalid
-			has_global_variable = hd_sg218_xhy_dead
+			OR = {
+				has_global_variable = hd_sg218_hanzhong_invalid
+				has_global_variable = hd_sg218_hanzhong_white
+			}
 			NOT = { has_global_variable = hd_sg218_hanzhong_won }
 			NOT = { has_global_variable = hd_sg218_hanzhong_result_done }
 			exists = global_var:hd218_hanzhong_title.holder
 			exists = title:e_hd218_wei.holder
 		}
-		remove_global_variable = hd_sg218_hanzhong_invalid
+		if = {
+			limit = { has_global_variable = hd_sg218_hanzhong_invalid }
+			remove_global_variable = hd_sg218_hanzhong_invalid
+		}
+		if = {
+			limit = { has_global_variable = hd_sg218_hanzhong_white }
+			remove_global_variable = hd_sg218_hanzhong_white
+		}
+		if = {
+			limit = { title:e_hd218_wei.holder = { is_ai = no } }
+			set_global_variable = { name = hd_sg218_hanzhong_asking value = yes days = 60 }
+			debug_log = "HD218 HANZHONG WHITE_OR_INVALID ASK_WEI_PLAYER"
+			title:e_hd218_wei.holder = { trigger_event = hd_sg218.0066 }
+		}
+		else_if = {
+			limit = {
+				OR = {
+					title:d_hanzhong.holder ?= {
+						is_ai = no
+						is_vassal_or_below_of = title:e_hd218_wei.holder
+					}
+					title:d_hanzhong = {
+						any_in_de_jure_hierarchy = {
+							tier = tier_county
+							holder ?= {
+								is_vassal_or_below_of = title:e_hd218_wei.holder
+								OR = {
+									is_ai = no
+									any_liege_or_above = {
+										is_ai = no
+										NOT = { this = title:e_hd218_wei.holder }
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			debug_log = "HD218 HANZHONG WHITE_OR_INVALID SKIP player_county"
+		}
+		else = {
+			hd_sg218_hanzhong_cede_effect = yes
+		}
+	}
+}
+
+# 魏国一方把汉中郡里的县交给蜀主，记为汉中之战刘备胜。兜底和 0066 选项 a 用。Root：任意
+hd_sg218_hanzhong_cede_effect = {
+	if = {
+		limit = {
+			exists = global_var:hd218_hanzhong_title.holder
+			exists = title:e_hd218_wei.holder
+		}
 		set_global_variable = hd_sg218_hanzhong_won
 		global_var:hd218_hanzhong_title.holder = { save_scope_as = hd_sg218_annexer }
 		title:e_hd218_wei.holder = { save_scope_as = hd_sg218_annex_from }
 		create_title_and_vassal_change = { type = conquest save_scope_as = hd_sg218_annex_change add_claim_on_loss = no }
 		hd_sg218_annex_duchy_effect = { DUCHY = title:d_hanzhong }
 		resolve_title_and_vassal_change = scope:hd_sg218_annex_change
-		debug_log = "HD218 HANZHONG INVALID_AFTER_XHY -> WON"
+		debug_log = "HD218 HANZHONG WHITE_OR_INVALID -> WON"
 	}
 }
 
@@ -631,7 +683,7 @@ hd_sg218_check_baiyi_effect = {
 				NOT = { scope:hd_sg218_def_baiyi = character:sun_quan }
 				NOT = { character:sun_quan = { is_at_war_with = scope:hd_sg218_def_baiyi } }
 			}
-			set_global_variable = hd_sg218_baiyi_done
+			# baiyi_done 由 0090 在开战成功或玩家坐观成败时设（10-18 执行后复核）
 			character:sun_quan = { trigger_event = hd_sg218.0090 }
 		}
 	}
@@ -682,6 +734,262 @@ hd_sg218_defect_check_effect = {
 }
 
 ############################################################
+# 9b 大都督吕蒙（boki 10-18）：219.10 起，白衣渡江未发生时由孙权拜吕蒙为大都督袭取荆州。两个入口：
+# 一、汉中之战已不在进行，刘备没拿到汉中（战败、没开起来、白和作废后魏方不让）；
+# 二、刘备得了汉中，但襄樊之战已结束或到 220.6 还没打、白衣渡江没接上（计划复核加，boki 原话之外）。
+# 开战方为孙权本人（吕蒙是封臣），守方是刘备；复用白衣渡江的战争效果，之后照常走麦城
+############################################################
+hd_sg218_check_lv_meng_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_sg218_baiyi_done }
+			NOT = { has_global_variable = hd_sg218_lv_meng_wait }
+			NOT = { has_global_variable = hd_sg218_hanzhong_asking }
+			current_date >= 219.10.1
+			OR = {
+				AND = {
+					NOT = { has_global_variable = hd_sg218_hanzhong_active }
+					NOT = { has_global_variable = hd_sg218_hanzhong_won }
+					NOT = { has_global_variable = hd_sg218_liu_got_hanzhong }
+				}
+				AND = {
+					has_global_variable = hd_sg218_liu_got_hanzhong
+					NOT = { hd_sg218_war_active_trigger = { KIND = xiangfan } }
+					NOT = { has_global_variable = hd_sg218_xiangfan_wait }
+					OR = {
+						current_date >= 220.6.1
+						has_global_variable = hd_sg218_xiangfan_won
+						has_global_variable = hd_sg218_xiangfan_lost
+						has_global_variable = hd_sg218_xiangfan_white
+						has_global_variable = hd_sg218_xiangfan_invalid
+					}
+				}
+			}
+		}
+		if = {
+			limit = {
+				character:guan_yu ?= {
+					is_alive = yes
+					has_title = title:k_uuii_jingzhou
+				}
+				character:hd218_lv_meng ?= { is_alive = yes }
+				character:sun_quan ?= { is_alive = yes is_landed = yes is_independent_ruler = yes }
+			}
+			hd_sg218_find_defender_effect = { TARGET = title:d_nanjun KIND = baiyi }
+			if = {
+				limit = {
+					exists = scope:hd_sg218_def_baiyi
+					NOT = { scope:hd_sg218_def_baiyi = character:sun_quan }
+					NOT = { character:sun_quan = { is_at_war_with = scope:hd_sg218_def_baiyi } }
+				}
+				# 玩家选维持孙刘之好、或开战没开成时一年后再问
+				set_global_variable = { name = hd_sg218_lv_meng_wait value = yes days = 365 }
+				debug_log = "HD218 LV_MENG ASK"
+				character:sun_quan = { trigger_event = hd_sg218.0095 }
+			}
+			else_if = {
+				limit = { NOT = { has_global_variable = hd_sg218_lv_meng_skip_logged } }
+				set_global_variable = hd_sg218_lv_meng_skip_logged
+				debug_log = "HD218 LV_MENG SKIP no_defender_or_already_at_war"
+			}
+		}
+		else_if = {
+			limit = { NOT = { has_global_variable = hd_sg218_lv_meng_skip_logged } }
+			set_global_variable = hd_sg218_lv_meng_skip_logged
+			debug_log = "HD218 LV_MENG SKIP guan_yu_no_jingzhou_or_lv_meng_dead_or_sun_quan_not_independent"
+		}
+	}
+}
+
+# 0095 选项 a。Root：孙权；scope:hd_sg218_def_baiyi 由事件带入。确认开战后才设标记、给修正、发通报
+hd_sg218_lv_meng_war_effect = {
+	hd_sg218_baiyi_war_effect = yes
+	if = {
+		limit = { exists = scope:hd_sg218_war_baiyi }
+		set_global_variable = hd_sg218_baiyi_done
+		character:hd218_lv_meng ?= {
+			add_character_modifier = { modifier = hd_sg218_dadudu_modifier years = 3 }
+		}
+		root = { save_scope_as = hd_news_a }
+		character:guan_yu = { save_scope_as = hd_news_b }
+		hd_world_news_send_effect = { EVENT = hd_sg218.0595 }
+		debug_log = "HD218 LV_MENG WAR_OK"
+	}
+	else = { debug_log = "HD218 LV_MENG WAR_FAILED" }
+}
+
+############################################################
+# 华佗（boki 10-18）：人物表里华佗 208 年已死，218 开局另建一个 73 岁的华佗作曹操门客，供刮骨疗毒、开颅两件事用
+############################################################
+hd_sg218_create_hua_tuo_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_sg218_hua_tuo }
+			character:cao_cao ?= { is_alive = yes }
+		}
+		create_character = {
+			name = uuii_book_hua_tuo_name
+			age = 73
+			gender_female_chance = 0
+			random_traits = no
+			trait = historical_character
+			culture = culture:han
+			faith = character:cao_cao.faith
+			dynasty_house = house:uuii_book_house_d146232eeee8
+			employer = character:cao_cao
+			location = character:cao_cao.location
+			diplomacy = 7
+			martial = 3
+			stewardship = 7
+			intrigue = 7
+			learning = 20
+			prowess = 6
+			save_scope_as = hd_sg218_new_hua_tuo
+		}
+		scope:hd_sg218_new_hua_tuo = {
+			set_character_rite = rite:jingxue
+			add_character_modifier = { modifier = hd_sg218_wuqinxi_modifier }
+		}
+		set_global_variable = { name = hd_sg218_hua_tuo value = scope:hd_sg218_new_hua_tuo }
+		debug_log = "HD218 HUA_TUO CREATED"
+	}
+}
+
+############################################################
+# 刮骨疗毒（boki 10-18）：关羽受伤、华佗在世，一次
+############################################################
+hd_sg218_check_guagu_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_sg218_guagu_done }
+			character:guan_yu ?= {
+				is_alive = yes
+				is_imprisoned = no
+				OR = {
+					has_trait = wounded_1
+					has_trait = wounded_2
+					has_trait = wounded_3
+				}
+			}
+			global_var:hd_sg218_hua_tuo ?= {
+				is_alive = yes
+				is_imprisoned = no
+			}
+		}
+		set_global_variable = hd_sg218_guagu_done
+		debug_log = "HD218 GUAGU"
+		character:guan_yu = { trigger_event = hd_sg218.0096 }
+	}
+}
+
+############################################################
+# 曹操头疾（boki 10-18）：219.9 起头疾；关羽死讯（0098）或 220.3 仍在世时头疾恶化；
+# 恶化后华佗在世则请开颅（0099）；AI 曹操 221.1 仍在世且没开颅成功则病逝
+############################################################
+hd_sg218_check_cao_cao_frail_effect = {
+	character:cao_cao ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				current_date >= 219.9.1
+				NOT = { has_character_flag = hd_sg218_cao_cao_frail }
+			}
+			add_character_flag = hd_sg218_cao_cao_frail
+			add_character_modifier = { modifier = hd_sg218_cao_cao_frail_modifier years = 5 }
+			debug_log = "HD218 CAO_CAO FRAIL"
+			trigger_event = hd_sg218.0097
+		}
+		if = {
+			limit = {
+				is_alive = yes
+				current_date >= 220.3.1
+				NOT = { has_character_flag = hd_sg218_cao_cao_dying }
+				NOT = { has_character_flag = hd_sg218_kailu_success }
+			}
+			hd_sg218_cao_cao_worsen_effect = yes
+			debug_log = "HD218 CAO_CAO DYING by_date"
+			trigger_event = hd_sg218.0097
+		}
+		if = {
+			limit = {
+				is_alive = yes
+				has_character_flag = hd_sg218_cao_cao_dying
+				NOT = { has_character_flag = hd_sg218_kailu_asked }
+				global_var:hd_sg218_hua_tuo ?= {
+					is_alive = yes
+					is_imprisoned = no
+				}
+			}
+			add_character_flag = hd_sg218_kailu_asked
+			debug_log = "HD218 KAILU ASK"
+			trigger_event = hd_sg218.0099
+		}
+		if = {
+			limit = {
+				is_alive = yes
+				is_ai = yes
+				current_date >= 221.1.1
+				NOT = { has_character_flag = hd_sg218_kailu_success }
+			}
+			debug_log = "HD218 CAO_CAO FORCED_DEATH"
+			death = { death_reason = death_ill }
+		}
+		else_if = {
+			limit = {
+				is_alive = yes
+				current_date >= 220.3.1
+				current_date < 225.1.1
+			}
+			debug_log = "HD218 CAO_CAO STILL_ALIVE"
+		}
+	}
+}
+
+# 头疾恶化。Root：曹操
+hd_sg218_cao_cao_worsen_effect = {
+	if = {
+		limit = { NOT = { has_character_flag = hd_sg218_cao_cao_frail } }
+		add_character_flag = hd_sg218_cao_cao_frail
+		add_character_modifier = { modifier = hd_sg218_cao_cao_frail_modifier years = 5 }
+	}
+	if = {
+		limit = { NOT = { has_character_flag = hd_sg218_cao_cao_dying } }
+		add_character_flag = hd_sg218_cao_cao_dying
+		add_character_modifier = { modifier = hd_sg218_cao_cao_dying_modifier years = 5 }
+	}
+}
+
+# 关羽之死（on_death，关羽作用域）：白衣渡江之战进行中或凶手属孙权一方，记为死于吴手（夷陵之战要用）；曹操在世则 10 天后哀悼
+hd_sg218_guan_yu_death_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_sg218_guan_yu_killed_by_wu }
+			OR = {
+				hd_sg218_war_active_trigger = { KIND = baiyi }
+				scope:killer ?= {
+					OR = {
+						this = character:sun_quan
+						is_vassal_or_below_of = character:sun_quan
+					}
+				}
+			}
+		}
+		set_global_variable = hd_sg218_guan_yu_killed_by_wu
+		debug_log = "HD218 GUAN_YU KILLED_BY_WU"
+	}
+	character:cao_cao ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				NOT = { has_character_flag = hd_sg218_mourned_guan_yu }
+			}
+			add_character_flag = hd_sg218_mourned_guan_yu
+			trigger_event = { id = hd_sg218.0098 days = 10 }
+		}
+	}
+}
+
+############################################################
 # 10 麦城（核心）：白衣渡江之战孙权胜，或关羽被孙权俘虏
 ############################################################
 hd_sg218_check_maicheng_effect = {
@@ -692,7 +1000,15 @@ hd_sg218_check_maicheng_effect = {
 			character:sun_quan ?= { is_alive = yes }
 			OR = {
 				has_global_variable = hd_sg218_baiyi_won
-				character:guan_yu = { is_imprisoned_by = character:sun_quan }
+				character:guan_yu = {
+					is_imprisoned = yes
+					imprisoner ?= {
+						OR = {
+							this = character:sun_quan
+							is_vassal_or_below_of = character:sun_quan
+						}
+					}
+				}
 			}
 		}
 		set_global_variable = hd_sg218_maicheng_done
@@ -991,7 +1307,35 @@ hd_sg218_jianzuo_complete_effect = {
 				exists = global_var:hd218_hanzhong_title
 				scope:hd_sg218_jz_title = global_var:hd218_hanzhong_title
 			}
-			scope:hd_sg218_jz_title = { set_title_name = dynn_title_han }
+			scope:hd_sg218_jz_title = {
+				set_title_name = dynn_title_han
+				# 蜀汉首席议会席位改称丞相（WJ_CouncilName_chancellor 首条），记在头衔上，后主及以后的君主沿用
+				set_variable = hd218_shu_chengxiang
+			}
+			# 电脑刘备（或接许可的继承人）拜诸葛亮为丞相；玩家自己任命（boki 10-18）
+			if = {
+				limit = {
+					scope:hd_sg218_jz_ruler = { is_ai = yes }
+					character:zhu_ge_liang ?= {
+						is_alive = yes
+						is_imprisoned = no
+						NOT = { this = scope:hd_sg218_jz_ruler }
+						is_vassal_or_below_of = scope:hd_sg218_jz_ruler
+					}
+				}
+				character:zhu_ge_liang = { add_character_flag = hd_cp_merit_exempt } # 剧本拜相不受卿档贤望门槛
+				scope:hd_sg218_jz_ruler = {
+					assign_councillor_type = {
+						type = councillor_chancellor
+						target = character:zhu_ge_liang
+					}
+				}
+				if = {
+					limit = { character:zhu_ge_liang = { has_council_position = councillor_chancellor } }
+					debug_log = "HD218 SHU_CHENGXIANG ZHUGE_LIANG OK"
+				}
+				else = { debug_log = "HD218 SHU_CHENGXIANG ZHUGE_LIANG FAIL" }
+			}
 			set_global_variable = hd_sg218_shu_crowned
 			# 孙权称帝至少再等两年
 			set_global_variable = { name = hd_sg218_wu_wait value = yes days = 730 }

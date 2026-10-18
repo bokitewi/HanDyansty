@@ -184,15 +184,15 @@ hd253.0200 = {
 	theme = intrigue
 	left_portrait = { character = root animation = personality_bold }
 	right_portrait = {
-		character = character:sun_jun
+		character = global_var:hd_sg_sun_jun
 		animation = scheme
-		trigger = { character:sun_jun ?= { is_alive = yes } }
+		trigger = { global_var:hd_sg_sun_jun ?= { is_alive = yes } }
 	}
 	trigger = { is_alive = yes }
 	# 入宫赴宴
 	option = {
 		name = hd253.0200.a
-		character:sun_jun ?= { save_scope_as = hd_news_b }
+		global_var:hd_sg_sun_jun ?= { save_scope_as = hd_news_b }
 		save_scope_as = hd_news_a
 		hd_world_news_send_effect = { EVENT = hd253.0530 }
 		hd253_zhuge_ke_killed_effect = yes
@@ -202,7 +202,7 @@ hd253.0200 = {
 	option = {
 		name = hd253.0200.b
 		add_stress = medium_stress_impact_gain
-		character:sun_jun ?= {
+		global_var:hd_sg_sun_jun ?= {
 			add_opinion = { target = root modifier = suspicion_opinion opinion = -30 }
 		}
 		ai_chance = { base = 0 }
@@ -216,13 +216,13 @@ hd253.0300 = {
 	desc = hd253.0300.desc
 	theme = dynastic_cycle
 	left_portrait = { character = root animation = personality_cynical }
-	right_portrait = { character = character:cao_fang animation = fear }
+	right_portrait = { character = global_var:hd_sg_cao_fang animation = fear trigger = { global_var:hd_sg_cao_fang ?= { is_alive = yes } } }
 	trigger = { is_alive = yes }
 	# 废帝，迎立高贵乡公
 	option = {
 		name = hd253.0300.a
 		save_scope_as = hd_news_a
-		character:cao_fang = { save_scope_as = hd_news_b }
+		global_var:hd_sg_cao_fang ?= { save_scope_as = hd_news_b }
 		# 夏侯玄与李丰同谋，先已伏诛（玩家扮演的不动）
 		character:xia_hou_xuan ?= {
 			if = {
@@ -232,7 +232,7 @@ hd253.0300 = {
 		}
 		hd253_feifang_effect = yes
 		hd_world_news_send_effect = { EVENT = hd253.0540 }
-		character:cao_fang ?= {
+		global_var:hd_sg_cao_fang ?= {
 			if = {
 				limit = { is_ai = no }
 				trigger_event = hd253.0310
@@ -261,7 +261,7 @@ hd253.0305 = {
 		name = hd253.0305.a
 		character:si_ma_shi = {
 			save_scope_as = hd_news_a
-			character:cao_fang = { save_scope_as = hd_news_b }
+			global_var:hd_sg_cao_fang ?= { save_scope_as = hd_news_b }
 			character:xia_hou_xuan ?= {
 				if = {
 					limit = { is_alive = yes is_ai = yes }
@@ -304,19 +304,46 @@ hd253.0400 = {
 		animation = personality_bold
 		trigger = { character:wen_qin ?= { is_alive = yes } }
 	}
-	trigger = { is_alive = yes }
-	# 矫太后诏，起兵讨司马
+	trigger = {
+		is_alive = yes
+		NOT = { has_global_variable = hd253_guanqiu_done }
+	}
+	# 矫太后诏，起兵讨司马（10-18 加固 D：确认开战后才上锁、发通报；没开出来记一次失败，下次再问）
 	option = {
 		name = hd253.0400.a
-		hd253_rebel_effect = yes
-		save_scope_as = hd_news_a
-		liege ?= { save_scope_as = hd_news_b }
-		hd_world_news_send_effect = { EVENT = hd253.0550 }
+		if = {
+			limit = {
+				NOT = { has_global_variable = hd253_guanqiu_done }
+				is_at_war = no
+			}
+			liege ?= { save_scope_as = hd_news_b }
+			hd253_rebel_effect = yes
+		}
+		if = {
+			limit = { exists = scope:hd253_rebel_war }
+			set_global_variable = hd253_guanqiu_done
+			set_global_variable = hd253_guanqiu_war_ok
+			if = {
+				limit = { has_global_variable = hd253_guanqiu_pending }
+				remove_global_variable = hd253_guanqiu_pending
+			}
+			save_scope_as = hd_news_a
+			hd_world_news_send_effect = { EVENT = hd253.0550 }
+		}
+		else_if = {
+			limit = { NOT = { has_global_variable = hd253_guanqiu_done } }
+			hd253_rebel_fail_effect = { KEY = guanqiu }
+		}
 		ai_chance = { base = 100 }
 	}
 	# 隐忍不发
 	option = {
 		name = hd253.0400.b
+		set_global_variable = hd253_guanqiu_done
+		if = {
+			limit = { has_global_variable = hd253_guanqiu_pending }
+			remove_global_variable = hd253_guanqiu_pending
+		}
 		add_stress = medium_stress_impact_gain
 		ai_chance = { base = 0 }
 	}
@@ -329,34 +356,60 @@ hd253.0500 = {
 	desc = hd253.0500.desc
 	theme = war
 	left_portrait = { character = root animation = war_attacker }
-	trigger = { is_alive = yes }
-	# 敛兵据守，请救于吴
+	trigger = {
+		is_alive = yes
+		NOT = { has_global_variable = hd253_zhuge_dan_done }
+	}
+	# 敛兵据守，请救于吴（10-18 加固 D：确认开战后才上锁、请吴援、发通报）
 	option = {
 		name = hd253.0500.a
-		hd253_rebel_effect = yes
-		# 吴发兵来援（吴帝是电脑且不在战中时直接加入攻方）
-		scope:hd253_rebel_war ?= {
+		if = {
+			limit = {
+				NOT = { has_global_variable = hd253_zhuge_dan_done }
+				is_at_war = no
+			}
+			liege ?= { save_scope_as = hd_news_b }
+			hd253_rebel_effect = yes
+		}
+		if = {
+			limit = { exists = scope:hd253_rebel_war }
+			set_global_variable = hd253_zhuge_dan_done
 			if = {
-				limit = {
-					title:e_jiangdong.holder ?= { is_ai = yes is_at_war = no }
+				limit = { has_global_variable = hd253_zhuge_dan_pending }
+				remove_global_variable = hd253_zhuge_dan_pending
+			}
+			# 吴发兵来援（吴帝是电脑且不在战中时直接加入攻方）
+			scope:hd253_rebel_war = {
+				if = {
+					limit = {
+						title:e_jiangdong.holder ?= { is_ai = yes is_at_war = no }
+					}
+					add_attacker = title:e_jiangdong.holder
 				}
-				add_attacker = title:e_jiangdong.holder
 			}
-		}
-		title:e_jiangdong.holder ?= {
-			if = {
-				limit = { is_ai = no exists = scope:hd253_rebel_war }
-				trigger_event = hd253.0505
+			title:e_jiangdong.holder ?= {
+				if = {
+					limit = { is_ai = no }
+					trigger_event = hd253.0505
+				}
 			}
+			save_scope_as = hd_news_a
+			hd_world_news_send_effect = { EVENT = hd253.0560 }
 		}
-		save_scope_as = hd_news_a
-		liege ?= { save_scope_as = hd_news_b }
-		hd_world_news_send_effect = { EVENT = hd253.0560 }
+		else_if = {
+			limit = { NOT = { has_global_variable = hd253_zhuge_dan_done } }
+			hd253_rebel_fail_effect = { KEY = zhuge_dan }
+		}
 		ai_chance = { base = 100 }
 	}
 	# 隐忍不发
 	option = {
 		name = hd253.0500.b
+		set_global_variable = hd253_zhuge_dan_done
+		if = {
+			limit = { has_global_variable = hd253_zhuge_dan_pending }
+			remove_global_variable = hd253_zhuge_dan_pending
+		}
 		add_stress = medium_stress_impact_gain
 		ai_chance = { base = 0 }
 	}
@@ -425,15 +478,41 @@ hd253.0610 = {
 	}
 }
 
-# 曹髦讨司马昭。Root：曹髦。电脑亲率宿卫出讨，玩家可隐忍
+# 曹髦讨权臣（司马昭；10-18 加固 B：司马师仍在时讨司马师）。Root：曹髦。电脑亲率宿卫出讨，玩家可隐忍
 hd253.0700 = {
 	type = character_event
-	title = hd253.0700.t
-	desc = hd253.0700.desc
+	title = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { scope:hd253_regent ?= character:si_ma_shi }
+				desc = hd253.0700.t_shi
+			}
+			desc = hd253.0700.t
+		}
+	}
+	desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { scope:hd253_regent ?= character:si_ma_shi }
+				desc = hd253.0700.desc_shi
+			}
+			desc = hd253.0700.desc
+		}
+	}
 	theme = dynastic_cycle
 	left_portrait = { character = root animation = anger }
-	right_portrait = { character = character:si_ma_zhao animation = personality_cynical }
+	right_portrait = {
+		character = scope:hd253_regent
+		animation = personality_cynical
+		trigger = { exists = scope:hd253_regent }
+	}
 	trigger = { is_alive = yes }
+	immediate = {
+		if = {
+			limit = { hd253_sima_regent_trigger = yes }
+			title:h_china.var:hd_court_regent = { save_scope_as = hd253_regent }
+		}
+	}
 	# 宁死不为常道乡公
 	option = {
 		name = hd253.0700.a
@@ -448,15 +527,16 @@ hd253.0700 = {
 	}
 }
 
-# 南阙之变（只给玩家司马昭）。Root：司马昭
+# 南阙之变（只给玩家权臣：司马昭，或仍在世的司马师）。Root：权臣
 hd253.0705 = {
 	type = character_event
 	title = hd253.0705.t
 	desc = hd253.0705.desc
 	theme = intrigue
 	left_portrait = { character = root animation = personality_cynical }
-	right_portrait = { character = character:cao_mao animation = anger }
+	right_portrait = { character = global_var:hd_sg_cao_mao animation = anger trigger = { global_var:hd_sg_cao_mao ?= { is_alive = yes } } }
 	trigger = { is_alive = yes }
+	immediate = { save_scope_as = hd253_regent }
 	# 任成济出手
 	option = {
 		name = hd253.0705.a
@@ -470,7 +550,7 @@ hd253.0705 = {
 	}
 }
 
-# 灭蜀之议。Root：司马昭。电脑发兵，玩家可罢
+# 灭蜀之议。Root：权臣（司马昭；10-18 加固 B：司马师仍在时为司马师）。电脑发兵，玩家可罢
 hd253.0710 = {
 	type = character_event
 	title = hd253.0710.t
@@ -478,21 +558,100 @@ hd253.0710 = {
 	theme = war
 	left_portrait = { character = root animation = personality_cynical }
 	right_portrait = {
-		character = character:yingchuan_zhong_024
+		character = global_var:hd_sg_yingchuan_zhong_024
 		animation = personality_bold
-		trigger = { character:yingchuan_zhong_024 ?= { is_alive = yes } }
+		trigger = { global_var:hd_sg_yingchuan_zhong_024 ?= { is_alive = yes } }
 	}
-	trigger = { is_alive = yes }
-	# 钟会、邓艾分道伐蜀
+	trigger = {
+		is_alive = yes
+		NOT = { has_global_variable = hd253_fashu_asked }
+		NOT = { has_global_variable = hd253_fashu_active }
+		NOT = { has_global_variable = hd253_fashu_won }
+	}
+	# 钟会、邓艾分道伐蜀（魏天子是玩家时先请准奏）
 	option = {
 		name = hd253.0710.a
-		hd253_fashu_war_effect = yes
+		if = {
+			limit = {
+				NOT = { has_global_variable = hd253_fashu_asked }
+				NOT = { has_global_variable = hd253_fashu_active }
+				NOT = { has_global_variable = hd253_fashu_won }
+				NOT = { has_global_variable = hd253_fashu_cooldown }
+				OR = {
+					NOT = { exists = global_var:hd253_fashu_tries }
+					global_var:hd253_fashu_tries < 3
+				}
+				current_date < 268.1.1
+			}
+			hd253_fashu_decide_effect = yes
+		}
 		ai_chance = { base = 100 }
 	}
-	# 蜀道艰险，且缓图之
+	# 蜀道艰险，且缓图之（玩家罢兵，此后不再议）
 	option = {
 		name = hd253.0710.b
+		set_global_variable = hd253_fashu_asked
+		if = {
+			limit = { has_global_variable = hd253_fashu_pending }
+			remove_global_variable = hd253_fashu_pending
+		}
 		ai_chance = { base = 0 }
+	}
+}
+
+# 10-18 加固：伐蜀请旨（只给玩家魏天子，权臣不是他本人时）。Root：魏天子
+hd253.0715 = {
+	type = character_event
+	title = hd253.0715.t
+	desc = hd253.0715.desc
+	theme = war
+	left_portrait = { character = root animation = worry }
+	right_portrait = {
+		character = scope:hd253_regent
+		animation = personality_cynical
+		trigger = { exists = scope:hd253_regent }
+	}
+	trigger = {
+		is_alive = yes
+		has_title = title:h_china
+		NOT = { has_global_variable = hd253_fashu_asked }
+		NOT = { has_global_variable = hd253_fashu_active }
+		NOT = { has_global_variable = hd253_fashu_won }
+	}
+	immediate = {
+		title:h_china.var:hd_court_regent ?= { save_scope_as = hd253_regent }
+	}
+	# 准奏，诏诸军伐蜀
+	option = {
+		name = hd253.0715.a
+		if = {
+			limit = {
+				NOT = { has_global_variable = hd253_fashu_asked }
+				NOT = { has_global_variable = hd253_fashu_active }
+				NOT = { has_global_variable = hd253_fashu_won }
+				NOT = { has_global_variable = hd253_fashu_cooldown }
+				OR = {
+					NOT = { exists = global_var:hd253_fashu_tries }
+					global_var:hd253_fashu_tries < 3
+				}
+				current_date < 268.1.1
+			}
+			hd253_fashu_go_effect = yes
+		}
+	}
+	# 不准（此后不再议）
+	option = {
+		name = hd253.0715.b
+		set_global_variable = hd253_fashu_asked
+		if = {
+			limit = { has_global_variable = hd253_fashu_pending }
+			remove_global_variable = hd253_fashu_pending
+		}
+		add_prestige = minor_prestige_gain
+		scope:hd253_regent ?= {
+			add_opinion = { target = root modifier = suspicion_opinion opinion = -20 }
+		}
+		debug_log = "HD253 FASHU_EMPEROR_REFUSED"
 	}
 }
 
@@ -588,6 +747,28 @@ hd253.0580 = {
 	desc = hd253.0580.desc
 	theme = war
 	left_portrait = { character = scope:hd_news_a animation = war_attacker }
+	right_portrait = { character = scope:hd_news_b animation = worry }
+	option = { name = hd_world_news.a ai_chance = { base = 100 } }
+}
+# 10-18 加固 A：司马师病逝。scope:hd_news_a 司马师，scope:hd_news_b 魏天子
+hd253.0595 = {
+	type = character_event
+	title = hd253.0595.t
+	desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = {
+					has_global_variable = hd253_guanqiu_war_ok
+					# 淮南确已平定：毌丘俭已死，或在世但不在战中、也没有独立
+					NOT = { character:guan_qiu_jian ?= { is_alive = yes OR = { is_at_war = yes is_independent_ruler = yes } } }
+				}
+				desc = hd253.0595.desc
+			}
+			desc = hd253.0595.desc_plain
+		}
+	}
+	theme = death
+	left_portrait = { character = scope:hd_news_a animation = sick }
 	right_portrait = { character = scope:hd_news_b animation = worry }
 	option = { name = hd_world_news.a ai_chance = { base = 100 } }
 }

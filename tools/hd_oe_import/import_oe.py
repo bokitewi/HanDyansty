@@ -395,6 +395,9 @@ mou = {'某', ''}
 
 MERGED = {r['删除ID']: r['并入ID'] for r in
           csv.DictReader(open(os.path.join(MOD, 'docs/人物审查/合并记录_2026-10-14.csv'), encoding='utf-8-sig'))}
+MERGED18 = {r['删除ID']: r['并入ID'] for r in
+            csv.DictReader(open(os.path.join(MOD, 'docs/人物审查/合并记录_2026-10-18.csv'), encoding='utf-8-sig'))
+            if r['删除方文件'] == 'zz_hd_oe_characters.txt'}
 OLD_AUDIT = {r['角色ID']: r for r in
              csv.DictReader(open(os.path.join(MOD, 'docs/人物审查/人物总表.csv'), encoding='utf-8-sig'))
              if r.get('标记') != 'OE整合'}
@@ -430,6 +433,12 @@ for c in order:
             if cands:
                 hit = min(cands, key=lambda x: abs(x['birth'][0] - b))
                 STATUS[cid] = 'dup_father'
+    # 10-18 同人合并删掉的 OE 副本（OE 生卒常与本 mod 差 10 年以上，上面 ±3 年认不出）：直接指向并入方
+    if not hit:
+        k18 = MERGED18.get(cid) or MERGED18.get('oe_' + cid)
+        if k18 and k18 in HD:
+            hit = HD[k18]
+            STATUS[cid] = 'dup_merged18'
     # 10-14 查重删掉的 ID：旧行与本人同名或同生年，即同一人，指向并入方
     if not hit and cid in MERGED and MERGED[cid] in HD:
         old = OLD_AUDIT.get(cid)

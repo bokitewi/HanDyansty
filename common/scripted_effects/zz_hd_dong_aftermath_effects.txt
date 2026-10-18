@@ -44,28 +44,81 @@ hd_dong_grant_duchy_effect = {
 	resolve_title_and_vassal_change = scope:hd_dong_duchy_change
 }
 
-hd_dong_queue_murder_effect = {
+# 2026-10-17（boki）：王允与吕布固定在 192 年五月诛董，不再看讨董战争是否结束。
+# 讨董战争结束时的三处旧调用保留，但不再排期；排期见 zz_hd_dong_aftermath_on_actions.txt。
+hd_dong_queue_murder_effect = { }
+
+# 任意作用域。由 hd_dong_192_murder_check 调用。条件不满足时 30 天后再查；玩家当事人先弹事件。
+hd_dong_192_try_effect = {
 	if = {
 		limit = {
-			exists = global_var:hd_anti_regent_first_war_confirmed
+			game_start_date = 184.1.1
+			NOT = { exists = global_var:hd_dong_murder_scheduled }
+			NOT = { exists = global_var:hd_dong_settlement_pending }
+			NOT = { exists = global_var:hd_dong_settlement_processed }
+			NOT = { exists = global_var:hd_dong_settlement_completed }
+			character:dong_zhuo_2 ?= { is_alive = yes }
+			character:wang_yun ?= { is_alive = yes }
+		}
+		if = {
+			limit = {
+				exists = title:h_china.holder
+				character:dong_zhuo_2 = {
+					has_character_flag = hd_current_han_regent
+					liege ?= title:h_china.holder
+					NOT = { this = title:h_china.holder }
+				}
+				character:wang_yun = { is_imprisoned = no }
+			}
+			if = {
+				limit = { character:dong_zhuo_2 = { is_ai = no } }
+				character:dong_zhuo_2 = { trigger_event = hd_dong_aftermath.0020 }
+			}
+			else_if = {
+				limit = { character:wang_yun = { is_ai = no } }
+				character:wang_yun = { trigger_event = hd_dong_aftermath.0021 }
+			}
+			else_if = {
+				limit = { character:lv_bu ?= { is_alive = yes is_ai = no } }
+				character:lv_bu = { trigger_event = hd_dong_aftermath.0021 }
+			}
+			else = { hd_dong_192_execute_effect = yes }
+		}
+		# 等到 200 年为止，过期不再诛董。
+		else_if = {
+			limit = { current_date < 200.1.1 }
+			debug_log = "HD_DONG 192_WAIT_NOT_REGENT"
+			title:h_china = { trigger_event = { on_action = hd_dong_192_murder_check days = 30 } }
+		}
+		else = { debug_log = "HD_DONG 192_EXPIRED" }
+	}
+}
+
+# 任意作用域。玩家推迟时一年后再查。
+hd_dong_192_defer_effect = {
+	debug_log = "HD_DONG 192_DEFERRED_BY_PLAYER"
+	title:h_china = { trigger_event = { on_action = hd_dong_192_murder_check days = 365 } }
+}
+
+# 任意作用域。沿用原 30 天排期的变量与 hd_dong_aftermath.0001，改为当天执行。
+hd_dong_192_execute_effect = {
+	if = {
+		limit = {
 			NOT = { exists = global_var:hd_dong_murder_scheduled }
 			NOT = { exists = global_var:hd_dong_settlement_pending }
 			NOT = { exists = global_var:hd_dong_settlement_completed }
-			exists = character:dong_zhuo_2
-			character:dong_zhuo_2 = { is_alive = yes }
+			character:dong_zhuo_2 ?= { is_alive = yes }
 		}
 		set_global_variable = hd_dong_murder_scheduled
 		set_global_variable = hd_dong_war_chain_ended
-		set_global_variable = { name = hd_dong_war_ended_date value = current_date }
 		if = {
 			limit = { exists = character:wang_yun exists = title:h_china.holder character:wang_yun = { is_alive = yes } title:h_china.holder = { is_alive = yes } }
 			set_global_variable = hd_dong_murder_pending
-			set_global_variable = { name = hd_dong_murder_waiting value = yes days = 30 }
 			character:wang_yun = {
 				every_scheme = { limit = { scheme_type = murder scheme_target_character = character:dong_zhuo_2 } end_scheme = yes }
-				trigger_event = { id = hd_dong_aftermath.0001 days = 30 }
+				trigger_event = hd_dong_aftermath.0001
 			}
-			debug_log = "HD_DONG MURDER_QUEUED_30_DAYS"
+			debug_log = "HD_DONG MURDER_QUEUED_192"
 		}
 		else = { debug_log = "HD_DONG MURDER_ABORTED_WANG_OR_EMPEROR_MISSING" }
 	}

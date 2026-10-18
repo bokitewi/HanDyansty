@@ -25,7 +25,31 @@ hd_hb_decide_ruler_effect = {
 	# Culture scopes have no liege accessor. Save the character's direct liege
 	# before the score's culture-heritage comparison changes scope.
 	liege = { save_temporary_scope_as = hd_hb_round_liege }
+	# 2026-10-17：分支顺序为 权臣跳过 → 玩家 → AI 三支。当朝权臣（含玩家）不参与解散。
 	if = {
+		limit = {
+			has_character_flag = hd_current_han_regent
+			liege ?= title:h_china.holder
+		}
+		debug_log = "HD_HB SKIP_REGENT"
+	}
+	# 2026-10-17：玩家一律弹选择，不看强制、禁止条件。待选时的上级已变就重新问。
+	else_if = {
+		limit = { is_ai = no }
+		if = {
+			limit = {
+				has_character_flag = hd_hb_choice_pending
+				exists = var:hd_hb_choice_pending_liege
+				NOT = { liege = var:hd_hb_choice_pending_liege }
+			}
+			hd_hb_clear_player_pending_effect = yes
+		}
+		if = {
+			limit = { NOT = { has_character_flag = hd_hb_choice_pending } }
+			add_to_temporary_list = hd_hb_player_targets
+		}
+	}
+	else_if = {
 		limit = {
 			hd_hb_force_independence_trigger = yes
 			NOT = { hd_hb_block_independence_trigger = yes }
@@ -37,20 +61,12 @@ hd_hb_decide_ruler_effect = {
 			hd_hb_block_independence_trigger = yes
 			NOT = { hd_hb_force_independence_trigger = yes }
 		}
-		# A D3 single-sided block also invalidates any unanswered D0 choice.
-		hd_hb_clear_player_pending_effect = yes
+		# 有意留空：被禁止独立的 AI 直接留下，不进入下面的掷骰。
 	}
 	else = {
-		if = {
-			limit = { is_ai = yes }
-			random = {
-				chance = hd_hb_independence_chance
-				add_to_temporary_list = hd_hb_release_targets
-			}
-		}
-		else_if = {
-			limit = { NOT = { has_character_flag = hd_hb_choice_pending } }
-			add_to_temporary_list = hd_hb_player_targets
+		random = {
+			chance = hd_hb_independence_chance
+			add_to_temporary_list = hd_hb_release_targets
 		}
 	}
 }
@@ -127,6 +143,9 @@ hd_qxzl_begin_effect = {
 			every_vassal_or_below = {
 				limit = { hd_hb_live_vassal_trigger = yes }
 				add_to_temporary_list = hd_hb_round_targets
+				# 2026-10-17：记下 D0 判定时的直接上级，D3 只重判没有记录或上级已变的人。
+				liege = { save_temporary_scope_as = hd_hb_d0_liege_scope }
+				set_variable = { name = hd_hb_d0_liege value = scope:hd_hb_d0_liege_scope days = 30 }
 				# Spatial tickets include each initial vassal's territorial titles,
 				# so split inheritance and D0/D3 independent parents stay covered.
 				every_held_title = {
@@ -176,6 +195,12 @@ hd_hb_recheck_duchies_effect = {
 						limit = {
 							hd_hb_live_vassal_trigger = yes
 							NOT = { is_in_list = hd_hb_round_targets }
+							NOT = {
+								AND = {
+									exists = var:hd_hb_d0_liege
+									liege = var:hd_hb_d0_liege
+								}
+							}
 						}
 						add_to_temporary_list = hd_hb_round_targets
 					}
@@ -191,32 +216,37 @@ hd_hb_recheck_duchies_effect = {
 	}
 }
 
-# Player options cannot override a newly single-sided force/block result.
-# In the equality case, execute only the player's stated choice (no AI roll).
+# 2026-10-17：玩家选什么就执行什么，不再受强制、禁止条件影响。
 hd_hb_player_choose_independence_effect = {
 	if = {
-		limit = {
-			hd_hb_player_choice_valid_trigger = yes
-			OR = {
-				hd_hb_force_independence_trigger = yes
-				NOT = { hd_hb_block_independence_trigger = yes }
-			}
-		}
+		limit = { hd_hb_player_choice_valid_trigger = yes }
 		hd_qxzl_release_ruler_effect = yes
 	}
-	hd_hb_clear_player_pending_effect = yes
+	if = {
+		limit = {
+			OR = {
+				NOT = { exists = var:hd_hb_choice_pending_liege }
+				NOT = { exists = scope:hd_hb_choice_liege }
+				var:hd_hb_choice_pending_liege = scope:hd_hb_choice_liege
+			}
+		}
+		# 只有作答的是当前这一问才清待选标记；D3 重问后点旧事件不作废新事件。
+		hd_hb_clear_player_pending_effect = yes
+	}
 	title:h_china = { hd_hb_maybe_spatial_effect = yes }
 }
 
 hd_hb_player_choose_stay_effect = {
 	if = {
 		limit = {
-			hd_hb_player_choice_valid_trigger = yes
-			hd_hb_force_independence_trigger = yes
-			NOT = { hd_hb_block_independence_trigger = yes }
+			OR = {
+				NOT = { exists = var:hd_hb_choice_pending_liege }
+				NOT = { exists = scope:hd_hb_choice_liege }
+				var:hd_hb_choice_pending_liege = scope:hd_hb_choice_liege
+			}
 		}
-		hd_qxzl_release_ruler_effect = yes
+		# 只有作答的是当前这一问才清待选标记；D3 重问后点旧事件不作废新事件。
+		hd_hb_clear_player_pending_effect = yes
 	}
-	hd_hb_clear_player_pending_effect = yes
 	title:h_china = { hd_hb_maybe_spatial_effect = yes }
 }

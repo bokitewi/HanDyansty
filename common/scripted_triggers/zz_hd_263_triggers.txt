@@ -29,3 +29,89 @@ hd263_yizhou_duchy_trigger = {
 	tier = tier_duchy
 	de_jure_liege ?= title:k_uuii_yizhou
 }
+
+# 253 局接力 263 后半段（三国剧本事件衔接，2026-10-18）：接力已启动
+hd263_relay_trigger = {
+	exists = global_var:hd263_relay_on
+}
+
+# 263 主线在跑：263 开局，或 253 局接力已启动
+hd263_chain_on_trigger = {
+	OR = {
+		game_start_date = 263.9.20
+		hd263_relay_trigger = yes
+	}
+}
+
+# S3 截止：263 开局按 264.6.1；接力按 S2 后 150 天的限时变量
+hd263_s3_expired_trigger = {
+	OR = {
+		AND = { NOT = { hd263_relay_trigger = yes } current_date >= 264.6.1 }
+		AND = { hd263_relay_trigger = yes NOT = { exists = global_var:hd263_relay_s3_window } }
+	}
+}
+
+# S4 截止：263 开局按 264.9.1；接力按 S2 后 240 天的限时变量
+hd263_s4_expired_trigger = {
+	OR = {
+		AND = { NOT = { hd263_relay_trigger = yes } current_date >= 264.9.1 }
+		AND = { hd263_relay_trigger = yes NOT = { exists = global_var:hd263_relay_s4_window } }
+	}
+}
+
+# 接力：伐蜀已了结（战争不在进行，且 S4 已了／S3–S4 作罢，或从未出降而 253 已发满三次或过了 268.1.1 最晚发兵日）
+hd263_relay_fashu_settled_trigger = {
+	NOT = { exists = global_var:hd253_fashu_active }
+	OR = {
+		exists = global_var:hd263_s4_done
+		exists = global_var:hd263_s34_skip
+		AND = {
+			NOT = { exists = global_var:hd263_s2_done }
+			OR = {
+				exists = global_var:hd253_fashu_asked # 玩家罢兵（永久）
+				AND = { exists = global_var:hd253_fashu_tries global_var:hd253_fashu_tries >= 3 }
+				current_date >= 268.1.1
+			}
+		}
+	}
+}
+
+# 接力授地：$WHO$ 有实地（县级以上、非世族、非无地类头衔）。Scope：人物
+hd263_relay_has_real_land_trigger = {
+	any_held_title = {
+		tier >= tier_county
+		is_noble_family_title = no
+		is_landless_type_title = no
+	}
+}
+
+# 接力授地：郡头衔可收给 $WHO$。持有者在魏境内、是电脑、非权臣、非司马氏、主君是天子或电脑、此郡不是其首府郡、郡内有其直持县。Scope：郡头衔
+hd263_relay_grantable_duchy_trigger = {
+	exists = holder
+	holder = {
+		is_ai = yes
+		NOT = { global_var:hd_sg_$WHO$ ?= this }
+		NOT = { title:h_china.var:hd_court_regent ?= this }
+		NOT = { dynasty ?= character:si_ma_zhao.dynasty }
+		OR = {
+			this = title:h_china.holder
+			top_liege ?= title:h_china.holder
+		}
+		OR = {
+			this = title:h_china.holder
+			liege ?= { is_ai = yes }
+		}
+	}
+	NOT = { holder.capital_county.duchy ?= this }
+	# 郡内有玩家的县则不收（转郡头衔时引擎会把郡内封臣一起拉给新郡主）
+	NOT = {
+		any_in_de_jure_hierarchy = {
+			tier = tier_county
+			holder ?= { is_ai = no }
+		}
+	}
+	any_in_de_jure_hierarchy = {
+		tier = tier_county
+		holder ?= prev.holder
+	}
+}

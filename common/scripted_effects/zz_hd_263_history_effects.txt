@@ -4,6 +4,7 @@
 # 转头衔一律先结束战争 → 一个 change 里先转头衔后改投封臣 → 设主头衔 → 最后才死亡或囚禁。
 # 依赖：S2–S4 依赖 S1；S5–S8 只看"司马昭／司马炎是权臣、曹奂在位"，与伐蜀成败无关。
 # 伐蜀战争复用 hd253_history_war_cb 与 hd253_start_history_war_effect（KIND = fashu），结局标记 hd253_fashu_*（253 的心跳只在 253 闸门下跑）。
+# 253 局接力（hd263_relay_trigger，zz_hd_263_relay.txt，2026-10-18）：伐蜀由 253 发兵（含重试），S1 不跑；出降起走 S2–S8，253 自带的出降由预设 hd253_fashu_surrender_done 关掉。
 
 ############################################################
 # 心跳（每 30 天）
@@ -78,6 +79,7 @@ hd263_rebel_effect = {
 hd263_s1_try_effect = {
 	if = {
 		limit = {
+			NOT = { hd263_relay_trigger = yes } # 接力时伐蜀由 253 发兵
 			NOT = { exists = global_var:hd263_s1_cancel }
 			NOT = { exists = global_var:hd263_s1_asked }
 			NOT = { exists = global_var:hd263_s2_done }
@@ -149,7 +151,7 @@ hd263_s1_war_effect = {
 
 # 三路将领：玩家先问"受命／称疾"，电脑直接加入
 hd263_s1_general_effect = {
-	character:$WHO$ ?= {
+	global_var:hd_sg_$WHO$ ?= {
 		if = {
 			limit = { is_alive = yes is_ai = no }
 			trigger_event = hd263.0110
@@ -197,7 +199,7 @@ hd263_s1_decline_effect = {
 hd263_s1_spawn_effect = {
 	$WHO$ = {
 		if = {
-			limit = { scope:hd263_gen = { this = character:yingchuan_zhong_024 } }
+			limit = { scope:hd263_gen = { global_var:hd_sg_yingchuan_zhong_024 ?= this } }
 			spawn_army = { levies = 25000 location = capital_province origin = capital_province inheritable = yes uses_supply = yes war = scope:hd263_war name = hd263_zhonghui_army_name }
 		}
 		else_if = {
@@ -212,6 +214,20 @@ hd263_s1_spawn_effect = {
 
 # 战争计数与结局：白和、战败、失效后允许重宣（264.1.16 前），过期则 S1–S4 作罢
 hd263_s1_watch_effect = {
+	# 接力：只给 S2 计战期（不在打就归零）；不删 hd253_fashu_white/lost/invalid（253 的冷却与重试要读），不设 s1_cancel
+	if = {
+		limit = { hd263_relay_trigger = yes }
+		if = {
+			limit = { hd263_s1_war_active_trigger = yes }
+			change_global_variable = { name = hd263_s1_pulses add = 1 }
+		}
+		else = { set_global_variable = { name = hd263_s1_pulses value = 0 } }
+	}
+	else = {
+		hd263_s1_watch_main_effect = yes
+	}
+}
+hd263_s1_watch_main_effect = {
 	if = {
 		limit = { hd263_s1_war_active_trigger = yes }
 		change_global_variable = { name = hd263_s1_pulses add = 1 }
@@ -256,7 +272,8 @@ hd263_s2_check_effect = {
 				AND = {
 					hd263_s1_war_active_trigger = yes
 					OR = {
-						current_date >= 264.1.16
+						AND = { NOT = { hd263_relay_trigger = yes } current_date >= 264.1.16 }
+						AND = { hd263_relay_trigger = yes global_var:hd263_s1_pulses >= 4 } # 接力：打满约 120 天兜底
 						AND = {
 							global_var:hd263_s1_pulses >= 2
 							OR = {
@@ -279,6 +296,11 @@ hd263_s2_check_effect = {
 		}
 		set_global_variable = hd263_s2_done
 		if = {
+			limit = { hd263_relay_trigger = yes }
+			set_global_variable = { name = hd263_relay_s3_window value = yes days = 150 }
+			set_global_variable = { name = hd263_relay_s4_window value = yes days = 240 }
+		}
+		if = {
 			limit = { title:e_bashu.holder ?= { is_alive = yes is_ai = no } }
 			title:e_bashu.holder = { trigger_event = hd263.0200 }
 		}
@@ -288,6 +310,24 @@ hd263_s2_check_effect = {
 
 # 出降：①以攻方胜结束 S1（on_victory 把益州交天子）②汉帝头衔归天子、封臣改投（姜维降钟会）③益州与蜀郡、蜀地郡守交邓艾 ④绵竹诸将与刘谌之死（只限电脑）
 hd263_s2_surrender_effect = {
+	# 接力：钟会、邓艾无实地时先授郡（玩家刘禅选背城一战不经过这里）
+	if = {
+		limit = { hd263_relay_trigger = yes }
+		hd263_relay_land_generals_effect = yes
+	}
+	# 接力：结束战争、转移头衔之前，先给真在蜀汉治下的姜维与绵竹诸将记标记（之后分不出原属），④ 与姜维降钟会只认有标记的人
+	if = {
+		limit = { hd263_relay_trigger = yes exists = title:e_bashu.holder }
+		title:e_bashu.holder = { save_scope_as = hd263_shu }
+		hd263_relay_mark_shu_effect = { WHO = jiang_wei }
+		hd263_relay_mark_shu_effect = { WHO = zhu_ge_zhan }
+		hd263_relay_mark_shu_effect = { WHO = zhu_ge_shang }
+		hd263_relay_mark_shu_effect = { WHO = huang_chong }
+		hd263_relay_mark_shu_effect = { WHO = li_qiu }
+		hd263_relay_mark_shu_effect = { WHO = zhang_zun_2 }
+		hd263_relay_mark_shu_effect = { WHO = fu_qian }
+		hd263_relay_mark_shu_effect = { WHO = liu_chen }
+	}
 	hd263_find_war_effect = yes
 	if = {
 		limit = { exists = scope:hd263_war }
@@ -325,11 +365,17 @@ hd263_s2_surrender_effect = {
 		# 姜维（上一步已随众改投天子）：电脑再降钟会；玩家先问（hd263.0210：降钟会／拒命）
 		character:jiang_wei ?= {
 			if = {
-				limit = { is_alive = yes is_landed = yes is_ai = no }
+				limit = {
+					is_alive = yes is_landed = yes is_ai = no
+					OR = { NOT = { hd263_relay_trigger = yes } has_character_flag = hd263_relay_shu }
+				}
 				trigger_event = hd263.0210
 			}
 			else_if = {
-				limit = { is_alive = yes is_landed = yes }
+				limit = {
+					is_alive = yes is_landed = yes
+					OR = { NOT = { hd263_relay_trigger = yes } has_character_flag = hd263_relay_shu }
+				}
 				hd263_jiang_wei_submit_effect = yes
 			}
 		}
@@ -359,16 +405,31 @@ hd263_s2_surrender_effect = {
 	else = { debug_log = "HD263 S2 SKIPPED_NO_RULER" }
 }
 
-# 只杀电脑角色；玩家角色不杀，只记日志
+# 只杀电脑角色；玩家角色不杀，只记日志。接力时只杀出降前在蜀汉治下（有 hd263_relay_shu 标记）、东家与主君都不是玩家的人
 hd263_die_effect = {
-	character:$WHO$ ?= {
+	global_var:hd_sg_$WHO$ ?= {
 		if = {
-			limit = { is_alive = yes is_ai = yes }
+			limit = {
+				is_alive = yes
+				is_ai = yes
+				OR = {
+					NOT = { hd263_relay_trigger = yes }
+					AND = {
+						has_character_flag = hd263_relay_shu
+						NOT = { employer ?= { is_ai = no } }
+						NOT = { liege ?= { is_ai = no } }
+					}
+				}
+			}
 			death = { death_reason = $REASON$ }
 		}
 		else_if = {
-			limit = { is_alive = yes }
+			limit = { is_alive = yes is_ai = no }
 			debug_log = "HD263 PLAYER_SPARED $WHO$"
+		}
+		else_if = {
+			limit = { is_alive = yes }
+			debug_log = "HD263 RELAY SPARED $WHO$"
 		}
 	}
 }
@@ -388,14 +449,14 @@ hd263_jiang_wei_submit_effect = {
 			limit = { is_alive = yes is_landed = yes }
 			if = {
 				limit = {
-					character:yingchuan_zhong_024 ?= {
+					global_var:hd_sg_yingchuan_zhong_024 ?= {
 						is_alive = yes
 						is_landed = yes
 						liege ?= title:h_china.holder
 					}
 				}
 				# 封臣须低于主君：梁州（王国）先交钟会，再让姜维、张翼、廖化改投钟会（执行后复核必改 1）
-				character:yingchuan_zhong_024 = { save_scope_as = hd263_zh }
+				global_var:hd_sg_yingchuan_zhong_024 ?= { save_scope_as = hd263_zh }
 				create_title_and_vassal_change = { type = granted save_scope_as = hd263_jw_change add_claim_on_loss = no }
 				title:k_liaozhou = {
 					if = {
@@ -474,7 +535,7 @@ hd263_s2_dengai_yizhou_effect = {
 			every_vassal = {
 				limit = {
 					NOT = { this = scope:hd263_ai }
-					NOT = { this = character:luo_xian }
+					NOT = { global_var:hd_sg_luo_xian ?= this }
 					primary_title = { hd263_yizhou_duchy_trigger = yes }
 				}
 				change_liege = { liege = scope:hd263_ai change = scope:hd263_s2b_change }
@@ -509,7 +570,7 @@ hd263_s3_check_effect = {
 			limit = { exists = global_var:hd263_s3_pending }
 			# 等玩家选择；到期仍未选则作罢（执行后复核建议 5）
 			if = {
-				limit = { current_date >= 264.6.1 }
+				limit = { hd263_s3_expired_trigger = yes }
 				set_global_variable = hd263_s3_done
 				set_global_variable = hd263_s34_skip
 				debug_log = "HD263 S3 EXPIRED_PENDING"
@@ -520,7 +581,7 @@ hd263_s3_check_effect = {
 			set_global_variable = hd263_s3_wait   # 先等一个心跳（约 30 天）
 		}
 		else_if = {
-			limit = { current_date >= 264.6.1 }
+			limit = { hd263_s3_expired_trigger = yes }
 			set_global_variable = hd263_s3_done
 			set_global_variable = hd263_s34_skip
 			debug_log = "HD263 S3 EXPIRED"
@@ -528,7 +589,7 @@ hd263_s3_check_effect = {
 		else_if = {
 			limit = {
 				character:deng_ai ?= { is_alive = yes has_title = title:k_uuii_yizhou liege ?= title:h_china.holder }
-				character:yingchuan_zhong_024 ?= { is_alive = yes is_landed = yes liege ?= title:h_china.holder }
+				global_var:hd_sg_yingchuan_zhong_024 ?= { is_alive = yes is_landed = yes liege ?= title:h_china.holder }
 			}
 			set_global_variable = hd263_s3_pending
 			hd263_s3_route_effect = yes
@@ -537,7 +598,7 @@ hd263_s3_check_effect = {
 			limit = {
 				OR = {
 					character:deng_ai ?= { is_alive = no }
-					character:yingchuan_zhong_024 ?= { is_alive = no }
+					global_var:hd_sg_yingchuan_zhong_024 ?= { is_alive = no }
 				}
 			}
 			set_global_variable = hd263_s3_done
@@ -552,9 +613,9 @@ hd263_s3_route_effect = {
 	if = {
 		limit = {
 			NOT = { exists = global_var:hd263_s3_ok_zh }
-			character:yingchuan_zhong_024 ?= { is_ai = no }
+			global_var:hd_sg_yingchuan_zhong_024 ?= { is_ai = no }
 		}
-		character:yingchuan_zhong_024 = { trigger_event = hd263.0300 }
+		global_var:hd_sg_yingchuan_zhong_024 ?= { trigger_event = hd263.0300 }
 	}
 	else_if = {
 		limit = {
@@ -578,7 +639,7 @@ hd263_s3_effect = {
 	set_global_variable = hd263_s3_done
 	title:h_china.holder = { save_scope_as = hd263_wei }
 	character:deng_ai = { save_scope_as = hd263_ai }
-	character:yingchuan_zhong_024 = { save_scope_as = hd263_zh }
+	global_var:hd_sg_yingchuan_zhong_024 ?= { save_scope_as = hd263_zh }
 	create_title_and_vassal_change = { type = revoked save_scope_as = hd263_s3_change add_claim_on_loss = no }
 	scope:hd263_ai = {
 		every_held_title = {
@@ -626,14 +687,14 @@ hd263_s3_effect = {
 			limit = { scope:hd263_ai = { is_alive = yes is_imprisoned = no } }
 			imprison = { target = scope:hd263_ai type = dungeon }
 		}
-		character:deng_zhong ?= {
+		global_var:hd_sg_deng_zhong ?= {
 			if = {
 				limit = { is_alive = yes is_imprisoned = no is_ruler = no }
 				if = {
 					limit = { NOT = { is_courtier_of = scope:hd263_zh } }
 					set_employer = scope:hd263_zh
 				}
-				scope:hd263_zh = { imprison = { target = character:deng_zhong type = dungeon } }
+				scope:hd263_zh = { imprison = { target = global_var:hd_sg_deng_zhong type = dungeon } }
 			}
 		}
 	}
@@ -677,13 +738,13 @@ hd263_s4_check_effect = {
 			set_global_variable = hd263_s4_wait
 		}
 		else_if = {
-			limit = { current_date >= 264.9.1 }
+			limit = { hd263_s4_expired_trigger = yes }
 			set_global_variable = hd263_s4_done
 			debug_log = "HD263 S4 EXPIRED"
 		}
 		else_if = {
 			limit = {
-				character:yingchuan_zhong_024 ?= {
+				global_var:hd_sg_yingchuan_zhong_024 ?= {
 					is_alive = yes
 					has_title = title:k_uuii_yizhou
 					is_independent_ruler = no
@@ -692,8 +753,8 @@ hd263_s4_check_effect = {
 			}
 			set_global_variable = hd263_s4_done
 			if = {
-				limit = { character:yingchuan_zhong_024 = { is_ai = no } }
-				character:yingchuan_zhong_024 = { trigger_event = hd263.0400 }
+				limit = { global_var:hd_sg_yingchuan_zhong_024 ?= { is_ai = no } }
+				global_var:hd_sg_yingchuan_zhong_024 ?= { trigger_event = hd263.0400 }
 			}
 			else_if = {
 				limit = { character:jiang_wei ?= { is_alive = yes is_ai = no } }
@@ -702,7 +763,7 @@ hd263_s4_check_effect = {
 			else = { hd263_s4_mutiny_effect = yes }
 		}
 		else_if = {
-			limit = { character:yingchuan_zhong_024 ?= { is_alive = no } }
+			limit = { global_var:hd_sg_yingchuan_zhong_024 ?= { is_alive = no } }
 			set_global_variable = hd263_s4_done
 			debug_log = "HD263 S4 SKIPPED_DEAD"
 		}
@@ -712,6 +773,26 @@ hd263_s4_check_effect = {
 # 电脑钟会起兵即败：胡烈、丘建兵变。先把钟会、姜维（电脑）、邓艾（若仍有地）的头衔交天子、封臣改投天子，再杀
 hd263_s4_mutiny_effect = {
 	title:h_china.holder = { save_scope_as = hd263_wei }
+	# 接力：交出头衔前先记下该杀的人（在魏境内的钟会、姜维、邓艾，钟会帐下的姜斌、刘璿，被钟会囚禁的邓忠）
+	if = {
+		limit = { hd263_relay_trigger = yes }
+		global_var:hd_sg_yingchuan_zhong_024 ?= { save_scope_as = hd263_zh }
+		hd263_relay_mark_s4_effect = { WHO = yingchuan_zhong_024 CORE = yes }
+		hd263_relay_mark_s4_effect = { WHO = jiang_wei CORE = yes }
+		hd263_relay_mark_s4_effect = { WHO = deng_ai CORE = yes }
+		hd263_relay_mark_s4_effect = { WHO = jiang_bin CORE = no }
+		hd263_relay_mark_s4_effect = { WHO = zhuojun_liu_005 CORE = no }
+		global_var:hd_sg_deng_zhong ?= {
+			if = {
+				limit = {
+					is_alive = yes
+					exists = scope:hd263_zh
+					is_imprisoned_by = scope:hd263_zh
+				}
+				add_character_flag = { flag = hd263_relay_s4_kill days = 1 }
+			}
+		}
+	}
 	create_title_and_vassal_change = { type = revoked save_scope_as = hd263_s4_change add_claim_on_loss = no }
 	hd263_s4_strip_effect = { WHO = yingchuan_zhong_024 }
 	character:jiang_wei ?= {
@@ -723,28 +804,31 @@ hd263_s4_mutiny_effect = {
 	hd263_s4_strip_effect = { WHO = deng_ai }
 	resolve_title_and_vassal_change = scope:hd263_s4_change
 	if = {
-		limit = { character:yingchuan_zhong_024 ?= { is_landed = no } }
+		limit = { global_var:hd_sg_yingchuan_zhong_024 ?= { is_landed = no } }
 		debug_log = "HD263 S4 TRANSFER_OK"
 	}
 	else = { debug_log = "HD263 S4 TRANSFER_BAD" }
-	character:anding_hu_018 ?= { save_scope_as = hd263_killer }
-	character:tian_xu ?= { save_scope_as = hd263_killer_tx }
+	global_var:hd_sg_anding_hu_018 ?= { save_scope_as = hd263_killer }
+	global_var:hd_sg_tian_xu ?= { save_scope_as = hd263_killer_tx }
 	hd263_s4_kill_effect = { WHO = yingchuan_zhong_024 KILLER = hd263_killer }
 	hd263_s4_kill_effect = { WHO = jiang_wei KILLER = hd263_killer }
 	hd263_s4_kill_effect = { WHO = jiang_bin KILLER = hd263_killer }
 	hd263_s4_kill_effect = { WHO = zhuojun_liu_005 KILLER = hd263_killer }
 	hd263_s4_kill_effect = { WHO = deng_ai KILLER = hd263_killer_tx }
 	hd263_s4_kill_effect = { WHO = deng_zhong KILLER = hd263_killer_tx }
-	character:yingchuan_zhong_024 ?= { save_scope_as = hd_news_b }
+	global_var:hd_sg_yingchuan_zhong_024 ?= { save_scope_as = hd_news_b }
 	scope:hd263_wei = { save_scope_as = hd_news_a }
 	hd_world_news_send_effect = { EVENT = hd263.0930 }
 	debug_log = "HD263 S4 MUTINY DONE"
 }
 # 在 scope:hd263_s4_change 里：$WHO$ 的头衔交天子，封臣改投天子
 hd263_s4_strip_effect = {
-	character:$WHO$ ?= {
+	global_var:hd_sg_$WHO$ ?= {
 		if = {
-			limit = { is_alive = yes is_landed = yes NOT = { this = scope:hd263_wei } }
+			limit = {
+				is_alive = yes is_landed = yes NOT = { this = scope:hd263_wei }
+				OR = { NOT = { hd263_relay_trigger = yes } top_liege ?= scope:hd263_wei } # 接力：不收外国的地
+			}
 			every_held_title = {
 				limit = { is_noble_family_title = no is_landless_type_title = no }
 				change_title_holder = { holder = scope:hd263_wei change = scope:hd263_s4_change take_baronies = yes }
@@ -755,11 +839,18 @@ hd263_s4_strip_effect = {
 		}
 	}
 }
-# 电脑才杀（被杀者有凶手时记凶手）
+# 电脑才杀（被杀者有凶手时记凶手）；接力时只杀有 hd263_relay_s4_kill 标记的人
 hd263_s4_kill_effect = {
-	character:$WHO$ ?= {
+	global_var:hd_sg_$WHO$ ?= {
 		if = {
-			limit = { is_alive = yes is_ai = yes }
+			limit = {
+				is_alive = yes
+				is_ai = yes
+				OR = {
+					NOT = { hd263_relay_trigger = yes }
+					has_character_flag = hd263_relay_s4_kill
+				}
+			}
 			if = {
 				limit = { exists = scope:$KILLER$ scope:$KILLER$ = { is_alive = yes } }
 				death = { death_reason = death_murder_known killer = scope:$KILLER$ }
@@ -771,10 +862,10 @@ hd263_s4_kill_effect = {
 
 # 玩家钟会起兵：独立战争（二万），姜维（电脑、在其帐下）随之
 hd263_s4_zhonghui_rebel_effect = {
-	character:yingchuan_zhong_024 = {
+	global_var:hd_sg_yingchuan_zhong_024 ?= {
 		hd263_rebel_effect = { LEVIES = 20000 }
 	}
-	hd263_news_effect = { A = character:yingchuan_zhong_024 B = title:h_china.holder EVENT = hd263.0935 }
+	hd263_news_effect = { A = global_var:hd_sg_yingchuan_zhong_024 B = title:h_china.holder EVENT = hd263.0935 }
 }
 
 ############################################################
@@ -790,7 +881,7 @@ hd263_s5_check_effect = {
 				is_landed = yes
 				title:h_china.var:hd_court_regent ?= this
 			}
-			title:h_china.holder ?= { this = character:cao_huan }
+			title:h_china.holder ?= { global_var:hd_sg_cao_huan ?= this }
 		}
 		set_global_variable = hd263_s5_done
 		if = {
@@ -865,6 +956,10 @@ hd263_s5_duchy_effect = {
 				holder ?= {
 					NOT = { this = scope:hd263_zhao }
 					liege ?= scope:hd263_wei
+					OR = {
+						NOT = { hd263_relay_trigger = yes }
+						is_ai = yes # 接力：玩家郡守不强行改投
+					}
 				}
 			}
 			holder = { change_liege = { liege = scope:hd263_zhao change = scope:hd263_s5_change } }
@@ -919,16 +1014,34 @@ hd263_s7_check_effect = {
 			NOT = { exists = global_var:hd263_zhao_dead }
 			current_date >= 265.9.6
 			character:si_ma_zhao ?= { is_alive = yes is_ai = yes }
-			character:si_ma_yan ?= { is_alive = yes }
+			global_var:hd_sg_si_ma_yan ?= { is_alive = yes }
+			# 253 局接力：司马昭须是天子封臣兼权臣；伐蜀了结后才病逝（269.1.1 硬上限）
+			OR = {
+				NOT = { hd263_relay_trigger = yes }
+				AND = {
+					title:h_china.var:hd_court_regent ?= character:si_ma_zhao
+					character:si_ma_zhao = { liege ?= title:h_china.holder }
+					OR = {
+						hd263_relay_fashu_settled_trigger = yes
+						current_date >= 269.1.1
+					}
+				}
+			}
 		}
 		hd263_s7_pass_effect = yes
+		# 接力：交地后司马昭已无地，on_death 不一定认得他，由 S7 自己记死并排司马炎接任
+		if = {
+			limit = { hd263_relay_trigger = yes }
+			set_global_variable = hd263_zhao_dead
+			title:h_china = { trigger_event = { on_action = hd263_yan_succession days = 3 } }
+		}
 		character:si_ma_zhao = { death = { death_reason = death_natural_causes } }
 	}
 }
 
 # 生前交接：晋（并州）、河内与其余领地、封臣交司马炎
 hd263_s7_pass_effect = {
-	character:si_ma_yan = { save_scope_as = hd263_yan }
+	global_var:hd_sg_si_ma_yan ?= { save_scope_as = hd263_yan }
 	# 先把辅政锁指向司马炎（免得转移中拜官把晋国郡守收归天子）；丞相官职不随领地转，接任时再授
 	title:h_china = { set_variable = { name = hd_dc_ten_qjc_regent value = scope:hd263_yan } }
 	create_title_and_vassal_change = { type = granted save_scope_as = hd263_s7_change add_claim_on_loss = no }
@@ -965,8 +1078,8 @@ hd263_s7_pass_effect = {
 # 司马昭死后第 3 天：头衔若已被任命给别人就收回交司马炎，再走接任（天子是玩家问天子，司马炎是玩家问他）
 hd263_yan_succession_route_effect = {
 	if = {
-		limit = { character:si_ma_yan ?= { is_alive = yes } }
-		character:si_ma_yan = { save_scope_as = hd263_yan }
+		limit = { global_var:hd_sg_si_ma_yan ?= { is_alive = yes } }
+		global_var:hd_sg_si_ma_yan ?= { save_scope_as = hd263_yan }
 		title:h_china.holder ?= { save_scope_as = hd263_wei }
 		create_title_and_vassal_change = { type = granted save_scope_as = hd263_s7r_change add_claim_on_loss = no }
 		title:k_uuii_bingzhou = {
@@ -977,7 +1090,15 @@ hd263_yan_succession_route_effect = {
 		}
 		title:d_henei = {
 			if = {
-				limit = { exists = holder NOT = { holder ?= scope:hd263_yan } NOT = { holder ?= { is_ai = no } } }
+				limit = {
+					exists = holder
+					NOT = { holder ?= scope:hd263_yan }
+					NOT = { holder ?= { is_ai = no } }
+					OR = {
+						NOT = { hd263_relay_trigger = yes }
+						holder ?= { OR = { this = scope:hd263_wei dynasty ?= scope:hd263_yan.dynasty } } # 接力：只从天子或司马氏手里收
+					}
+				}
 				holder = { save_scope_as = hd263_henei_old }
 				every_in_de_jure_hierarchy = {
 					limit = { tier = tier_county holder ?= scope:hd263_henei_old }
@@ -1006,9 +1127,9 @@ hd263_yan_succession_route_effect = {
 				set_primary_title_to = title:k_uuii_bingzhou
 				if = {
 					limit = { exists = global_var:hd263_s6_done }
-					hd_nbc_style_effect = { WHO = si_ma_yan STYLE = wang }
+					hd263_style_ptr_effect = { WHO = si_ma_yan STYLE = wang }
 				}
-				else = { hd_nbc_style_effect = { WHO = si_ma_yan STYLE = gong } }
+				else = { hd263_style_ptr_effect = { WHO = si_ma_yan STYLE = gong } }
 			}
 		}
 		if = {
@@ -1022,8 +1143,8 @@ hd263_yan_succession_route_effect = {
 			title:h_china.holder = { trigger_event = hd263.0700 }
 		}
 		else_if = {
-			limit = { character:si_ma_yan = { is_ai = no } }
-			character:si_ma_yan = { trigger_event = hd263.0710 }
+			limit = { global_var:hd_sg_si_ma_yan ?= { is_ai = no } }
+			global_var:hd_sg_si_ma_yan ?= { trigger_event = hd263.0710 }
 		}
 		else = { hd263_yan_regency_effect = yes }
 	}
@@ -1045,15 +1166,15 @@ hd263_s7_duchy_liege_effect = {
 
 # 司马炎接任权臣：先设辅政锁（免得授丞相时晋国郡守被收归天子），再授丞相、秘书省、装权臣
 hd263_yan_regency_effect = {
-	character:si_ma_yan ?= {
+	global_var:hd_sg_si_ma_yan ?= {
 		if = {
 			limit = {
 				is_alive = yes
 				is_landed = yes
-				title:h_china.holder ?= { NOT = { this = character:si_ma_yan } }
+				title:h_china.holder ?= { NOT = { global_var:hd_sg_si_ma_yan ?= this } }
 				liege ?= title:h_china.holder
 			}
-			title:h_china = { set_variable = { name = hd_dc_ten_qjc_regent value = character:si_ma_yan } }
+			title:h_china = { set_variable = { name = hd_dc_ten_qjc_regent value = global_var:hd_sg_si_ma_yan } }
 			hd218_grant_chengxiang_effect = yes
 			WJ_install_historical_secretariat_effect = { OFFICE = e_WJ_minister_cheng_xiang POSITION = WJ_minister_cheng_xiang LAW = WJ_grand_chengxiang_law }
 			hd_court_install_regency_effect = yes
@@ -1076,7 +1197,7 @@ hd263_yan_regency_effect = {
 				limit = {
 					OR = {
 						NOT = { exists = global_var:hd263_s5_ok }
-						title:d_taiyuan.holder ?= { OR = { this = character:si_ma_yan liege ?= character:si_ma_yan } }
+						title:d_taiyuan.holder ?= { OR = { global_var:hd_sg_si_ma_yan ?= this liege ?= global_var:hd_sg_si_ma_yan } }
 					}
 				}
 				debug_log = "HD263 S7 JIN_VASSALS OK"
@@ -1095,12 +1216,18 @@ hd263_s8_check_effect = {
 		limit = {
 			NOT = { exists = global_var:hd263_s8_done }
 			current_date >= 266.2.8
-			title:h_china.holder ?= { this = character:cao_huan }
+			# 253 局接力：伐蜀了结（且不在伐蜀战中）后才禅代；269.6.1 硬上限
+			OR = {
+				NOT = { hd263_relay_trigger = yes }
+				hd263_relay_fashu_settled_trigger = yes
+				current_date >= 269.6.1 # 硬上限：到期不再等伐蜀
+			}
+			title:h_china.holder ?= { global_var:hd_sg_cao_huan ?= this }
 			title:h_china.var:hd_court_regent ?= {
 				is_alive = yes
 				is_landed = yes
 				OR = {
-					this = character:si_ma_yan
+					global_var:hd_sg_si_ma_yan ?= this
 					AND = { this = character:si_ma_zhao is_ai = no }
 				}
 			}
@@ -1237,7 +1364,7 @@ hd263_shandai_effect = {
 hd263_jin_name_effect = {
 	title:h_china.holder ?= {
 		if = {
-			limit = { dynasty ?= character:si_ma_yan.dynasty }
+			limit = { dynasty ?= global_var:hd_sg_si_ma_yan.dynasty }
 			primary_title = { set_title_name = dynn_title_jin }
 			dynasty ?= {
 				remove_variable = hd_fixed_realm_title
@@ -1259,7 +1386,7 @@ hd263_s5_unpull_effect = {
 }
 # S2 校正：$WHO$ 若已改投邓艾，改回天子
 hd263_s2_unpull_effect = {
-	character:$WHO$ ?= {
+	global_var:hd_sg_$WHO$ ?= {
 		if = {
 			limit = { is_alive = yes liege ?= scope:hd263_ai }
 			change_liege = { liege = scope:hd263_wei change = scope:hd263_s2_fix }
@@ -1272,13 +1399,16 @@ hd263_s2_unpull_effect = {
 hd263_tenure_renew_effect = {
 	if = {
 		limit = {
-			current_date < 266.3.1
+			OR = {
+				current_date < 266.3.1
+				AND = { hd263_relay_trigger = yes current_date < 270.1.1 } # 接力：禅代可能推迟
+			}
 			NOT = { exists = global_var:hd263_s8_done }
 			exists = title:h_china.var:hd_court_regent
 		}
 		title:h_china.var:hd_court_regent = {
 			if = {
-				limit = { OR = { this = character:si_ma_zhao this = character:si_ma_yan } }
+				limit = { OR = { this = character:si_ma_zhao global_var:hd_sg_si_ma_yan ?= this } }
 				add_character_flag = { flag = hd_court_regent_tenure days = 60 }
 			}
 		}

@@ -60,7 +60,7 @@ hd253_opening_wars_effect = {
 			character:jiang_wei ?= { is_alive = yes has_title = title:k_liaozhou is_at_war = no }
 			title:d_taoxi1.holder ?= {
 				is_independent_ruler = no
-				top_liege = character:cao_fang
+				top_liege ?= global_var:hd_sg_cao_fang
 			}
 		}
 		title:d_taoxi1.holder = { save_scope_as = hd253_didao_def }
@@ -119,30 +119,83 @@ hd253_opening_wars_effect = {
 }
 
 ############################################################
-# 心跳（每 30 天，到 266 年）：魏吴大事件链
+# 218 局接力（2026-10-18）：各项过了最晚日期就永久跳过，记一次 HD253 RELAY_LATE。$KEY$ 同 hd253_$KEY$_done
+############################################################
+hd253_relay_late_effect = {
+	if = {
+		limit = {
+			hd253_relay_trigger = yes
+			current_date >= $DATE$
+			NOT = { has_global_variable = hd253_$KEY$_done }
+			NOT = { has_global_variable = hd253_$KEY$_late }
+		}
+		set_global_variable = hd253_$KEY$_late
+		debug_log = "HD253 RELAY_LATE $KEY$"
+	}
+}
+
+############################################################
+# 心跳（每 30 天，到 270 年）：魏吴大事件链
 ############################################################
 hd253_history_pulse_effect = {
+	# 218 局接力：司马师任权臣的心跳数（约 30 天一次），A 的 257 兜底要满 12 次
+	if = {
+		limit = {
+			hd253_relay_trigger = yes
+			title:h_china.var:hd_court_regent ?= { this = character:si_ma_shi }
+		}
+		if = {
+			limit = { NOT = { exists = global_var:hd253_relay_shi_regent_pulses } }
+			set_global_variable = { name = hd253_relay_shi_regent_pulses value = 0 }
+		}
+		change_global_variable = { name = hd253_relay_shi_regent_pulses add = 1 }
+	}
 	hd253_check_zhuge_ke_effect = yes
 	hd253_check_feifang_effect = yes
 	hd253_check_guanqiu_effect = yes
+	hd253_check_shi_death_effect = yes
 	hd253_check_zhuge_dan_effect = yes
 	hd253_check_cao_mao_effect = yes
-	hd253_check_fashu_effect = yes
+	# 结局处理须排在伐蜀检查之前（10-18 加固 C：战争刚结束时先设冷却，免得当场重发）
 	hd253_check_fashu_result_effect = yes
+	hd253_check_fashu_effect = yes
 }
 
 # 3 孙峻诛诸葛恪（史实 253 年十月）：新城之战已了、诸葛恪不在战中。事件给诸葛恪本人：电脑赴宴，玩家可称疾不赴
 hd253_check_zhuge_ke_effect = {
+	hd253_relay_late_effect = { KEY = zhuge_ke DATE = 256.1.1 }
 	if = {
 		limit = {
 			NOT = { has_global_variable = hd253_zhuge_ke_done }
+			NOT = { has_global_variable = hd253_zhuge_ke_late }
 			current_date >= 253.10.1
 			NOT = { has_global_variable = hd253_xincheng_active }
 			character:zhu_ge_ke ?= { is_alive = yes is_at_war = no }
-			character:sun_jun ?= { is_alive = yes is_imprisoned = no }
+			global_var:hd_sg_sun_jun ?= { is_alive = yes is_imprisoned = no }
+			# 218 局接力：诸葛恪是吴帝的首辅或议政直属封臣，孙峻在吴帝治下
+			OR = {
+				NOT = { hd253_relay_trigger = yes }
+				hd253_relay_zhuge_ke_pos_trigger = yes
+			}
 		}
 		set_global_variable = hd253_zhuge_ke_done
-		character:zhu_ge_ke = { trigger_event = hd253.0200 }
+		if = {
+			# 218 局接力：吴帝是玩家时不替他杀封臣、换首辅
+			limit = {
+				hd253_relay_trigger = yes
+				title:e_jiangdong.holder = { is_ai = no }
+			}
+			debug_log = "HD253 RELAY SKIP ZHUGE_KE PLAYER_WU"
+		}
+		else_if = {
+			# 218 局接力：诸葛恪帐下有玩家封臣时整项跳过
+			limit = {
+				hd253_relay_trigger = yes
+				character:zhu_ge_ke = { any_vassal = { is_ai = no } }
+			}
+			debug_log = "HD253 RELAY SKIP ZHUGE_KE PLAYER_VASSAL"
+		}
+		else = { character:zhu_ge_ke = { trigger_event = hd253.0200 } }
 	}
 }
 
@@ -152,25 +205,49 @@ hd253_zhuge_ke_killed_effect = {
 	top_liege = { save_scope_as = hd253_wu_emperor }
 	create_title_and_vassal_change = { type = revoked save_scope_as = hd253_ke_change add_claim_on_loss = no }
 	every_held_title = {
-		limit = { is_noble_family_title = no is_landless_type_title = no }
-		change_title_holder = { holder = scope:hd253_wu_emperor change = scope:hd253_ke_change }
+		limit = {
+			is_noble_family_title = no
+			is_landless_type_title = no
+			OR = {
+				NOT = { hd253_relay_trigger = yes }
+				tier >= tier_county # 218 局接力：只转县级以上
+			}
+		}
+		if = {
+			limit = { hd253_relay_trigger = yes }
+			change_title_holder = { holder = scope:hd253_wu_emperor change = scope:hd253_ke_change take_baronies = yes }
+		}
+		else = { change_title_holder = { holder = scope:hd253_wu_emperor change = scope:hd253_ke_change } }
 	}
 	every_vassal = {
+		limit = {
+			OR = {
+				NOT = { hd253_relay_trigger = yes }
+				is_ai = yes # 218 局接力：玩家封臣不改投
+			}
+		}
 		change_liege = { liege = scope:hd253_wu_emperor change = scope:hd253_ke_change }
 	}
+	if = {
+		limit = {
+			hd253_relay_trigger = yes
+			any_vassal = { is_ai = no }
+		}
+		debug_log = "HD253 RELAY ZHUGE_KE PLAYER_VASSAL_KEPT"
+	}
 	resolve_title_and_vassal_change = scope:hd253_ke_change
-	character:sun_jun ?= { save_scope_as = hd253_sun_jun }
+	global_var:hd_sg_sun_jun ?= { save_scope_as = hd253_sun_jun }
 	death = { death_reason = death_murder_known killer = scope:hd253_sun_jun }
 	scope:hd253_wu_emperor = {
 		if = {
 			limit = {
 				has_diarchy_type = grand_secretariat
-				character:sun_jun ?= { is_alive = yes is_diarch_valid_trigger = yes }
+				global_var:hd_sg_sun_jun ?= { is_alive = yes is_diarch_valid_trigger = yes }
 			}
-			set_diarch = character:sun_jun
+			set_diarch = global_var:hd_sg_sun_jun
 		}
 		if = {
-			limit = { diarch ?= character:sun_jun }
+			limit = { diarch ?= global_var:hd_sg_sun_jun }
 			debug_log = "HD253 ZHUGE_KE KILLED SUN_JUN_DIARCH OK"
 		}
 		else = { debug_log = "HD253 ZHUGE_KE KILLED SUN_JUN_DIARCH BAD" }
@@ -180,24 +257,41 @@ hd253_zhuge_ke_killed_effect = {
 
 # 4 司马师废曹芳立曹髦（史实 254 年九月）：司马师是权臣、曹芳在位。事件给司马师：电脑行废立，玩家可罢
 hd253_check_feifang_effect = {
+	hd253_relay_late_effect = { KEY = feifang DATE = 258.1.1 }
 	if = {
 		limit = {
 			NOT = { has_global_variable = hd253_feifang_done }
+			NOT = { has_global_variable = hd253_feifang_late }
 			current_date >= 254.10.1
-			character:cao_fang ?= { is_alive = yes has_title = title:h_china }
-			character:cao_mao ?= { is_alive = yes is_landed = no }
+			global_var:hd_sg_cao_fang ?= { is_alive = yes has_title = title:h_china }
+			global_var:hd_sg_cao_mao ?= {
+				is_alive = yes
+				# 10-18 加固 E：有封地也可，只要仍在魏境内（废立时先收回再继位）
+				OR = {
+					is_landed = no
+					top_liege ?= global_var:hd_sg_cao_fang
+				}
+			}
 			character:si_ma_shi ?= {
 				is_alive = yes
 				title:h_china.var:hd_court_regent ?= this
+			}
+			# 218 局接力：司马师仍是天子封臣；曹髦不从玩家或外国宫中拉来
+			OR = {
+				NOT = { hd253_relay_trigger = yes }
+				AND = {
+					character:si_ma_shi = { liege ?= title:h_china.holder }
+					global_var:hd_sg_cao_mao ?= { hd253_relay_pullable_trigger = yes }
+				}
 			}
 		}
 		set_global_variable = hd253_feifang_done
 		if = {
 			limit = {
 				character:si_ma_shi = { is_ai = yes }
-				character:cao_fang = { is_ai = no }
+				global_var:hd_sg_cao_fang ?= { is_ai = no }
 			}
-			character:cao_fang = { trigger_event = hd253.0305 }
+			global_var:hd_sg_cao_fang ?= { trigger_event = hd253.0305 }
 		}
 		else = {
 			character:si_ma_shi = { trigger_event = hd253.0300 }
@@ -207,12 +301,9 @@ hd253_check_feifang_effect = {
 
 # 废立：曹芳的头衔与封臣尽归曹髦，曹芳为齐王（无地，作新帝廷臣）；司马师重新挟新帝。Root：司马师
 hd253_feifang_effect = {
-	character:cao_fang = { save_scope_as = hd253_old_emp }
-	character:cao_mao = { save_scope_as = hd253_new_emp }
-	if = {
-		limit = { scope:hd253_new_emp = { NOT = { is_courtier_of = scope:hd253_old_emp } } }
-		scope:hd253_new_emp = { set_employer = scope:hd253_old_emp }
-	}
+	global_var:hd_sg_cao_fang ?= { save_scope_as = hd253_old_emp }
+	global_var:hd_sg_cao_mao ?= { save_scope_as = hd253_new_emp }
+	hd253_new_emp_prepare_effect = yes
 	scope:hd253_old_emp = {
 		if = {
 			limit = { has_active_diarchy = yes }
@@ -222,10 +313,19 @@ hd253_feifang_effect = {
 	create_title_and_vassal_change = { type = usurped save_scope_as = hd253_feifang_change add_claim_on_loss = no }
 	scope:hd253_old_emp = {
 		every_held_title = {
-			limit = { is_noble_family_title = no }
+			# 只转县级以上；无地类头衔中只转天下霸权 h_china（它本身是 landless 头衔）
+			limit = {
+				tier >= tier_county
+				is_noble_family_title = no
+				OR = {
+					is_landless_type_title = no
+					this = title:h_china
+				}
+			}
 			change_title_holder = { holder = scope:hd253_new_emp change = scope:hd253_feifang_change take_baronies = yes }
 		}
 		every_vassal = {
+			limit = { NOT = { this = scope:hd253_new_emp } }
 			change_liege = { liege = scope:hd253_new_emp change = scope:hd253_feifang_change }
 		}
 	}
@@ -278,9 +378,12 @@ hd253_feifang_effect = {
 
 # 5 毌丘俭、文钦起兵淮南（史实 255 年正月）：废帝之后或 255 年起。事件给毌丘俭：电脑起兵，玩家可隐忍
 hd253_check_guanqiu_effect = {
+	hd253_relay_late_effect = { KEY = guanqiu DATE = 257.1.1 }
 	if = {
 		limit = {
 			NOT = { has_global_variable = hd253_guanqiu_done }
+			NOT = { has_global_variable = hd253_guanqiu_pending }
+			NOT = { has_global_variable = hd253_guanqiu_late }
 			current_date >= 255.2.1
 			character:guan_qiu_jian ?= {
 				is_alive = yes
@@ -289,17 +392,28 @@ hd253_check_guanqiu_effect = {
 				is_at_war = no
 				top_liege ?= title:h_china.holder
 			}
+			# 218 局接力：司马氏掌权，毌丘俭直属天子
+			OR = {
+				NOT = { hd253_relay_trigger = yes }
+				AND = {
+					hd253_sima_regent_trigger = yes
+					character:guan_qiu_jian = { liege ?= title:h_china.holder }
+				}
+			}
 		}
-		set_global_variable = hd253_guanqiu_done
+		set_global_variable = { name = hd253_guanqiu_pending value = yes days = 365 }
 		character:guan_qiu_jian = { trigger_event = hd253.0400 }
 	}
 }
 
 # 6 诸葛诞起兵（史实 257 年五月），连吴为援。事件给诸葛诞：电脑起兵，玩家可隐忍
 hd253_check_zhuge_dan_effect = {
+	hd253_relay_late_effect = { KEY = zhuge_dan DATE = 260.1.1 }
 	if = {
 		limit = {
 			NOT = { has_global_variable = hd253_zhuge_dan_done }
+			NOT = { has_global_variable = hd253_zhuge_dan_pending }
+			NOT = { has_global_variable = hd253_zhuge_dan_late }
 			current_date >= 257.6.1
 			character:yangxian_zhuge_000 ?= {
 				is_alive = yes
@@ -308,9 +422,140 @@ hd253_check_zhuge_dan_effect = {
 				is_at_war = no
 				top_liege ?= title:h_china.holder
 			}
+			# 218 局接力：司马氏掌权，诸葛诞直属天子
+			OR = {
+				NOT = { hd253_relay_trigger = yes }
+				AND = {
+					hd253_sima_regent_trigger = yes
+					character:yangxian_zhuge_000 = { liege ?= title:h_china.holder }
+				}
+			}
 		}
-		set_global_variable = hd253_zhuge_dan_done
+		set_global_variable = { name = hd253_zhuge_dan_pending value = yes days = 365 }
 		character:yangxian_zhuge_000 = { trigger_event = hd253.0500 }
+	}
+}
+
+# 10-18 加固 D：起兵没开出战争时记一次失败，下次心跳再问；失败满 3 次放弃。$KEY$ = guanqiu / zhuge_dan
+hd253_rebel_fail_effect = {
+	if = {
+		limit = { NOT = { exists = global_var:hd253_$KEY$_fails } }
+		set_global_variable = { name = hd253_$KEY$_fails value = 0 }
+	}
+	change_global_variable = { name = hd253_$KEY$_fails add = 1 }
+	if = {
+		limit = { has_global_variable = hd253_$KEY$_pending }
+		remove_global_variable = hd253_$KEY$_pending
+	}
+	if = {
+		limit = { global_var:hd253_$KEY$_fails >= 3 }
+		set_global_variable = hd253_$KEY$_done
+		debug_log = "HD253 REBEL_GAVE_UP $KEY$"
+	}
+	else = { debug_log = "HD253 REBEL_RETRY $KEY$" }
+}
+
+############################################################
+# 10-18 加固 A：司马师病逝（史实 255 年闰正月，平毌丘俭后目疾发作，卒于许昌）。
+# 只限电脑司马师，且司马昭能接任（在世、有地、魏天子封臣）；之后由 on_death 钩子 3 天后让司马昭接任权臣。
+# 时机：已废帝，并且毌丘俭之叛已了（真正起兵后不在战中，或已放弃/隐忍）或到 255.12.1；未废帝时最迟 257.1.1。
+############################################################
+hd253_check_shi_death_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd253_shi_death_done }
+			current_date >= 255.3.1
+			character:si_ma_shi ?= { is_alive = yes is_ai = yes }
+			title:h_china.var:hd_court_regent ?= {
+				this = character:si_ma_shi
+				liege ?= title:h_china.holder
+			}
+			character:si_ma_zhao ?= {
+				is_alive = yes
+				is_landed = yes
+				liege ?= title:h_china.holder
+			}
+			OR = {
+				AND = {
+					current_date >= 257.1.1
+					OR = {
+						NOT = { hd253_relay_trigger = yes }
+						AND = { # 218 局接力：已任权臣约一年
+							exists = global_var:hd253_relay_shi_regent_pulses
+							global_var:hd253_relay_shi_regent_pulses >= 12
+						}
+					}
+				}
+				AND = {
+					has_global_variable = hd253_feifang_done
+					OR = {
+						current_date >= 255.12.1
+						AND = {
+							has_global_variable = hd253_guanqiu_done
+							NOT = { character:guan_qiu_jian ?= { is_alive = yes is_at_war = yes } }
+						}
+					}
+				}
+			}
+		}
+		set_global_variable = hd253_shi_death_done
+		character:si_ma_shi = { save_scope_as = hd_news_a }
+		title:h_china.holder = { save_scope_as = hd_news_b }
+		hd_world_news_send_effect = { EVENT = hd253.0595 }
+		character:si_ma_shi = { death = { death_reason = death_ill } }
+		debug_log = "HD253 SHI_DEATH"
+	}
+	else_if = {
+		# 时机已到但司马昭不能接任：不杀，留给 B（司马师在世时曹髦之死、伐蜀以他为对手）。只记一次
+		limit = {
+			NOT = { has_global_variable = hd253_shi_death_done }
+			NOT = { has_global_variable = hd253_shi_death_skip_logged }
+			current_date >= 255.12.1
+			character:si_ma_shi ?= { is_alive = yes is_ai = yes }
+			title:h_china.var:hd_court_regent ?= { this = character:si_ma_shi }
+			NOT = {
+				character:si_ma_zhao ?= {
+					is_alive = yes
+					is_landed = yes
+					liege ?= title:h_china.holder
+				}
+			}
+		}
+		set_global_variable = hd253_shi_death_skip_logged
+		debug_log = "HD253 SHI_DEATH SKIPPED_NO_ZHAO"
+	}
+}
+
+# 10-18 加固 E：新帝若有封地，先把其县级以上非世族头衔与封臣收归旧帝（随后随旧帝头衔一并转给新帝），收回先结算；
+# 无地而不在旧帝宫中时改投旧帝宫廷。需 scope:hd253_old_emp、scope:hd253_new_emp
+hd253_new_emp_prepare_effect = {
+	if = {
+		limit = { scope:hd253_new_emp = { is_landed = yes } }
+		create_title_and_vassal_change = { type = revoked save_scope_as = hd253_prep_change add_claim_on_loss = no }
+		scope:hd253_new_emp = {
+			every_held_title = {
+				limit = {
+					tier >= tier_county
+					is_noble_family_title = no
+					is_landless_type_title = no
+				}
+				change_title_holder = { holder = scope:hd253_old_emp change = scope:hd253_prep_change take_baronies = yes }
+			}
+			every_vassal = {
+				change_liege = { liege = scope:hd253_old_emp change = scope:hd253_prep_change }
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd253_prep_change
+		debug_log = "HD253 NEW_EMP_LANDS_REVOKED"
+	}
+	if = {
+		limit = {
+			scope:hd253_new_emp = {
+				is_landed = no
+				NOT = { is_courtier_of = scope:hd253_old_emp }
+			}
+		}
+		scope:hd253_new_emp = { set_employer = scope:hd253_old_emp }
 	}
 }
 
@@ -349,61 +594,84 @@ hd253_rebel_effect = {
 # 7 曹髦讨司马昭（史实 260 年五月）：曹髦在位、司马昭是权臣。事件给曹髦：电脑亲率宿卫讨司马昭，玩家可隐忍
 ############################################################
 hd253_check_cao_mao_effect = {
+	hd253_relay_late_effect = { KEY = cao_mao DATE = 263.1.1 }
 	if = {
 		limit = {
 			NOT = { has_global_variable = hd253_cao_mao_done }
+			NOT = { has_global_variable = hd253_cao_mao_late }
 			current_date >= 260.6.1
-			character:cao_mao ?= { is_alive = yes has_title = title:h_china }
-			character:si_ma_zhao ?= {
-				is_alive = yes
-				title:h_china.var:hd_court_regent ?= this
+			global_var:hd_sg_cao_mao ?= { is_alive = yes has_title = title:h_china }
+			hd253_sima_regent_trigger = yes # 10-18 加固 B：司马师或司马昭
+			# 218 局接力：曹奂已出场、在魏境内（条件同 hd253_cao_mao_end_effect），且不从玩家宫中拉来；不满足就等下次心跳
+			OR = {
+				NOT = { hd253_relay_trigger = yes }
+				global_var:hd_sg_cao_huan ?= {
+					hd253_relay_pullable_trigger = yes
+					OR = {
+						is_landed = no
+						top_liege ?= global_var:hd_sg_cao_mao
+					}
+				}
 			}
 		}
 		set_global_variable = hd253_cao_mao_done
-		character:cao_mao = { trigger_event = hd253.0700 }
+		global_var:hd_sg_cao_mao ?= { trigger_event = hd253.0700 }
 	}
 }
 
-# 曹髦出讨：司马昭是玩家时由他定（弑君或擒废），否则成济刺杀曹髦、迎立曹奂。Root：曹髦
+# 曹髦出讨：权臣（司马师或司马昭）是玩家时由他定（弑君或擒废），否则成济刺杀曹髦、迎立曹奂。Root：曹髦
 hd253_cao_mao_strike_effect = {
 	if = {
-		limit = { character:si_ma_zhao = { is_ai = no } }
-		character:si_ma_zhao = { trigger_event = hd253.0705 }
+		limit = { hd253_sima_regent_trigger = yes }
+		title:h_china.var:hd_court_regent = { save_scope_as = hd253_regent }
 	}
-	else = {
-		character:si_ma_zhao = { hd253_cao_mao_end_effect = { KILL = yes } }
+	if = {
+		limit = { scope:hd253_regent ?= { is_alive = yes is_ai = no } }
+		scope:hd253_regent = { trigger_event = hd253.0705 }
 	}
+	else_if = {
+		limit = { scope:hd253_regent ?= { is_alive = yes } }
+		scope:hd253_regent = { hd253_cao_mao_end_effect = { KILL = yes } }
+	}
+	else = { debug_log = "HD253 CAO_MAO STRIKE_NO_REGENT" }
 }
 
-# 立曹奂，曹髦遇弑（KILL = yes）或废为庶人（KILL = no）。Root：司马昭
+# 立曹奂，曹髦遇弑（KILL = yes）或废为庶人（KILL = no）。Scope：权臣；须已存 scope:hd253_regent（两处调用都先存好）
+# 曹奂的条件在曹髦死之前判（先换帝再杀）
 hd253_cao_mao_end_effect = {
 	if = {
-		limit = { character:cao_huan ?= { is_alive = yes is_landed = no } }
-		hd253_swap_emperor_effect = { OLD = character:cao_mao NEW = character:cao_huan }
+		limit = {
+			global_var:hd_sg_cao_huan ?= {
+				is_alive = yes
+				# 10-18 加固 E：有封地也可，只要仍在魏境内
+				OR = {
+					is_landed = no
+					top_liege ?= global_var:hd_sg_cao_mao
+				}
+			}
+		}
+		hd253_swap_emperor_effect = { OLD = global_var:hd_sg_cao_mao NEW = global_var:hd_sg_cao_huan }
 	}
 	if = {
 		limit = { always = $KILL$ }
-		character:cao_mao ?= {
+		global_var:hd_sg_cao_mao ?= {
 			if = {
 				limit = { is_alive = yes }
-				death = { death_reason = death_murder_known killer = character:si_ma_zhao }
+				death = { death_reason = death_murder_known killer = scope:hd253_regent }
 			}
 		}
 	}
-	character:cao_mao ?= { save_scope_as = hd_news_b }
+	global_var:hd_sg_cao_mao ?= { save_scope_as = hd_news_b }
 	save_scope_as = hd_news_a
 	hd_world_news_send_effect = { EVENT = hd253.0570 }
 	debug_log = "HD253 CAO_MAO END"
 }
 
-# 换天子：$OLD$ 的头衔与封臣尽归 $NEW$，$OLD$ 留在新帝宫中；Root（权臣）重新挟新帝（写法同 hd253_feifang_effect）
+# 换天子：$OLD$ 的头衔与封臣尽归 $NEW$，$OLD$ 留在新帝宫中；当前 scope（权臣，即 scope:hd253_regent）重新挟新帝（写法同 hd253_feifang_effect）
 hd253_swap_emperor_effect = {
 	$OLD$ = { save_scope_as = hd253_old_emp }
 	$NEW$ = { save_scope_as = hd253_new_emp }
-	if = {
-		limit = { scope:hd253_new_emp = { NOT = { is_courtier_of = scope:hd253_old_emp } } }
-		scope:hd253_new_emp = { set_employer = scope:hd253_old_emp }
-	}
+	hd253_new_emp_prepare_effect = yes
 	scope:hd253_old_emp = {
 		if = {
 			limit = { has_active_diarchy = yes }
@@ -413,10 +681,19 @@ hd253_swap_emperor_effect = {
 	create_title_and_vassal_change = { type = usurped save_scope_as = hd253_swap_change add_claim_on_loss = no }
 	scope:hd253_old_emp = {
 		every_held_title = {
-			limit = { is_noble_family_title = no }
+			# 只转县级以上；无地类头衔中只转天下霸权 h_china（它本身是 landless 头衔）
+			limit = {
+				tier >= tier_county
+				is_noble_family_title = no
+				OR = {
+					is_landless_type_title = no
+					this = title:h_china
+				}
+			}
 			change_title_holder = { holder = scope:hd253_new_emp change = scope:hd253_swap_change take_baronies = yes }
 		}
 		every_vassal = {
+			limit = { NOT = { this = scope:hd253_new_emp } }
 			change_liege = { liege = scope:hd253_new_emp change = scope:hd253_swap_change }
 		}
 	}
@@ -444,7 +721,7 @@ hd253_swap_emperor_effect = {
 	hd_court_install_regency_effect = yes
 	scope:hd253_new_emp = {
 		if = {
-			limit = { has_diarchy_type = grand_secretariat diarch ?= root }
+			limit = { has_diarchy_type = grand_secretariat diarch ?= scope:hd253_regent }
 			set_diarchy_swing = 100
 		}
 	}
@@ -456,56 +733,143 @@ hd253_swap_emperor_effect = {
 }
 
 ############################################################
-# 8 钟会、邓艾伐蜀（史实 263 年秋）：司马昭是权臣、汉帝在位、魏汉不在交战。事件给司马昭：电脑发兵，玩家可罢
+# 8 钟会、邓艾伐蜀（史实 263 年秋）：权臣（司马师或司马昭，10-18 加固 B）、汉帝在位、魏汉不在交战。事件给权臣：电脑发兵，玩家可罢
+# 10-18 加固 C/D：hd253_fashu_asked 只在玩家罢兵时设（永久）；pending 防重发；tries 计发兵次数（含开战失败），最多 3 次；
+# 未胜（白和、战败、作废）后冷却 730 天再议，开战失败冷却 180 天
 ############################################################
 hd253_check_fashu_effect = {
 	if = {
 		limit = {
 			NOT = { has_global_variable = hd253_fashu_asked }
-			current_date >= 263.9.1
-			character:si_ma_zhao ?= {
-				is_alive = yes
-				title:h_china.var:hd_court_regent ?= this
+			NOT = { has_global_variable = hd253_fashu_pending }
+			NOT = { has_global_variable = hd253_fashu_active }
+			NOT = { has_global_variable = hd253_fashu_won }
+			NOT = { has_global_variable = hd253_fashu_white }
+			NOT = { has_global_variable = hd253_fashu_lost }
+			NOT = { has_global_variable = hd253_fashu_invalid }
+			NOT = { has_global_variable = hd253_fashu_cooldown }
+			OR = {
+				NOT = { exists = global_var:hd253_fashu_tries }
+				global_var:hd253_fashu_tries < 3
 			}
+			current_date >= 263.9.1
+			current_date < 268.1.1 # 最晚发兵（心跳 270 年停，留出结算出降的时间）
+			hd253_sima_regent_trigger = yes
 			title:e_bashu.holder ?= {
 				is_alive = yes
 				is_independent_ruler = yes
 				NOT = { is_at_war_with = title:h_china.holder }
 			}
+			# 218 局接力：巴蜀帝国的持有者真是"蜀"（不是魏天子、不兼吴）
+			OR = {
+				NOT = { hd253_relay_trigger = yes }
+				hd253_relay_shu_ok_trigger = yes
+			}
 		}
-		set_global_variable = hd253_fashu_asked
-		character:si_ma_zhao = { trigger_event = hd253.0710 }
+		set_global_variable = { name = hd253_fashu_pending value = yes days = 365 }
+		title:h_china.var:hd_court_regent = { trigger_event = hd253.0710 }
 	}
+}
+
+# 发兵（权臣 0710 选 a，或玩家天子 0715 准奏）：开战，记一次，开不出来短冷却后再议。Scope：发令者
+hd253_fashu_go_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd253_fashu_active } }
+		if = {
+			limit = { exists = global_var:hd253_fashu_tries }
+			debug_log = "HD253 FASHU_RETRY_START"
+		}
+		hd253_fashu_war_effect = yes
+	}
+	if = {
+		limit = { NOT = { exists = global_var:hd253_fashu_tries } }
+		set_global_variable = { name = hd253_fashu_tries value = 0 }
+	}
+	change_global_variable = { name = hd253_fashu_tries add = 1 }
+	if = {
+		limit = { has_global_variable = hd253_fashu_pending }
+		remove_global_variable = hd253_fashu_pending
+	}
+	if = {
+		limit = { NOT = { exists = scope:hd253_war_fashu } }
+		set_global_variable = { name = hd253_fashu_cooldown value = yes days = 180 }
+		debug_log = "HD253 FASHU_START_FAILED"
+		if = {
+			limit = { global_var:hd253_fashu_tries >= 3 }
+			debug_log = "HD253 FASHU_GAVE_UP"
+		}
+	}
+}
+
+# 权臣定议发兵：魏天子是玩家（且不是权臣本人）时先请天子准奏（玩家当事人要有选择），否则直接发兵。Scope：权臣
+hd253_fashu_decide_effect = {
+	if = {
+		limit = {
+			title:h_china.holder ?= {
+				is_ai = no
+				NOT = { this = title:h_china.var:hd_court_regent }
+			}
+		}
+		title:h_china.holder = { trigger_event = hd253.0715 }
+	}
+	else = { hd253_fashu_go_effect = yes }
 }
 
 # 发兵：魏天子对汉帝开战（全国之战，不是边境战争），目标益州；天子另得三万事件兵（出关中），钟会、邓艾为将。Root：司马昭
 hd253_fashu_war_effect = {
 	title:h_china.holder = { save_scope_as = hd253_fashu_att }
 	title:e_bashu.holder = { save_scope_as = hd253_fashu_def }
+	# 10-18 加固 C：重试时可能仍在上次战后停战期内，照 263 免背约惩罚
+	scope:hd253_fashu_att = { add_character_flag = { flag = allowed_war_declaration_sans_truce_penalties days = 1 } }
 	hd253_start_history_war_effect = { ATTACKER = scope:hd253_fashu_att DEFENDER = scope:hd253_fashu_def TARGET = title:k_uuii_yizhou KIND = fashu }
 	if = {
 		limit = { exists = scope:hd253_war_fashu }
 		scope:hd253_fashu_att = {
-			spawn_army = {
-				levies = 30000
-				location = title:c_uuii_p_867.title_province
-				origin = title:c_uuii_p_867.title_province
-				inheritable = yes
-				uses_supply = yes
-				war = scope:hd253_war_fashu
-				name = hd253_fashu_army_name
+			if = {
+				# 218 局接力：长安不在魏境内时改在天子首府出兵
+				limit = {
+					hd253_relay_trigger = yes
+					NOT = { title:c_uuii_p_867.holder.top_liege ?= scope:hd253_fashu_att }
+				}
+				spawn_army = {
+					levies = 30000
+					location = capital_province
+					origin = capital_province
+					inheritable = yes
+					uses_supply = yes
+					war = scope:hd253_war_fashu
+					name = hd253_fashu_army_name
+				}
+			}
+			else = {
+				spawn_army = {
+					levies = 30000
+					location = title:c_uuii_p_867.title_province
+					origin = title:c_uuii_p_867.title_province
+					inheritable = yes
+					uses_supply = yes
+					war = scope:hd253_war_fashu
+					name = hd253_fashu_army_name
+				}
 			}
 		}
 		# 钟会、邓艾随军（无地则改投天子宫中，随后由引擎派为将领）
-		character:yingchuan_zhong_024 ?= {
+		# 218 局接力：只拉魏境内、东家是电脑的人
+		global_var:hd_sg_yingchuan_zhong_024 ?= {
 			if = {
-				limit = { is_alive = yes is_landed = no NOT = { is_courtier_of = scope:hd253_fashu_att } }
+				limit = {
+					is_alive = yes is_landed = no NOT = { is_courtier_of = scope:hd253_fashu_att }
+					OR = { NOT = { hd253_relay_trigger = yes } hd253_relay_pullable_trigger = yes }
+				}
 				set_employer = scope:hd253_fashu_att
 			}
 		}
 		character:deng_ai ?= {
 			if = {
-				limit = { is_alive = yes is_landed = no NOT = { is_courtier_of = scope:hd253_fashu_att } }
+				limit = {
+					is_alive = yes is_landed = no NOT = { is_courtier_of = scope:hd253_fashu_att }
+					OR = { NOT = { hd253_relay_trigger = yes } hd253_relay_pullable_trigger = yes }
+				}
 				set_employer = scope:hd253_fashu_att
 			}
 		}
@@ -517,6 +881,37 @@ hd253_fashu_war_effect = {
 
 # 伐蜀得胜：汉帝出降——电脑直接降魏（巴蜀帝国交魏天子，本人带其余头衔作魏封臣，史实封安乐公）；玩家可拒降
 hd253_check_fashu_result_effect = {
+	# 10-18 加固 C：未胜（白和、战败、作废）后冷却 730 天再议；次数用尽则放弃
+	if = {
+		limit = {
+			OR = {
+				has_global_variable = hd253_fashu_white
+				has_global_variable = hd253_fashu_lost
+				has_global_variable = hd253_fashu_invalid
+			}
+		}
+		if = {
+			limit = { has_global_variable = hd253_fashu_white }
+			remove_global_variable = hd253_fashu_white
+		}
+		if = {
+			limit = { has_global_variable = hd253_fashu_lost }
+			remove_global_variable = hd253_fashu_lost
+		}
+		if = {
+			limit = { has_global_variable = hd253_fashu_invalid }
+			remove_global_variable = hd253_fashu_invalid
+		}
+		set_global_variable = { name = hd253_fashu_cooldown value = yes days = 730 }
+		if = {
+			limit = {
+				exists = global_var:hd253_fashu_tries
+				global_var:hd253_fashu_tries >= 3
+			}
+			debug_log = "HD253 FASHU_GAVE_UP"
+		}
+		else = { debug_log = "HD253 FASHU_RETRY_COOLDOWN" }
+	}
 	if = {
 		limit = {
 			has_global_variable = hd253_fashu_won

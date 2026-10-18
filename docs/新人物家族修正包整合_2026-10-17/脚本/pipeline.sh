@@ -19,6 +19,7 @@ PY
 python -I tools/defs.py "$M" pkg1017/10.11 $O
 python -I tools/repair.py "$M" "$G" $O
 for f in $(grep -l "整合时移除无效 dynasty=xifang_yuchi_dyn" $O/history/characters/*.txt); do sed -i 's/# 整合时移除无效 dynasty=xifang_yuchi_dyn/dynasty = yuchi #西方尉迟氏（整合时由未定义的 xifang_yuchi_dyn 改挂尉迟氏宗族）/' "$f"; done
+python -I tools/apply_del18.py "$M" $O  # 2026-10-18 同人合并删掉的 ID 不再带回
 python -I tools/validate.py "$M" "$G" $O > /dev/null
 python -I tools/fixnames.py "$M" $O base0/validate.json > $O/fixnames.txt
 python -I tools/validate.py "$M" "$G" $O

@@ -1,0 +1,159 @@
+﻿# 公卿卸任交接（2026-10-18）
+# 问题：朝廷界面换人时，旧任的 on_lose_position 若拿不到 scope:new_councillor，
+# fired_minister_position_effect 会立刻把头衔和席位交给头衔继承人（继承分数第一），
+# 并以 remove_existing_councillor 顶掉玩家刚选的人。
+# 做法：席位上的卸任不再当场交接，隔一天看席位实况再定：
+#   席位已有新人 -> 头衔归新人；席位空着 -> 照旧由头衔继承人顺补（须达卿档贤望）。
+# 诊断：game.log 搜 "HD_CPDIAG"。
+
+# root：失去席位的人；scope:councillor_liege：议会主人；scope:new_councillor 可能不存在。
+hd_minister_lose_position_effect = {
+	if = {
+		limit = {
+			exists = scope:councillor_liege
+			scope:councillor_liege = { tgp_has_access_to_ministry_trigger = yes }
+		}
+		if = {
+			limit = { exists = scope:new_councillor }
+			debug_log = "HD_CPDIAG LOSE new_councillor=yes"
+		}
+		else = {
+			debug_log = "HD_CPDIAG LOSE new_councillor=no"
+		}
+		debug_log_scopes = yes
+	}
+	if = {
+		limit = {
+			is_alive = yes
+			NOT = { exists = scope:new_councillor }
+			exists = scope:councillor_liege
+			scope:councillor_liege = { tgp_has_access_to_ministry_trigger = yes }
+			hd_holds_any_ministry_title_trigger = yes
+		}
+		set_variable = {
+			name = hd_cp_lose_liege
+			value = scope:councillor_liege
+			days = 5
+		}
+		trigger_event = {
+			id = hd_cp_handoff.0001
+			days = 1
+		}
+	}
+	else = {
+		fired_minister_position_effect = yes
+	}
+}
+
+# root：卸任者；scope:councillor_liege、scope:hd_cp_old 已存。
+hd_minister_settle_one_effect = {
+	if = {
+		limit = { has_title = title:$MINISTER_TITLE$ }
+		if = {
+			limit = {
+				scope:councillor_liege = { exists = cp:$POSITION$ }
+				NOT = { scope:councillor_liege.cp:$POSITION$ = scope:hd_cp_old }
+			}
+			# 席位已由所选之人接任：头衔随席位走，不交继承人。
+			debug_log = "HD_CPDIAG SETTLE seat_filled title_follows_seat"
+			scope:councillor_liege.cp:$POSITION$ = {
+				got_minister_position_effect = { MINISTER_TITLE = $MINISTER_TITLE$ MINISTER_POSITION = $POSITION$ }
+			}
+		}
+		else_if = {
+			limit = { NOT = { has_council_position = $POSITION$ } }
+			# 席位确实空出：沿用原交接（头衔继承人顺补或撤销头衔）。
+			debug_log = "HD_CPDIAG SETTLE seat_vacant heir_handoff"
+			fired_minister_position_effect = yes
+		}
+	}
+}
+
+hd_minister_settle_effect = {
+	save_scope_as = hd_cp_old
+	hd_minister_settle_one_effect = { MINISTER_TITLE = e_minister_chancellor POSITION = councillor_chancellor }
+	hd_minister_settle_one_effect = { MINISTER_TITLE = e_minister_censor POSITION = councillor_spymaster }
+	hd_minister_settle_one_effect = { MINISTER_TITLE = e_minister_grand_marshal POSITION = minister_grand_marshal }
+	hd_minister_settle_one_effect = { MINISTER_TITLE = e_minister_of_personnel POSITION = minister_personnel }
+	hd_minister_settle_one_effect = { MINISTER_TITLE = e_minister_of_revenue POSITION = councillor_steward }
+	hd_minister_settle_one_effect = { MINISTER_TITLE = e_minister_of_rites POSITION = councillor_court_chaplain }
+	hd_minister_settle_one_effect = { MINISTER_TITLE = e_minister_of_war POSITION = councillor_marshal }
+	hd_minister_settle_one_effect = { MINISTER_TITLE = e_minister_of_justice POSITION = minister_justice }
+	hd_minister_settle_one_effect = { MINISTER_TITLE = e_minister_of_works POSITION = minister_works }
+	hd_minister_settle_one_effect = { MINISTER_TITLE = e_WJ_minister_tai_fu POSITION = WJ_minister_tai_fu }
+	hd_minister_settle_one_effect = { MINISTER_TITLE = e_WJ_minister_zong_zheng POSITION = WJ_minister_zong_zheng }
+	hd_minister_settle_one_effect = { MINISTER_TITLE = e_WJ_minister_cheng_xiang POSITION = WJ_minister_cheng_xiang }
+	hd_minister_settle_one_effect = { MINISTER_TITLE = e_WJ_minister_guang_lu_xun POSITION = WJ_minister_guang_lu_xun }
+	# 头衔已交出者，清掉旧职标记与省部修正。
+	if = {
+		limit = { has_character_flag = officer_tai_fu NOT = { has_title = title:e_WJ_minister_tai_fu } }
+		remove_character_flag = officer_tai_fu
+	}
+	if = {
+		limit = { has_character_flag = officer_zong_zheng NOT = { has_title = title:e_WJ_minister_zong_zheng } }
+		remove_character_flag = officer_zong_zheng
+	}
+	if = {
+		limit = { has_character_flag = officer_cheng_xiang NOT = { has_title = title:e_WJ_minister_cheng_xiang } }
+		remove_character_flag = officer_cheng_xiang
+	}
+	if = {
+		limit = { has_character_flag = officer_guang_lu_xun NOT = { has_title = title:e_WJ_minister_guang_lu_xun } }
+		remove_character_flag = officer_guang_lu_xun
+	}
+	if = {
+		limit = { has_character_flag = officer_da_jiang_jun NOT = { has_title = title:e_minister_grand_marshal } }
+		remove_character_flag = officer_da_jiang_jun
+	}
+	if = {
+		limit = {
+			has_character_modifier = minister_scheme_slots_modifier
+			hd_holds_any_ministry_title_trigger = no
+		}
+		remove_character_modifier = minister_scheme_slots_modifier
+	}
+	WJ_reconcile_contract_privileges_effect = yes
+}
+
+# 两席对调：原版按 primary_title 互换，会把实封领地一起换走；这里只互换内阁头衔。
+# root 与 scope:councillor 为对调双方，scope:councillor_liege 为议会主人。
+hd_minister_swap_titles_effect = {
+	if = {
+		limit = {
+			exists = scope:councillor_liege
+			scope:councillor_liege = { tgp_has_access_to_ministry_trigger = yes }
+			hd_holds_any_ministry_title_trigger = yes
+			scope:councillor = { hd_holds_any_ministry_title_trigger = yes }
+		}
+		random_held_title = {
+			limit = { hd_is_any_ministry_title_trigger = yes }
+			save_scope_as = hd_cp_swap_title_a
+		}
+		scope:councillor = {
+			random_held_title = {
+				limit = { hd_is_any_ministry_title_trigger = yes }
+				save_scope_as = hd_cp_swap_title_b
+			}
+		}
+		debug_log = "HD_CPDIAG SWAP titles"
+		debug_log_scopes = yes
+		create_title_and_vassal_change = {
+			type = appointment
+			save_scope_as = hd_cp_swap_change
+			add_claim_on_loss = no
+		}
+		scope:hd_cp_swap_title_a = {
+			change_title_holder = {
+				holder = scope:councillor
+				change = scope:hd_cp_swap_change
+			}
+		}
+		scope:hd_cp_swap_title_b = {
+			change_title_holder = {
+				holder = root
+				change = scope:hd_cp_swap_change
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_cp_swap_change
+	}
+}
