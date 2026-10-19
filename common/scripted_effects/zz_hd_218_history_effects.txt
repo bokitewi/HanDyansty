@@ -52,21 +52,32 @@ hd_sg218_find_war_effect = {
 # $ATTACKER$ 对 scope:hd_sg218_def_$KIND$ 宣战，主目标 $TARGET$（头衔）。
 # 成功则战争存为 scope:hd_sg218_war_$KIND$，设战争种类和全局标记 hd_sg218_$KIND$_active；失败写日志。
 # 战争变量写法照 zz_hd_lubu_exile_effects.txt 的 random_character_war，加防守方条件区分同时进行的几场。
+# 目标经连通筛选（boki 10-18，zz_hd_war_contiguity_effects.txt）：附加目标须在宣战前用 hd_sg218_add_target_effect 加入。
 hd_sg218_start_war_effect = {
+	hd_sg218_start_war_core_effect = { ATTACKER = $ATTACKER$ KIND = $KIND$ TARGET = $TARGET$ CB = hd_sg218_war_cb }
+	hd_wct_clear_input_effect = yes
+}
+
+# 同上，指定战争理由（白衣渡江、襄樊之战各有战争名）
+hd_sg218_start_war_named_effect = {
+	hd_sg218_start_war_core_effect = { ATTACKER = $ATTACKER$ KIND = $KIND$ TARGET = $TARGET$ CB = $CB$ }
+	hd_wct_clear_input_effect = yes
+}
+
+hd_sg218_start_war_core_effect = {
+	hd_wct_add_input_effect = { TARGET = $TARGET$ }
 	$ATTACKER$ = {
 		# 孙刘开局结盟（boki 10-12 20:28）：对盟友开战前先背盟（原版背盟惩罚：威望、"攻击盟友"修正）
 		if = {
 			limit = { is_allied_to = scope:hd_sg218_def_$KIND$ }
 			break_alliance_due_to_attack_effect = { TARGET = scope:hd_sg218_def_$KIND$ }
 		}
-		start_war = {
-			cb = hd_sg218_war_cb
-			target = scope:hd_sg218_def_$KIND$
-			target_title = $TARGET$
-		}
+	}
+	hd_wct_start_war_effect = { CB = $CB$ ATTACKER = $ATTACKER$ DEFENDER = scope:hd_sg218_def_$KIND$ }
+	$ATTACKER$ = {
 		random_character_war = {
 			limit = {
-				using_cb = hd_sg218_war_cb
+				using_cb = $CB$
 				primary_attacker = $ATTACKER$
 				primary_defender = scope:hd_sg218_def_$KIND$
 				NOT = { has_variable = hd_sg218_war_kind }
@@ -87,14 +98,14 @@ hd_sg218_start_war_effect = {
 
 # 封臣作攻方宣战不成时，改由其最高领主宣战、封臣参战（计划第 4 步"攻守双方"）
 hd_sg218_start_war_fallback_effect = {
-	hd_sg218_start_war_effect = { ATTACKER = $ATTACKER$ KIND = $KIND$ TARGET = $TARGET$ }
+	hd_sg218_start_war_core_effect = { ATTACKER = $ATTACKER$ KIND = $KIND$ TARGET = $TARGET$ CB = $CB$ }
 	if = {
 		limit = { NOT = { exists = scope:hd_sg218_war_$KIND$ } }
 		$ATTACKER$.top_liege = { save_scope_as = hd_sg218_fallback_$KIND$ }
 		if = {
 			limit = { NOT = { scope:hd_sg218_fallback_$KIND$ = $ATTACKER$ } }
 			debug_log = "HD218 WAR_FALLBACK $KIND$"
-			hd_sg218_start_war_effect = { ATTACKER = scope:hd_sg218_fallback_$KIND$ KIND = $KIND$ TARGET = $TARGET$ }
+			hd_sg218_start_war_core_effect = { ATTACKER = scope:hd_sg218_fallback_$KIND$ KIND = $KIND$ TARGET = $TARGET$ CB = $CB$ }
 			scope:hd_sg218_war_$KIND$ ?= {
 				if = {
 					limit = { NOT = { is_participant = $ATTACKER$ } }
@@ -103,13 +114,12 @@ hd_sg218_start_war_fallback_effect = {
 			}
 		}
 	}
+	hd_wct_clear_input_effect = yes
 }
 
-# 主目标之外一并争夺的郡
+# 主目标之外一并争夺的郡：须在宣战前调用，与主目标一起经连通筛选后列为战争目标（10-18 起不再挂战争变量另行转让）
 hd_sg218_add_target_effect = {
-	scope:hd_sg218_war_$KIND$ ?= {
-		add_to_variable_list = { name = hd_sg218_extra_targets target = $TARGET$ }
-	}
+	hd_wct_add_input_effect = { TARGET = $TARGET$ }
 }
 
 # 战争结局。Root：战争理由（CB 的 on_victory 等；战争是 root.war）
@@ -220,8 +230,10 @@ hd_sg218_pulse_effect = {
 	hd_sg218_check_hanzhong_invalid_effect = yes
 	hd_sg218_check_hanzhong_result_effect = yes
 	hd_sg218_check_xiangfan_effect = yes
+	hd_sg218_check_xiangfan_guan_yu_dead_effect = yes
 	hd_sg218_check_flood_effect = yes
 	hd_sg218_check_baiyi_effect = yes
+	hd_sg218_check_liu_feng_shangyong_effect = yes
 	hd_sg218_check_lv_meng_effect = yes
 	hd_sg218_check_guagu_effect = yes
 	hd_sg218_check_maicheng_effect = yes
@@ -239,6 +251,78 @@ hd_sg218_pulse_effect = {
 	hd_sg218_check_beifa_effect = yes
 	hd_sg218_check_jiang_wei_effect = yes
 	hd_sg218_check_jieting_effect = yes
+	hd_sg218_check_huo_jun_effect = yes
+	hd_sg218_check_ma_su_recall_effect = yes
+}
+
+# 218官职（boki 10-19）：马谡开局任越巂太守。为保街亭（要求马谡在蜀军中），诸葛亮南征开战时召回朝中
+# （史实南征时献攻心之策）；始终没有南征则刘备死后、225 年起召回（自拟）。越巂交新生成的郡守，作蜀主封臣
+hd_sg218_check_ma_su_recall_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_sg218_ma_su_recalled }
+			exists = global_var:hd218_hanzhong_title.holder
+			OR = {
+				has_global_variable = hd_sg218_nanzheng_started
+				AND = {
+					has_global_variable = hd_sg218_liu_bei_dead
+					current_date >= 225.1.1
+				}
+			}
+			character:ma_su ?= {
+				is_alive = yes
+				is_ai = yes
+				has_title = title:d_yuexi
+				is_vassal_or_below_of = global_var:hd218_hanzhong_title.holder
+			}
+		}
+		set_global_variable = hd_sg218_ma_su_recalled
+		global_var:hd218_hanzhong_title.holder = { save_scope_as = hd_sg218_recall_boss }
+		character:ma_su = { save_scope_as = hd_sg218_recall_who }
+		title:d_yuexi = { save_scope_as = seceding_county } # 原版模板 post_migration_minor_warlord_template 要用
+		create_character = {
+			location = title:d_yuexi.title_capital_county.title_province
+			template = post_migration_minor_warlord_template
+			employer = scope:hd_sg218_recall_boss
+			dynasty = generate # 天朝政体要求君主有王朝
+			save_scope_as = hd_sg218_recall_new
+		}
+		create_title_and_vassal_change = { type = granted save_scope_as = hd_sg218_recall_change add_claim_on_loss = no }
+		title:d_yuexi = {
+			every_in_de_jure_hierarchy = {
+				limit = {
+					tier = tier_county
+					holder ?= scope:hd_sg218_recall_who
+				}
+				change_title_holder = { holder = scope:hd_sg218_recall_new change = scope:hd_sg218_recall_change take_baronies = yes }
+			}
+			change_title_holder = { holder = scope:hd_sg218_recall_new change = scope:hd_sg218_recall_change }
+		}
+		resolve_title_and_vassal_change = scope:hd_sg218_recall_change
+		scope:hd_sg218_recall_new = { hd218_governor_fix_liege_effect = { LIEGE = scope:hd_sg218_recall_boss } }
+		scope:hd_sg218_recall_who = {
+			if = {
+				limit = {
+					is_landed = no
+					NOT = { employer ?= scope:hd_sg218_recall_boss }
+				}
+				scope:hd_sg218_recall_boss = { add_courtier = scope:hd_sg218_recall_who }
+			}
+		}
+		debug_log = "HD218 MA_SU RECALLED"
+	}
+}
+
+# 218官职（boki 10-19）：霍峻任梓潼太守，卒年延至 220。history 里的未来卒年在 218 开局不执行，这里按日期补
+hd_sg218_check_huo_jun_effect = {
+	if = {
+		limit = {
+			current_date >= 220.1.1
+			character:huo_jun ?= { is_alive = yes }
+		}
+		character:huo_jun = { death = { death_reason = death_natural_causes } }
+		debug_log = "HD218 HUO_JUN DEATH"
+	}
 }
 
 ############################################################
@@ -345,7 +429,7 @@ hd_sg218_wan_war_effect = {
 		character:hou_yin = { save_scope_as = hd_sg218_def_wan }
 		if = {
 			limit = { character:cao_ren ?= { is_alive = yes is_landed = yes } }
-			hd_sg218_start_war_fallback_effect = { ATTACKER = character:cao_ren KIND = wan TARGET = title:c_uuii_p_1733 }
+			hd_sg218_start_war_fallback_effect = { ATTACKER = character:cao_ren KIND = wan TARGET = title:c_uuii_p_1733 CB = hd_sg218_war_cb }
 		}
 		else = {
 			hd_sg218_start_war_effect = { ATTACKER = root KIND = wan TARGET = title:c_uuii_p_1733 }
@@ -506,6 +590,7 @@ hd_sg218_hanzhong_annex_effect = {
 		hd_sg218_seize_duchy_effect = { DUCHY = title:d_weixing }
 		resolve_title_and_vassal_change = scope:hd_sg218_annex_change
 		debug_log = "HD218 HANZHONG ANNEX shangyong fangling weixing"
+		hd_sg218_check_liu_feng_shangyong_effect = yes
 	}
 	else = { debug_log = "HD218 HANZHONG ANNEX_SKIPPED" }
 }
@@ -538,6 +623,66 @@ hd_sg218_seize_duchy_effect = {
 	}
 }
 
+# 刘备得上庸郡（郡头衔在刘备本人手里）即强制以刘封为上庸太守（boki 10-18），一次。
+# 刘封须在世、未被囚、在刘备国内（廷臣或封臣）；汉中之战夺东三郡后立即调一次，心跳兜底
+hd_sg218_check_liu_feng_shangyong_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_sg218_liu_feng_shangyong_done }
+			character:liu_bei ?= {
+				is_alive = yes
+				has_title = title:d_shangyong
+			}
+			character:liu_feng ?= {
+				is_alive = yes
+				is_imprisoned = no
+				NOT = { this = character:liu_bei }
+				OR = {
+					employer ?= character:liu_bei
+					is_vassal_or_below_of = character:liu_bei
+				}
+			}
+		}
+		set_global_variable = hd_sg218_liu_feng_shangyong_done
+		character:liu_feng = { save_scope_as = hd_sg218_liu_feng }
+		create_title_and_vassal_change = { type = granted save_scope_as = hd_sg218_lf_change add_claim_on_loss = no }
+		title:d_shangyong = {
+			every_in_de_jure_hierarchy = {
+				limit = {
+					tier = tier_county
+					holder ?= character:liu_bei
+				}
+				change_title_holder = { holder = scope:hd_sg218_liu_feng change = scope:hd_sg218_lf_change take_baronies = yes }
+			}
+			change_title_holder = { holder = scope:hd_sg218_liu_feng change = scope:hd_sg218_lf_change }
+		}
+		resolve_title_and_vassal_change = scope:hd_sg218_lf_change
+		hd_sg218_swear_fealty_effect = { WHO = liu_feng LIEGE = character:liu_bei }
+		if = {
+			limit = { title:d_shangyong.holder ?= scope:hd_sg218_liu_feng }
+			debug_log = "HD218 LIU_FENG_SHANGYONG GRANTED"
+		}
+		else = { debug_log = "HD218 LIU_FENG_SHANGYONG GRANT_FAILED" }
+	}
+}
+
+# 诸葛亮请杀刘封（hd_sg218.0105 选项 a）：先把刘封的头衔收归刘备，再处决。Root：刘备
+hd_sg218_execute_liu_feng_effect = {
+	character:liu_feng ?= {
+		if = {
+			limit = { is_alive = yes }
+			create_title_and_vassal_change = { type = revoked save_scope_as = hd_sg218_lf_revoke add_claim_on_loss = no }
+			every_held_title = {
+				limit = { tier > tier_barony }
+				change_title_holder = { holder = root change = scope:hd_sg218_lf_revoke take_baronies = yes }
+			}
+			resolve_title_and_vassal_change = scope:hd_sg218_lf_revoke
+			debug_log = "HD218 LIU_FENG EXECUTED"
+		}
+	}
+	hd_sg218_kill_effect = { WHO = liu_feng KILLER = root REASON = death_execution }
+}
+
 # 任命魏延为汉中太守（hd_sg218.0065）：汉中郡头衔、蜀主手里的汉中各县授魏延，魏延改为蜀主直属封臣。Root：蜀主
 hd_sg218_appoint_wei_yan_effect = {
 	character:wei_yan = { save_scope_as = hd_sg218_wei_yan }
@@ -565,6 +710,7 @@ hd_sg218_appoint_wei_yan_effect = {
 	if = {
 		limit = { title:d_hanzhong.holder ?= scope:hd_sg218_wei_yan }
 		debug_log = "HD218 WEI_YAN_HANZHONG GRANTED"
+		set_global_variable = hd_hev_218_weiyan
 	}
 	else = { debug_log = "HD218 WEI_YAN_HANZHONG GRANT_FAILED" }
 }
@@ -627,8 +773,11 @@ hd_sg218_check_xiangfan_effect = {
 
 # 0070 选项 a。Root：关羽；scope:hd_sg218_def_xiangfan 由事件带入
 hd_sg218_xiangfan_war_effect = {
-	hd_sg218_start_war_fallback_effect = { ATTACKER = character:guan_yu KIND = xiangfan TARGET = title:d_xiangyang }
-	hd_sg218_add_target_effect = { KIND = xiangfan TARGET = title:d_nanyang }
+	# 襄樊之战（boki 10-18）：目标襄阳、竟陵、章陵（d_anlu）、新野四郡，经连通筛选
+	hd_sg218_add_target_effect = { TARGET = title:d_jingling }
+	hd_sg218_add_target_effect = { TARGET = title:d_anlu }
+	hd_sg218_add_target_effect = { TARGET = title:d_xinye }
+	hd_sg218_start_war_fallback_effect = { ATTACKER = character:guan_yu KIND = xiangfan TARGET = title:d_xiangyang CB = hd_sg218_xiangfan_cb }
 	if = {
 		limit = { exists = scope:hd_sg218_war_xiangfan }
 		# 白衣渡江至少等三个月
@@ -676,47 +825,118 @@ hd_sg218_check_baiyi_effect = {
 			character:hd218_lv_meng ?= { is_alive = yes }
 			character:sun_quan ?= { is_alive = yes is_landed = yes is_independent_ruler = yes }
 		}
-		hd_sg218_find_defender_effect = { TARGET = title:d_nanjun KIND = baiyi }
+		# 边境战争（boki 10-18）：守方是荆州持有者关羽本人，不再找刘备
 		if = {
 			limit = {
-				exists = scope:hd_sg218_def_baiyi
-				NOT = { scope:hd_sg218_def_baiyi = character:sun_quan }
-				NOT = { character:sun_quan = { is_at_war_with = scope:hd_sg218_def_baiyi } }
+				character:guan_yu = {
+					has_title = title:k_uuii_jingzhou
+					NOT = { this = character:sun_quan }
+					NOT = { is_vassal_or_below_of = character:sun_quan }
+					NOT = { is_at_war_with = character:sun_quan }
+				}
 			}
+			character:guan_yu = { save_scope_as = hd_sg218_def_baiyi }
 			# baiyi_done 由 0090 在开战成功或玩家坐观成败时设（10-18 执行后复核）
 			character:sun_quan = { trigger_event = hd_sg218.0090 }
 		}
 	}
 }
 
-# 0090 选项 a。Root：孙权；scope:hd_sg218_def_baiyi 由事件带入
+# 0090 选项 a（0095 也复用）。Root：孙权；scope:hd_sg218_def_baiyi 由事件带入（关羽）
+# 白衣渡江改边境战争（boki 10-18，照汉中之战）：孙权只向荆州持有者关羽宣战，目标整个荆州王国，不走连通筛选；
+# 关羽的宗主（刘备）须满 border_war_grace_period_days（1095 天）才能用「加入封臣战争」下场；孙刘同盟当场撕毁，另互给三年停战。
+# 胜后荆州头衔与关羽名下封臣全部归孙权（hd_sg218_baiyi_cb 的 on_victory）
 hd_sg218_baiyi_war_effect = {
-	# 糜芳、士仁按对关羽的好感判定是否献城（先献城，再按剩下的郡定主目标）
-	hd_sg218_defect_check_effect = { WHO = mi_fang }
-	hd_sg218_defect_check_effect = { WHO = shi_ren }
 	if = {
-		limit = { title:d_nanjun = { hd_sg218_title_held_by_trigger = { DEF = scope:hd_sg218_def_baiyi } } }
-		hd_sg218_start_war_effect = { ATTACKER = root KIND = baiyi TARGET = title:d_nanjun }
+		limit = {
+			character:guan_yu ?= {
+				is_alive = yes
+				has_title = title:k_uuii_jingzhou
+			}
+		}
+		character:guan_yu = { save_scope_as = hd_sg218_def_baiyi }
+		# 关羽的宗主：天子直属封臣（刘备），国不在天子之下取最高领主
+		hd_sg218_find_defender_effect = { TARGET = title:k_uuii_jingzhou KIND = baiyi_liege }
+		# 「加入封臣战争」要求守方宗主链上有人持边境战争法律；没有时引擎会把最高宗主拉进战争，补上
+		character:guan_yu.top_liege = {
+			if = {
+				limit = {
+					NOT = { this = character:guan_yu }
+					NOT = { has_realm_law = top_liege_not_redirected_to_border_wars_law }
+				}
+				add_realm_law_skip_effects = top_liege_not_redirected_to_border_wars_law
+				debug_log = "HD218 BAIYI BORDER_LAW_ADDED"
+			}
+		}
+		root = {
+			if = {
+				limit = { is_allied_to = character:guan_yu }
+				break_alliance_due_to_attack_effect = { TARGET = character:guan_yu }
+			}
+			scope:hd_sg218_def_baiyi_liege ?= {
+				if = {
+					limit = {
+						NOT = { this = character:guan_yu }
+						is_allied_to = root
+					}
+					save_scope_as = hd_sg218_baiyi_ally
+					root = { break_alliance_due_to_attack_effect = { TARGET = scope:hd_sg218_baiyi_ally } }
+					debug_log = "HD218 BAIYI ALLIANCE_BROKEN"
+				}
+			}
+			# 糜芳、士仁：AI 且为关羽直属封臣，开战即谋反改投孙权（boki 10-18，不再看好感）
+			hd_sg218_defect_check_effect = { WHO = mi_fang }
+			hd_sg218_defect_check_effect = { WHO = shi_ren }
+			start_war = {
+				cb = hd_sg218_baiyi_cb
+				target = character:guan_yu
+				target_title = title:k_uuii_jingzhou
+			}
+			random_character_war = {
+				limit = {
+					using_cb = hd_sg218_baiyi_cb
+					primary_attacker = root
+					NOT = { has_variable = hd_sg218_war_kind }
+				}
+				set_variable = { name = hd_sg218_war_kind value = flag:baiyi }
+				save_scope_as = hd_sg218_war_baiyi
+				# 边境法律没生效时引擎会把守方改成宗主，日志里看实际守方
+				primary_defender = { save_scope_as = hd_sg218_baiyi_real_def }
+				if = {
+					limit = { scope:hd_sg218_baiyi_real_def = character:guan_yu }
+					debug_log = "HD218 BAIYI DEFENDER guan_yu"
+				}
+				else = { debug_log = "HD218 BAIYI DEFENDER_REDIRECTED" }
+			}
+		}
+		if = {
+			limit = { exists = scope:hd_sg218_war_baiyi }
+			set_global_variable = hd_sg218_baiyi_active
+			debug_log = "HD218 WAR_CONFIRMED baiyi"
+			scope:hd_sg218_def_baiyi_liege ?= {
+				if = {
+					limit = {
+						NOT = { this = character:guan_yu }
+						NOT = { is_at_war_with = root }
+					}
+					add_truce_both_ways = {
+						character = root
+						years = 3
+						name = hd_sg218_baiyi_truce
+					}
+				}
+			}
+		}
+		else = {
+			debug_log = "HD218 WAR_START_FAILED baiyi"
+		}
 	}
-	else_if = {
-		limit = { title:d_yidou = { hd_sg218_title_held_by_trigger = { DEF = scope:hd_sg218_def_baiyi } } }
-		hd_sg218_start_war_effect = { ATTACKER = root KIND = baiyi TARGET = title:d_yidou }
+	else = {
+		debug_log = "HD218 BAIYI SKIPPED guan_yu_no_jingzhou"
 	}
-	else_if = {
-		limit = { title:d_lingling = { hd_sg218_title_held_by_trigger = { DEF = scope:hd_sg218_def_baiyi } } }
-		hd_sg218_start_war_effect = { ATTACKER = root KIND = baiyi TARGET = title:d_lingling }
-	}
-	else_if = {
-		limit = { title:d_wuling = { hd_sg218_title_held_by_trigger = { DEF = scope:hd_sg218_def_baiyi } } }
-		hd_sg218_start_war_effect = { ATTACKER = root KIND = baiyi TARGET = title:d_wuling }
-	}
-	hd_sg218_add_target_effect = { KIND = baiyi TARGET = title:d_nanjun }
-	hd_sg218_add_target_effect = { KIND = baiyi TARGET = title:d_yidou }
-	hd_sg218_add_target_effect = { KIND = baiyi TARGET = title:d_lingling }
-	hd_sg218_add_target_effect = { KIND = baiyi TARGET = title:d_wuling }
 }
 
-# 献城：AI、仍是关羽封臣、对关羽好感低于 10。Root：孙权
+# 谋反：AI、仍是关羽直属封臣，开战即改投孙权（boki 10-18 去掉好感条件）。Root：孙权
 hd_sg218_defect_check_effect = {
 	if = {
 		limit = {
@@ -725,7 +945,6 @@ hd_sg218_defect_check_effect = {
 				is_ai = yes
 				is_landed = yes
 				liege ?= character:guan_yu
-				opinion = { target = character:guan_yu value < 10 }
 			}
 		}
 		hd_sg218_swear_fealty_effect = { WHO = $WHO$ LIEGE = root }
@@ -775,13 +994,16 @@ hd_sg218_check_lv_meng_effect = {
 				character:hd218_lv_meng ?= { is_alive = yes }
 				character:sun_quan ?= { is_alive = yes is_landed = yes is_independent_ruler = yes }
 			}
-			hd_sg218_find_defender_effect = { TARGET = title:d_nanjun KIND = baiyi }
+			# 边境战争（boki 10-18）：守方是关羽本人
 			if = {
 				limit = {
-					exists = scope:hd_sg218_def_baiyi
-					NOT = { scope:hd_sg218_def_baiyi = character:sun_quan }
-					NOT = { character:sun_quan = { is_at_war_with = scope:hd_sg218_def_baiyi } }
+					character:guan_yu = {
+						NOT = { this = character:sun_quan }
+						NOT = { is_vassal_or_below_of = character:sun_quan }
+						NOT = { is_at_war_with = character:sun_quan }
+					}
 				}
+				character:guan_yu = { save_scope_as = hd_sg218_def_baiyi }
 				# 玩家选维持孙刘之好、或开战没开成时一年后再问
 				set_global_variable = { name = hd_sg218_lv_meng_wait value = yes days = 365 }
 				debug_log = "HD218 LV_MENG ASK"
@@ -807,6 +1029,7 @@ hd_sg218_lv_meng_war_effect = {
 	if = {
 		limit = { exists = scope:hd_sg218_war_baiyi }
 		set_global_variable = hd_sg218_baiyi_done
+		set_global_variable = hd_hev_218_lvmeng
 		character:hd218_lv_meng ?= {
 			add_character_modifier = { modifier = hd_sg218_dadudu_modifier years = 3 }
 		}
@@ -895,6 +1118,7 @@ hd_sg218_check_cao_cao_frail_effect = {
 				NOT = { has_character_flag = hd_sg218_cao_cao_frail }
 			}
 			add_character_flag = hd_sg218_cao_cao_frail
+			set_global_variable = hd_hev_218_toufeng
 			add_character_modifier = { modifier = hd_sg218_cao_cao_frail_modifier years = 5 }
 			debug_log = "HD218 CAO_CAO FRAIL"
 			trigger_event = hd_sg218.0097
@@ -950,6 +1174,7 @@ hd_sg218_cao_cao_worsen_effect = {
 	if = {
 		limit = { NOT = { has_character_flag = hd_sg218_cao_cao_frail } }
 		add_character_flag = hd_sg218_cao_cao_frail
+		set_global_variable = hd_hev_218_toufeng
 		add_character_modifier = { modifier = hd_sg218_cao_cao_frail_modifier years = 5 }
 	}
 	if = {
@@ -986,6 +1211,53 @@ hd_sg218_guan_yu_death_effect = {
 			add_character_flag = hd_sg218_mourned_guan_yu
 			trigger_event = { id = hd_sg218.0098 days = 10 }
 		}
+	}
+	# 关羽死则襄樊之战立即判攻方战败（boki 10-18）
+	hd_sg218_end_xiangfan_lost_effect = yes
+	# 10 天后诸葛亮请杀刘封（boki 10-18），条件在事件 trigger 里查
+	character:liu_bei ?= {
+		if = {
+			limit = { is_alive = yes }
+			trigger_event = { id = hd_sg218.0105 days = 10 }
+		}
+	}
+}
+
+# 襄樊之战进行中而关羽已死：判守方胜（走 CB 的 on_defeat，设 hd_sg218_xiangfan_lost）。
+# 关羽死时（on_death）调一次，心跳再兜底。Root：任意
+hd_sg218_end_xiangfan_lost_effect = {
+	if = {
+		limit = { hd_sg218_war_active_trigger = { KIND = xiangfan } }
+		hd_sg218_find_war_effect = { WHO = character:liu_bei KIND = xiangfan }
+		if = {
+			limit = { NOT = { exists = scope:hd_sg218_war_xiangfan } }
+			hd_sg218_find_defender_effect = { TARGET = title:d_xiangyang KIND = xf_end }
+			hd_sg218_find_war_effect = { WHO = scope:hd_sg218_def_xf_end KIND = xiangfan }
+		}
+		if = {
+			limit = { NOT = { exists = scope:hd_sg218_war_xiangfan } }
+			hd_sg218_find_war_effect = { WHO = character:guan_yu KIND = xiangfan }
+		}
+		if = {
+			limit = { exists = scope:hd_sg218_war_xiangfan }
+			debug_log = "HD218 XIANGFAN GUAN_YU_DEAD -> DEFEAT"
+			scope:hd_sg218_war_xiangfan = { end_war = defender }
+		}
+		else = { debug_log = "HD218 XIANGFAN GUAN_YU_DEAD WAR_NOT_FOUND" }
+	}
+}
+
+# 心跳兜底：关羽已死而襄樊之战仍在进行
+hd_sg218_check_xiangfan_guan_yu_dead_effect = {
+	if = {
+		limit = {
+			hd_sg218_war_active_trigger = { KIND = xiangfan }
+			OR = {
+				NOT = { exists = character:guan_yu }
+				character:guan_yu = { is_alive = no }
+			}
+		}
+		hd_sg218_end_xiangfan_lost_effect = yes
 	}
 }
 
@@ -1429,14 +1701,14 @@ hd_sg218_check_sun_quan_effect = {
 }
 
 ############################################################
-# 15 张飞遇害（可选）：221 年夏起；张飞是 AI；刘备已称帝
+# 15 张飞遇害（可选）：221 年夏起；张飞是 AI（称帝与否不论，boki 10-18）
 ############################################################
 hd_sg218_check_zhangfei_effect = {
 	if = {
 		limit = {
 			NOT = { has_global_variable = hd_sg218_zhangfei_done }
 			current_date >= 221.6.1
-			has_global_variable = hd_sg218_liu_bei_emperor
+			# 称没称帝都会发生（boki 10-18，与夷陵之战一致）
 			character:zhang_fei ?= { is_alive = yes is_ai = yes }
 			character:zhang_da ?= { is_alive = yes }
 			exists = global_var:hd218_hanzhong_title.holder
@@ -1447,7 +1719,7 @@ hd_sg218_check_zhangfei_effect = {
 }
 
 ############################################################
-# 16 夷陵之战（核心）：关羽死于孙权之手、刘备已称帝；221 年秋起
+# 16 夷陵之战（核心）：关羽死于孙权之手（称帝与否不论，boki 10-18）；221 年秋起
 ############################################################
 hd_sg218_check_yiling_effect = {
 	if = {
@@ -1456,7 +1728,7 @@ hd_sg218_check_yiling_effect = {
 			NOT = { has_global_variable = hd_sg218_yiling_wait }
 			current_date >= 221.7.1
 			has_global_variable = hd_sg218_guan_yu_killed_by_wu
-			has_global_variable = hd_sg218_liu_bei_emperor
+			# 称没称帝都可发动（boki 10-18）
 			character:liu_bei ?= {
 				is_alive = yes
 				hd_sg218_shu_ruler_trigger = yes
@@ -1504,12 +1776,12 @@ hd_sg218_yiling_war_effect = {
 				exists = scope:hd_sg218_def_yiling
 				NOT = { scope:hd_sg218_def_yiling = root }
 			}
-			hd_sg218_start_war_effect = { ATTACKER = root KIND = yiling TARGET = scope:hd_sg218_yiling_main }
 			every_in_list = {
 				list = hd_sg218_yiling_targets
 				save_temporary_scope_as = hd_sg218_yiling_extra
-				hd_sg218_add_target_effect = { KIND = yiling TARGET = scope:hd_sg218_yiling_extra }
+				hd_sg218_add_target_effect = { TARGET = scope:hd_sg218_yiling_extra }
 			}
+			hd_sg218_start_war_effect = { ATTACKER = root KIND = yiling TARGET = scope:hd_sg218_yiling_main }
 		}
 	}
 }
@@ -1601,6 +1873,10 @@ hd_sg218_check_nanzhong_effect = {
 		}
 		set_global_variable = hd_sg218_nanzhong_done
 		global_var:hd218_hanzhong_title.holder = { save_scope_as = hd_sg218_shu_ruler }
+		# 218官职（boki 10-19）：开局建宁归益州太守张裔、牂牁归向朗；起兵前雍闿夺建宁并执张裔送孙权，朱褒夺牂牁
+		hd_sg218_nanzhong_seize_effect = { WHO = yong_kai TITLE = d_jianning }
+		hd_sg218_nanzhong_send_zhang_yi_effect = yes
+		hd_sg218_nanzhong_seize_effect = { WHO = zhu_bao TITLE = d_zangke }
 		hd_sg218_rebel_effect = { WHO = yong_kai }
 		hd_sg218_rebel_effect = { WHO = gao_ding }
 		hd_sg218_rebel_effect = { WHO = zhu_bao }
@@ -1624,6 +1900,62 @@ hd_sg218_rebel_effect = {
 		}
 		hd_sg218_independence_effect = { WHO = $WHO$ }
 		character:$WHO$ = { add_character_flag = hd_sg218_nanzhong_rebel }
+	}
+}
+
+# 叛首 $WHO$ 夺 $TITLE$：郡头衔和原郡守在郡内的县全归 $WHO$。只在双方都是蜀主治下的 AI 时做。
+# 需要 scope:hd_sg218_shu_ruler。夺到张裔时记下 scope:hd_sg218_seized_zhang_yi 供送吴。
+hd_sg218_nanzhong_seize_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_ai = yes
+				is_vassal_or_below_of = scope:hd_sg218_shu_ruler
+				title:$TITLE$.holder ?= {
+					NOT = { this = character:$WHO$ }
+					is_ai = yes
+					is_vassal_or_below_of = scope:hd_sg218_shu_ruler
+				}
+			}
+			save_scope_as = hd_sg218_seizer
+			title:$TITLE$.holder = { save_scope_as = hd_sg218_seized }
+			create_title_and_vassal_change = { type = usurped save_scope_as = hd_sg218_seize_change add_claim_on_loss = no }
+			title:$TITLE$ = {
+				every_in_de_jure_hierarchy = {
+					limit = {
+						tier = tier_county
+						holder ?= scope:hd_sg218_seized
+					}
+					change_title_holder = { holder = scope:hd_sg218_seizer change = scope:hd_sg218_seize_change take_baronies = yes }
+				}
+				change_title_holder = { holder = scope:hd_sg218_seizer change = scope:hd_sg218_seize_change }
+			}
+			resolve_title_and_vassal_change = scope:hd_sg218_seize_change
+			if = {
+				limit = { scope:hd_sg218_seized ?= character:zhang_yi_6 }
+				scope:hd_sg218_seized = { save_scope_as = hd_sg218_seized_zhang_yi }
+			}
+			debug_log = "HD218 NANZHONG_SEIZE $WHO$ $TITLE$"
+		}
+		else = { debug_log = "HD218 NANZHONG_SEIZE_SKIPPED $WHO$ $TITLE$" }
+	}
+}
+
+# 雍闿执张裔送吴（史实）：张裔已无地、孙权在世有地时转入孙权宫廷
+hd_sg218_nanzhong_send_zhang_yi_effect = {
+	if = {
+		limit = {
+			exists = scope:hd_sg218_seized_zhang_yi
+			scope:hd_sg218_seized_zhang_yi = {
+				is_alive = yes
+				is_landed = no
+				is_ai = yes
+			}
+			character:sun_quan ?= { is_alive = yes is_landed = yes }
+		}
+		character:sun_quan = { add_courtier = scope:hd_sg218_seized_zhang_yi }
+		debug_log = "HD218 NANZHONG ZHANG_YI_TO_WU"
 	}
 }
 
@@ -1663,8 +1995,8 @@ hd_sg218_nanzheng_one_effect = {
 			NOT = { is_at_war_with = character:$WHO$ }
 		}
 		character:$WHO$ = { save_scope_as = hd_sg218_def_nanzheng }
+		hd_sg218_add_target_effect = { TARGET = title:$EXTRA$ }
 		hd_sg218_start_war_effect = { ATTACKER = root KIND = nanzheng TARGET = title:$TITLE$ }
-		hd_sg218_add_target_effect = { KIND = nanzheng TARGET = title:$EXTRA$ }
 	}
 }
 
@@ -1713,9 +2045,9 @@ hd_sg218_check_beifa_effect = {
 # 0210 选项 a。Root：蜀主；scope:hd_sg218_def_beifa 由事件带入
 hd_sg218_beifa_war_effect = {
 	set_global_variable = hd_sg218_beifa_started
+	hd_sg218_add_target_effect = { TARGET = title:d_nanan }
+	hd_sg218_add_target_effect = { TARGET = title:d_anding }
 	hd_sg218_start_war_effect = { ATTACKER = root KIND = beifa TARGET = title:d_tianshui }
-	hd_sg218_add_target_effect = { KIND = beifa TARGET = title:d_nanan }
-	hd_sg218_add_target_effect = { KIND = beifa TARGET = title:d_anding }
 	# 街亭至少等两个月
 	set_global_variable = { name = hd_sg218_jieting_wait value = yes days = 60 }
 }

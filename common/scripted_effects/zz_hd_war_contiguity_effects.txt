@@ -1,0 +1,2224 @@
+﻿# 剧本史实战争「连通目标」筛选（boki 10-18：所有宣称头衔必须与本土相连，不准有飞地）。
+# 本文件由 tools/gen_war_contiguity.py 生成，改动请改生成器。
+#
+# 用法：
+#   hd_wct_add_input_effect = { TARGET = title:xxx }   # 可多次，加入原定目标（州/郡/县均可）
+#   hd_wct_start_war_effect = { CB = xxx_cb ATTACKER = <角色> DEFENDER = <角色> }
+#   结束后由调用方 hd_wct_clear_input_effect = yes 清空输入（218 封臣宣战不成要改由宗主再宣一次，所以不在这里清）。
+#
+# 规则（boki 10-18 拍板）：
+#   1 候选县 = 原定目标法理下、由守方或其封臣持有的县。
+#   2 从「与攻方最高领主国土接壤」的候选县出发，只经候选县向外连通，连得到的才算。
+#   3 某个原定目标的候选县全部连得到 → 原头衔照用（州/郡名、战争名不变）；
+#     否则拆开：整郡连得到的用该郡，其余只取连得到的县。
+#   4 一个都连不到 → 改为守方所有与攻方接壤的郡，按 2、3 再筛一遍。
+#   5 仍为空（两国根本不接壤）→ 沿用原定目标并写日志 HD_WCT NO_BORDER。
+# 中间结果都放全局变量表（hd_wct_*），用完即清。
+
+hd_wct_add_input_effect = {
+	if = {
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_in target = $TARGET$ } } }
+		add_to_global_variable_list = { name = hd_wct_in target = $TARGET$ }
+	}
+}
+
+hd_wct_clear_input_effect = {
+	clear_global_variable_list = hd_wct_in
+}
+
+# 由 hd_wct_in 算出 hd_wct_out（规则 1~3）
+hd_wct_build_effect = {
+	clear_global_variable_list = hd_wct_cand
+	clear_global_variable_list = hd_wct_reach
+	clear_global_variable_list = hd_wct_out
+	# 1 候选县
+	every_in_global_list = {
+		variable = hd_wct_in
+		every_in_de_jure_hierarchy = {
+			limit = {
+				tier = tier_county
+				hd_wct_def_held_trigger = yes
+				NOT = { is_target_in_global_variable_list = { name = hd_wct_cand target = this } }
+			}
+			add_to_global_variable_list = { name = hd_wct_cand target = this }
+		}
+	}
+	# 2 起点：与攻方接壤的候选县
+	every_in_global_list = {
+		variable = hd_wct_cand
+		limit = { hd_wct_borders_att_trigger = yes }
+		add_to_global_variable_list = { name = hd_wct_reach target = this }
+	}
+	# 2 只经候选县向外连通
+	while = {
+		limit = {
+			any_in_global_list = {
+				variable = hd_wct_cand
+				NOT = { is_target_in_global_variable_list = { name = hd_wct_reach target = this } }
+				any_neighboring_county = { is_target_in_global_variable_list = { name = hd_wct_reach target = this } }
+			}
+		}
+		every_in_global_list = {
+			variable = hd_wct_cand
+			limit = {
+				NOT = { is_target_in_global_variable_list = { name = hd_wct_reach target = this } }
+				any_neighboring_county = { is_target_in_global_variable_list = { name = hd_wct_reach target = this } }
+			}
+			add_to_global_variable_list = { name = hd_wct_reach target = this }
+		}
+	}
+	# 3 定目标
+	every_in_global_list = {
+		variable = hd_wct_in
+		if = {
+			limit = {
+				any_in_de_jure_hierarchy = {
+					tier = tier_county
+					is_target_in_global_variable_list = { name = hd_wct_reach target = this }
+				}
+				NOT = {
+					any_in_de_jure_hierarchy = {
+						tier = tier_county
+						is_target_in_global_variable_list = { name = hd_wct_cand target = this }
+						NOT = { is_target_in_global_variable_list = { name = hd_wct_reach target = this } }
+					}
+				}
+			}
+			hd_wct_add_out_effect = yes
+		}
+		else = {
+			every_in_de_jure_hierarchy = {
+				limit = { tier = tier_duchy }
+				if = {
+					limit = {
+						any_in_de_jure_hierarchy = {
+							tier = tier_county
+							is_target_in_global_variable_list = { name = hd_wct_reach target = this }
+						}
+						NOT = {
+							any_in_de_jure_hierarchy = {
+								tier = tier_county
+								is_target_in_global_variable_list = { name = hd_wct_cand target = this }
+								NOT = { is_target_in_global_variable_list = { name = hd_wct_reach target = this } }
+							}
+						}
+					}
+					hd_wct_add_out_effect = yes
+				}
+				else = {
+					every_in_de_jure_hierarchy = {
+						limit = {
+							tier = tier_county
+							is_target_in_global_variable_list = { name = hd_wct_reach target = this }
+						}
+						hd_wct_add_out_effect = yes
+					}
+				}
+			}
+		}
+	}
+}
+
+# Scope：头衔
+hd_wct_add_out_effect = {
+	if = {
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_out target = this } } }
+		add_to_global_variable_list = { name = hd_wct_out target = this }
+	}
+}
+
+hd_wct_start_war_effect = {
+	$ATTACKER$ = {
+		save_scope_as = hd_wct_me
+		top_liege = { save_scope_as = hd_wct_att }
+	}
+	$DEFENDER$ = { save_scope_as = hd_wct_def }
+	hd_wct_build_effect = yes
+	# 4 一个都连不到：改为守方所有与攻方接壤的郡
+	if = {
+		limit = { NOT = { any_in_global_list = { variable = hd_wct_out always = yes } } }
+		clear_global_variable_list = hd_wct_orig
+		every_in_global_list = {
+			variable = hd_wct_in
+			add_to_global_variable_list = { name = hd_wct_orig target = this }
+		}
+		clear_global_variable_list = hd_wct_in
+		scope:hd_wct_def = {
+			every_sub_realm_county = {
+				limit = { hd_wct_borders_att_trigger = yes }
+				duchy ?= {
+					if = {
+						limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_in target = this } } }
+						add_to_global_variable_list = { name = hd_wct_in target = this }
+					}
+				}
+			}
+		}
+		hd_wct_build_effect = yes
+		debug_log = "HD_WCT TARGET_NOT_CONTIGUOUS -> BORDER_DUCHIES"
+		# 5 两国不接壤：沿用原定目标
+		if = {
+			limit = { NOT = { any_in_global_list = { variable = hd_wct_out always = yes } } }
+			every_in_global_list = {
+				variable = hd_wct_orig
+				add_to_global_variable_list = { name = hd_wct_out target = this }
+			}
+			debug_log = "HD_WCT NO_BORDER -> ORIGINAL_TARGETS"
+		}
+		# 恢复输入表，供封臣宣战不成时宗主再宣一次
+		clear_global_variable_list = hd_wct_in
+		every_in_global_list = {
+			variable = hd_wct_orig
+			add_to_global_variable_list = { name = hd_wct_in target = this }
+		}
+		clear_global_variable_list = hd_wct_orig
+	}
+	hd_wct_assign_effect = yes
+	scope:hd_wct_me = {
+		hd_wct_declare_effect = { CB = $CB$ }
+	}
+	clear_global_variable_list = hd_wct_cand
+	clear_global_variable_list = hd_wct_reach
+	clear_global_variable_list = hd_wct_out
+	clear_global_variable_list = hd_wct_used
+}
+
+
+# 把 hd_wct_out 依次存为 scope:hd_wct_t1 ~ t50（先清掉上一次留下的）
+hd_wct_assign_effect = {
+	clear_global_variable_list = hd_wct_used
+	clear_saved_scope = hd_wct_t1
+	clear_saved_scope = hd_wct_t2
+	clear_saved_scope = hd_wct_t3
+	clear_saved_scope = hd_wct_t4
+	clear_saved_scope = hd_wct_t5
+	clear_saved_scope = hd_wct_t6
+	clear_saved_scope = hd_wct_t7
+	clear_saved_scope = hd_wct_t8
+	clear_saved_scope = hd_wct_t9
+	clear_saved_scope = hd_wct_t10
+	clear_saved_scope = hd_wct_t11
+	clear_saved_scope = hd_wct_t12
+	clear_saved_scope = hd_wct_t13
+	clear_saved_scope = hd_wct_t14
+	clear_saved_scope = hd_wct_t15
+	clear_saved_scope = hd_wct_t16
+	clear_saved_scope = hd_wct_t17
+	clear_saved_scope = hd_wct_t18
+	clear_saved_scope = hd_wct_t19
+	clear_saved_scope = hd_wct_t20
+	clear_saved_scope = hd_wct_t21
+	clear_saved_scope = hd_wct_t22
+	clear_saved_scope = hd_wct_t23
+	clear_saved_scope = hd_wct_t24
+	clear_saved_scope = hd_wct_t25
+	clear_saved_scope = hd_wct_t26
+	clear_saved_scope = hd_wct_t27
+	clear_saved_scope = hd_wct_t28
+	clear_saved_scope = hd_wct_t29
+	clear_saved_scope = hd_wct_t30
+	clear_saved_scope = hd_wct_t31
+	clear_saved_scope = hd_wct_t32
+	clear_saved_scope = hd_wct_t33
+	clear_saved_scope = hd_wct_t34
+	clear_saved_scope = hd_wct_t35
+	clear_saved_scope = hd_wct_t36
+	clear_saved_scope = hd_wct_t37
+	clear_saved_scope = hd_wct_t38
+	clear_saved_scope = hd_wct_t39
+	clear_saved_scope = hd_wct_t40
+	clear_saved_scope = hd_wct_t41
+	clear_saved_scope = hd_wct_t42
+	clear_saved_scope = hd_wct_t43
+	clear_saved_scope = hd_wct_t44
+	clear_saved_scope = hd_wct_t45
+	clear_saved_scope = hd_wct_t46
+	clear_saved_scope = hd_wct_t47
+	clear_saved_scope = hd_wct_t48
+	clear_saved_scope = hd_wct_t49
+	clear_saved_scope = hd_wct_t50
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t1
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t2
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t3
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t4
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t5
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t6
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t7
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t8
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t9
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t10
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t11
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t12
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t13
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t14
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t15
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t16
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t17
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t18
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t19
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t20
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t21
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t22
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t23
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t24
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t25
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t26
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t27
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t28
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t29
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t30
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t31
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t32
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t33
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t34
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t35
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t36
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t37
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t38
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t39
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t40
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t41
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t42
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t43
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t44
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t45
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t46
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t47
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t48
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t49
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	ordered_in_global_list = {
+		variable = hd_wct_out
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } }
+		order_by = hd_wct_tier_value
+		save_scope_as = hd_wct_t50
+		add_to_global_variable_list = { name = hd_wct_used target = this }
+	}
+	if = {
+		limit = { any_in_global_list = { variable = hd_wct_out NOT = { is_target_in_global_variable_list = { name = hd_wct_used target = this } } } }
+		debug_log = "HD_WCT TOO_MANY_TARGETS (>50), REST DROPPED"
+	}
+}
+
+# Scope：宣战人。按目标个数选分支（原版 diarchy_events 同法）
+hd_wct_declare_effect = {
+	if = {
+		limit = { exists = scope:hd_wct_t50 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+			target_title = scope:hd_wct_t23
+			target_title = scope:hd_wct_t24
+			target_title = scope:hd_wct_t25
+			target_title = scope:hd_wct_t26
+			target_title = scope:hd_wct_t27
+			target_title = scope:hd_wct_t28
+			target_title = scope:hd_wct_t29
+			target_title = scope:hd_wct_t30
+			target_title = scope:hd_wct_t31
+			target_title = scope:hd_wct_t32
+			target_title = scope:hd_wct_t33
+			target_title = scope:hd_wct_t34
+			target_title = scope:hd_wct_t35
+			target_title = scope:hd_wct_t36
+			target_title = scope:hd_wct_t37
+			target_title = scope:hd_wct_t38
+			target_title = scope:hd_wct_t39
+			target_title = scope:hd_wct_t40
+			target_title = scope:hd_wct_t41
+			target_title = scope:hd_wct_t42
+			target_title = scope:hd_wct_t43
+			target_title = scope:hd_wct_t44
+			target_title = scope:hd_wct_t45
+			target_title = scope:hd_wct_t46
+			target_title = scope:hd_wct_t47
+			target_title = scope:hd_wct_t48
+			target_title = scope:hd_wct_t49
+			target_title = scope:hd_wct_t50
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t49 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+			target_title = scope:hd_wct_t23
+			target_title = scope:hd_wct_t24
+			target_title = scope:hd_wct_t25
+			target_title = scope:hd_wct_t26
+			target_title = scope:hd_wct_t27
+			target_title = scope:hd_wct_t28
+			target_title = scope:hd_wct_t29
+			target_title = scope:hd_wct_t30
+			target_title = scope:hd_wct_t31
+			target_title = scope:hd_wct_t32
+			target_title = scope:hd_wct_t33
+			target_title = scope:hd_wct_t34
+			target_title = scope:hd_wct_t35
+			target_title = scope:hd_wct_t36
+			target_title = scope:hd_wct_t37
+			target_title = scope:hd_wct_t38
+			target_title = scope:hd_wct_t39
+			target_title = scope:hd_wct_t40
+			target_title = scope:hd_wct_t41
+			target_title = scope:hd_wct_t42
+			target_title = scope:hd_wct_t43
+			target_title = scope:hd_wct_t44
+			target_title = scope:hd_wct_t45
+			target_title = scope:hd_wct_t46
+			target_title = scope:hd_wct_t47
+			target_title = scope:hd_wct_t48
+			target_title = scope:hd_wct_t49
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t48 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+			target_title = scope:hd_wct_t23
+			target_title = scope:hd_wct_t24
+			target_title = scope:hd_wct_t25
+			target_title = scope:hd_wct_t26
+			target_title = scope:hd_wct_t27
+			target_title = scope:hd_wct_t28
+			target_title = scope:hd_wct_t29
+			target_title = scope:hd_wct_t30
+			target_title = scope:hd_wct_t31
+			target_title = scope:hd_wct_t32
+			target_title = scope:hd_wct_t33
+			target_title = scope:hd_wct_t34
+			target_title = scope:hd_wct_t35
+			target_title = scope:hd_wct_t36
+			target_title = scope:hd_wct_t37
+			target_title = scope:hd_wct_t38
+			target_title = scope:hd_wct_t39
+			target_title = scope:hd_wct_t40
+			target_title = scope:hd_wct_t41
+			target_title = scope:hd_wct_t42
+			target_title = scope:hd_wct_t43
+			target_title = scope:hd_wct_t44
+			target_title = scope:hd_wct_t45
+			target_title = scope:hd_wct_t46
+			target_title = scope:hd_wct_t47
+			target_title = scope:hd_wct_t48
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t47 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+			target_title = scope:hd_wct_t23
+			target_title = scope:hd_wct_t24
+			target_title = scope:hd_wct_t25
+			target_title = scope:hd_wct_t26
+			target_title = scope:hd_wct_t27
+			target_title = scope:hd_wct_t28
+			target_title = scope:hd_wct_t29
+			target_title = scope:hd_wct_t30
+			target_title = scope:hd_wct_t31
+			target_title = scope:hd_wct_t32
+			target_title = scope:hd_wct_t33
+			target_title = scope:hd_wct_t34
+			target_title = scope:hd_wct_t35
+			target_title = scope:hd_wct_t36
+			target_title = scope:hd_wct_t37
+			target_title = scope:hd_wct_t38
+			target_title = scope:hd_wct_t39
+			target_title = scope:hd_wct_t40
+			target_title = scope:hd_wct_t41
+			target_title = scope:hd_wct_t42
+			target_title = scope:hd_wct_t43
+			target_title = scope:hd_wct_t44
+			target_title = scope:hd_wct_t45
+			target_title = scope:hd_wct_t46
+			target_title = scope:hd_wct_t47
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t46 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+			target_title = scope:hd_wct_t23
+			target_title = scope:hd_wct_t24
+			target_title = scope:hd_wct_t25
+			target_title = scope:hd_wct_t26
+			target_title = scope:hd_wct_t27
+			target_title = scope:hd_wct_t28
+			target_title = scope:hd_wct_t29
+			target_title = scope:hd_wct_t30
+			target_title = scope:hd_wct_t31
+			target_title = scope:hd_wct_t32
+			target_title = scope:hd_wct_t33
+			target_title = scope:hd_wct_t34
+			target_title = scope:hd_wct_t35
+			target_title = scope:hd_wct_t36
+			target_title = scope:hd_wct_t37
+			target_title = scope:hd_wct_t38
+			target_title = scope:hd_wct_t39
+			target_title = scope:hd_wct_t40
+			target_title = scope:hd_wct_t41
+			target_title = scope:hd_wct_t42
+			target_title = scope:hd_wct_t43
+			target_title = scope:hd_wct_t44
+			target_title = scope:hd_wct_t45
+			target_title = scope:hd_wct_t46
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t45 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+			target_title = scope:hd_wct_t23
+			target_title = scope:hd_wct_t24
+			target_title = scope:hd_wct_t25
+			target_title = scope:hd_wct_t26
+			target_title = scope:hd_wct_t27
+			target_title = scope:hd_wct_t28
+			target_title = scope:hd_wct_t29
+			target_title = scope:hd_wct_t30
+			target_title = scope:hd_wct_t31
+			target_title = scope:hd_wct_t32
+			target_title = scope:hd_wct_t33
+			target_title = scope:hd_wct_t34
+			target_title = scope:hd_wct_t35
+			target_title = scope:hd_wct_t36
+			target_title = scope:hd_wct_t37
+			target_title = scope:hd_wct_t38
+			target_title = scope:hd_wct_t39
+			target_title = scope:hd_wct_t40
+			target_title = scope:hd_wct_t41
+			target_title = scope:hd_wct_t42
+			target_title = scope:hd_wct_t43
+			target_title = scope:hd_wct_t44
+			target_title = scope:hd_wct_t45
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t44 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+			target_title = scope:hd_wct_t23
+			target_title = scope:hd_wct_t24
+			target_title = scope:hd_wct_t25
+			target_title = scope:hd_wct_t26
+			target_title = scope:hd_wct_t27
+			target_title = scope:hd_wct_t28
+			target_title = scope:hd_wct_t29
+			target_title = scope:hd_wct_t30
+			target_title = scope:hd_wct_t31
+			target_title = scope:hd_wct_t32
+			target_title = scope:hd_wct_t33
+			target_title = scope:hd_wct_t34
+			target_title = scope:hd_wct_t35
+			target_title = scope:hd_wct_t36
+			target_title = scope:hd_wct_t37
+			target_title = scope:hd_wct_t38
+			target_title = scope:hd_wct_t39
+			target_title = scope:hd_wct_t40
+			target_title = scope:hd_wct_t41
+			target_title = scope:hd_wct_t42
+			target_title = scope:hd_wct_t43
+			target_title = scope:hd_wct_t44
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t43 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+			target_title = scope:hd_wct_t23
+			target_title = scope:hd_wct_t24
+			target_title = scope:hd_wct_t25
+			target_title = scope:hd_wct_t26
+			target_title = scope:hd_wct_t27
+			target_title = scope:hd_wct_t28
+			target_title = scope:hd_wct_t29
+			target_title = scope:hd_wct_t30
+			target_title = scope:hd_wct_t31
+			target_title = scope:hd_wct_t32
+			target_title = scope:hd_wct_t33
+			target_title = scope:hd_wct_t34
+			target_title = scope:hd_wct_t35
+			target_title = scope:hd_wct_t36
+			target_title = scope:hd_wct_t37
+			target_title = scope:hd_wct_t38
+			target_title = scope:hd_wct_t39
+			target_title = scope:hd_wct_t40
+			target_title = scope:hd_wct_t41
+			target_title = scope:hd_wct_t42
+			target_title = scope:hd_wct_t43
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t42 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+			target_title = scope:hd_wct_t23
+			target_title = scope:hd_wct_t24
+			target_title = scope:hd_wct_t25
+			target_title = scope:hd_wct_t26
+			target_title = scope:hd_wct_t27
+			target_title = scope:hd_wct_t28
+			target_title = scope:hd_wct_t29
+			target_title = scope:hd_wct_t30
+			target_title = scope:hd_wct_t31
+			target_title = scope:hd_wct_t32
+			target_title = scope:hd_wct_t33
+			target_title = scope:hd_wct_t34
+			target_title = scope:hd_wct_t35
+			target_title = scope:hd_wct_t36
+			target_title = scope:hd_wct_t37
+			target_title = scope:hd_wct_t38
+			target_title = scope:hd_wct_t39
+			target_title = scope:hd_wct_t40
+			target_title = scope:hd_wct_t41
+			target_title = scope:hd_wct_t42
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t41 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+			target_title = scope:hd_wct_t23
+			target_title = scope:hd_wct_t24
+			target_title = scope:hd_wct_t25
+			target_title = scope:hd_wct_t26
+			target_title = scope:hd_wct_t27
+			target_title = scope:hd_wct_t28
+			target_title = scope:hd_wct_t29
+			target_title = scope:hd_wct_t30
+			target_title = scope:hd_wct_t31
+			target_title = scope:hd_wct_t32
+			target_title = scope:hd_wct_t33
+			target_title = scope:hd_wct_t34
+			target_title = scope:hd_wct_t35
+			target_title = scope:hd_wct_t36
+			target_title = scope:hd_wct_t37
+			target_title = scope:hd_wct_t38
+			target_title = scope:hd_wct_t39
+			target_title = scope:hd_wct_t40
+			target_title = scope:hd_wct_t41
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t40 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+			target_title = scope:hd_wct_t23
+			target_title = scope:hd_wct_t24
+			target_title = scope:hd_wct_t25
+			target_title = scope:hd_wct_t26
+			target_title = scope:hd_wct_t27
+			target_title = scope:hd_wct_t28
+			target_title = scope:hd_wct_t29
+			target_title = scope:hd_wct_t30
+			target_title = scope:hd_wct_t31
+			target_title = scope:hd_wct_t32
+			target_title = scope:hd_wct_t33
+			target_title = scope:hd_wct_t34
+			target_title = scope:hd_wct_t35
+			target_title = scope:hd_wct_t36
+			target_title = scope:hd_wct_t37
+			target_title = scope:hd_wct_t38
+			target_title = scope:hd_wct_t39
+			target_title = scope:hd_wct_t40
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t39 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+			target_title = scope:hd_wct_t23
+			target_title = scope:hd_wct_t24
+			target_title = scope:hd_wct_t25
+			target_title = scope:hd_wct_t26
+			target_title = scope:hd_wct_t27
+			target_title = scope:hd_wct_t28
+			target_title = scope:hd_wct_t29
+			target_title = scope:hd_wct_t30
+			target_title = scope:hd_wct_t31
+			target_title = scope:hd_wct_t32
+			target_title = scope:hd_wct_t33
+			target_title = scope:hd_wct_t34
+			target_title = scope:hd_wct_t35
+			target_title = scope:hd_wct_t36
+			target_title = scope:hd_wct_t37
+			target_title = scope:hd_wct_t38
+			target_title = scope:hd_wct_t39
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t38 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+			target_title = scope:hd_wct_t23
+			target_title = scope:hd_wct_t24
+			target_title = scope:hd_wct_t25
+			target_title = scope:hd_wct_t26
+			target_title = scope:hd_wct_t27
+			target_title = scope:hd_wct_t28
+			target_title = scope:hd_wct_t29
+			target_title = scope:hd_wct_t30
+			target_title = scope:hd_wct_t31
+			target_title = scope:hd_wct_t32
+			target_title = scope:hd_wct_t33
+			target_title = scope:hd_wct_t34
+			target_title = scope:hd_wct_t35
+			target_title = scope:hd_wct_t36
+			target_title = scope:hd_wct_t37
+			target_title = scope:hd_wct_t38
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t37 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+			target_title = scope:hd_wct_t23
+			target_title = scope:hd_wct_t24
+			target_title = scope:hd_wct_t25
+			target_title = scope:hd_wct_t26
+			target_title = scope:hd_wct_t27
+			target_title = scope:hd_wct_t28
+			target_title = scope:hd_wct_t29
+			target_title = scope:hd_wct_t30
+			target_title = scope:hd_wct_t31
+			target_title = scope:hd_wct_t32
+			target_title = scope:hd_wct_t33
+			target_title = scope:hd_wct_t34
+			target_title = scope:hd_wct_t35
+			target_title = scope:hd_wct_t36
+			target_title = scope:hd_wct_t37
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t36 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+			target_title = scope:hd_wct_t23
+			target_title = scope:hd_wct_t24
+			target_title = scope:hd_wct_t25
+			target_title = scope:hd_wct_t26
+			target_title = scope:hd_wct_t27
+			target_title = scope:hd_wct_t28
+			target_title = scope:hd_wct_t29
+			target_title = scope:hd_wct_t30
+			target_title = scope:hd_wct_t31
+			target_title = scope:hd_wct_t32
+			target_title = scope:hd_wct_t33
+			target_title = scope:hd_wct_t34
+			target_title = scope:hd_wct_t35
+			target_title = scope:hd_wct_t36
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t35 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+			target_title = scope:hd_wct_t23
+			target_title = scope:hd_wct_t24
+			target_title = scope:hd_wct_t25
+			target_title = scope:hd_wct_t26
+			target_title = scope:hd_wct_t27
+			target_title = scope:hd_wct_t28
+			target_title = scope:hd_wct_t29
+			target_title = scope:hd_wct_t30
+			target_title = scope:hd_wct_t31
+			target_title = scope:hd_wct_t32
+			target_title = scope:hd_wct_t33
+			target_title = scope:hd_wct_t34
+			target_title = scope:hd_wct_t35
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t34 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+			target_title = scope:hd_wct_t23
+			target_title = scope:hd_wct_t24
+			target_title = scope:hd_wct_t25
+			target_title = scope:hd_wct_t26
+			target_title = scope:hd_wct_t27
+			target_title = scope:hd_wct_t28
+			target_title = scope:hd_wct_t29
+			target_title = scope:hd_wct_t30
+			target_title = scope:hd_wct_t31
+			target_title = scope:hd_wct_t32
+			target_title = scope:hd_wct_t33
+			target_title = scope:hd_wct_t34
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t33 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+			target_title = scope:hd_wct_t23
+			target_title = scope:hd_wct_t24
+			target_title = scope:hd_wct_t25
+			target_title = scope:hd_wct_t26
+			target_title = scope:hd_wct_t27
+			target_title = scope:hd_wct_t28
+			target_title = scope:hd_wct_t29
+			target_title = scope:hd_wct_t30
+			target_title = scope:hd_wct_t31
+			target_title = scope:hd_wct_t32
+			target_title = scope:hd_wct_t33
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t32 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+			target_title = scope:hd_wct_t23
+			target_title = scope:hd_wct_t24
+			target_title = scope:hd_wct_t25
+			target_title = scope:hd_wct_t26
+			target_title = scope:hd_wct_t27
+			target_title = scope:hd_wct_t28
+			target_title = scope:hd_wct_t29
+			target_title = scope:hd_wct_t30
+			target_title = scope:hd_wct_t31
+			target_title = scope:hd_wct_t32
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t31 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+			target_title = scope:hd_wct_t23
+			target_title = scope:hd_wct_t24
+			target_title = scope:hd_wct_t25
+			target_title = scope:hd_wct_t26
+			target_title = scope:hd_wct_t27
+			target_title = scope:hd_wct_t28
+			target_title = scope:hd_wct_t29
+			target_title = scope:hd_wct_t30
+			target_title = scope:hd_wct_t31
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t30 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+			target_title = scope:hd_wct_t23
+			target_title = scope:hd_wct_t24
+			target_title = scope:hd_wct_t25
+			target_title = scope:hd_wct_t26
+			target_title = scope:hd_wct_t27
+			target_title = scope:hd_wct_t28
+			target_title = scope:hd_wct_t29
+			target_title = scope:hd_wct_t30
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t29 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+			target_title = scope:hd_wct_t23
+			target_title = scope:hd_wct_t24
+			target_title = scope:hd_wct_t25
+			target_title = scope:hd_wct_t26
+			target_title = scope:hd_wct_t27
+			target_title = scope:hd_wct_t28
+			target_title = scope:hd_wct_t29
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t28 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+			target_title = scope:hd_wct_t23
+			target_title = scope:hd_wct_t24
+			target_title = scope:hd_wct_t25
+			target_title = scope:hd_wct_t26
+			target_title = scope:hd_wct_t27
+			target_title = scope:hd_wct_t28
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t27 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+			target_title = scope:hd_wct_t23
+			target_title = scope:hd_wct_t24
+			target_title = scope:hd_wct_t25
+			target_title = scope:hd_wct_t26
+			target_title = scope:hd_wct_t27
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t26 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+			target_title = scope:hd_wct_t23
+			target_title = scope:hd_wct_t24
+			target_title = scope:hd_wct_t25
+			target_title = scope:hd_wct_t26
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t25 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+			target_title = scope:hd_wct_t23
+			target_title = scope:hd_wct_t24
+			target_title = scope:hd_wct_t25
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t24 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+			target_title = scope:hd_wct_t23
+			target_title = scope:hd_wct_t24
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t23 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+			target_title = scope:hd_wct_t23
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t22 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+			target_title = scope:hd_wct_t22
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t21 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+			target_title = scope:hd_wct_t21
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t20 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+			target_title = scope:hd_wct_t20
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t19 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+			target_title = scope:hd_wct_t19
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t18 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+			target_title = scope:hd_wct_t18
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t17 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+			target_title = scope:hd_wct_t17
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t16 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+			target_title = scope:hd_wct_t16
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t15 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+			target_title = scope:hd_wct_t15
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t14 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+			target_title = scope:hd_wct_t14
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t13 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+			target_title = scope:hd_wct_t13
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t12 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+			target_title = scope:hd_wct_t12
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t11 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+			target_title = scope:hd_wct_t11
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t10 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+			target_title = scope:hd_wct_t10
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t9 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+			target_title = scope:hd_wct_t9
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t8 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+			target_title = scope:hd_wct_t8
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t7 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+			target_title = scope:hd_wct_t7
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t6 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+			target_title = scope:hd_wct_t6
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t5 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+			target_title = scope:hd_wct_t5
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t4 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+			target_title = scope:hd_wct_t4
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t3 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+			target_title = scope:hd_wct_t3
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t2 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+			target_title = scope:hd_wct_t2
+		}
+	}
+	else_if = {
+		limit = { exists = scope:hd_wct_t1 }
+		start_war = {
+			cb = $CB$
+			target = scope:hd_wct_def
+			target_title = scope:hd_wct_t1
+		}
+	}
+	else = { debug_log = "HD_WCT NO_TARGET $CB$" }
+}

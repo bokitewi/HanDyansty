@@ -1,12 +1,32 @@
 ﻿# Character scope; native obligation writes only, no title transactions or source flags.
+# Pass counties default to Military only on entry; WJ_pass_military_assigned marks that the
+# default was applied, so a later manual switch to Standard is respected. Leaving pass status clears it.
 WJ_pass_county_reconcile = {
  if = { limit = { WJ_name_pass_county_trigger = yes is_independent_ruler = no }
-  if = { limit = { NOT = { vassal_contract_has_flag = celestial_province_military } }
-   vassal_contract_set_obligation_level = { type = celestial_provinces level = 3 }
+  if = { limit = { NOT = { has_variable = WJ_pass_military_assigned } }
+   if = { limit = { vassal_contract_has_flag = celestial_province_military }
+    set_variable = { name = WJ_pass_military_assigned value = yes }
+   }
+   else_if = {
+    limit = {
+     # Same military cap as the native contract is_valid; retry on a later reconcile if full.
+     OR = {
+      liege != top_liege
+      liege = { any_vassal = { count < celestial_province_military_max_value vassal_contract_has_flag = celestial_province_military } }
+     }
+    }
+    vassal_contract_set_obligation_level = { type = celestial_provinces level = 3 }
+    if = { limit = { vassal_contract_has_flag = celestial_province_military }
+     set_variable = { name = WJ_pass_military_assigned value = yes }
+     if = { limit = { NOT = { has_realm_law = celestial_military_appointment_succession_law } }
+      add_realm_law_skip_effects = celestial_military_appointment_succession_law
+     }
+    }
+   }
   }
-  if = { limit = { NOT = { has_realm_law = celestial_military_appointment_succession_law } }
-   add_realm_law_skip_effects = celestial_military_appointment_succession_law
-  }
+ }
+ else_if = { limit = { is_alive = yes has_variable = WJ_pass_military_assigned }
+  remove_variable = WJ_pass_military_assigned
  }
 }
 WJ_reconcile_contract_privileges_effect = {
