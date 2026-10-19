@@ -359,7 +359,11 @@ for c in order:
     dyn = c.get('dynasty')
     if house:
         if house in houses:
-            b.append(f'\thouse:{house} ?= {{ save_scope_as = {P}_house }}\n')
+            # history 里父子同家族才打随父标记：父亲开局后另立支系时子女跟过去；history 刻意分出的支系不受影响（2026-10-19）
+            fa = c['_father'][1] if c['_father'] else None
+            follow = bool(fa) and fa in H and H[fa].get('dynasty_house') == house
+            extra = f' save_scope_as = {P}_follow' if follow else ''
+            b.append(f'\thouse:{house} ?= {{ save_scope_as = {P}_house{extra} }}\n')
         else:
             problems['家族无效（无家族出场）'].append(f'{cid}:{house}')
     elif dyn:

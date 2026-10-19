@@ -398,6 +398,12 @@ MERGED = {r['删除ID']: r['并入ID'] for r in
 MERGED18 = {r['删除ID']: r['并入ID'] for r in
             csv.DictReader(open(os.path.join(MOD, 'docs/人物审查/合并记录_2026-10-18.csv'), encoding='utf-8-sig'))
             if r['删除方文件'] == 'zz_hd_oe_characters.txt'}
+# 2026-10-19 吴郡孙氏合并：OE 孙氏宗室副本并入 UUII 人物，同样直接指向并入方
+MERGED18.update({r['删除ID']: r['并入ID'] for r in
+                 csv.DictReader(open(os.path.join(MOD, 'docs/人物审查/合并记录_2026-10-19.csv'), encoding='utf-8-sig'))})
+# 2026-10-19：富春孙氏并入吴郡孙氏，不再单立家族；孙孺、孙香随父亲孙旃入乐安孙氏
+HOUSE_REMAP = {'house_fuchun_sun': 'wujun_sun'}
+CHAR_HOUSE = {'1407880': 'lean_sun', '1407881': 'lean_sun'}
 OLD_AUDIT = {r['角色ID']: r for r in
              csv.DictReader(open(os.path.join(MOD, 'docs/人物审查/人物总表.csv'), encoding='utf-8-sig'))
              if r.get('标记') != 'OE整合'}
@@ -620,6 +626,7 @@ def emit_char(c):
         L.append('\tfemale = yes')
     dyn, house = c.get('dynasty'), c.get('dynasty_house')
     if house:
+        house = CHAR_HOUSE.get(c['id'], HOUSE_REMAP.get(house, house))
         if house in HD_HOUSE or house in OE_HOUSE or house in VAN_HOUSE:
             L.append(f'\tdynasty_house = {house}')
             NEED_HOUSE.add(house)

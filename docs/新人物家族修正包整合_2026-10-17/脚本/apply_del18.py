@@ -9,6 +9,11 @@ import csv, os, re, sys
 mod, out = sys.argv[1:3]
 M = {r['删除ID']: r['并入ID'] for r in
      csv.DictReader(open(os.path.join(mod, 'docs/人物审查/合并记录_2026-10-18.csv'), encoding='utf-8-sig'))}
+# 2026-10-19 吴郡孙氏合并：OE 孙氏宗室副本同样删块改指
+M.update({r['删除ID']: r['并入ID'] for r in
+          csv.DictReader(open(os.path.join(mod, 'docs/人物审查/合并记录_2026-10-19.csv'), encoding='utf-8-sig'))})
+# 2026-10-19：人物文件里的富春孙氏改回吴郡孙氏（只改 characters 目录，不碰家族定义文件）
+HOUSE_REMAP = {'house_fuchun_sun': 'wujun_sun'}
 TOK = re.compile(r'(?<![A-Za-z0-9_.:$])([A-Za-z0-9_]+)(?![A-Za-z0-9_])')
 KEY = re.compile(r'([A-Za-z0-9_\-\.]+)\s*=\s*\{')
 
@@ -50,14 +55,17 @@ for root, _, fs in os.walk(out):
             continue
         p = os.path.join(root, f)
         raw = open(p, 'rb').read()
-        if not any(k.encode() in raw for k in M):
+        is_char = os.path.basename(os.path.dirname(p)) == 'characters'
+        if not any(k.encode() in raw for k in M) and not (is_char and any(k.encode() in raw for k in HOUSE_REMAP)):
             continue
         bom = raw.startswith(b'\xef\xbb\xbf')
         t = raw.decode('utf-8-sig')
-        if os.path.basename(os.path.dirname(p)) == 'characters':
+        if is_char:
             for k, s, e in sorted(spans(t), key=lambda x: -x[1]):
                 if k in M:
                     t = t[:s] + t[e:]; dropped += 1
+            for a, b in HOUSE_REMAP.items():
+                t = re.sub(r'(dynasty_house\s*=\s*"?)' + a + r'\b', r'\g<1>' + b, t)
         nt = '\n'.join(code_sub(l) for l in t.split('\n'))
         rewired += nt != t
         open(p, 'w', encoding='utf-8-sig' if bom else 'utf-8', newline='').write(nt)
