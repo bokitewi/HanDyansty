@@ -401,6 +401,9 @@ MERGED18 = {r['删除ID']: r['并入ID'] for r in
 # 2026-10-19 吴郡孙氏合并：OE 孙氏宗室副本并入 UUII 人物，同样直接指向并入方
 MERGED18.update({r['删除ID']: r['并入ID'] for r in
                  csv.DictReader(open(os.path.join(MOD, 'docs/人物审查/合并记录_2026-10-19.csv'), encoding='utf-8-sig'))})
+# 2026-10-20：OE 于吉（生于60年，开局即老死）并入 UUII yu_ji
+MERGED18.update({r['删除ID']: r['并入ID'] for r in
+                 csv.DictReader(open(os.path.join(MOD, 'docs/人物审查/合并记录_2026-10-20.csv'), encoding='utf-8-sig'))})
 # 2026-10-19：富春孙氏并入吴郡孙氏，不再单立家族；孙孺、孙香随父亲孙旃入乐安孙氏
 HOUSE_REMAP = {'house_fuchun_sun': 'wujun_sun'}
 CHAR_HOUSE = {'1407880': 'lean_sun', '1407881': 'lean_sun'}

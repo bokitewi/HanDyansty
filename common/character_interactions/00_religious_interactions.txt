@@ -1044,9 +1044,9 @@ demand_conversion_vassal_ruler_interaction = {
 							    modifier = {
 							        add = 10
 							        OR = {
-								has_trait = education_learning_3
-								has_trait = education_learning_4
-								has_trait = education_learning_5
+							        	has_trait = education_learning_3
+							        	has_trait = education_learning_4
+							        	has_trait = education_learning_5
 							        }
 							    }
 							    modifier = {
@@ -1709,27 +1709,27 @@ demand_conversion_minister_rites_interaction = {
 	on_decline_summary = stop_attacker_vassal_war_decline_summary
 
 	is_shown = {
-		scope:actor = {
+		scope:puppet_or_actor ?= {
 			is_ai = no
 			has_title = title:e_minister_of_rites
-		}
-		scope:recipient = {
-			top_liege = scope:actor.top_liege
-			this != top_liege
-			faith = {
-				OR = {
-					faith_hostility_level = {
-						target = scope:actor.faith
-						value >= faith_hostile_level
-					}
-					faith_hostility_level = {
-						target = scope:actor.top_liege.faith
-						value >= faith_hostile_level
+			scope:recipient = {
+				top_liege ?= scope:puppet_or_actor.top_liege
+				this != top_liege
+				rite ?= {
+					OR = {
+						rite_hostility_level = {
+							target = scope:puppet_or_actor.rite
+							value >= faith_hostile_level
+						}
+						rite_hostility_level = {
+							target = scope:puppet_or_actor.top_liege.rite
+							value >= faith_hostile_level
+						}
 					}
 				}
+				is_ai = yes
+				is_ruler = yes
 			}
-			is_ai = yes
-			is_ruler = yes
 		}
 	}
 
@@ -2165,6 +2165,7 @@ convert_to_religion_adventurer_interaction = {
 		scope:actor = {
 			hidden_effect = { faith = { save_scope_as = old_faith } }
 			set_character_faith = scope:recipient.faith
+			set_character_rite = scope:recipient.rite
 			trigger_event = {
 				on_action = on_faith_conversion
 			}
@@ -2455,6 +2456,16 @@ seek_indulgences_interaction = {
 				scope:recipient ?= scope:puppet_or_actor.faith.religious_head
 			}
 			scope:puppet_or_actor ?= { is_following_religious_head_challenger = no }
+		}
+		scope:actor = {
+			trigger_if = {
+				limit = {
+					cp:councillor_court_chaplain ?= scope:recipient
+					pam_is_archbishop_or_higher_trigger = no
+					actor_has_capital_archbishop_trigger = yes
+				}
+				seek_indulgences_recipient_trigger = yes
+			}
 		}
 	}
 
@@ -3417,6 +3428,11 @@ excommunicate_interaction = {
 				}
 			}
 		}
+
+		modifier = {
+			factor = 0
+			scope:puppet_or_actor.puppeteer ?= scope:recipient
+		}
 	}
 }
 
@@ -3700,7 +3716,7 @@ request_excommunication_interaction = {
 				save_scope_as = recipient
 			}
 		}
-
+		
 		#Still hasn't been set
 		#stop errors from the above process failing, this should be blocked anyway
 		if = {
@@ -3774,7 +3790,9 @@ request_excommunication_interaction = {
 					any_faith_subordinate = {
 						highest_held_title_tier >= tier_duchy
 						save_temporary_scope_as = cleric_temp
-						pam_valid_excommunication_target_trigger = { EXCOMMUNICATOR = scope:cleric_temp }
+						scope:secondary_recipient = {
+							pam_valid_excommunication_target_trigger = { EXCOMMUNICATOR = scope:cleric_temp }
+						}
 					}
 				}
 			}
@@ -3786,19 +3804,19 @@ request_excommunication_interaction = {
 			scope:secondary_recipient = {
 				NOT = { has_strong_hook = scope:puppet_or_actor }
 			}
-			trigger_if = {
-				limit = {
-					petition_head_of_faith_excommunication_target_requires_petition_trigger = yes
-					NOT = { scope:excommunication_hook = yes }
-				}
-				scope:puppet_or_actor = {
-					piety >= massive_piety_value
-				}
+		}
+		trigger_if = {
+			limit = {
+				petition_head_of_faith_excommunication_target_requires_petition_trigger = yes
+				NOT = { scope:excommunication_hook = yes }
 			}
-			trigger_else = {
-				scope:puppet_or_actor = {
-					piety >= request_excommunication_piety_cost_value
-				}
+			scope:puppet_or_actor = {
+				piety >= massive_piety_value
+			}
+		}
+		trigger_else = {
+			scope:puppet_or_actor = {
+				piety >= request_excommunication_piety_cost_value
 			}
 		}
 
@@ -3977,6 +3995,11 @@ request_excommunication_interaction = {
 			add = 15
 			desc = EXCOMMUNICATION_EXECUTED_HOF
 		}
+		modifier = {
+			scope:secondary_recipient ?= { has_character_modifier = pam_defied_church_peace_modifier }
+			add = 50
+			desc = EXCOMMUNICATION_DEFIED_CHURCH_PEACE
+		}
 		opinion_modifier = {
 			who = scope:recipient
 			opinion_target = scope:puppet_or_actor
@@ -4042,6 +4065,11 @@ request_excommunication_interaction = {
 			scope:puppet_or_actor.puppet:theological_agent_puppet ?= scope:recipient
 			desc = IS_YOUR_PUPPET
 		}
+		modifier = {
+			add = -1000
+			scope:recipient.puppeteer ?= scope:secondary_recipient
+			desc = EXCOMMUNICATION_TARGET_IS_PUPPETEER
+		}
 		secular_to_ecclesiastical_pam_factors_acceptance_modifier = yes
 	}
 
@@ -4103,11 +4131,10 @@ request_excommunication_interaction = {
 						add_piety = {
 							value = {
 								value = request_excommunication_piety_cost_value
-								max = piety
 								multiply = -1
 							}
 						}
-					}
+					}				
 
 					#Letter event to inform character the pope agreed to their request.
 					trigger_event = {
@@ -4171,7 +4198,7 @@ request_excommunication_interaction = {
 				HOOK = excommunication_hook
 				PIETY_VALUE = massive_piety_value
 			}
-		}
+		}	
 	}
 
 	on_decline = {
@@ -4277,6 +4304,11 @@ request_excommunication_interaction = {
 				faith_has_existing_empire_holder_trigger = yes
 				faith = scope:puppet_or_actor.faith
 			}
+		}
+
+		modifier = {
+			factor = 0
+			scope:puppet_or_actor.puppeteer ?= scope:secondary_recipient
 		}
 	}
 }
@@ -6875,6 +6907,16 @@ hof_ask_for_gold_interaction = {
 			}
 			scope:puppet_or_actor ?= { is_following_religious_head_challenger = no }
 		}
+		scope:actor = {
+			trigger_if = {
+				limit = {
+					cp:councillor_court_chaplain ?= scope:recipient
+					pam_is_archbishop_or_higher_trigger = no
+					actor_has_capital_archbishop_trigger = yes
+				}
+				capital_county.clerical_region_title.holder ?= scope:recipient
+			}
+		}
 	}
 
 	is_valid_showing_failures_only = {
@@ -8964,34 +9006,34 @@ attempt_conversion_of_local_ruler_interaction = {
 			scope:provisions = yes
 			desc = USING_PROVISIONS
 		}
-		modifier = {
+ 		modifier = {
 			scope:recipient = {
 				has_trait = trusting
 			}
-			add = 20
-			desc = DEMAND_SUBMISSION_RECIPIENT_IS_TRUSTING
-		}
-		modifier = {
+ 			add = 20
+ 			desc = DEMAND_SUBMISSION_RECIPIENT_IS_TRUSTING
+ 		}
+ 		modifier = {
 			scope:recipient = {
 				has_relation_lover = scope:puppet_or_actor
 			}
-			add = 25
-			desc = AI_YOUR_LOVER
-		}
-		modifier = {
+ 			add = 25
+ 			desc = AI_YOUR_LOVER
+ 		}
+ 		modifier = {
 			scope:recipient = {
 				has_relation_friend = scope:puppet_or_actor
 			}
-			add = 25
-			desc = AI_YOUR_FRIEND
-		}
-		modifier = {
+ 			add = 25
+ 			desc = AI_YOUR_FRIEND
+ 		}
+ 		modifier = {
 			scope:recipient = {
 				is_child_of = scope:puppet_or_actor
 			}
-			add = 50
-			desc = AI_YOUR_CHILD
-		}
+ 			add = 50
+ 			desc = AI_YOUR_CHILD
+ 		}
 		modifier = {
 			add = {
 				value = scope:puppet_or_actor.piety_level
@@ -9528,8 +9570,8 @@ take_monastic_vows_interaction = {
 			custom_tooltip = {
 				text = female_monastic_order_not_female_tt
 				scope:recipient = {
-				is_female = yes
-			}
+    				is_female = yes
+    			}
 			}
 		}
 		trigger_if = {
@@ -9541,8 +9583,8 @@ take_monastic_vows_interaction = {
 			custom_tooltip = {
 				text = male_monastic_order_not_male_tt
 				scope:recipient = {
-				is_male = yes
-			}
+    				is_male = yes
+    			}
 			}
 		}
 	}
@@ -9663,9 +9705,9 @@ take_monastic_vows_interaction = {
 				name = vows_piety_spent
 				value = ask_to_take_vows_piety_cost
 				days = 10
-			}
-		}
-	}
+ 			}
+ 		}
+ 	}
 
 	on_accept = {
 		if = {
@@ -9840,20 +9882,20 @@ take_monastic_vows_interaction = {
 				limit = {
 					scope:recipient = {
 						has_variable = vows_piety_spent
-					}
-				}
+ 					}
+ 				}
 				scope:puppet_or_actor = {
 					add_piety_no_experience = {
 						value = scope:recipient.var:vows_piety_spent
-					}
+ 					}
 				}
 				scope:recipient = {
 					remove_variable = vows_piety_spent
-				}
-			}
-		}
+ 				}
+ 			}
+ 		}
 
-		# If we're a clan this interaction affects unity
+ 		# If we're a clan this interaction affects unity
 		add_clan_unity_interaction_effect = {
 			CHARACTER = scope:puppet_or_actor
 			TARGET = scope:recipient
@@ -9861,7 +9903,7 @@ take_monastic_vows_interaction = {
 			DESC = clan_unity_refused_to_take_vows.desc
 			REVERSE_NON_HOUSE_TARGET = no
 		}
-	}
+ 	}
 
 	auto_accept = no
 
@@ -10704,7 +10746,7 @@ monastic_donation_interaction = {
 
 	ai_min_reply_days = 3
 	ai_max_reply_days = 6
-	common_interaction = yes
+	common_interaction = no
 
 	cooldown_against_recipient = { years = 5 }
 
@@ -10753,7 +10795,7 @@ monastic_donation_interaction = {
 			trigger_else = {
 				gold >= monastic_donation_value
 			}
-
+			
 		}
 		#Monastic holding's leases are all in realms actor is at war with
 		custom_tooltip = {
@@ -10896,7 +10938,7 @@ monastic_donation_interaction = {
 	}
 
 	on_send = {
-	}
+ 	}
 
 	on_accept = {
 		show_as_tooltip = {
@@ -10919,7 +10961,7 @@ monastic_donation_interaction = {
 				id = holy_order.2031
 			}
 		}
-	}
+ 	}
 
 	auto_accept = no
 
@@ -11190,7 +11232,7 @@ monastic_donation_interaction = {
 	ai_target_quick_trigger = {
 		adult = yes
 	}
-
+	
 	ai_targets = {
 		ai_recipients = neighboring_rulers
 		ai_recipients = faith_holy_order_leaders
@@ -11392,7 +11434,7 @@ lease_title_to_existing_monastic_order_interaction = {
 
 	ai_min_reply_days = 3
 	ai_max_reply_days = 6
-	common_interaction = yes
+	common_interaction = no
 
 	desc = lease_title_to_existing_monastic_order_interaction_desc
 
@@ -11404,12 +11446,12 @@ lease_title_to_existing_monastic_order_interaction = {
 		trigger_if = {
 			limit = { is_ai = yes }
 			any_held_title = {
-				count >= 2
-				tier = tier_county
-				any_county_province = {
-					has_holding_type = church_holding
-					barony ?= {
-						trigger_if = {
+			 	count >= 2
+			 	tier = tier_county
+			 	any_county_province = {
+			 		has_holding_type = church_holding
+			 		barony ?= {
+			 			trigger_if = {
 							limit = {
 								exists = barony.lessee
 							}
@@ -11419,8 +11461,8 @@ lease_title_to_existing_monastic_order_interaction = {
 								}
 							}
 						}
-					}
-				}
+			 		}
+			 	}
 			}
 			#either needs spiritual fulfillment or a monastic holy order to patron
 			OR = {
@@ -11474,6 +11516,13 @@ lease_title_to_existing_monastic_order_interaction = {
 							government_has_flag = government_is_monastic_holy_order
 						}
 					}
+				}
+			}
+			custom_tooltip = {
+				text = already_has_monastic_lease_tt
+				trigger_if = {
+					limit = { has_variable = pending_monastic_order_lease }
+					var:pending_monastic_order_lease = scope:recipient
 				}
 			}
 			is_landless_type_title = no
@@ -11582,6 +11631,15 @@ lease_title_to_existing_monastic_order_interaction = {
 	}
 
 	on_send = {
+		hidden_effect = {
+			scope:target = {
+				set_variable = {
+					name = pending_monastic_order_lease
+					value = scope:recipient
+					days = 30 # Cleared in holy_order.2040/2041 as soon as the monastic order answers; the timeout is only a fallback
+				}
+			}
+		}
 	}
 
 	on_accept = {
@@ -11618,7 +11676,7 @@ lease_title_to_existing_monastic_order_interaction = {
 				id = holy_order.2041
 			}
 		}
-	}
+ 	}
 
 	auto_accept = no
 
@@ -11891,7 +11949,7 @@ lease_title_to_existing_monastic_order_interaction = {
 	ai_target_quick_trigger = {
 		adult = yes
 	}
-
+	
 	ai_targets = {
 		ai_recipients = neighboring_rulers
 		ai_recipients = faith_holy_order_leaders
@@ -12059,7 +12117,7 @@ lease_title_to_existing_monastic_order_interaction = {
 					}
 				}
 			}
-		}
+		}	
 		modifier = { # shares the order's rite
 			add = 20
 			scope:puppet_or_actor.rite = scope:recipient.rite
@@ -12090,7 +12148,7 @@ offer_bedside_support_interaction = {
 	is_available = {
 		rite ?= {
 			rite_has_parameter = tenet_sacred_childbirth_offer_bedside_support
-		}
+		}		
 	}
 
 	is_shown = {
@@ -12246,7 +12304,7 @@ monastic_espouse_beliefs_interaction = {
 				text = recipient_clerical_puppet_req_tt
 				puppeteer ?= scope:actor
 			}
-
+			
 			is_physically_able_adult = yes
 			custom_tooltip = {
 				text = espoused_order_beliefs_recently
@@ -12356,7 +12414,7 @@ monastic_espouse_beliefs_interaction = {
 					any_personal_tenet = {
 						this = scope:recipient.holy_order.order_tenet
 					}
-				}
+				}	
 			}
 		}
 		modifier = {

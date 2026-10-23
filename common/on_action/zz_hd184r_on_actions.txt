@@ -1,0 +1,82 @@
+﻿# 184 剧本流程重制（2026-10-21）调度。日期按 184.1.1 起算（CK3 无闰年）。
+on_game_start = { on_actions = { hd184r_game_start } }
+
+hd184r_game_start = {
+	trigger = {
+		game_start_date = 190.1.1 # 2026-10-22 改 190 讨董开局：排期天数一律从 190.1.1 起算（原 184.1.1 起算减 2190）
+		hd_history_events_enabled_trigger = yes
+	}
+	effect = {
+		title:h_china = {
+			trigger_event = { on_action = hd184r_sched_era_fallback days = 1095 }	# 193.1.1 仍未进入群雄割据则进入
+			trigger_event = { on_action = hd184r_sched_xunyu days = 608 }		# 191.9.1 荀彧来投
+			trigger_event = { on_action = hd184r_sched_chengyu days = 881 }		# 192.6.1 程昱来投
+			trigger_event = { on_action = hd184r_sched_caosong days = 1246 }		# 193.6.1 曹嵩遇害
+			trigger_event = { on_action = hd184r_sched_tao_worsen days = 1825 }	# 195.1.1 陶谦病重
+			trigger_event = { on_action = hd184r_sched_liguo days = 1884 }		# 195.3.1 李郭内讧、天子东归
+			trigger_event = { on_action = hd184r_sched_tao_death days = 2190 }	# 196.1.1 陶谦病逝（兜底）
+			trigger_event = { on_action = hd184r_sched_guojia days = 2249 }		# 196.3.1 郭嘉来投
+			trigger_event = { on_action = hd184r_sched_zhufu days = 2341 }		# 196.6.1 朱符遇害
+			trigger_event = { on_action = hd184r_sched_yuanshu days = 2614 }		# 197.3.1 袁术称帝
+			trigger_event = { on_action = hd184r_sched_lusu days = 3071 }		# 198.6.1 鲁肃来投
+		}
+	}
+}
+
+hd184r_sched_era_fallback = { effect = { hd184r_warlord_era_fallback_effect = yes } }
+hd184r_sched_xunyu = { effect = { hd184r_advisor_cao_effect = { WHO = xun_yu } } }
+hd184r_sched_chengyu = { effect = { hd184r_advisor_cao_effect = { WHO = cheng_yu } } }
+hd184r_sched_guojia = { effect = { hd184r_advisor_cao_effect = { WHO = guo_jia } } }
+hd184r_sched_lusu = { effect = { hd184r_advisor_lusu_effect = yes } }
+hd184r_sched_caosong = { effect = { hd184r_caosong_effect = yes } }
+hd184r_sched_tao_worsen = { effect = { hd184r_tao_worsen_effect = yes } }
+hd184r_sched_tao_death = { effect = { hd184r_tao_death_effect = yes } }
+hd184r_sched_liguo = { effect = { hd184r_lijue_guosi_effect = yes } }
+hd184r_sched_zhufu = { effect = { hd184r_zhufu_effect = yes } }
+hd184r_sched_yuanshu = { effect = { hd184r_yuanshu_check_effect = yes } }
+
+# 第 4 期导演层：落位后接手、每季度脉冲（均在 title:h_china 上）。
+hd184r_director_bootstrap = { effect = { hd184r_director_bootstrap_effect = yes } }
+hd184r_director_pulse = {
+	effect = {
+		hd184r_director_pulse_effect = yes
+		hd184r_yuan_shao_death_check_effect = yes
+	}
+}
+
+# 2026-10-22：董卓无论怎么死（诛董、战死、病死），两天后检查：结算链没接手时，自行还原法理、销毁郿国，未进入割据则进入。
+on_death = { on_actions = { hd184r_dong_death } }
+hd184r_dong_death = {
+	trigger = {
+		game_start_date = 190.1.1
+		root = { this = character:dong_zhuo_2 }
+	}
+	effect = {
+		title:h_china = { trigger_event = { on_action = hd184r_dong_death_followup days = 2 } }
+	}
+}
+hd184r_dong_death_followup = {
+	effect = {
+		if = {
+			limit = {
+				NOT = { exists = global_var:hd_dong_settlement_pending }
+				NOT = { exists = global_var:hd_dong_settlement_processed }
+			}
+			# 只在董卓已入京（郿国已建）或讨董联盟已成立后才进入割据；入京前就死的交给 193 年兜底
+			if = {
+				limit = {
+					hd_history_events_enabled_trigger = yes
+					OR = {
+						exists = global_var:hd184r_meiguo
+						exists = global_var:hd_anti_regent_founded
+						exists = global_var:hd_anti_regent_chain_resolved
+					}
+				}
+				hd184r_meiguo_destroy_effect = yes
+				hd184r_warlord_era_begin_effect = yes
+			}
+			else = { hd184r_meiguo_destroy_effect = yes }
+			debug_log = "HD184R P3 DONG_DEATH_FOLLOWUP"
+		}
+	}
+}

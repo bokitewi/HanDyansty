@@ -1,0 +1,212 @@
+﻿# 184 剧本流程重制（2026-10-21）第 1、3 期：董卓的西凉兵、郿国实封，以及诛董时进入群雄割据。
+# 设计见 docs/184剧本流程重制_设计草案.md（D8~D10、D13~D19）。debug.log 搜 HD184R。
+
+############################################################
+# D10 董卓入京：事件兵 3 万（羌骑 5000、湟中义从 5000、重甲步兵 2 万），只给一次。Scope：董卓
+############################################################
+hd184r_dong_xiliang_troops_effect = {
+	if = {
+		limit = {
+			this = character:dong_zhuo_2
+			is_alive = yes
+			NOT = { has_character_flag = hd184r_xiliang_troops_received }
+		}
+		add_character_flag = hd184r_xiliang_troops_received
+		spawn_army = {
+			name = hd184r_xiliang_army
+			location = title:b_uuii_p_787.title_province
+			origin = title:b_uuii_p_787.title_province
+			men_at_arms = { type = hd_qiang_qi stacks = 50 }
+			men_at_arms = { type = hd_huangzhong_yicong stacks = 50 }
+			men_at_arms = { type = armored_footmen stacks = 200 }
+			inheritable = no
+			uses_supply = yes
+		}
+		debug_log = "HD184R P1 XILIANG_TROOPS_SPAWNED"
+	}
+}
+
+############################################################
+# 郿国实封（2026-10-22 改为帝国级，boki）：照 218 魏国（e_hd218_wei）的做法，新建帝国级「郿国」（王，wj_rf_rank = 2）
+# 作董卓主头衔；司隶、并州两州的法理归郿国，州内各郡不动。河南郡暂挂汉帝国下的空州「洛州」（k_luozhou，州治在河南郡），
+# 汉帝国头衔因此始终有法理、不被销毁。董卓入京、杀丁原后拿到的司隶、并州州头衔随即注销，他只直接持有郿国与各郡，
+# 「非独立帝国级不留王国」规则无王国可送（10-22 实测：持有有地王国即被任命给他人，空壳王国则留在手里）。
+# 诛董时按「两州 → 河南」的顺序还原法理（hd184r_meiguo_restore_dejure_effect），再销毁郿国。
+# 名号词干取郿县（c_uuii_p_891），显示为「郿国」「郿王」；国都长安。玩家董卓同样适用（剧情建国）。
+############################################################
+hd184r_meiguo_create_effect = {
+	hidden_effect = {
+		if = {
+			limit = {
+				NOT = { exists = global_var:hd184r_meiguo }
+				exists = title:h_china.holder
+				character:dong_zhuo_2 ?= {
+					is_alive = yes
+					is_landed = yes
+					NOT = { this = top_liege }
+					top_liege = title:h_china.holder
+				}
+			}
+			character:dong_zhuo_2 = { save_scope_as = hd184r_dong }
+			title:h_china.holder = { save_scope_as = hd184r_mei_sovereign }
+			create_dynamic_title = { tier = empire name = hd184r_meiguo_name }
+			scope:new_title = {
+				save_scope_as = hd184r_mei_new
+				set_variable = { name = wj_rf_rank value = 2 }
+				set_variable = { name = wj_rf_name_source value = title:k_uuii_sili }
+				set_definitive_form = yes
+				set_variable = { name = wj_rf_stem_capital value = title:c_uuii_p_891 }
+				set_variable = { name = wj_rf_name_code value = 0 }
+				set_capital_county = title:c_uuii_p_867
+				set_coa = title:d_fufeng
+				set_color_from_title = title:d_fufeng
+				set_de_jure_liege_title = title:h_china
+			}
+			set_global_variable = { name = hd184r_meiguo value = scope:hd184r_mei_new }
+			create_title_and_vassal_change = { type = granted save_scope_as = hd184r_mei_change add_claim_on_loss = no }
+			scope:hd184r_mei_new = {
+				change_title_holder = { holder = scope:hd184r_dong change = scope:hd184r_mei_change government_base = scope:hd184r_mei_sovereign }
+			}
+			resolve_title_and_vassal_change = scope:hd184r_mei_change
+			# 先把河南挂到洛州，再把司隶移入郿国：汉帝国头衔任何时刻都有法理
+			title:d_henan = { hd184r_mei_move_dejure_effect = { TO = title:k_luozhou } }
+			title:k_uuii_sili = { hd184r_mei_move_dejure_effect = { TO = scope:hd184r_mei_new } }
+			scope:hd184r_dong = {
+				if = {
+					limit = { has_title = scope:hd184r_mei_new }
+					if = { limit = { has_variable = wj_peer_rank } WJ_peer_clear = yes }
+					set_primary_title_to = scope:hd184r_mei_new
+					if = {
+						limit = { primary_title = scope:hd184r_mei_new }
+						debug_log = "HD184R P1 MEIGUO_PRIMARY"
+					}
+					else = { debug_log = "HD184R P1 MEIGUO_NOT_PRIMARY" }
+					hd184r_mei_drop_kingdom_effect = { K = k_uuii_sili }
+					WJ_rf_refresh_holder = yes
+					scope:hd184r_mei_new = { save_scope_as = wj_rf_law_title }
+					trigger_event = WJ_rf.4
+					debug_log = "HD184R P1 MEIGUO_OK"
+				}
+				else = { debug_log = "HD184R P1 MEIGUO_BAD" }
+			}
+		}
+		else = { debug_log = "HD184R P1 MEIGUO_SKIPPED" }
+	}
+}
+
+# 丁原死、并州归董卓后调用：并州的法理移入郿国，董卓手里的并州州头衔注销。Scope：任意
+hd184r_meiguo_add_bingzhou_effect = {
+	hidden_effect = {
+		if = {
+			limit = {
+				exists = global_var:hd184r_meiguo
+				global_var:hd184r_meiguo.holder ?= character:dong_zhuo_2
+			}
+			title:k_uuii_bingzhou = { hd184r_mei_move_dejure_effect = { TO = global_var:hd184r_meiguo } }
+			character:dong_zhuo_2 = { hd184r_mei_drop_kingdom_effect = { K = k_uuii_bingzhou } }
+			debug_log = "HD184R P1 MEIGUO_BINGZHOU_ADDED"
+		}
+		else = { debug_log = "HD184R P1 MEIGUO_BINGZHOU_SKIPPED" }
+	}
+}
+
+# Scope：被移动法理的头衔。第一次移动时记下原法理上级，诛董时据此还原。
+hd184r_mei_move_dejure_effect = {
+	if = {
+		limit = { NOT = { has_variable = hd184r_orig_dejure } exists = de_jure_liege }
+		set_variable = { name = hd184r_orig_dejure value = de_jure_liege }
+	}
+	set_de_jure_liege_title = $TO$
+}
+
+# Scope：董卓。注销他本人持有的州头衔（王国级）；封臣仍归他。
+hd184r_mei_drop_kingdom_effect = {
+	if = {
+		limit = { has_title = title:$K$ }
+		destroy_title = title:$K$
+		debug_log = "HD184R P1 MEIGUO_KINGDOM_TITLE_DROPPED"
+	}
+}
+
+# 诛董后还原法理：先两州回原帝国，再河南回司隶（顺序不能反，否则汉帝国头衔一度失去法理）。可重复调用。Scope：任意
+hd184r_meiguo_restore_dejure_effect = {
+	title:k_uuii_sili = { hd184r_mei_restore_one_effect = yes }
+	title:k_uuii_bingzhou = { hd184r_mei_restore_one_effect = yes }
+	title:d_henan = { hd184r_mei_restore_one_effect = yes }
+}
+
+hd184r_mei_restore_one_effect = {
+	if = {
+		limit = { exists = var:hd184r_orig_dejure }
+		var:hd184r_orig_dejure = { save_scope_as = hd184r_mei_orig }
+		set_de_jure_liege_title = scope:hd184r_mei_orig
+		remove_variable = hd184r_orig_dejure
+		debug_log = "HD184R P3 MEIGUO_DEJURE_RESTORED"
+	}
+}
+
+# D15 董卓死后：先还原法理，再销毁郿国。Scope：任意
+hd184r_meiguo_destroy_effect = {
+	hd184r_meiguo_restore_dejure_effect = yes
+	if = {
+		limit = { exists = global_var:hd184r_meiguo }
+		global_var:hd184r_meiguo = { save_scope_as = hd184r_mei_title }
+		if = {
+			limit = { exists = scope:hd184r_mei_title.holder }
+			scope:hd184r_mei_title.holder = { destroy_title = scope:hd184r_mei_title }
+			debug_log = "HD184R P3 MEIGUO_DESTROYED"
+		}
+		else = { debug_log = "HD184R P3 MEIGUO_ALREADY_GONE" }
+		remove_global_variable = hd184r_meiguo
+	}
+}
+
+############################################################
+# D16~D19 诛董时进入群雄割据：只做史实势力落位；原有解体判定（hd_qxzl_begin_effect，即原 D0）2026-10-23 起不再执行。
+# 讨董结束时不再判定；董卓死后的「总拆」与结算里的成批释放已停用。Scope：任意
+############################################################
+hd184r_warlord_era_begin_effect = {
+	if = {
+		limit = {
+			game_start_date = 190.1.1
+			NOT = { exists = global_var:hd184r_warlord_era }
+			exists = title:h_china.holder
+		}
+		set_global_variable = hd184r_warlord_era
+		set_global_variable = { name = hd184r_warlord_era_date value = current_date }
+		# 董卓已死（结算链没走到）时，先还原司隶、并州、河南的法理并销毁郿国
+		if = {
+			limit = { character:dong_zhuo_2 ?= { is_alive = no } }
+			hd184r_meiguo_destroy_effect = yes
+		}
+		# 讨董联盟未成立或已散时，原 D0 也要求「讨董链已结束」
+		if = {
+			limit = { NOT = { exists = global_var:hd_anti_regent_chain_resolved } }
+			set_global_variable = { name = hd_anti_regent_chain_resolved value = yes }
+		}
+		# 2026-10-22 boki：先放出所有史实势力（落位、按表补足、搬迁、清飞地），再对其余地方随机分裂。
+		# 史实人物本人不参与判定；他们手下的郡守、县令照原概率掷骰（见 hd_qxzl_begin_effect / hd_hb_decide_ruler_effect）。
+		hd_hw_run_effect = yes
+		# 2026-10-23 boki：诛董时不再做随机分裂判定（hd_qxzl_begin_effect 已停用），
+		# 只补设它原本的开始标记，供刘备后续、招降、事件面板等使用。
+		set_global_variable = hd_hb_started
+		set_global_variable = hd_qxzl_started
+		set_global_variable = { name = hd_qxzl_start_date value = current_date }
+		# 导演层在落位（hd_hw_run_effect）之后由 hd184r_director_bootstrap 接手
+		title:h_china = { trigger_event = { on_action = hd184r_director_bootstrap days = 45 } }
+		debug_log = "HD184R P3 WARLORD_ERA_BEGIN"
+	}
+}
+
+# 兜底：193.1.1 仍未进入群雄割据（宫变或诛董链断了），直接进入。Scope：任意
+hd184r_warlord_era_fallback_effect = {
+	if = {
+		limit = {
+			game_start_date = 190.1.1
+			NOT = { exists = global_var:hd184r_warlord_era }
+			hd_history_events_enabled_trigger = yes
+		}
+		debug_log = "HD184R P3 WARLORD_ERA_FALLBACK"
+		hd184r_warlord_era_begin_effect = yes
+	}
+}

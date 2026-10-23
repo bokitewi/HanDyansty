@@ -44,6 +44,75 @@ hd_dong_grant_duchy_effect = {
 	resolve_title_and_vassal_change = scope:hd_dong_duchy_change
 }
 
+# 2026-10-23（boki）：讨董胜利不再把河南交给盟主，河南诸县当即各自独立。
+# 伯爵封臣直接独立；上级直辖的县生成本地豪强再独立（同 hd_dong_localize_non_jingzhao_direct_counties_effect）。
+# 天子亲领的县不拆；d_henan 头衔留在原持有者手里。
+hd_anti_regent_henan_counties_independence_effect = {
+	# 先收集，再改动，避免一边遍历一边换主。
+	title:d_henan = {
+		every_in_de_jure_hierarchy = {
+			limit = {
+				tier = tier_county
+				exists = holder
+				holder = { NOT = { has_title = title:h_china } }
+			}
+			add_to_temporary_list = hd_henan_indep_counties
+		}
+	}
+	every_in_list = {
+		list = hd_henan_indep_counties
+		save_temporary_scope_as = seceding_county
+		holder ?= {
+			# 已是独立县主（含同一伯爵名下前面已放出的县）不动。
+			if = {
+				limit = { is_independent_ruler = no highest_held_title_tier = tier_county }
+				create_title_and_vassal_change = {
+					type = independency
+					save_scope_as = hd_henan_count_indep_change
+					add_claim_on_loss = no
+				}
+				becomes_independent = { change = scope:hd_henan_count_indep_change }
+				resolve_title_and_vassal_change = scope:hd_henan_count_indep_change
+			}
+			else_if = {
+				limit = { highest_held_title_tier > tier_county }
+				# 原版 post_migration_minor_warlord_template 从 scope:seceding_county 取文化信仰。
+				create_character = {
+					location = scope:seceding_county.title_province
+					template = post_migration_minor_warlord_template
+					save_scope_as = hd_henan_county_holder
+				}
+				create_title_and_vassal_change = {
+					type = usurped
+					save_scope_as = hd_henan_county_grant_change
+					add_claim_on_loss = no
+				}
+				scope:seceding_county = {
+					change_title_holder = {
+						holder = scope:hd_henan_county_holder
+						change = scope:hd_henan_county_grant_change
+						take_baronies = yes
+					}
+				}
+				resolve_title_and_vassal_change = scope:hd_henan_county_grant_change
+				scope:hd_henan_county_holder = {
+					if = {
+						limit = { is_independent_ruler = no }
+						create_title_and_vassal_change = {
+							type = independency
+							save_scope_as = hd_henan_county_indep_change
+							add_claim_on_loss = no
+						}
+						becomes_independent = { change = scope:hd_henan_county_indep_change }
+						resolve_title_and_vassal_change = scope:hd_henan_county_indep_change
+					}
+				}
+			}
+		}
+	}
+	debug_log = "HD_COALITION HENAN_COUNTIES_INDEPENDENT"
+}
+
 # 2026-10-17（boki）：王允与吕布固定在 192 年五月诛董，不再看讨董战争是否结束。
 # 讨董战争结束时的三处旧调用保留，但不再排期；排期见 zz_hd_dong_aftermath_on_actions.txt。
 hd_dong_queue_murder_effect = { }
@@ -52,7 +121,7 @@ hd_dong_queue_murder_effect = { }
 hd_dong_192_try_effect = {
 	if = {
 		limit = {
-			game_start_date = 184.1.1
+			game_start_date = 190.1.1
 			NOT = { exists = global_var:hd_dong_murder_scheduled }
 			NOT = { exists = global_var:hd_dong_settlement_pending }
 			NOT = { exists = global_var:hd_dong_settlement_processed }
@@ -61,11 +130,10 @@ hd_dong_192_try_effect = {
 			character:wang_yun ?= { is_alive = yes }
 		}
 		if = {
+			# 184 剧本流程重制（2026-10-22）：董卓在世即诛，不再要求他是天子的现任权臣（权臣链出差错时不至于永不诛董）。
 			limit = {
 				exists = title:h_china.holder
 				character:dong_zhuo_2 = {
-					has_character_flag = hd_current_han_regent
-					liege ?= title:h_china.holder
 					NOT = { this = title:h_china.holder }
 				}
 				character:wang_yun = { is_imprisoned = no }
@@ -226,22 +294,8 @@ hd_dong_settle_death_effect = {
 			}
 		}
 	}
-	# Release existing dukes first; kings keep only their personal duchies.
-	every_in_list = {
-		list = hd_dong_breakaway_rulers
-		limit = { is_independent_ruler = no highest_held_title_tier = tier_duchy }
-		hd_dong_release_ruler_effect = yes
-	}
-	every_in_list = {
-		list = hd_dong_breakaway_rulers
-		limit = { is_independent_ruler = no highest_held_title_tier >= tier_kingdom }
-		hd_dong_release_ruler_effect = yes
-	}
-	every_in_list = {
-		list = hd_dong_breakaway_rulers
-		limit = { is_independent_ruler = no highest_held_title_tier = tier_county liege = title:h_china.holder }
-		hd_dong_release_ruler_effect = yes
-	}
+	# 184 剧本流程重制 D16（2026-10-21）：这里原先按郡→州→县成批释放快照里的统治者，已停用；
+	# 改由结算后的 hd184r_warlord_era_begin_effect（原有解体判定）全局判定一次。
 	clear_global_variable_list = hd_dong_breakaway_titles
 	if = {
 		limit = { exists = character:lv_bu character:lv_bu = { is_alive = yes } }

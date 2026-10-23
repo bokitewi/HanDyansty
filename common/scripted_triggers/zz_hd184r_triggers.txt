@@ -1,0 +1,223 @@
+﻿# 184 剧本流程重制（2026-10-21，docs/184剧本流程重制_设计草案.md）共用触发器。前缀 hd184r_。
+
+# 是否为 184 开局。
+hd184r_is_184_trigger = {
+	game_start_date = 190.1.1
+}
+
+# D7：184 开局到董卓之死（进入群雄割据）之前，冻结州牧调任。
+hd184r_governor_freeze_active_trigger = {
+	game_start_date = 190.1.1
+	NOT = { exists = global_var:hd184r_warlord_era }
+}
+
+# 持有王国级实土头衔（州牧）。不计无地头衔与名门家族头衔。作用域：角色。
+hd184r_holds_kingdom_land_trigger = {
+	any_held_title = {
+		tier = tier_kingdom
+		is_landless_type_title = no
+		is_noble_family_title = no
+	}
+}
+
+# D7 豁免：当朝权臣（董卓）与剧本指定人选。作用域：角色。
+hd184r_freeze_exempt_trigger = {
+	OR = {
+		has_character_flag = hd_current_han_regent
+		has_character_flag = hd_cp_merit_exempt
+	}
+}
+
+# 已进入群雄割据（诛董时的全局判定已跑）。
+hd184r_warlord_era_trigger = {
+	game_start_date = 190.1.1
+	exists = global_var:hd184r_warlord_era
+}
+
+############################################################
+# 第 3 期 群雄落位补足（zz_hd184r_placement_effects.txt）。需 scope:hd_hw_actor / hd_hw_duchy / hd_hw_cand。
+############################################################
+
+# 郡（公国）作用域：有县与首领本人或其领内接壤。
+hd184r_duchy_adjacent_to_actor_trigger = {
+	any_de_jure_county = {
+		any_neighboring_county = {
+			holder ?= {
+				OR = {
+					this = scope:hd_hw_actor
+					any_liege_or_above = { this = scope:hd_hw_actor }
+				}
+			}
+		}
+	}
+}
+
+# 人物作用域（县或郡的持有人）：虚构人物，且所在势力的顶层领主也是虚构人物（已独立的虚构郡守领内）。
+hd184r_hw_fict_realm_holder_trigger = {
+	is_ai = yes
+	has_character_flag = hd_hw_fict
+	NOT = { has_character_flag = hd_hw_leader }
+	NOT = { this = scope:hd_hw_actor }
+	NOT = { any_liege_or_above = { this = scope:hd_hw_actor } }
+	NOT = { hd_hw_player_above_trigger = yes }
+	top_liege = {
+		is_ai = yes
+		has_character_flag = hd_hw_fict
+		NOT = { has_character_flag = hd_hw_leader }
+		NOT = { has_character_flag = hd_hw_keep }
+		NOT = { title:h_china.holder ?= this }
+	}
+}
+
+# 县作用域：照 hd_hw_grab_county_trigger，另允许夺取已独立虚构人物领内虚构人物的县。
+hd184r_hw_grab_county_trigger = {
+	OR = {
+		hd_hw_grab_county_trigger = yes
+		AND = {
+			NOT = { hd_hw_royal_capital_trigger = yes }
+			holder ?= { hd184r_hw_fict_realm_holder_trigger = yes }
+		}
+	}
+}
+
+# 郡作用域：郡头衔可接手（照 hd_hw_duchy_takeable_trigger，另允许已独立虚构人物领内的虚构郡守）。
+hd184r_hw_duchy_takeable_trigger = {
+	tier = tier_duchy
+	OR = {
+		hd_hw_duchy_takeable_trigger = yes
+		holder ?= { hd184r_hw_fict_realm_holder_trigger = yes }
+	}
+}
+
+# 郡作用域：至少有一个可夺取的县。
+hd184r_hw_duchy_usable_trigger = {
+	tier = tier_duchy
+	any_in_de_jure_hierarchy = {
+		tier = tier_county
+		hd184r_hw_grab_county_trigger = yes
+	}
+}
+
+############################################################
+# 第 4 期 导演扩张引擎（zz_hd184r_director_effects.txt）。需 scope:hd184r_actor。
+############################################################
+
+# 名单人物可由导演层开战。Scope：名单人物。
+hd184r_director_actor_ready_trigger = {
+	is_alive = yes
+	is_ai = yes
+	is_adult = yes
+	is_landed = yes
+	is_imprisoned = no
+	hd_court_independent_or_regent_trigger = yes
+	NOT = { government_has_flag = cannot_be_vassal_or_liege }
+	hd_dong_transition_pending_trigger = no
+	# 冀州交接未完时，袁绍、公孙瓒不另开战（同天意青睐引擎）
+	trigger_if = {
+		limit = { exists = global_var:hd_yuan_jizhou_pending }
+		NOT = { this = character:yuan_shao }
+		NOT = { this = character:gong_sun_zan }
+	}
+}
+
+# 进攻战（本人为主攻方）少于 4 场（D23）。Scope：名单人物。
+hd184r_director_war_slot_trigger = {
+	NOT = {
+		any_character_war = {
+			count >= 4
+			primary_attacker = prev
+		}
+	}
+}
+
+# 合法的守方（前线县的顶层领主）。Scope：角色。
+hd184r_target_ok_trigger = {
+	is_alive = yes
+	is_landed = yes
+	NOT = { this = scope:hd184r_actor }
+	NOT = { is_allied_to = scope:hd184r_actor }
+	NOT = { is_at_war_with = scope:hd184r_actor }
+	NOT = { scope:hd184r_actor = { has_truce = prev } }
+	NOT = { has_title = title:h_china }
+	NOT = { character:liu_xie ?= this }
+	current_military_strength <= scope:hd184r_actor.hd_strat_strength_ceiling_value
+	# 官渡之前曹操、袁绍互不攻伐（同天意青睐引擎）
+	trigger_if = {
+		limit = { NOT = { exists = global_var:hd_guandu_world_resolved } }
+		NOT = { AND = { character:yuan_shao ?= this character:cao_cao ?= scope:hd184r_actor } }
+		NOT = { AND = { character:cao_cao ?= this character:yuan_shao ?= scope:hd184r_actor } }
+	}
+}
+
+# 前线县：在别人领内，与 scope:hd184r_actor 领内的县接壤，且守方合法。Scope：县。
+hd184r_county_valid_front_trigger = {
+	exists = holder
+	NOT = {
+		holder = {
+			OR = {
+				this = scope:hd184r_actor
+				is_vassal_or_below_of = scope:hd184r_actor
+			}
+		}
+	}
+	any_neighboring_county = {
+		holder ?= {
+			OR = {
+				this = scope:hd184r_actor
+				is_vassal_or_below_of = scope:hd184r_actor
+			}
+		}
+	}
+	holder = { top_liege = { hd184r_target_ok_trigger = yes } }
+}
+
+# 郡里至少有一个前线县。Scope：郡。
+hd184r_duchy_has_valid_defender_trigger = {
+	any_de_jure_county = { hd184r_county_valid_front_trigger = yes }
+}
+
+############################################################
+# 第 5 期
+############################################################
+
+# D37 韩馥让冀州：公孙瓒有地，且领地与冀州接壤（原为持有幽州王国头衔）。Scope：公孙瓒。
+hd184r_gsz_borders_jizhou_trigger = {
+	is_landed = yes
+	any_realm_county = {
+		any_neighboring_county = { kingdom = title:k_uuii_jizhou }
+	}
+}
+
+# D44-2 袁术可称帝：独立有地、未称帝，且据有寿春一带（寿春、九江、淮南）或领县 >= 30。Scope：袁术。
+hd184r_yuanshu_can_proclaim_trigger = {
+	is_alive = yes
+	is_landed = yes
+	is_independent_ruler = yes
+	highest_held_title_tier < tier_empire
+	NOT = { has_character_modifier = hd_court_pseudo_emperor_modifier }
+	OR = {
+		any_realm_county = {
+			OR = {
+				duchy = title:d_anfeng
+				duchy = title:d_guangling_yangzhou
+				duchy = title:d_huainan
+			}
+		}
+		realm_size >= 30
+	}
+}
+
+############################################################
+# 2026-10-22 解体重做：先放出史实势力，再分裂其余地方
+############################################################
+
+# 史实势力的首领：落位名单（hd_hw_leader，诛董时由 hd_hw_mark_effect 打上）或导演层名单。Scope：角色。
+hd184r_historical_leader_trigger = {
+	OR = {
+		has_character_flag = hd_hw_leader
+		has_character_flag = hd184r_director_member
+		this = character:liu_zhang_4
+		trigger_if = { limit = { has_global_variable = wj_hchar_sun_ce } this = global_var:wj_hchar_sun_ce } trigger_else = { always = no }
+		trigger_if = { limit = { has_global_variable = wj_hchar_sun_quan } this = global_var:wj_hchar_sun_quan } trigger_else = { always = no }
+	}
+}

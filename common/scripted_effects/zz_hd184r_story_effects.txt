@@ -1,0 +1,362 @@
+﻿# 184 剧本流程重制（2026-10-21）第 5 期：剧情修补与小历史事件（D36、D41、D44）。
+# 调度见 common/on_action/zz_hd184r_on_actions.txt；事件见 events/zz_hd184r_events.txt（namespace hd184r）。
+# 条件不满足时每 90 天再查，最多 8 次（约两年）后作罢。玩家角色不被脚本致死（D4）。
+
+# 重试计数。Scope：title:h_china。KEY 为计数变量名，ON_ACTION 为重试的 on_action。
+hd184r_retry_effect = {
+	if = { limit = { NOT = { has_variable = $KEY$ } } set_variable = { name = $KEY$ value = 0 } }
+	change_variable = { name = $KEY$ add = 1 }
+	if = {
+		limit = { var:$KEY$ < 8 }
+		trigger_event = { on_action = $ON_ACTION$ days = 90 }
+	}
+	else = { debug_log = "HD184R P5 RETRY_EXPIRED" }
+}
+
+############################################################
+# D36 陶谦 194 年前后病死，徐州按遗命链交刘备
+############################################################
+# 195.1.1：陶谦（AI）仍在世则病势加重，促成遗命链（hd_lb_bequest_ready_trigger 看健康 <= 2）。
+hd184r_tao_worsen_effect = {
+	character:tao_qian ?= {
+		if = {
+			limit = { is_alive = yes is_ai = yes NOT = { has_character_modifier = hd184r_tao_dying } }
+			add_character_modifier = { modifier = hd184r_tao_dying }
+			debug_log = "HD184R P5 TAO_DYING"
+		}
+	}
+}
+# 196.1.1：仍在世（遗命链没走成）则病逝，按普通继承。
+hd184r_tao_death_effect = {
+	character:tao_qian ?= {
+		if = {
+			limit = { is_alive = yes is_ai = yes }
+			death = { death_reason = death_ill }
+			debug_log = "HD184R P5 TAO_DIED_FALLBACK"
+		}
+	}
+}
+
+############################################################
+# D36 袁绍官渡战败约 2 年后病逝（触发现有的诸子分裂 hd4_yuan_partition_armed）
+############################################################
+# 由导演层脉冲每季度检查。Scope：任意
+hd184r_yuan_shao_death_check_effect = {
+	character:yuan_shao ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_ai = yes
+				has_character_flag = hd4_yuan_partition_armed
+				NOT = { has_character_flag = hd184r_yuan_death_queued }
+			}
+			add_character_flag = hd184r_yuan_death_queued
+			trigger_event = { id = hd184r.0101 days = 730 }
+			debug_log = "HD184R P5 YUAN_SHAO_DEATH_QUEUED"
+		}
+	}
+}
+
+############################################################
+# D41 朱符遇害（196 前后）：士燮接管朱符的地盘与交州王国头衔并独立，兄弟分任合浦、九真、南海太守
+############################################################
+hd184r_zhufu_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd184r_zhufu_done }
+			character:zhu_fu ?= { is_alive = yes is_ai = yes }
+			character:shi_xie ?= { is_alive = yes is_landed = yes }
+		}
+		set_global_variable = hd184r_zhufu_done
+		character:shi_xie = { save_scope_as = hd184r_shi }
+		character:zhu_fu = { save_scope_as = hd184r_zhu }
+		create_title_and_vassal_change = { type = granted save_scope_as = hd184r_zhufu_change add_claim_on_loss = no }
+		scope:hd184r_zhu = {
+			every_held_title = {
+				limit = { tier >= tier_county is_landless_type_title = no is_noble_family_title = no }
+				add_to_temporary_list = hd184r_zhufu_titles
+			}
+		}
+		every_in_list = {
+			list = hd184r_zhufu_titles
+			change_title_holder_include_vassals = { holder = scope:hd184r_shi change = scope:hd184r_zhufu_change }
+		}
+		# 交州王国头衔：无主则授予；由 AI 持有（非玩家）则移交头衔本身
+		title:k_uuii_jiaozhou = {
+			if = {
+				limit = {
+					OR = {
+						NOT = { exists = holder }
+						holder ?= { is_ai = yes NOT = { this = scope:hd184r_shi } NOT = { this = scope:hd184r_zhu } }
+					}
+				}
+				change_title_holder = { holder = scope:hd184r_shi change = scope:hd184r_zhufu_change }
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd184r_zhufu_change
+		scope:hd184r_zhu = {
+			if = { limit = { is_alive = yes } death = { death_reason = death_murder } }
+		}
+		scope:hd184r_shi = {
+			if = {
+				limit = { is_independent_ruler = no is_ai = yes }
+				hd_force_independent_celestial_effect = yes
+			}
+		}
+		# 兄弟分任三郡太守（士燮本人持有该郡头衔时）
+		hd184r_shi_brother_effect = { BRO = shi_yi DUCHY = d_hepu }
+		hd184r_shi_brother_effect = { BRO = shi_huang_you DUCHY = d_jiuzhen }
+		hd184r_shi_brother_effect = { BRO = shi_wu DUCHY = d_nanhai }
+		scope:hd184r_shi = { save_scope_as = hd_news_a }
+		scope:hd184r_zhu = { save_scope_as = hd_news_b }
+		hd_world_news_send_all_effect = { EVENT = hd184r.0205 }
+		debug_log = "HD184R P5 ZHUFU_KILLED_SHIXIE_JIAOZHOU"
+	}
+	else_if = {
+		limit = { NOT = { exists = global_var:hd184r_zhufu_done } }
+		title:h_china = { hd184r_retry_effect = { KEY = hd184r_zhufu_tries ON_ACTION = hd184r_sched_zhufu } }
+	}
+}
+
+hd184r_shi_brother_effect = {
+	if = {
+		limit = {
+			character:$BRO$ ?= { is_alive = yes is_adult = yes is_ai = yes is_landed = no }
+			title:$DUCHY$.holder ?= scope:hd184r_shi
+		}
+		create_title_and_vassal_change = { type = granted save_scope_as = hd184r_shi_bro_change add_claim_on_loss = no }
+		title:$DUCHY$ = {
+			change_title_holder = { holder = character:$BRO$ change = scope:hd184r_shi_bro_change }
+			every_de_jure_county = {
+				limit = { holder ?= scope:hd184r_shi NOT = { this = scope:hd184r_shi.capital_county } }
+				change_title_holder = { holder = character:$BRO$ change = scope:hd184r_shi_bro_change }
+			}
+		}
+		character:$BRO$ = { change_liege = { liege = scope:hd184r_shi change = scope:hd184r_shi_bro_change } }
+		resolve_title_and_vassal_change = scope:hd184r_shi_bro_change
+		character:$BRO$ = { hd_force_celestial_effect = yes }
+	}
+}
+
+############################################################
+# D44-1 曹嵩遇害、曹操伐徐（193 前后）
+############################################################
+hd184r_caosong_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd184r_caosong_done }
+			character:cao_song ?= { is_alive = yes }
+			character:cao_cao ?= { is_alive = yes is_landed = yes hd_court_independent_or_regent_trigger = yes }
+			character:tao_qian ?= { is_alive = yes is_landed = yes is_independent_ruler = yes }
+		}
+		set_global_variable = hd184r_caosong_done
+		character:cao_song = {
+			if = { limit = { is_ai = yes } death = { death_reason = death_murder } }
+		}
+		character:cao_cao = {
+			add_opinion = { target = character:tao_qian modifier = angry_opinion opinion = -100 }
+			save_scope_as = hd_news_a
+		}
+		character:tao_qian = { save_scope_as = hd_news_b }
+		hd_world_news_send_all_effect = { EVENT = hd184r.0201 }
+		# 曹操为 AI 时立即对陶谦宣战：只打与曹操接壤、陶谦领内的徐州郡（不够格则作罢）
+		character:cao_cao = {
+			if = {
+				limit = { is_ai = yes hd184r_director_war_slot_trigger = yes }
+				save_scope_as = hd184r_actor
+				clear_saved_scope = hd184r_target_duchy
+				clear_saved_scope = hd184r_defender
+				title:k_uuii_xuzhou = {
+					random_in_de_jure_hierarchy = {
+						continue = { tier > tier_duchy }
+						limit = {
+							tier = tier_duchy
+							any_de_jure_county = {
+								hd184r_county_valid_front_trigger = yes
+								holder.top_liege ?= character:tao_qian
+							}
+						}
+						save_scope_as = hd184r_target_duchy
+					}
+				}
+				if = {
+					limit = { exists = scope:hd184r_target_duchy }
+					hd_tb_arm_effect = { KIND = historical }
+					start_war = { cb = hd_dc_tunbing_cb target = character:tao_qian target_title = scope:hd184r_target_duchy }
+					debug_log = "HD184R P5 CAO_FA_XU_WAR"
+				}
+				else = { debug_log = "HD184R P5 CAO_FA_XU_NO_FRONT" }
+			}
+		}
+	}
+	else_if = {
+		limit = { NOT = { exists = global_var:hd184r_caosong_done } }
+		title:h_china = { hd184r_retry_effect = { KEY = hd184r_caosong_tries ON_ACTION = hd184r_sched_caosong } }
+	}
+}
+
+############################################################
+# D44-2 袁术称帝、建仲家（197 前后）
+############################################################
+hd184r_yuanshu_check_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd184r_yuanshu_done }
+			character:yuan_shu ?= { hd184r_yuanshu_can_proclaim_trigger = yes }
+		}
+		set_global_variable = hd184r_yuanshu_done
+		character:yuan_shu = {
+			if = {
+				limit = { is_ai = yes }
+				hd184r_yuanshu_proclaim_effect = yes
+			}
+			else = { trigger_event = hd184r.0202 }
+		}
+	}
+	else_if = {
+		limit = { NOT = { exists = global_var:hd184r_yuanshu_done } }
+		title:h_china = { hd184r_retry_effect = { KEY = hd184r_yuanshu_tries ON_ACTION = hd184r_sched_yuanshu } }
+	}
+}
+
+# Scope：袁术
+hd184r_yuanshu_proclaim_effect = {
+	hd_court_proclaim_emperor_effect = yes
+	if = {
+		limit = { primary_title = { tier = tier_empire } }
+		primary_title = { set_title_name = hd184r_zhongjia_name }
+	}
+	save_scope_as = hd_news_a
+	save_scope_as = hd_news_b
+	hd_world_news_send_effect = { EVENT = hd184r.0203 }
+	debug_log = "HD184R P5 YUANSHU_PROCLAIMED"
+}
+
+############################################################
+# D44-3 李郭内讧、天子东归（195 前后）
+############################################################
+hd184r_lijue_guosi_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd184r_liguo_done }
+			character:li_jue ?= { is_alive = yes is_ai = yes is_landed = yes is_independent_ruler = yes }
+			character:guo_si ?= { is_alive = yes is_ai = yes }
+		}
+		set_global_variable = hd184r_liguo_done
+		character:li_jue = { save_scope_as = hd184r_li }
+		character:guo_si = { save_scope_as = hd184r_guo }
+		# 郭汜据弘农自立（李傕持有弘农时：郡头衔与李傕在郡内的县归郭汜）
+		if = {
+			limit = { title:d_hongnong.holder ?= scope:hd184r_li }
+			create_title_and_vassal_change = { type = granted save_scope_as = hd184r_liguo_change add_claim_on_loss = no }
+			title:d_hongnong = {
+				change_title_holder = { holder = scope:hd184r_guo change = scope:hd184r_liguo_change }
+				every_de_jure_county = {
+					limit = { holder ?= scope:hd184r_li NOT = { this = scope:hd184r_li.capital_county } }
+					change_title_holder = { holder = scope:hd184r_guo change = scope:hd184r_liguo_change }
+				}
+			}
+			resolve_title_and_vassal_change = scope:hd184r_liguo_change
+			scope:hd184r_guo = {
+				if = {
+					limit = { is_landed = yes }
+					hd_force_independent_celestial_effect = yes
+					if = {
+						limit = { title:d_hongnong.title_capital_county.holder ?= this }
+						set_realm_capital = title:d_hongnong.title_capital_county
+					}
+				}
+			}
+		}
+		scope:hd184r_li = { add_opinion = { target = scope:hd184r_guo modifier = angry_opinion opinion = -80 } }
+		scope:hd184r_guo = { add_opinion = { target = scope:hd184r_li modifier = angry_opinion opinion = -80 } }
+		# 天子东归雒阳（AI 天子；雒阳县由天子持有，或由非玩家的虚构人物持有时改归天子）
+		title:h_china.holder ?= {
+			if = {
+				limit = { is_ai = yes }
+				save_scope_as = hd184r_emperor
+				if = {
+					limit = {
+						NOT = { title:c_luoyang.holder ?= scope:hd184r_emperor }
+						title:c_luoyang.holder ?= { is_ai = yes has_character_flag = hd_hw_fict }
+					}
+					create_title_and_vassal_change = { type = granted save_scope_as = hd184r_donggui_change add_claim_on_loss = no }
+					title:c_luoyang = { change_title_holder = { holder = scope:hd184r_emperor change = scope:hd184r_donggui_change } }
+					resolve_title_and_vassal_change = scope:hd184r_donggui_change
+				}
+				if = {
+					limit = { title:c_luoyang.holder ?= scope:hd184r_emperor }
+					set_realm_capital = title:c_luoyang
+				}
+				set_location = { location = title:c_luoyang.title_province stick_to_location = yes }
+				set_global_variable = hd184r_emperor_returned_east
+			}
+		}
+		scope:hd184r_guo = { save_scope_as = hd_news_a }
+		scope:hd184r_li = { save_scope_as = hd_news_b }
+		hd_world_news_send_all_effect = { EVENT = hd184r.0204 }
+		debug_log = "HD184R P5 LIGUO_FEUD_DONGGUI"
+	}
+	else_if = {
+		limit = { NOT = { exists = global_var:hd184r_liguo_done } }
+		title:h_china = { hd184r_retry_effect = { KEY = hd184r_liguo_tries ON_ACTION = hd184r_sched_liguo } }
+	}
+}
+
+############################################################
+# D44-4 谋士来投：荀彧 191、程昱 192、郭嘉 196 投曹操；鲁肃 198 投孙氏
+############################################################
+# WHO 来投 LORD。WHO 须在世、成年、AI、无地，且不在 LORD 处。
+hd184r_advisor_join_effect = {
+	if = {
+		limit = {
+			character:$WHO$ ?= {
+				is_alive = yes is_adult = yes is_ai = yes is_landed = no is_imprisoned = no
+				NOT = { employer ?= { is_ai = no } } # D4：不从玩家宫廷挖人
+			}
+			exists = scope:hd184r_lord
+			scope:hd184r_lord = { is_alive = yes is_landed = yes }
+			NOT = { character:$WHO$ = { is_courtier_of = scope:hd184r_lord } }
+		}
+		character:$WHO$ = {
+			set_employer = scope:hd184r_lord
+			if = {
+				limit = { is_courtier_of = scope:hd184r_lord }
+				add_opinion = { target = scope:hd184r_lord modifier = grateful_opinion opinion = 30 }
+				save_scope_as = hd184r_advisor
+				scope:hd184r_lord = {
+					if = { limit = { is_ai = no } trigger_event = hd184r.0206 }
+				}
+				debug_log = "HD184R P5 ADVISOR_JOINED"
+				debug_log_scopes = yes
+			}
+		}
+	}
+}
+
+hd184r_advisor_cao_effect = {
+	character:cao_cao ?= {
+		if = {
+			limit = { is_alive = yes is_landed = yes }
+			save_scope_as = hd184r_lord
+			hd184r_advisor_join_effect = { WHO = $WHO$ }
+		}
+	}
+}
+
+hd184r_advisor_lusu_effect = {
+	clear_saved_scope = hd184r_lord
+	if = {
+		limit = { has_global_variable = wj_hchar_sun_ce }
+		global_var:wj_hchar_sun_ce ?= {
+			if = { limit = { is_alive = yes is_landed = yes } save_scope_as = hd184r_lord }
+		}
+	}
+	if = {
+		limit = { NOT = { exists = scope:hd184r_lord } has_global_variable = wj_hchar_sun_quan }
+		global_var:wj_hchar_sun_quan ?= {
+			if = { limit = { is_alive = yes is_landed = yes } save_scope_as = hd184r_lord }
+		}
+	}
+	hd184r_advisor_join_effect = { WHO = lu_su }
+}

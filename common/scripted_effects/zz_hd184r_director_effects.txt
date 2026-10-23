@@ -1,0 +1,460 @@
+﻿# 184 剧本流程重制（2026-10-21）第 4 期：史实势力扩张导演层 hd184r_director。
+# 设计：docs/184剧本流程重制_设计草案.md D23、D27~D31、D33；目标表 §5。
+# - 每季度检查一次（h_china 上的 hd184r_director_pulse）；只管 AI、有地、独立（或挟天子的权臣）的名单人物；玩家不受控（D4）。
+# - 只打与本人领地接壤的郡；当前目标州的法理郡优先，其次是州外接壤的郡（守成型只打目标州）；绝不隔地开战。
+# - 实控目标州法理县 70%，或连续 4 次检查找不到目标州内可打的接壤目标，算完成，转下一州。
+# - 守成型完成最后一州后停手；进取型完成后继续向中原（汉霸权法理内）接壤的郡扩张。
+# - 进攻战（本人为主攻方）最多 4 场，每次检查最多新开 2 场；防守战不占名额。
+# - 宣战走 CB 会话的接口：hd_tb_arm_effect = { KIND = historical } + start_war cb = hd_dc_tunbing_cb（只拿目标郡里守方的县）。
+
+############################################################
+# 启动与脉冲
+############################################################
+
+# Scope：title:h_china。诛董进入割据后 45 天起尝试；落位（hd_hw_run_effect）完成后才接手，最多等一年。
+hd184r_director_bootstrap_effect = {
+	if = {
+		limit = {
+			game_start_date = 190.1.1
+			exists = global_var:hd184r_warlord_era
+			NOT = { exists = global_var:hd184r_director_active }
+		}
+		if = {
+			limit = {
+				OR = {
+					exists = global_var:hd_hw_done
+					exists = global_var:hd184r_director_wait_expired
+				}
+			}
+			set_global_variable = hd184r_director_active
+			hd184r_director_mark_roster_effect = yes
+			trigger_event = { on_action = hd184r_director_pulse days = 1 }
+			debug_log = "HD184R P4 DIRECTOR_STARTED"
+		}
+		else = {
+			# 每 15 天再查一次，约一年（24 次）后不再等落位
+			if = { limit = { NOT = { exists = global_var:hd184r_director_wait_count } } set_global_variable = { name = hd184r_director_wait_count value = 0 } }
+			change_global_variable = { name = hd184r_director_wait_count add = 1 }
+			if = {
+				limit = { global_var:hd184r_director_wait_count >= 24 }
+				set_global_variable = hd184r_director_wait_expired
+			}
+			trigger_event = { on_action = hd184r_director_bootstrap days = 15 }
+			debug_log = "HD184R P4 DIRECTOR_WAIT_PLACEMENT"
+		}
+	}
+}
+
+# Scope：任意。名单人物打上 hd184r_director_member（战略 AI 据此不再管他们），并设类型与起始阶段。
+hd184r_director_mark_roster_effect = {
+	character:cao_cao ?= { hd184r_director_mark_effect = { TYPE = jinqu } }
+	character:yuan_shao ?= { hd184r_director_mark_effect = { TYPE = jinqu } }
+	character:yuan_shu ?= { hd184r_director_mark_effect = { TYPE = jinqu } }
+	if = { limit = { has_global_variable = wj_hchar_sun_ce } global_var:wj_hchar_sun_ce ?= { hd184r_director_mark_effect = { TYPE = jinqu } } }
+	if = { limit = { has_global_variable = wj_hchar_sun_quan } global_var:wj_hchar_sun_quan ?= { hd184r_director_mark_effect = { TYPE = jinqu } } }
+	character:gong_sun_zan ?= { hd184r_director_mark_effect = { TYPE = jinqu } }
+	character:ma_teng ?= { hd184r_director_mark_effect = { TYPE = jinqu } }
+	character:han_sui ?= { hd184r_director_mark_effect = { TYPE = jinqu } }
+	character:liu_biao ?= { hd184r_director_mark_effect = { TYPE = shoucheng } }
+	character:liu_yan_5 ?= { hd184r_director_mark_effect = { TYPE = shoucheng } }
+	character:liu_zhang_4 ?= { hd184r_director_mark_effect = { TYPE = shoucheng } }
+	character:zhang_lu ?= { hd184r_director_mark_effect = { TYPE = shoucheng } }
+	character:shi_xie ?= { hd184r_director_mark_effect = { TYPE = shoucheng } }
+	character:gong_sun_du ?= { hd184r_director_mark_effect = { TYPE = shoucheng } }
+	character:tao_qian ?= { hd184r_director_mark_effect = { TYPE = shoucheng } }
+}
+
+hd184r_director_mark_effect = {
+	if = {
+		limit = { is_alive = yes NOT = { has_character_flag = hd184r_director_member } }
+		add_character_flag = hd184r_director_member
+		add_character_flag = hd184r_type_$TYPE$
+		set_variable = { name = hd184r_stage value = 1 }
+		set_variable = { name = hd184r_idle value = 0 }
+	}
+}
+
+# Scope：title:h_china。每季度一次，逐个处理名单人物，随后自我续期。
+hd184r_director_pulse_effect = {
+	if = {
+		limit = {
+			game_start_date = 190.1.1
+			exists = global_var:hd184r_director_active
+		}
+		hd184r_director_mark_roster_effect = yes
+		character:cao_cao ?= { hd184r_director_tick_effect = yes }
+		character:yuan_shao ?= { hd184r_director_tick_effect = yes }
+		character:yuan_shu ?= { hd184r_director_tick_effect = yes }
+		if = { limit = { has_global_variable = wj_hchar_sun_ce } global_var:wj_hchar_sun_ce ?= { hd184r_director_tick_effect = yes } }
+		if = { limit = { has_global_variable = wj_hchar_sun_quan } global_var:wj_hchar_sun_quan ?= { hd184r_director_tick_effect = yes } }
+		character:gong_sun_zan ?= { hd184r_director_tick_effect = yes }
+		character:ma_teng ?= { hd184r_director_tick_effect = yes }
+		character:han_sui ?= { hd184r_director_tick_effect = yes }
+		character:liu_biao ?= { hd184r_director_tick_effect = yes }
+		character:liu_yan_5 ?= { hd184r_director_tick_effect = yes }
+		character:liu_zhang_4 ?= { hd184r_director_tick_effect = yes }
+		character:zhang_lu ?= { hd184r_director_tick_effect = yes }
+		character:shi_xie ?= { hd184r_director_tick_effect = yes }
+		character:gong_sun_du ?= { hd184r_director_tick_effect = yes }
+		character:tao_qian ?= { hd184r_director_tick_effect = yes }
+		trigger_event = { on_action = hd184r_director_pulse days = 91 }
+	}
+}
+
+############################################################
+# 单人处理
+############################################################
+
+# Scope：名单人物。
+hd184r_director_tick_effect = {
+	if = {
+		limit = {
+			has_character_flag = hd184r_director_member
+			NOT = { has_character_flag = hd184r_done }
+			hd184r_director_actor_ready_trigger = yes
+		}
+		save_scope_as = hd184r_actor
+		hd184r_director_build_stage_effect = yes
+		# 一、阶段完成检查（受剧情门槛挡住的阶段不检查、不计空转）
+		if = {
+			limit = { NOT = { has_character_flag = hd184r_stage_gated } }
+			hd184r_director_check_stage_effect = yes
+		}
+		# 二、找目标、开战（检查后若刚进入新阶段，按新阶段重建目标）
+		if = {
+			limit = { has_character_flag = hd184r_stage_rebuild }
+			remove_character_flag = hd184r_stage_rebuild
+			hd184r_director_build_stage_effect = yes
+		}
+		if = {
+			limit = { NOT = { has_character_flag = hd184r_done } }
+			hd184r_director_collect_candidates_effect = yes
+			if = {
+				limit = { NOT = { has_variable_list = hd184r_scand } }
+				# 目标州内没有可打的接壤目标：空转 +1（门槛挡住时不计）
+				if = {
+					limit = { NOT = { has_character_flag = hd184r_stage_gated } }
+					change_variable = { name = hd184r_idle add = 1 }
+				}
+				debug_log = "HD184R P4 NO_STAGE_TARGET"
+				debug_log_scopes = yes
+			}
+			else = { set_variable = { name = hd184r_idle value = 0 } }
+			hd184r_director_declare_one_effect = yes
+			hd184r_director_declare_one_effect = yes
+		}
+		clear_variable_list = hd184r_targets
+		clear_variable_list = hd184r_front
+		clear_variable_list = hd184r_scand
+		clear_variable_list = hd184r_ocand
+	}
+}
+
+# Scope：名单人物。按 var:hd184r_stage 重建目标郡列表 hd184r_targets；
+# 阶段超过最后一阶时：进取型进入「开放」（无目标州，只打州外接壤），守成型标 hd184r_done。
+hd184r_director_build_stage_effect = {
+	clear_variable_list = hd184r_targets
+	remove_character_flag = hd184r_stage_gated
+	remove_character_flag = hd184r_open_mode
+	if = { limit = { this = character:cao_cao }
+		if = { limit = { var:hd184r_stage = 1 } hd184r_dk = { K = k_uuii_yanzhou } }
+		else_if = { limit = { var:hd184r_stage = 2 } hd184r_dk = { K = k_uuii_yuzhou } }
+		else_if = { limit = { var:hd184r_stage = 3 } hd184r_dk = { K = k_uuii_xuzhou } }
+		else_if = { limit = { var:hd184r_stage = 4 } hd184r_dk = { K = k_uuii_jizhou } hd184r_gate_guandu = yes }
+		else_if = { limit = { var:hd184r_stage = 5 } hd184r_dk = { K = k_uuii_qingzhou } hd184r_gate_guandu = yes }
+		else_if = { limit = { var:hd184r_stage = 6 } hd184r_dk = { K = k_uuii_youzhou } hd184r_gate_guandu = yes }
+		else_if = { limit = { var:hd184r_stage = 7 } hd184r_dk = { K = k_uuii_bingzhou } hd184r_gate_guandu = yes }
+		else_if = { limit = { var:hd184r_stage = 8 } hd184r_dk = { K = k_uuii_jingzhou } hd184r_gate_guandu = yes }
+		else_if = { limit = { var:hd184r_stage = 9 } hd184r_dk = { K = k_uuii_sili } hd184r_gate_guandu = yes }
+		else_if = { limit = { var:hd184r_stage = 10 } hd184r_dk = { K = k_uuii_liangzhou } hd184r_gate_guandu = yes }
+		else = { hd184r_stage_end_effect = yes }
+	}
+	else_if = { limit = { this = character:yuan_shao }
+		if = { limit = { var:hd184r_stage = 1 } hd184r_dk = { K = k_uuii_jizhou } }
+		else_if = { limit = { var:hd184r_stage = 2 } hd184r_dk = { K = k_uuii_youzhou } }
+		else_if = { limit = { var:hd184r_stage = 3 } hd184r_dk = { K = k_uuii_qingzhou } }
+		else_if = { limit = { var:hd184r_stage = 4 } hd184r_dk = { K = k_uuii_bingzhou } }
+		else = { hd184r_stage_end_effect = yes }
+	}
+	else_if = { limit = { this = character:yuan_shu }
+		if = { limit = { var:hd184r_stage = 1 }
+			hd184r_dd = { D = d_nanyang } hd184r_dd = { D = d_xinye } hd184r_dd = { D = d_nanxiang }
+			hd184r_dd = { D = d_anlu } hd184r_dd = { D = d_jingling } hd184r_dd = { D = d_yingchuan_jingzhou }
+		}
+		else_if = { limit = { var:hd184r_stage = 2 } hd184r_dk = { K = k_uuii_yuzhou } }
+		else_if = { limit = { var:hd184r_stage = 3 }
+			hd184r_dd = { D = d_guangling_yangzhou } hd184r_dd = { D = d_huainan } hd184r_dd = { D = d_lujiang }
+			hd184r_dd = { D = d_luan } hd184r_dd = { D = d_zhongli } hd184r_dd = { D = d_liyang } hd184r_dd = { D = d_anfeng }
+		}
+		else = { hd184r_stage_end_effect = yes }
+	}
+	else_if = {
+		limit = {
+			OR = {
+				trigger_if = { limit = { has_global_variable = wj_hchar_sun_ce } this = global_var:wj_hchar_sun_ce } trigger_else = { always = no }
+				trigger_if = { limit = { has_global_variable = wj_hchar_sun_quan } this = global_var:wj_hchar_sun_quan } trigger_else = { always = no }
+			}
+		}
+		if = { limit = { var:hd184r_stage = 1 } hd184r_dk = { K = k_uuii_yangzhou } }
+		else_if = { limit = { var:hd184r_stage = 2 }
+			hd184r_dd = { D = d_changsha } hd184r_dd = { D = d_xiangdong } hd184r_dd = { D = d_guiyang } hd184r_dd = { D = d_yingyang }
+			hd184r_dd = { D = d_hengyang } hd184r_dd = { D = d_lingling } hd184r_dd = { D = d_shaoling } hd184r_dd = { D = d_hengyang_jingzhou }
+			hd184r_dd = { D = d_wuling } hd184r_dd = { D = d_jiangxia }
+			# 荆南在赤壁之后
+			if = { limit = { NOT = { exists = global_var:hd_chibi_world_resolved } } add_character_flag = hd184r_stage_gated }
+		}
+		else = { hd184r_stage_end_effect = yes }
+	}
+	else_if = { limit = { this = character:gong_sun_zan }
+		if = { limit = { var:hd184r_stage = 1 } hd184r_dk = { K = k_uuii_youzhou } }
+		else_if = { limit = { var:hd184r_stage = 2 } hd184r_dk = { K = k_uuii_jizhou } }
+		else_if = { limit = { var:hd184r_stage = 3 } hd184r_dk = { K = k_uuii_qingzhou } }
+		else = { hd184r_stage_end_effect = yes }
+	}
+	else_if = { limit = { OR = { this = character:ma_teng this = character:han_sui } }
+		if = { limit = { var:hd184r_stage = 1 } hd184r_dk = { K = k_uuii_liangzhou } }
+		else_if = { limit = { var:hd184r_stage = 2 }
+			hd184r_dd = { D = d_jingzhao } hd184r_dd = { D = d_fufeng } hd184r_dd = { D = d_fengyi }
+			hd184r_dd = { D = d_xianyang } hd184r_dd = { D = d_shiping }
+		}
+		else = { hd184r_stage_end_effect = yes }
+	}
+	else_if = { limit = { this = character:liu_biao }
+		if = { limit = { var:hd184r_stage = 1 } hd184r_dk = { K = k_uuii_jingzhou } }
+		else = { hd184r_stage_end_effect = yes }
+	}
+	else_if = { limit = { OR = { this = character:liu_yan_5 this = character:liu_zhang_4 } }
+		if = { limit = { var:hd184r_stage = 1 }
+			hd184r_dk = { K = k_uuii_yizhou }
+			# 汉中归张鲁（第 5 期），不列入刘焉/刘璋的目标
+			remove_list_variable = { name = hd184r_targets target = title:d_hanzhong }
+			remove_list_variable = { name = hd184r_targets target = title:d_weixing }
+		}
+		else = { hd184r_stage_end_effect = yes }
+	}
+	else_if = { limit = { this = character:zhang_lu }
+		if = { limit = { var:hd184r_stage = 1 } hd184r_dd = { D = d_hanzhong } }
+		else_if = { limit = { var:hd184r_stage = 2 } hd184r_dd = { D = d_baxi } }
+		else = { hd184r_stage_end_effect = yes }
+	}
+	else_if = { limit = { this = character:shi_xie }
+		if = { limit = { var:hd184r_stage = 1 } hd184r_dk = { K = k_uuii_jiaozhou } }
+		else = { hd184r_stage_end_effect = yes }
+	}
+	else_if = { limit = { this = character:gong_sun_du }
+		if = { limit = { var:hd184r_stage = 1 }
+			hd184r_dd = { D = d_liaodong } hd184r_dd = { D = d_xuantu } hd184r_dd = { D = d_lelang }
+			hd184r_dd = { D = d_daifang } hd184r_dd = { D = d_daifangjun }
+		}
+		else = { hd184r_stage_end_effect = yes }
+	}
+	else_if = { limit = { this = character:tao_qian }
+		if = { limit = { var:hd184r_stage = 1 } hd184r_dk = { K = k_uuii_xuzhou } }
+		else = { hd184r_stage_end_effect = yes }
+	}
+}
+
+# 目标州：把王国法理下全部郡加入 hd184r_targets。Scope：名单人物。
+hd184r_dk = {
+	save_scope_as = hd184r_list_owner
+	title:$K$ = {
+		every_in_de_jure_hierarchy = {
+			continue = { tier > tier_duchy }
+			limit = { tier = tier_duchy }
+			scope:hd184r_list_owner = { add_to_variable_list = { name = hd184r_targets target = prev } }
+		}
+	}
+}
+# 单个目标郡。Scope：名单人物。
+hd184r_dd = {
+	add_to_variable_list = { name = hd184r_targets target = title:$D$ }
+}
+# 官渡之前不进北方与其后各阶段。Scope：曹操。
+hd184r_gate_guandu = {
+	if = { limit = { NOT = { exists = global_var:hd_guandu_world_resolved } } add_character_flag = hd184r_stage_gated }
+}
+# 目标表走完。Scope：名单人物。
+hd184r_stage_end_effect = {
+	if = {
+		limit = { has_character_flag = hd184r_type_shoucheng }
+		if = {
+			limit = { NOT = { has_character_flag = hd184r_done } }
+			add_character_flag = hd184r_done
+			debug_log = "HD184R P4 SHOUCHENG_DONE"
+			debug_log_scopes = yes
+		}
+	}
+	else = { add_character_flag = hd184r_open_mode }
+}
+
+# Scope：名单人物（scope:hd184r_actor）。实控 70% 或空转满 4 次即完成本阶段。
+hd184r_director_check_stage_effect = {
+	if = {
+		limit = { NOT = { has_character_flag = hd184r_open_mode } NOT = { has_character_flag = hd184r_done } }
+		set_variable = { name = hd184r_tot value = 0 }
+		set_variable = { name = hd184r_own value = 0 }
+		every_in_list = {
+			variable = hd184r_targets
+			every_de_jure_county = {
+				scope:hd184r_actor = { change_variable = { name = hd184r_tot add = 1 } }
+				if = {
+					limit = {
+						holder ?= {
+							OR = {
+								this = scope:hd184r_actor
+								is_vassal_or_below_of = scope:hd184r_actor
+							}
+						}
+					}
+					scope:hd184r_actor = { change_variable = { name = hd184r_own add = 1 } }
+				}
+			}
+		}
+		set_variable = { name = hd184r_need value = var:hd184r_tot }
+		change_variable = { name = hd184r_need multiply = 0.7 }
+		if = {
+			limit = {
+				OR = {
+					var:hd184r_tot <= 0
+					var:hd184r_own >= var:hd184r_need
+					var:hd184r_idle >= 4
+				}
+			}
+			if = {
+				limit = { var:hd184r_idle >= 4 }
+				debug_log = "HD184R P4 STAGE_DONE_IDLE"
+			}
+			else = { debug_log = "HD184R P4 STAGE_DONE_CONTROL" }
+			debug_log_scopes = yes
+			change_variable = { name = hd184r_stage add = 1 }
+			set_variable = { name = hd184r_idle value = 0 }
+			add_character_flag = hd184r_stage_rebuild
+		}
+		remove_variable = hd184r_tot
+		remove_variable = hd184r_own
+		remove_variable = hd184r_need
+	}
+}
+
+# Scope：名单人物（scope:hd184r_actor）。前线郡：与本人领地接壤、却不在本人领内的县所在的郡。
+# 变量列表 hd184r_scand：前线郡里属于目标州且有合法守方的；hd184r_ocand：其余在汉霸权法理内且有合法守方的（只进取型用）。
+hd184r_director_collect_candidates_effect = {
+	clear_variable_list = hd184r_front
+	clear_variable_list = hd184r_scand
+	clear_variable_list = hd184r_ocand
+	# 用 sub_realm：挟天子的权臣是天子的封臣，只算他自己的辖区
+	every_sub_realm_county = {
+		every_neighboring_county = {
+			limit = {
+				exists = holder
+				NOT = {
+					holder = {
+						OR = {
+							this = scope:hd184r_actor
+							is_vassal_or_below_of = scope:hd184r_actor
+						}
+					}
+				}
+			}
+			duchy ?= {
+				save_temporary_scope_as = hd184r_front_duchy
+				scope:hd184r_actor = {
+					if = {
+						limit = { NOT = { is_target_in_variable_list = { name = hd184r_front target = scope:hd184r_front_duchy } } }
+						add_to_variable_list = { name = hd184r_front target = scope:hd184r_front_duchy }
+					}
+				}
+			}
+		}
+	}
+	every_in_list = {
+		variable = hd184r_front
+		limit = { hd184r_duchy_has_valid_defender_trigger = yes }
+		save_temporary_scope_as = hd184r_cand_duchy
+		if = {
+			limit = {
+				scope:hd184r_actor = {
+					NOT = { has_character_flag = hd184r_stage_gated }
+					is_target_in_variable_list = { name = hd184r_targets target = scope:hd184r_cand_duchy }
+				}
+			}
+			scope:hd184r_actor = { add_to_variable_list = { name = hd184r_scand target = scope:hd184r_cand_duchy } }
+		}
+		else_if = {
+			limit = {
+				scope:hd184r_actor = {
+					has_character_flag = hd184r_type_jinqu
+					# 被门槛挡住的目标州郡不从「州外」口子漏进来（官渡前的冀州、赤壁前的荆南）
+					NOT = { is_target_in_variable_list = { name = hd184r_targets target = scope:hd184r_cand_duchy } }
+				}
+				target_is_de_jure_liege_or_above = title:h_china
+			}
+			scope:hd184r_actor = { add_to_variable_list = { name = hd184r_ocand target = scope:hd184r_cand_duchy } }
+		}
+	}
+}
+
+# Scope：名单人物（scope:hd184r_actor）。有进攻名额时，先目标州、后州外，挑一个郡开战。
+hd184r_director_declare_one_effect = {
+	if = {
+		limit = { hd184r_director_war_slot_trigger = yes }
+		clear_saved_scope = hd184r_target_duchy
+		clear_saved_scope = hd184r_defender
+		random_in_list = {
+			variable = hd184r_scand
+			limit = { hd184r_duchy_has_valid_defender_trigger = yes }
+			save_scope_as = hd184r_target_duchy
+		}
+		if = {
+			limit = { NOT = { exists = scope:hd184r_target_duchy } }
+			random_in_list = {
+				variable = hd184r_ocand
+				limit = { hd184r_duchy_has_valid_defender_trigger = yes }
+				save_scope_as = hd184r_target_duchy
+			}
+		}
+		if = {
+			limit = { exists = scope:hd184r_target_duchy }
+			scope:hd184r_target_duchy = {
+				random_de_jure_county = {
+					limit = { hd184r_county_valid_front_trigger = yes }
+					holder = { top_liege = { save_scope_as = hd184r_defender } }
+				}
+			}
+		}
+		if = {
+			limit = { exists = scope:hd184r_defender }
+			# 宣战前临时解除和平锁（同天意青睐引擎），宣战后恢复
+			if = {
+				limit = { has_character_flag = sworn_peace }
+				remove_character_flag = sworn_peace
+				add_character_flag = { flag = hd184r_restore_sworn_peace days = 1 }
+			}
+			hd_tb_arm_effect = { KIND = historical }
+			start_war = {
+				cb = hd_dc_tunbing_cb
+				target = scope:hd184r_defender
+				target_title = scope:hd184r_target_duchy
+			}
+			if = {
+				limit = { has_character_flag = hd184r_restore_sworn_peace }
+				remove_character_flag = hd184r_restore_sworn_peace
+				add_character_flag = sworn_peace
+			}
+			if = {
+				limit = {
+					any_character_war = {
+						primary_attacker = scope:hd184r_actor
+						primary_defender = scope:hd184r_defender
+					}
+				}
+				debug_log = "HD184R P4 WAR_DECLARED"
+				debug_log_scopes = yes
+			}
+			else = {
+				debug_log = "HD184R P4 WAR_START_FAILED"
+				debug_log_scopes = yes
+			}
+		}
+	}
+}

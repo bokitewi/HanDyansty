@@ -902,70 +902,116 @@ hd263_s5_ask_emperor_effect = {
 	else = { hd263_s5_effect = yes }
 }
 
-# 封晋公：并州州头衔授司马昭（改名"晋"），并州本部七郡改归他（天子直持的连县带郡交他，郡守改投他）；冯翊、安定、新平、平凉与刘豹不动
+# 封晋公：照实封公（WJ_rf_commit）新建王国级"晋国"（wj_rf_rank = 1、世家继承），国都晋阳（太原郡治）；
+# 并州本部七郡逐郡走 WJ_rf_transfer_duchy 并入晋国（boki 10-20 选"照实封新建、剧本固定七郡"）；冯翊、安定、新平、平凉与刘豹不动。
+# 不走选郡界面、不调 WJ_rf_release_outside_offices（司马昭的河内等领地和丞相照留）、不扣天子正统
 hd263_s5_effect = {
-	set_global_variable = hd263_s5_ok
-	character:si_ma_zhao = { save_scope_as = hd263_zhao }
-	title:h_china.holder = { save_scope_as = hd263_wei }
-	create_title_and_vassal_change = { type = granted save_scope_as = hd263_s5_change add_claim_on_loss = no }
-	title:k_uuii_bingzhou = {
+	hidden_effect = { # 选项预览解析不了执行时才建的头衔（同 WJ_rf_promote）
+		character:si_ma_zhao = { save_scope_as = hd263_zhao save_scope_as = wj_rf_beneficiary }
+		title:h_china.holder = { save_scope_as = hd263_wei save_scope_as = wj_rf_sovereign }
 		if = {
-			limit = { holder ?= scope:hd263_wei }
-			change_title_holder = { holder = scope:hd263_zhao change = scope:hd263_s5_change }
+			limit = {
+				exists = scope:hd263_wei
+				scope:hd263_zhao ?= {
+					is_alive = yes
+					is_landed = yes
+					NOT = { this = top_liege }
+					top_liege = scope:hd263_wei
+				}
+			}
+			title:d_taiyuan = { save_scope_as = wj_rf_capital_duchy title_capital_county = { save_scope_as = wj_rf_capital_county } }
+			create_dynamic_title = { tier = kingdom name = hd263_jin_fief_name }
+			scope:new_title = {
+				save_scope_as = wj_rf_new_fief
+				set_variable = { name = wj_rf_rank value = 1 }
+				set_variable = { name = wj_rf_name_source value = title:k_uuii_bingzhou }
+				set_definitive_form = yes
+				set_variable = { name = wj_rf_stem_capital value = title:d_taiyuan }
+				set_variable = { name = wj_rf_name_code value = 13 } # 并州 → "晋"（WJ_rf_name_bingzhou）
+				set_capital_county = scope:wj_rf_capital_county
+				set_coa = title:d_taiyuan set_color_from_title = title:d_taiyuan
+			}
+			set_global_variable = { name = hd263_jin_fief value = scope:wj_rf_new_fief }
+			create_title_and_vassal_change = { type = granted save_scope_as = wj_rf_change add_claim_on_loss = no }
+			scope:wj_rf_new_fief = { change_title_holder = { holder = scope:hd263_zhao change = scope:wj_rf_change government_base = scope:hd263_wei } }
+			hd263_s5_duchy_effect = { DUCHY = d_taiyuan }
+			hd263_s5_duchy_effect = { DUCHY = d_shangdang }
+			hd263_s5_duchy_effect = { DUCHY = d_shangdang_sili }
+			hd263_s5_duchy_effect = { DUCHY = d_xinxing }
+			hd263_s5_duchy_effect = { DUCHY = d_yanmen_youzhou }
+			hd263_s5_duchy_effect = { DUCHY = d_wuxiang }
+			hd263_s5_duchy_effect = { DUCHY = d_jianxing }
+			# 国都晋阳交司马昭（照 WJ_rf_commit；接力局玩家持有不夺）
+			scope:wj_rf_capital_county = {
+				if = {
+					limit = {
+						NOT = { holder ?= scope:hd263_zhao }
+						OR = {
+							NOT = { exists = holder }
+							holder ?= { top_liege = scope:hd263_wei OR = { NOT = { hd263_relay_trigger = yes } is_ai = yes } }
+						}
+					}
+					change_title_holder = { holder = scope:hd263_zhao change = scope:wj_rf_change government_base = scope:hd263_wei }
+				}
+				set_variable = { name = wj_rf_capital_of value = scope:wj_rf_new_fief }
+			}
+			resolve_title_and_vassal_change = scope:wj_rf_change
+			# 校正（执行后复核必改 2）：冯翊、安定、新平、平凉郡守与刘豹若随并州被引擎改投司马昭，改回天子
+			create_title_and_vassal_change = { type = swear_fealty save_scope_as = hd263_s5_fix add_claim_on_loss = no }
+			hd263_s5_unpull_effect = { WHO = title:d_fengyi.holder TAG = d_fengyi }
+			hd263_s5_unpull_effect = { WHO = title:d_anding.holder TAG = d_anding }
+			hd263_s5_unpull_effect = { WHO = title:d_xinping.holder TAG = d_xinping }
+			hd263_s5_unpull_effect = { WHO = title:d_pingliang.holder TAG = d_pingliang }
+			hd263_s5_unpull_effect = { WHO = character:xiongnu_liu_010 TAG = liu_bao }
+			resolve_title_and_vassal_change = scope:hd263_s5_fix
+			scope:hd263_zhao = {
+				if = {
+					limit = { scope:wj_rf_new_fief.holder ?= scope:hd263_zhao }
+					if = { limit = { has_variable = wj_peer_rank } WJ_peer_clear = yes } # 照 WJ_rf_commit：实封公取代原爵
+					if = {
+						limit = { scope:wj_rf_capital_county.holder ?= scope:hd263_zhao }
+						set_realm_capital = scope:wj_rf_capital_county
+					}
+					set_primary_title_to = scope:wj_rf_new_fief
+					set_variable = { name = wj_rf_cooldown value = yes years = 3 }
+					WJ_rf_refresh_holder = yes
+					scope:wj_rf_new_fief = { save_scope_as = wj_rf_law_title }
+					trigger_event = WJ_rf.4 # 晋国、晋阳设世家继承
+					title:h_china = { set_variable = { name = hd_court_regent_title value = scope:hd263_zhao.primary_title } }
+					add_prestige = 500
+					set_global_variable = hd263_s5_ok
+					debug_log = "HD263 S5 JIN_GONG OK"
+				}
+				else = { debug_log = "HD263 S5 JIN_GONG BAD" }
+			}
+			hd263_news_effect = { A = scope:hd263_zhao B = scope:hd263_wei EVENT = hd263.0950 }
 		}
+		else = { debug_log = "HD263 S5 JIN_GONG SKIPPED" } # 司马昭已死、失地、独立或不再是天子封臣：不建晋国
 	}
-	hd263_s5_duchy_effect = { DUCHY = d_taiyuan }
-	hd263_s5_duchy_effect = { DUCHY = d_shangdang }
-	hd263_s5_duchy_effect = { DUCHY = d_shangdang_sili }
-	hd263_s5_duchy_effect = { DUCHY = d_xinxing }
-	hd263_s5_duchy_effect = { DUCHY = d_yanmen_youzhou }
-	hd263_s5_duchy_effect = { DUCHY = d_wuxiang }
-	hd263_s5_duchy_effect = { DUCHY = d_jianxing }
-	resolve_title_and_vassal_change = scope:hd263_s5_change
-	# 校正（执行后复核必改 2）：冯翊、安定、新平、平凉郡守与刘豹若随并州被引擎改投司马昭，改回天子
-	create_title_and_vassal_change = { type = swear_fealty save_scope_as = hd263_s5_fix add_claim_on_loss = no }
-	hd263_s5_unpull_effect = { WHO = title:d_fengyi.holder TAG = d_fengyi }
-	hd263_s5_unpull_effect = { WHO = title:d_anding.holder TAG = d_anding }
-	hd263_s5_unpull_effect = { WHO = title:d_xinping.holder TAG = d_xinping }
-	hd263_s5_unpull_effect = { WHO = title:d_pingliang.holder TAG = d_pingliang }
-	hd263_s5_unpull_effect = { WHO = character:xiongnu_liu_010 TAG = liu_bao }
-	resolve_title_and_vassal_change = scope:hd263_s5_fix
-	scope:hd263_zhao = {
-		if = {
-			limit = { has_title = title:k_uuii_bingzhou }
-			set_primary_title_to = title:k_uuii_bingzhou
-			title:k_uuii_bingzhou = { set_title_name = hd263_jin_state_name }
-			hd_nbc_style_effect = { WHO = si_ma_zhao STYLE = gong }
-			title:h_china = { set_variable = { name = hd_court_regent_title value = scope:hd263_zhao.primary_title } }
-			add_prestige = 500
-			debug_log = "HD263 S5 JIN_GONG OK"
-		}
-		else = { debug_log = "HD263 S5 JIN_GONG BAD" }
-	}
-	hd263_news_effect = { A = scope:hd263_zhao B = scope:hd263_wei EVENT = hd263.0950 }
 }
+# 一郡并入晋国：郡在魏境内才动；郡守是接力局玩家的只改法理、不改投（玩家郡守不强行改投）
 hd263_s5_duchy_effect = {
 	title:$DUCHY$ = {
 		if = {
-			limit = { holder ?= scope:hd263_wei }
-			every_in_de_jure_hierarchy = {
-				limit = { tier = tier_county holder ?= scope:hd263_wei }
-				change_title_holder = { holder = scope:hd263_zhao change = scope:hd263_s5_change take_baronies = yes }
-			}
-			change_title_holder = { holder = scope:hd263_zhao change = scope:hd263_s5_change }
-		}
-		else_if = {
 			limit = {
-				holder ?= {
-					NOT = { this = scope:hd263_zhao }
-					liege ?= scope:hd263_wei
-					OR = {
-						NOT = { hd263_relay_trigger = yes }
-						is_ai = yes # 接力：玩家郡守不强行改投
-					}
+				any_de_jure_county = { exists = holder holder.top_liege = scope:hd263_wei }
+				OR = {
+					NOT = { exists = holder }
+					holder ?= { top_liege = scope:hd263_wei }
 				}
 			}
-			holder = { change_liege = { liege = scope:hd263_zhao change = scope:hd263_s5_change } }
+			if = {
+				limit = {
+					hd263_relay_trigger = yes
+					holder ?= { is_ai = no NOT = { this = scope:hd263_zhao } }
+				}
+				if = { limit = { NOT = { has_variable = wj_rf_original_liege } exists = de_jure_liege }
+					set_variable = { name = wj_rf_original_liege value = de_jure_liege }
+				}
+				scope:wj_rf_new_fief = { add_to_variable_list = { name = wj_rf_duchies target = title:$DUCHY$ } }
+				set_de_jure_liege_title = scope:wj_rf_new_fief
+			}
+			else = { WJ_rf_transfer_duchy = yes }
 		}
 	}
 }
@@ -979,7 +1025,8 @@ hd263_s6_check_effect = {
 			exists = global_var:hd263_s5_ok
 			NOT = { exists = global_var:hd263_s6_done }
 			current_date >= 264.5.2
-			character:si_ma_zhao ?= { is_alive = yes has_title = title:k_uuii_bingzhou }
+			exists = global_var:hd263_jin_fief
+			character:si_ma_zhao ?= { is_alive = yes has_title = global_var:hd263_jin_fief }
 		}
 		set_global_variable = hd263_s6_done
 		if = {
@@ -989,24 +1036,75 @@ hd263_s6_check_effect = {
 		else = { hd263_s6_effect = yes }
 	}
 }
+# 进爵晋王：照 WJ_rf_promote 新建帝国级"晋国"（wj_rf_rank = 2）套住晋公国（boki 10-20）；
+# 剧本跳过 WJ_rf_can_promote 的玩家/百县/录尚书事门槛，天子须持霸权级（h_china）
 hd263_s6_effect = {
-	character:si_ma_zhao = {
-		if = {
-			limit = { NOT = { primary_title ?= title:k_uuii_bingzhou } }
-			set_primary_title_to = title:k_uuii_bingzhou
+	hidden_effect = { # 选项预览解析不了执行时才建的头衔（同 WJ_rf_promote）
+		character:si_ma_zhao = {
+			# 玩家已用「请求晋封为王」决议进过王：认那个王国，不再另建
+			if = {
+				limit = {
+					NOT = { exists = global_var:hd263_jin_wang }
+					any_held_title = { has_variable = wj_rf_rank var:wj_rf_rank = 2 }
+				}
+				random_held_title = {
+					limit = { has_variable = wj_rf_rank var:wj_rf_rank = 2 }
+					set_global_variable = { name = hd263_jin_wang value = this }
+				}
+				debug_log = "HD263 S6 JIN_WANG_TITLE ADOPTED"
+			}
+			if = {
+				limit = {
+					is_alive = yes
+					has_title = global_var:hd263_jin_fief
+					NOT = { exists = global_var:hd263_jin_wang }
+					NOT = { any_held_title = { has_variable = wj_rf_rank var:wj_rf_rank = 2 } }
+					top_liege = { has_title = title:h_china NOT = { this = character:si_ma_zhao } }
+				}
+				save_scope_as = wj_rf_beneficiary
+				top_liege = { save_scope_as = wj_rf_sovereign }
+				global_var:hd263_jin_fief = { save_scope_as = wj_rf_new_fief }
+				create_dynamic_title = { tier = empire name = hd263_jin_fief_name }
+				scope:new_title = {
+					save_scope_as = wj_rf_new_kingdom
+					set_variable = { name = wj_rf_rank value = 2 }
+					set_variable = { name = wj_rf_constituent_fief value = scope:wj_rf_new_fief }
+					set_definitive_form = yes
+					set_variable = { name = wj_rf_name_code value = scope:wj_rf_new_fief.var:wj_rf_name_code }
+					set_variable = { name = wj_rf_stem_capital value = scope:wj_rf_new_fief.var:wj_rf_stem_capital }
+					set_capital_county = scope:wj_rf_new_fief.title_capital_county
+					set_coa = scope:wj_rf_new_fief set_color_from_title = scope:wj_rf_new_fief
+				}
+				create_title_and_vassal_change = { type = granted save_scope_as = wj_rf_change add_claim_on_loss = no }
+				scope:wj_rf_new_kingdom = { change_title_holder = { holder = scope:wj_rf_beneficiary change = scope:wj_rf_change } }
+				change_liege = { liege = scope:wj_rf_sovereign change = scope:wj_rf_change }
+				resolve_title_and_vassal_change = scope:wj_rf_change
+				if = {
+					limit = { scope:wj_rf_new_kingdom.holder ?= scope:wj_rf_beneficiary }
+					set_global_variable = { name = hd263_jin_wang value = scope:wj_rf_new_kingdom }
+					scope:wj_rf_new_fief = { set_de_jure_liege_title = scope:wj_rf_new_kingdom }
+					set_primary_title_to = scope:wj_rf_new_kingdom
+					WJ_rf_refresh_holder = yes
+					scope:wj_rf_new_kingdom = { save_scope_as = wj_rf_law_title }
+					scope:wj_rf_new_fief.title_capital_county = { save_scope_as = wj_rf_capital_county }
+					trigger_event = WJ_rf.4 # 晋王国设世家继承
+					title:h_china = { set_variable = { name = hd_court_regent_title value = scope:wj_rf_new_kingdom } }
+					debug_log = "HD263 S6 JIN_WANG_TITLE OK"
+				}
+				else = { debug_log = "HD263 S6 JIN_WANG_TITLE BAD" }
+			}
+			add_prestige = 500
 		}
-		hd_nbc_style_effect = { WHO = si_ma_zhao STYLE = wang }
-		add_prestige = 500
-	}
-	title:h_china.holder ?= {
-		if = {
-			limit = { is_independent_ruler = yes }
-			hd_22_change_era_effect = { KEY = xianxi YEAR = 1 }
+		title:h_china.holder ?= {
+			if = {
+				limit = { is_independent_ruler = yes }
+				hd_22_change_era_effect = { KEY = xianxi YEAR = 1 }
+			}
 		}
+		hd263_news_effect = { A = character:si_ma_zhao B = title:h_china.holder EVENT = hd263.0960 }
+		set_global_variable = hd_hev_263_jinwang
+		debug_log = "HD263 S6 JIN_WANG"
 	}
-	hd263_news_effect = { A = character:si_ma_zhao B = title:h_china.holder EVENT = hd263.0960 }
-	set_global_variable = hd_hev_263_jinwang
-	debug_log = "HD263 S6 JIN_WANG"
 }
 
 ############################################################
@@ -1071,10 +1169,7 @@ hd263_s7_pass_effect = {
 			change_liege = { liege = title:h_china.holder change = scope:hd263_s7_fix }
 			resolve_title_and_vassal_change = scope:hd263_s7_fix
 		}
-		if = {
-			limit = { has_title = title:k_uuii_bingzhou }
-			set_primary_title_to = title:k_uuii_bingzhou
-		}
+		hd263_jin_primary_effect = yes
 	}
 	debug_log = "HD263 S7 PASS_TO_YAN"
 }
@@ -1086,9 +1181,16 @@ hd263_yan_succession_route_effect = {
 		global_var:hd_sg_si_ma_yan ?= { save_scope_as = hd263_yan }
 		title:h_china.holder ?= { save_scope_as = hd263_wei }
 		create_title_and_vassal_change = { type = granted save_scope_as = hd263_s7r_change add_claim_on_loss = no }
-		title:k_uuii_bingzhou = {
+		# 晋公国、晋王国（实封头衔）
+		global_var:hd263_jin_fief ?= {
 			if = {
-				limit = { exists = global_var:hd263_s5_ok NOT = { holder ?= scope:hd263_yan } NOT = { holder ?= { is_ai = no } } }   # 玩家继承人的头衔不收（执行后复核建议 8）
+				limit = { exists = global_var:hd263_s5_ok exists = holder NOT = { holder ?= scope:hd263_yan } NOT = { holder ?= { is_ai = no } } }   # 玩家继承人的头衔不收（执行后复核建议 8）
+				change_title_holder = { holder = scope:hd263_yan change = scope:hd263_s7r_change }
+			}
+		}
+		global_var:hd263_jin_wang ?= {
+			if = {
+				limit = { exists = holder NOT = { holder ?= scope:hd263_yan } NOT = { holder ?= { is_ai = no } } }
 				change_title_holder = { holder = scope:hd263_yan change = scope:hd263_s7r_change }
 			}
 		}
@@ -1126,15 +1228,7 @@ hd263_yan_succession_route_effect = {
 			resolve_title_and_vassal_change = scope:hd263_s7v_change
 		}
 		scope:hd263_yan = {
-			if = {
-				limit = { has_title = title:k_uuii_bingzhou }
-				set_primary_title_to = title:k_uuii_bingzhou
-				if = {
-					limit = { exists = global_var:hd263_s6_done }
-					hd263_style_ptr_effect = { WHO = si_ma_yan STYLE = wang }
-				}
-				else = { hd263_style_ptr_effect = { WHO = si_ma_yan STYLE = gong } }
-			}
+			hd263_jin_primary_effect = yes # 晋公/晋王称谓由实封头衔的 wj_rf_rank 显示
 		}
 		if = {
 			limit = { scope:hd263_yan = { is_landed = yes } }
@@ -1322,8 +1416,9 @@ hd263_shandai_effect = {
 			set_employer = scope:hd263_new
 		}
 	}
-	# ⑥ 国号"晋"（记到王朝上）；并州的"晋"名清掉；第 2 天复查
-	title:k_uuii_bingzhou = { reset_title_name = yes }
+	# ⑥ 晋王国、晋公国销毁并入；旧档并州"晋"名清掉；国号"晋"（记到王朝上）；第 2 天复查
+	hd263_jin_dissolve_effect = yes
+	title:k_uuii_bingzhou = { reset_title_name = yes } # 本次改版前的存档 S5 曾把并州改名"晋"
 	hd263_jin_name_effect = yes
 	title:h_china = { trigger_event = { on_action = hd263_jin_name_recheck days = 2 } }
 	# ⑦ 年号泰始元年；正统 6 级（禅让，不调篡位钩子）
@@ -1378,6 +1473,45 @@ hd263_jin_name_effect = {
 			}
 		}
 	}
+}
+
+# 主头衔设为晋王国（有则）或晋公国，刷新实封称谓显示。Scope：持有人
+hd263_jin_primary_effect = {
+	if = {
+		limit = { exists = global_var:hd263_jin_wang global_var:hd263_jin_wang.holder ?= this }
+		set_primary_title_to = global_var:hd263_jin_wang
+	}
+	else_if = {
+		limit = { exists = global_var:hd263_jin_fief global_var:hd263_jin_fief.holder ?= this }
+		set_primary_title_to = global_var:hd263_jin_fief
+	}
+	WJ_rf_refresh_holder = yes
+}
+
+# 禅代：晋王国、晋公国并入天子直辖后销毁（boki 10-20）。先销毁王国级，再销毁公国级；
+# 七郡法理由实封销毁钩子 WJ_rf_destroyed → WJ_rf_restore_destroyed_fief 还原到并州等原上级。Scope：受禅者
+hd263_jin_dissolve_effect = {
+	save_scope_as = hd263_jin_dissolver
+	global_var:hd263_jin_wang ?= {
+		if = {
+			limit = { holder ?= scope:hd263_jin_dissolver }
+			scope:hd263_jin_dissolver = { destroy_title = global_var:hd263_jin_wang }
+		}
+	}
+	global_var:hd263_jin_fief ?= {
+		if = {
+			limit = { holder ?= scope:hd263_jin_dissolver }
+			scope:hd263_jin_dissolver = { destroy_title = global_var:hd263_jin_fief }
+		}
+	}
+	if = {
+		limit = { has_title = title:h_china }
+		set_primary_title_to = title:h_china
+	}
+	WJ_rf_refresh_holder = yes
+	remove_global_variable = hd263_jin_wang
+	remove_global_variable = hd263_jin_fief
+	debug_log = "HD263 S8 JIN_FIEF_DISSOLVED"
 }
 
 # S5 校正：$WHO$ 若已改投司马昭，改回天子

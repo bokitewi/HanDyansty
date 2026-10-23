@@ -13,11 +13,13 @@ CK3 不会生成 history/characters 中开局后才出生的人物，本脚本�
 出场规则：
   - 正常：出生年 +16 年以 16 岁出场；
   - history 中未满 16 岁去世（夭折）：出生年以 0 岁出场，挂在父母身上；
-  - 出场年 1 月 1 日为每人排一个 1–364 天的随机延迟事件，全年分散出场；
+  - 每人按 ID 哈希固定到出场年的某个月；出场年 1 月 1 日为每个「年-月」桶排一个落在该月内的随机延迟 on_action，全年分散出场；
+    （2026-10-21：原先每人一个 on_action，共 2.5 万个，超出引擎带效果 on_action 的 1 万编号上限，加载时报 1.6 万条错误。）
   - 每人出场后留标记（指针 hd_hb_p_<id> 或 hd_hb_d_<id>），次年元旦补出因载体死亡而丢失的人；
   - 不按卒年处死。
 """
 import csv
+import hashlib
 import os
 import re
 import sys
@@ -112,6 +114,7 @@ dynasties = top_keys(both('common/dynasties'))
 nicknames = top_keys(both('common/nicknames'))
 faiths = top_keys([os.path.join(MOD, 'common/religion/faith_types')])  # replace_path，只读 mod
 traits = {}
+personality = set()
 for d in both('common/traits'):
     for dp, _, fs in os.walk(d):
         for f in fs:
@@ -119,6 +122,8 @@ for d in both('common/traits'):
                 for k, v in parse(read(os.path.join(dp, f))):
                     if k and isinstance(v, list):
                         traits[k] = any(kk == 'genetic' and vv == 'yes' for kk, vv in v)
+                        if any(kk == 'category' and vv == 'personality' for kk, vv in v):
+                            personality.add(k)
 rites = {}  # rite -> faith（rite_types 为 replace_path，只读 mod）
 for dp, _, fs in os.walk(os.path.join(MOD, 'common/religion/rite_types')):
     for f in fs:
@@ -167,7 +172,9 @@ def selected(c):
     if not b or not (START < b <= LAST):
         return False
     if re.match(r'hd_(nbc\d+|304|370|531|617)_(gov|chief)', c['id']):
-        return False  # 各剧本的虚构郡守、外围首领，只用于本剧本开局（346/404 2026-10-14；304、370、531 2026-10-15 补）
+        return False
+    if c['id'].startswith('hd_fill_'):
+        return False  # 2026-10-21：各开局补给空洞郡的占位首领，不是历史人物  # 各剧本的虚构郡守、外围首领，只用于本剧本开局（346/404 2026-10-14；304、370、531 2026-10-15 补）
     a = audit.get(c['id'])
     if a is None:
         return True  # 审查后新增的人物，默认按史实处理并在报告里列出
@@ -305,7 +312,8 @@ def num(v, default=None):
 tpl_lines = ['# 自动生成：tools/hd_hbirth/gen_hbirth.py。不要手改，改 history 后重新运行生成器。\n']
 eff_people = defaultdict(list)
 spawn_fx = []
-onact = ['# 自动生成：tools/hd_hbirth/gen_hbirth.py。每人一个延迟出场入口，由 hd_hb_y<年>_effect 排期。\n']
+onact = ['# 自动生成：tools/hd_hbirth/gen_hbirth.py。每个「出场年-月」一个延迟出场入口，由 hd_hb_y<年>_effect 排期。\n',
+         '# 不要改回每人一个 on_action：带 effect 的 on_action 引擎只给 1 万个编号。\n']
 for c in order:
     cid = c['id']
     inf = infant(c)
@@ -329,14 +337,20 @@ for c in order:
     h = num(c.get('health', ''))
     if h is not None:
         lines.append(f'\thealth = {h}\n')
-    lines.append(f'\trandom_traits = {"no" if c.get("disallow_random_traits") == "yes" else "yes"}\n')
+    kept = []
     for t in c['traits']:
         if t not in traits:
             problems['特质无效（已丢弃）'].append(f'{cid}:{t}')
         elif inf and not traits[t]:
             continue  # 婴儿只保留遗传特质
         else:
-            lines.append(f'\ttrait = {t}\n')
+            kept.append(t)
+    # random_traits = yes 时引擎不管已写的性格，照样再随机加 3 个（出场后 5~6 个性格）。
+    # 写了性格就关随机，不足 3 个由 hd_hb_spawn_new_effect 生成后补齐（模板 after_creation 实测不执行）（2026-10-20）。
+    n_pers = sum(t in personality for t in kept)
+    no_random = c.get("disallow_random_traits") == "yes" or n_pers > 0
+    lines.append(f'\trandom_traits = {"no" if no_random else "yes"}\n')
+    lines.extend(f'\ttrait = {t}\n' for t in kept)
     after = []
     if c.get('sexuality') in ('heterosexual', 'homosexual', 'bisexual', 'asexual'):
         after.append(f'set_sexuality = {c["sexuality"]}')
@@ -345,8 +359,7 @@ for c in order:
             after.append(f'give_nickname = {c["nick"]}')
         else:
             problems['绰号无效（已丢弃）'].append(f'{cid}:{c["nick"]}')
-    if after:
-        lines.append(f'\tafter_creation = {{ {" ".join(after)} }}\n')
+    # 模板 after_creation 实测不执行（230 年存档无一 shihao_* 绰号），改在出场块里对新生成的人执行（2026-10-20）。
     lines.append('}\n')
     tpl_lines.extend(lines)
 
@@ -374,6 +387,9 @@ for c in order:
     b.append(f'\t{P}_spawn_effect = {{ ID = {cid} }}\n')
     post = []
     mark = f'{P}_p_{cid}' if cid in need_ptr else f'{P}_d_{cid}'
+    if after:
+        # 只给新生成的人：沿用 history 原生人物时 scope:hd_hb_person 就是 character:<id>，跳过（hd_hb_adopt_only 不生成，scope 为空）
+        post.append(f'\t\tif = {{ limit = {{ NOT = {{ exists = character:{cid} }} }} {" ".join(after)} }}\n')
     post.append(f'\t\tset_global_variable = {{ name = {mark} value = {"this" if cid in need_ptr else "yes"} }}\n')
     for ch, role in late_children.get(cid, []):
         setter = 'set_father' if role == 'father' else 'set_mother'
@@ -396,7 +412,6 @@ for c in order:
     body = ''.join('\t' + x for x in ''.join(b).splitlines(True))
     spawn_fx.append(f'# {c["birth"][0]} 生\n{P}_s_{cid}_effect = {{\n\tif = {{\n\t\tlimit = {{ NOT = {{ has_global_variable = {mark} }} }}\n'
                     + body + '\t}\n}\n')
-    onact.append(f'{P}_o_{cid} = {{ effect = {{ {P}_s_{cid}_effect = yes }} }}\n')
     eff_people[spawn_year(c)].append(cid)
 
 # ---------------------------------------------------------------- 年份分派
@@ -404,10 +419,22 @@ years = sorted(eff_people)
 eff = ['# 自动生成：tools/hd_hbirth/gen_hbirth.py。不要手改，改 history 后重新运行生成器。\n',
        f'# 名单 {len(order)} 人，出场年份 {years[0]}-{years[-1]}。\n\n']
 eff.extend(spawn_fx)
-eff.append('\n# 当年排期：每人 1-364 天随机延迟，挂在 hd_hb_carrier（核心效果选定）身上。\n')
+eff.append('\n# 当年排期：每个「年-月」桶一个随机延迟（落在该月内），挂在 hd_hb_carrier（核心效果选定）身上。\n')
+
+
+def month_of(cid):
+    return 1 + int(hashlib.md5(cid.encode('utf-8')).hexdigest(), 16) % 12
+
+
+MONTH_DAYS = [(1 + 30 * (m - 1), 30 * m if m < 12 else 364) for m in range(1, 13)]
 for y in years:
+    buckets = defaultdict(list)
+    for i in eff_people[y]:
+        buckets[month_of(i)].append(i)  # 保持 order 顺序：父母、成人先于婴儿
+    for m in sorted(buckets):
+        onact.append(f'{P}_o_{y}_{m:02d} = {{ effect = {{\n' + ''.join(f'\t{P}_s_{i}_effect = yes\n' for i in buckets[m]) + '} }\n')
     eff.append(f'{P}_y{y}_effect = {{\n\tscope:{P}_carrier ?= {{\n'
-               + ''.join(f'\t\ttrigger_event = {{ on_action = {P}_o_{i} days = {{ 1 364 }} }}\n' for i in eff_people[y])
+               + ''.join(f'\t\ttrigger_event = {{ on_action = {P}_o_{y}_{m:02d} days = {{ {MONTH_DAYS[m - 1][0]} {MONTH_DAYS[m - 1][1]} }} }}\n' for m in sorted(buckets))
                + '\t}\n}\n')
 eff.append('\n# 立即出场：补跑过去年份、补出载体死亡而丢失的人；已出场者由标记跳过。\n')
 for y in years:

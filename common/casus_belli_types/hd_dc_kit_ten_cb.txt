@@ -1,65 +1,218 @@
-﻿# 天朝循环·时代特色：紧张期套件（docs/天朝循环_时代特色重制计划.md §3.3）—— 清君侧（B 方案：勒兵入朝）
-# 只能由脚本发起（civil_war 组）：互动 hd_dc_ten_qingjunce_interaction 或党锢"一网打尽"的反弹。
-# 攻方身上的 var:hd_dc_ten_qjc_target 指名权臣，宣战时转存到战争上。不涉及领地得失。
-# 胜：权臣罢官下狱，攻方次日成为天子的终身辅政（摄政）；败：攻方下狱。
+﻿# 清君侧（天朝循环·紧张期套件 §3.3；2026-10-21 合并「奉诏讨伐」「讨篡」）
+# 一个 CB 三种情境，结算时按攻守双方身份分派：
+#   ① 勒兵入朝（脚本发起：互动 hd_dc_ten_qingjunce_interaction 或党锢"一网打尽"的反弹）
+#      攻方是天子的封臣，身上 var:hd_dc_ten_qjc_target 指名权臣，宣战时转存到战争上；不涉及领地得失。
+#      胜：权臣罢官下狱，攻方次日成为天子的终身辅政（摄政）；败：攻方下狱。
+#   ② 讨篡（原 hd_court_taocuan_cb）：h_china.var:hd_court_usurper 存在（权臣篡位后 10 年内），
+#      天下内的郡国制独立君主讨伐篡位者；花费 500 威望；胜：触发 hd_court.0022 讨篡者取天命。
+#   ③ 奉诏讨伐（原 hd_court_fengzhao_cb）：var:hd_court_fengzhao_target 授权（5 年，令征伐时双方互得）；
+#      乱世期，免费；胜：取战争结束时由攻方占领、且归防守方之国所有的县。
+# 判别：宣战时按双方身份把情境写进战争变量 hd_dc_qjc_mode（flag:qjc / flag:taocuan / flag:fengzhao），
+#       此后结算、作废、描述一律读该变量，避免战争中途因头衔易手而串线。
 hd_dc_ten_qingjunce_cb = {
 	icon = dissolution_war
-	group = civil_war
+	group = conquest
 	target_titles = none
 	target_top_liege_if_outside_realm = no
 	ticking_war_score_targets_entire_realm = yes
 	allow_hostages = no
 	ignore_effect = change_title_holder
+	ai_only_against_neighbors = no
 
 	allowed_for_character = {
-		scope:attacker = { exists = var:hd_dc_ten_qjc_target }
-	}
-	allowed_against_character = {
-		scope:defender = { has_title = title:h_china }
-		scope:attacker = { liege = scope:defender }
+		OR = {
+			# ① 勒兵入朝
+			scope:attacker = { exists = var:hd_dc_ten_qjc_target }
+			# ② 讨篡
+			AND = {
+				hd_court_warlord_trigger = yes
+				exists = title:h_china.var:hd_court_usurper
+			}
+			# ③ 奉诏讨伐
+			AND = {
+				hd_cycle_is_divided_trigger = yes
+				hd_court_independent_or_regent_trigger = yes
+				is_landed = yes
+			}
+		}
 	}
 
-	cost = {}
+	allowed_against_character = {
+		trigger_if = {
+			limit = { scope:attacker = { exists = var:hd_dc_ten_qjc_target } }
+			scope:defender = { has_title = title:h_china }
+			scope:attacker = { liege = scope:defender }
+		}
+		trigger_else_if = {
+			limit = { scope:defender = { has_title = title:h_china } }
+			scope:defender = { title:h_china.var:hd_court_usurper ?= this }
+		}
+		trigger_else = {
+			hd_court_fengzhao_authorized_trigger = yes
+			scope:defender = { is_independent_ruler = yes }
+			scope:attacker = { top_liege != scope:defender.top_liege }
+			trigger_if = {	# AI 只打邻居；接壤判定开销大，只对 AI 检查
+				limit = { scope:attacker = { is_ai = yes } }
+				scope:attacker = {
+					any_neighboring_top_liege_realm_owner = { this = scope:defender }
+				}
+			}
+		}
+	}
+
+	should_invalidate = {
+		trigger_if = {
+			limit = { hd_dc_qjc_mode_qingjunce_trigger = yes }
+			always = no
+		}
+		trigger_else_if = {
+			limit = { hd_dc_qjc_mode_taocuan_trigger = yes }
+			# ② 讨篡：守方须仍持 h_china，且 h_china 仍记着篡位者
+			OR = {
+				scope:defender = { NOT = { has_title = title:h_china } }
+				NOT = { exists = title:h_china.var:hd_court_usurper }
+			}
+		}
+		trigger_else = {
+			# ③ 奉诏讨伐：守方须仍是独立君主
+			scope:defender = { is_independent_ruler = no }
+		}
+	}
+
+	cost = {
+		prestige = {
+			value = hd_dc_qingjunce_cost_value
+		}
+	}
 
 	on_declaration = {
 		on_declared_war = yes
-		war ?= {
-			set_variable = {
-				name = hd_dc_ten_qjc_target
-				value = scope:attacker.var:hd_dc_ten_qjc_target
+		if = {
+			limit = { scope:attacker = { exists = var:hd_dc_ten_qjc_target } }
+			war ?= {
+				set_variable = {
+					name = hd_dc_ten_qjc_target
+					value = scope:attacker.var:hd_dc_ten_qjc_target
+				}
+				set_variable = { name = hd_dc_qjc_mode value = flag:qingjunce }
 			}
+			scope:attacker = { remove_variable = hd_dc_ten_qjc_target }
 		}
-		scope:attacker = { remove_variable = hd_dc_ten_qjc_target }
+		else_if = {
+			limit = { scope:defender = { has_title = title:h_china } }
+			war ?= { set_variable = { name = hd_dc_qjc_mode value = flag:taocuan } }
+		}
+		else = {
+			war ?= { set_variable = { name = hd_dc_qjc_mode value = flag:fengzhao } }
+		}
 	}
 
 	on_victory_desc = {
-		desc = hd_dc_ten_qingjunce_cb_victory_desc
+		first_valid = {
+			triggered_desc = {
+				trigger = { hd_dc_qjc_mode_qingjunce_trigger = yes }
+				desc = hd_dc_ten_qingjunce_cb_victory_desc
+			}
+			triggered_desc = {
+				trigger = { hd_dc_qjc_mode_taocuan_trigger = yes }
+				desc = hd_court_taocuan_cb_victory_desc
+			}
+			desc = hd_court_fengzhao_cb_victory_desc
+		}
 	}
 	on_victory = {
-		hd_dc_kit_ten_qingjunce_victory_effect = yes
-		add_truce_attacker_victory_effect = yes
+		if = {
+			limit = { hd_dc_qjc_mode_qingjunce_trigger = yes }
+			# ① 勒兵入朝
+			hd_dc_kit_ten_qingjunce_victory_effect = yes
+			add_truce_attacker_victory_effect = yes
+		}
+		else_if = {
+			limit = { hd_dc_qjc_mode_taocuan_trigger = yes }
+			# ② 讨篡
+			scope:attacker = { show_pow_release_message_effect = yes }
+			add_legitimacy_attacker_victory_effect = yes
+			scope:attacker = {
+				add_prestige_experience = major_prestige_value
+				trigger_event = hd_court.0022
+			}
+			add_truce_attacker_victory_effect = yes
+		}
+		else = {
+			# ③ 奉诏讨伐
+			scope:attacker = { show_pow_release_message_effect = yes }
+			add_legitimacy_attacker_victory_effect = yes
+			create_title_and_vassal_change = {
+				type = conquest
+				save_scope_as = change
+				add_claim_on_loss = yes
+			}
+			scope:defender = {
+				every_realm_county = {
+					limit = { county_controller ?= scope:attacker }
+					change_title_holder = {
+						holder = scope:attacker
+						change = scope:change
+						take_baronies = yes
+					}
+				}
+			}
+			resolve_title_and_vassal_change = scope:change
+			scope:attacker = {
+				add_prestige_experience = medium_prestige_value
+				remove_variable = hd_court_fengzhao_target
+			}
+			add_truce_attacker_victory_effect = yes
+		}
 	}
 
 	on_white_peace_desc = {
-		desc = hd_dc_ten_qingjunce_cb_white_peace_desc
+		first_valid = {
+			triggered_desc = {
+				trigger = { hd_dc_qjc_mode_qingjunce_trigger = yes }
+				desc = hd_dc_ten_qingjunce_cb_white_peace_desc
+			}
+			desc = hd_court_taocuan_cb_white_peace_desc
+		}
 	}
 	on_white_peace = {
+		if = {
+			limit = { hd_dc_qjc_mode_qingjunce_trigger = no }
+			scope:attacker = { show_pow_release_message_effect = yes }
+		}
 		add_truce_white_peace_effect = yes
 	}
 
 	on_defeat_desc = {
-		desc = hd_dc_ten_qingjunce_cb_defeat_desc
+		first_valid = {
+			triggered_desc = {
+				trigger = { hd_dc_qjc_mode_qingjunce_trigger = yes }
+				desc = hd_dc_ten_qingjunce_cb_defeat_desc
+			}
+			triggered_desc = {
+				trigger = { hd_dc_qjc_mode_taocuan_trigger = yes }
+				desc = hd_court_taocuan_cb_defeat_desc
+			}
+			desc = hd_court_fengzhao_cb_defeat_desc
+		}
 	}
 	on_defeat = {
-		imprison_character_effect = {
-			TARGET = scope:attacker
-			IMPRISONER = scope:defender
-		}
-		scope:defender = {
-			add_opinion = {
-				target = scope:attacker
-				modifier = hd_dc_kit_ten_qjc_rebel_opinion
+		if = {
+			limit = { hd_dc_qjc_mode_qingjunce_trigger = yes }
+			imprison_character_effect = {
+				TARGET = scope:attacker
+				IMPRISONER = scope:defender
 			}
+			scope:defender = {
+				add_opinion = {
+					target = scope:attacker
+					modifier = hd_dc_kit_ten_qjc_rebel_opinion
+				}
+			}
+		}
+		else = {
+			scope:attacker = { show_pow_release_message_effect = yes }
+			scope:attacker = { pay_short_term_gold_reparations_effect = { GOLD_VALUE = 3 } }
 		}
 		add_truce_attacker_defeat_effect = yes
 	}
@@ -68,7 +221,7 @@ hd_dc_ten_qingjunce_cb = {
 	on_invalidated = {}
 
 	transfer_behavior = transfer
-	on_primary_attacker_death = invalidate
+	on_primary_attacker_death = inherit
 	on_primary_defender_death = inherit
 	attacker_allies_inherit = yes
 	defender_allies_inherit = yes
@@ -76,6 +229,9 @@ hd_dc_ten_qingjunce_cb = {
 	attacker_wargoal_percentage = 0.8
 	max_defender_score_from_occupation = 150
 	max_attacker_score_from_occupation = 150
+	max_attacker_score_from_battles = 200
+	attacker_capital_gives_war_score = yes
+	imprisonment_by_attacker_give_war_score = yes
 
 	interface_priority = 79
 	war_name = "HD_DC_TEN_QJC_WAR_NAME"

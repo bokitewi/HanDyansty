@@ -1,60 +1,471 @@
 ﻿# 天朝循环·时代特色：吞并（群雄割据期主力 CB，2026-10-08 用户指定）
 # - 群雄割据（斗争期）期间，天下内独立统治者对接壤的天下内独立统治者使用
 # - 花费：防守方持有县所在的每个郡（公爵领）200 威望，乘斗争期宣战折扣（hd_cycle_war_cost_mult_value，×0.4）
-# - 战分：战斗分上限 200%，占领分上限 10%；首都（原版 10%）与俘虏统治者（引擎固定 100%）照原版开启
 # - 胜利：防守方本人持有的全部头衔（霸权头衔除外，乱世只能由决议结束）归进攻方；其封臣归属交引擎默认处理
 # - 停战与战败赔偿：原版征服 CB 标准
-# 结构参照原版 conquest 类 CB 与本 mod 的 hd_strategic_annex_cb。
+#
+# 2026-10-21 合并：下列 8 个历史 CB 并入本 CB，由攻方临时变量 var:hd_tb_kind（宣战前由各控制器
+# hd_tb_arm_effect 写入，3 天自动过期）选择情境，on_declaration 再写到战争上（root.war.var:hd_tb_kind）：
+#   flag:historical  原 hd_historical_war_cb     剧本/事件史实战争，目标头衔内的守方领地
+#   flag:cao         原 hd_cao_expansion_cb      曹操扩张（按郡）
+#   flag:yuan        原 hd_yuan_expansion_cb     袁绍扩张
+#   flag:jizhou      原 hd_yuan_jizhou_cb        公孙瓒入冀州
+#   flag:guandu      原 hd4_guandu_cb            官渡
+#   flag:xuzhou      原 hd4_tao_xuzhou_cb        陶谦徐州
+#   flag:regional    原 hds_regional_cb          孙家区域战
+#   flag:wu          原 hds_wu_invasion_cb       孙家入吴/丹阳（取 zzzzzzzz 覆盖版）
+# 无 kind 时即普通吞并。各情境的开战条件、作废条件、胜败钩子、描述原样搬入下列分支；
+# 静态参数（占领分上限、战斗分、死亡继承、目标层级）全部共用，取历史战争的取值。
+# 目标头衔：target_titles = all / tier all，脚本战争照旧传 target_title；普通吞并的目标只是占位，
+# 胜利时仍夺取守方全部头衔。
 
 hd_dc_tunbing_cb = {
 	icon = celestial
 	group = conquest
+	combine_into_one = no
+	should_show_war_goal_subview = yes
+	mutually_exclusive_titles = { always = yes }
 	ai_only_against_neighbors = yes
+	ai_score_mult = { value = 1 }
 
-	max_attacker_score_from_battles = 200
-	max_attacker_score_from_occupation = 10
+	target_titles = all
+	target_title_tier = all
+	target_de_jure_regions_above = yes
+	target_top_liege_if_outside_realm = no
+	ignore_effect = change_title_holder
+
+	attacker_wargoal_percentage = 0.8
+	max_attacker_score_from_battles = 100
+	max_defender_score_from_battles = 50
+	max_attacker_score_from_occupation = 150
+	max_defender_score_from_occupation = 150
 	attacker_capital_gives_war_score = yes
 	imprisonment_by_attacker_give_war_score = yes
+	landless_attacker_needs_armies = no
 
 	allowed_for_character = {
-		hd_cycle_phase_is_struggle_trigger = yes
-		hd_court_independent_or_regent_trigger = yes	# 2026-10-10 乱世霸权（D28）：权臣视同独立君主
-		# 2026-10-09：佣兵团/冒险者/骑士团不可用
-		is_landed = yes
-		NOT = { government_has_flag = cannot_be_vassal_or_liege }
-		hd_dc_in_china_trigger = yes
+		trigger_if = {
+			limit = { scope:attacker = { has_variable = hd_tb_kind } }
+			trigger_if = {
+				limit = { hd_tb_arm_kind_trigger = { K = historical } }
+				always = yes
+			}
+			trigger_else_if = {
+				limit = { hd_tb_arm_kind_trigger = { K = cao } }
+				scope:attacker = {
+					this = character:cao_cao
+					is_alive = yes
+					is_landed = yes
+					has_variable = hd_cao_expansion_region
+					NOT = { has_character_flag = hd_cao_expansion_menu_pending }
+				}
+			}
+			trigger_else_if = {
+				limit = { hd_tb_arm_kind_trigger = { K = yuan } }
+				scope:attacker = {
+					this = character:yuan_shao
+					is_alive = yes
+					is_landed = yes
+					has_variable = hd_yuan_expansion_region
+					NOT = { has_character_flag = hd_yuan_expansion_menu_pending }
+				}
+			}
+			trigger_else_if = {
+				limit = { hd_tb_arm_kind_trigger = { K = jizhou } }
+				scope:attacker = {
+					this = character:gong_sun_zan
+					is_alive = yes
+					is_landed = yes
+					# 2026-10-21 boki D37：不再要求持有幽州头衔，改为有地且领地与冀州接壤
+					any_realm_county = { any_neighboring_county = { kingdom = title:k_uuii_jizhou } }
+					has_character_flag = hd4_jizhou_authorized
+				}
+				NOT = { exists = global_var:hd4_jizhou_finished }
+			}
+			trigger_else_if = {
+				limit = { hd_tb_arm_kind_trigger = { K = guandu } }
+				scope:attacker = {
+					this = character:cao_cao
+					is_alive = yes
+					is_landed = yes
+					has_character_flag = hd4_guandu_authorized
+				}
+				title:h_china = {
+					has_variable = hd4_northern_two_announced
+					NOT = { has_variable = hd4_guandu_done }
+					NOT = { has_variable = hd4_legacy_guandu }
+				}
+			}
+			trigger_else_if = {
+				limit = { hd_tb_arm_kind_trigger = { K = xuzhou } }
+				scope:attacker = { hd4_tao_can_campaign_trigger = yes }
+			}
+			trigger_else_if = {
+				limit = { hd_tb_arm_kind_trigger = { K = regional } }
+				scope:attacker = { is_alive = yes is_landed = yes is_independent_ruler = yes hds_regional_actor_trigger = yes }
+			}
+			trigger_else = {
+				# wu：孙策 / 孙坚 / 接续孙策的孙权；无封地时以继承的孙氏产业为合法身份
+				scope:attacker = {
+					is_alive = yes
+					is_ruler = yes
+					is_independent_ruler = yes
+					OR = {
+						AND = {
+							AND = { trigger_if = { limit = { has_global_variable = wj_hchar_sun_ce } this = global_var:wj_hchar_sun_ce } trigger_else = { always = no } }
+							has_character_flag = hds_sc_departed
+							has_character_flag = hds_sc_wu_authorized
+							NOT = { has_character_flag = hds_sc_wu_complete }
+							OR = { is_landed = yes hds_sun_estate_inherited_trigger = yes }
+						}
+						AND = {
+							this = character:sun_jian
+							has_character_flag = hds_sj_departed
+							has_character_flag = hds_sj_wu_authorized
+							NOT = { has_character_flag = hds_sj_wu_complete }
+							OR = { is_landed = yes hds_estate_ruler_trigger = yes has_character_flag = hds_sj_camp_converted }
+						}
+						AND = {
+							hds_sq_leader_trigger = yes
+							has_character_flag = hds_sq_departed
+							NOT = { has_character_flag = hds_sq_wu_complete }
+						}
+					}
+				}
+			}
+		}
+		trigger_else = {
+			hd_cycle_phase_is_struggle_trigger = yes
+			hd_court_independent_or_regent_trigger = yes	# 2026-10-10 乱世霸权（D28）：权臣视同独立君主
+			# 2026-10-09：佣兵团/冒险者/骑士团不可用
+			is_landed = yes
+			NOT = { government_has_flag = cannot_be_vassal_or_liege }
+			hd_dc_in_china_trigger = yes
+		}
 	}
 
 	allowed_against_character = {
-		scope:defender = {
-			is_independent_ruler = yes
-			hd_dc_in_china_trigger = yes
+		trigger_if = {
+			limit = { scope:attacker = { has_variable = hd_tb_kind } }
+			trigger_if = {
+				limit = { hd_tb_arm_kind_trigger = { K = historical } }
+				always = yes
+			}
+			trigger_else_if = {
+				limit = { hd_tb_arm_kind_trigger = { K = cao } }
+				scope:defender = { hd_cao_expansion_strategic_target_trigger = yes }
+				NOT = { scope:attacker.top_liege = scope:defender.top_liege }
+			}
+			trigger_else_if = {
+				limit = { hd_tb_arm_kind_trigger = { K = yuan } }
+				scope:defender = { hd_yuan_expansion_strategic_target_trigger = yes }
+				NOT = { scope:attacker.top_liege = scope:defender.top_liege }
+			}
+			trigger_else_if = {
+				limit = { hd_tb_arm_kind_trigger = { K = jizhou } }
+				scope:defender = { this = character:han_fu }
+			}
+			trigger_else_if = {
+				limit = { hd_tb_arm_kind_trigger = { K = guandu } }
+				scope:defender = { this = character:yuan_shao is_alive = yes is_landed = yes }
+			}
+			trigger_else_if = {
+				limit = { hd_tb_arm_kind_trigger = { K = xuzhou } }
+				scope:defender = { is_alive = yes is_landed = yes NOT = { this = character:tao_qian } }
+			}
+			trigger_else_if = {
+				limit = { hd_tb_arm_kind_trigger = { K = regional } }
+				scope:defender = { is_alive = yes is_landed = yes is_independent_ruler = yes }
+				NOT = { scope:attacker = scope:defender }
+			}
+			trigger_else = {
+				scope:defender = { is_alive = yes is_landed = yes is_independent_ruler = yes }
+				NOT = { scope:attacker = scope:defender }
+			}
 		}
-		scope:attacker = { top_liege != scope:defender.top_liege }
-		hd_court_ai_respects_emperor_trigger = yes	# 2026-10-10 乱世霸权（D4）：AI 尊汉者不攻天子
-		trigger_if = {	# AI 已由 ai_only_against_neighbors 预筛；接壤判定开销大，只对玩家检查
-			limit = { scope:attacker = { is_ai = no } }
-			scope:attacker = {
-				any_neighboring_top_liege_realm_owner = { this = scope:defender }
+		trigger_else = {
+			scope:defender = {
+				is_independent_ruler = yes
+				hd_dc_in_china_trigger = yes
+			}
+			scope:attacker = { top_liege != scope:defender.top_liege }
+			hd_court_ai_respects_emperor_trigger = yes	# 2026-10-10 乱世霸权（D4）：AI 尊汉者不攻天子
+			trigger_if = {	# AI 已由 ai_only_against_neighbors 预筛；接壤判定开销大，只对玩家检查
+				limit = { scope:attacker = { is_ai = no } }
+				scope:attacker = {
+					any_neighboring_top_liege_realm_owner = { this = scope:defender }
+				}
+			}
+		}
+	}
+
+	valid_to_start = {
+		trigger_if = {
+			limit = { scope:attacker = { has_variable = hd_tb_kind } }
+			trigger_if = {
+				limit = { hd_tb_arm_kind_trigger = { K = cao } }
+				scope:attacker = { hd_cao_expansion_actor_ready_trigger = yes }
+				scope:target = {
+					de_jure_liege = scope:attacker.var:hd_cao_expansion_region
+					any_de_jure_county = {
+						exists = holder
+						holder.top_liege = scope:defender
+					}
+				}
+			}
+			trigger_else_if = {
+				limit = { hd_tb_arm_kind_trigger = { K = yuan } }
+				scope:attacker = { hd_yuan_expansion_actor_ready_trigger = yes }
+				scope:target = {
+					# 只有个人故事控制器选定的那一个头衔合法
+					this = scope:attacker.var:hd_yuan_expansion_region
+					any_de_jure_county = {
+						exists = holder
+						holder.top_liege = scope:defender
+					}
+				}
+			}
+			trigger_else_if = {
+				limit = { hd_tb_arm_kind_trigger = { K = jizhou } }
+				scope:target = title:k_uuii_jizhou
+				scope:defender = {
+					this = character:han_fu
+					has_title = title:k_uuii_jizhou
+				}
+			}
+			trigger_else_if = {
+				limit = { hd_tb_arm_kind_trigger = { K = guandu } }
+				scope:attacker = character:cao_cao
+				scope:defender = character:yuan_shao
+				scope:target = { tier = tier_duchy }
+				character:cao_cao = {
+					is_target_in_variable_list = {
+						name = hd4_guandu_targets
+						target = scope:target
+					}
+				}
+			}
+			trigger_else_if = {
+				limit = { hd_tb_arm_kind_trigger = { K = xuzhou } }
+				scope:target = {
+					hd4_tao_target_duchy_trigger = yes
+					any_de_jure_county = {
+						AND = {
+							exists = holder
+							holder = {
+								OR = {
+									this = scope:defender
+									is_vassal_or_below_of = scope:defender
+								}
+							}
+						}
+					}
+				}
+			}
+			trigger_else_if = {
+				limit = { hd_tb_arm_kind_trigger = { K = regional } }
+				scope:attacker = { has_character_flag = hds_launch_authorized }
+				scope:target = scope:attacker.var:hds_requested_duchy
+				scope:target = { hds_cb_target_region_trigger = yes hds_enemy_holds_target_trigger = yes }
+			}
+			trigger_else_if = {
+				limit = { hd_tb_arm_kind_trigger = { K = wu } }
+				scope:attacker = { has_character_flag = hds_launch_authorized }
+				scope:target = title:d_danyang
+				scope:target = scope:attacker.var:hds_requested_duchy
+				title:d_danyang = { hds_enemy_holds_target_trigger = yes }
+			}
+			trigger_else = {
+				always = yes	# historical：只经脚本 start_war，不走界面
+			}
+		}
+		trigger_else = {
+			scope:target = {
+				OR = {
+					holder.top_liege ?= scope:defender
+					any_in_de_jure_hierarchy = {
+						tier = tier_county
+						holder.top_liege ?= scope:defender
+					}
+				}
 			}
 		}
 	}
 
 	should_invalidate = {
-		OR = {
-			hd_cycle_phase_is_struggle_trigger = no
-			scope:defender = { is_independent_ruler = no }
-			# 2026-10-09：清理旧存档中佣兵团长发起的吞并战争
-			scope:attacker = {
-				OR = {
-					is_landed = no
-					government_has_flag = cannot_be_vassal_or_liege
+		trigger_if = {
+			limit = { hd_tb_war_kind_trigger = { K = historical } }
+			NOT = {
+				any_in_list = {
+					list = target_titles
+					any_in_de_jure_hierarchy = {
+						tier = tier_county
+						holder = { OR = { this = scope:defender target_is_liege_or_above = scope:defender } }
+					}
+				}
+			}
+		}
+		trigger_else_if = {
+			limit = { hd_tb_war_kind_trigger = { K = cao } }
+			OR = {
+				scope:attacker = {
+					OR = {
+						NOT = { this = character:cao_cao }
+						is_alive = no
+						is_landed = no
+					}
+				}
+				scope:attacker.top_liege = scope:defender.top_liege
+				NOT = { hd_cao_expansion_war_has_land_trigger = yes }
+			}
+		}
+		trigger_else_if = {
+			limit = { hd_tb_war_kind_trigger = { K = yuan } }
+			OR = {
+				scope:attacker = {
+					OR = {
+						NOT = { this = character:yuan_shao }
+						is_alive = no
+						is_landed = no
+					}
+				}
+				scope:attacker.top_liege = scope:defender.top_liege
+				NOT = { hd_yuan_expansion_war_has_land_trigger = yes }
+			}
+		}
+		trigger_else_if = {
+			limit = { hd_tb_war_kind_trigger = { K = jizhou } }
+			OR = {
+				character:yuan_shao = { is_alive = no }
+				character:gong_sun_zan = { is_alive = no }
+				NOT = { scope:attacker = character:gong_sun_zan }
+				NOT = { scope:defender = character:han_fu }
+				NOT = {
+					AND = {
+						exists = title:k_uuii_jizhou.holder
+						title:k_uuii_jizhou.holder = character:han_fu
+					}
+				}
+			}
+		}
+		trigger_else_if = {
+			limit = { hd_tb_war_kind_trigger = { K = guandu } }
+			OR = {
+				NOT = { scope:attacker = character:cao_cao }
+				NOT = { scope:defender = character:yuan_shao }
+				character:cao_cao = { is_alive = no }
+				character:yuan_shao = { is_alive = no }
+				NOT = {
+					any_in_list = {
+						list = target_titles
+						any_de_jure_county = {
+							AND = {
+								exists = holder
+								holder = {
+									OR = {
+										this = scope:defender
+										is_vassal_or_below_of = scope:defender
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		trigger_else_if = {
+			limit = { hd_tb_war_kind_trigger = { K = xuzhou } }
+			OR = {
+				character:tao_qian = { is_alive = no }
+				NOT = { scope:attacker = character:tao_qian }
+				NOT = {
+					any_in_list = {
+						list = target_titles
+						any_de_jure_county = {
+							AND = {
+								exists = holder
+								holder = {
+									OR = {
+										this = scope:defender
+										is_vassal_or_below_of = scope:defender
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		trigger_else_if = {
+			limit = { hd_tb_war_kind_trigger = { K = regional } }
+			OR = {
+				scope:attacker = { is_alive = no }
+				scope:defender = { is_alive = no }
+				NOT = { scope:attacker = { hds_regional_actor_trigger = yes } }
+				NOT = { any_in_list = { list = target_titles hds_enemy_holds_target_trigger = yes } }
+			}
+		}
+		trigger_else_if = {
+			limit = { hd_tb_war_kind_trigger = { K = wu } }
+			OR = {
+				NOR = {
+					AND = { trigger_if = { limit = { has_global_variable = wj_hchar_sun_ce } scope:attacker = global_var:wj_hchar_sun_ce } trigger_else = { always = no } }
+					scope:attacker = character:sun_jian
+					AND = { trigger_if = { limit = { has_global_variable = hds_sq_leader } scope:attacker = global_var:hds_sq_leader } trigger_else = { always = no } }
+				}
+				scope:attacker = { is_alive = no }
+				scope:defender = { is_alive = no }
+				NOT = { title:d_danyang = { hds_enemy_holds_target_trigger = yes } }
+			}
+		}
+		trigger_else = {
+			OR = {
+				hd_cycle_phase_is_struggle_trigger = no
+				scope:defender = { is_independent_ruler = no }
+				# 2026-10-09：清理旧存档中佣兵团长发起的吞并战争
+				scope:attacker = {
+					OR = {
+						is_landed = no
+						government_has_flag = cannot_be_vassal_or_liege
+					}
 				}
 			}
 		}
 	}
-	on_invalidated_desc = msg_invalidate_war_title
-	on_invalidated = {}
+	on_invalidated_desc = {
+		first_valid = {
+			triggered_desc = { trigger = { hd_tb_war_kind_trigger = { K = historical } } desc = msg_religious_war_invalidation_region_message }
+			triggered_desc = { trigger = { hd_tb_war_kind_trigger = { K = cao } } desc = hd_cao_expansion_cb_invalidated_desc }
+			triggered_desc = { trigger = { hd_tb_war_kind_trigger = { K = yuan } } desc = hd_yuan_expansion_cb_invalidated_desc }
+			triggered_desc = { trigger = { hd_tb_war_kind_trigger = { K = jizhou } } desc = hd_yuan_jizhou_handover_peace_desc }
+			desc = msg_invalidate_war_title
+		}
+	}
+	on_invalidated = {
+		if = {
+			limit = { hd_tb_war_kind_trigger = { K = historical } }
+			hd_historical_world_war_invalidated_effect = yes
+		}
+		else_if = {
+			limit = { hd_tb_war_kind_trigger = { K = jizhou } }
+			# 韩馥刚让出冀州时，收尾交接并终止这场史实战争，而不是转给袁绍
+			hd_yuan_jizhou_finalize_handover_peace_effect = yes
+			hd_yuan_jizhou_end_effect = yes
+		}
+		else_if = {
+			limit = { hd_tb_war_kind_trigger = { K = guandu } }
+			hd4_guandu_invalidation_effect = yes
+		}
+		else_if = {
+			limit = {
+				OR = {
+					hd_tb_war_kind_trigger = { K = regional }
+					hd_tb_war_kind_trigger = { K = wu }
+				}
+			}
+			hds_cb_retry_effect = yes
+		}
+	}
 
 	cost = {
 		prestige = {
@@ -64,53 +475,326 @@ hd_dc_tunbing_cb = {
 
 	on_declaration = {
 		on_declared_war = yes
-	}
-
-	on_victory_desc = hd_dc_tunbing_cb_victory_desc
-	on_victory = {
-		scope:attacker = { show_pow_release_message_effect = yes }
-		add_legitimacy_attacker_victory_effect = yes
-		create_title_and_vassal_change = {
-			type = conquest
-			save_scope_as = change
-			add_claim_on_loss = yes
-		}
-		# 2026-10-10 乱世霸权（D29）：防守方为被挟持的天子时，以权臣为结算对象
-		hd_court_save_settle_target_effect = yes
-		scope:hd_court_settle = {
-			every_held_title = {
-				limit = {
-					tier >= tier_county
-					tier < tier_hegemony
-					is_landless_type_title = no
+		# 把宣战前写在攻方身上的情境标记搬到战争上（攻方变量 3 天自动过期，不在此清除，便于同一轮并行开战）
+		if = {
+			limit = { scope:attacker = { has_variable = hd_tb_kind } }
+			war ?= {
+				if = { limit = { scope:attacker.var:hd_tb_kind ?= flag:historical } set_variable = { name = hd_tb_kind value = flag:historical } }
+				else_if = { limit = { scope:attacker.var:hd_tb_kind ?= flag:cao } set_variable = { name = hd_tb_kind value = flag:cao } }
+				else_if = { limit = { scope:attacker.var:hd_tb_kind ?= flag:yuan } set_variable = { name = hd_tb_kind value = flag:yuan } }
+				else_if = { limit = { scope:attacker.var:hd_tb_kind ?= flag:jizhou } set_variable = { name = hd_tb_kind value = flag:jizhou } }
+				else_if = { limit = { scope:attacker.var:hd_tb_kind ?= flag:guandu } set_variable = { name = hd_tb_kind value = flag:guandu } }
+				else_if = { limit = { scope:attacker.var:hd_tb_kind ?= flag:xuzhou } set_variable = { name = hd_tb_kind value = flag:xuzhou } }
+				else_if = { limit = { scope:attacker.var:hd_tb_kind ?= flag:regional } set_variable = { name = hd_tb_kind value = flag:regional } }
+				else_if = { limit = { scope:attacker.var:hd_tb_kind ?= flag:wu } set_variable = { name = hd_tb_kind value = flag:wu } }
+			}
+			if = {
+				limit = { scope:attacker.var:hd_tb_kind ?= flag:guandu }
+				set_variable = {
+					name = hd_world_war_kind
+					value = flag:guandu
 				}
-				add_to_temporary_list = hd_dc_tunbing_titles
+				set_global_variable = hd_guandu_world_active
+				set_global_variable = hd_hev_184_guandu
+				# 全局通报：官渡对峙
+				scope:attacker = {
+					save_scope_as = hd_news_a
+					capital_province ?= { save_scope_as = hd_news_place }
+				}
+				scope:defender = { save_scope_as = hd_news_b }
+				hd_world_news_send_effect = { EVENT = hd_world_news.0013 }
+				character:yuan_shao = {
+					remove_opinion = {
+						modifier = hd_cao_yuan_historical_peace_opinion
+						target = character:cao_cao
+					}
+				}
+				character:cao_cao = {
+					remove_opinion = {
+						modifier = hd_cao_yuan_historical_peace_opinion
+						target = character:yuan_shao
+					}
+				}
 			}
 		}
-		every_in_list = {
-			list = hd_dc_tunbing_titles
-			change_title_holder = {
-				holder = scope:attacker
-				change = scope:change
-				take_baronies = yes
-			}
-		}
-		resolve_title_and_vassal_change = scope:change
-		scope:attacker = { add_prestige_experience = medium_prestige_value }
-		add_truce_attacker_victory_effect = yes
 	}
 
-	on_white_peace_desc = hd_dc_tunbing_cb_white_peace_desc
+	on_victory_desc = {
+		first_valid = {
+			triggered_desc = { trigger = { hd_tb_war_kind_trigger = { K = historical } } desc = hd_historical_war_victory_desc }
+			triggered_desc = { trigger = { hd_tb_war_kind_trigger = { K = cao } } desc = hd_cao_expansion_cb_victory_desc }
+			triggered_desc = { trigger = { hd_tb_war_kind_trigger = { K = yuan } } desc = hd_yuan_expansion_cb_victory_desc }
+			triggered_desc = { trigger = { hd_tb_war_kind_trigger = { K = jizhou } } desc = hd_yuan_jizhou_victory_desc }
+			triggered_desc = { trigger = { hd_tb_war_kind_trigger = { K = guandu } } desc = hd4_guandu_victory_desc }
+			triggered_desc = { trigger = { hd_tb_war_kind_trigger = { K = xuzhou } } desc = hd4_tao_victory_desc }
+			triggered_desc = {
+				trigger = {
+					OR = {
+						hd_tb_war_kind_trigger = { K = regional }
+						hd_tb_war_kind_trigger = { K = wu }
+					}
+				}
+				desc = hds_war_victory_desc
+			}
+			desc = hd_dc_tunbing_cb_victory_desc
+		}
+	}
+	on_victory = {
+		if = {
+			limit = { hd_tb_war_kind_trigger = { K = historical } }
+			create_title_and_vassal_change = { type = conquest save_scope_as = hd_world_conquest_change add_claim_on_loss = no }
+			every_in_list = {
+				list = target_titles
+				conquest_cb_title_transfer = { RELIGIOUS_WAR = no }
+			}
+			every_in_list = { list = vassals_taken change_liege = { liege = scope:attacker change = scope:hd_world_conquest_change } }
+			every_in_list = { list = titles_taken change_title_holder = { holder = scope:attacker change = scope:hd_world_conquest_change take_baronies = yes } }
+			resolve_title_and_vassal_change = scope:hd_world_conquest_change
+			hd_occupation_settle_effect = yes	# 天朝循环大修：战时占领地一并夺取
+			hd_historical_world_war_victory_effect = yes
+		}
+		else_if = {
+			limit = { hd_tb_war_kind_trigger = { K = cao } }
+			scope:attacker = { show_pow_release_message_effect = yes }
+			hd_cao_expansion_victory_effect = yes
+			add_truce_attacker_victory_effect = yes
+			laamp_as_mercenary_payout_tooltip_effect = yes
+		}
+		else_if = {
+			limit = { hd_tb_war_kind_trigger = { K = yuan } }
+			scope:attacker = { show_pow_release_message_effect = yes }
+			hd_yuan_expansion_victory_effect = yes
+			add_truce_attacker_victory_effect = yes
+			laamp_as_mercenary_payout_tooltip_effect = yes
+		}
+		else_if = {
+			limit = { hd_tb_war_kind_trigger = { K = jizhou } }
+			create_title_and_vassal_change = {
+				type = conquest
+				save_scope_as = hd4_jizhou_change
+				add_claim_on_loss = no
+			}
+			every_in_list = {
+				list = target_titles
+				add_to_list = titles_taken
+				conquest_cb_title_transfer = { RELIGIOUS_WAR = no }
+			}
+			every_in_list = {
+				list = vassals_taken
+				change_liege = {
+					liege = scope:attacker
+					change = scope:hd4_jizhou_change
+				}
+			}
+			every_in_list = {
+				list = titles_taken
+				change_title_holder = {
+					holder = scope:attacker
+					change = scope:hd4_jizhou_change
+					take_baronies = yes
+				}
+			}
+			resolve_title_and_vassal_change = scope:hd4_jizhou_change
+			set_global_variable = hd4_jizhou_finished
+			hd_yuan_jizhou_end_effect = yes
+			add_truce_attacker_victory_effect = yes
+		}
+		else_if = {
+			limit = { hd_tb_war_kind_trigger = { K = guandu } }
+			hd4_guandu_victory_effect = yes
+			add_truce_attacker_victory_effect = yes
+		}
+		else_if = {
+			limit = { hd_tb_war_kind_trigger = { K = xuzhou } }
+			hd4_target_conquest_effect = yes
+			add_truce_attacker_victory_effect = yes
+			hd4_tao_protect_new_vassals_effect = yes
+		}
+		else_if = {
+			limit = {
+				OR = {
+					hd_tb_war_kind_trigger = { K = regional }
+					hd_tb_war_kind_trigger = { K = wu }
+				}
+			}
+			hds_cb_victory_effect = yes
+			add_truce_attacker_victory_effect = yes
+			if = {
+				limit = { hd_tb_war_kind_trigger = { K = wu } }
+				# 2026-10-17：孙坚/孙策/孙权打赢丹阳入侵，奖 3000 威望。
+				scope:attacker = { add_prestige = 3000 }
+			}
+		}
+		else = {
+			scope:attacker = { show_pow_release_message_effect = yes }
+			add_legitimacy_attacker_victory_effect = yes
+			create_title_and_vassal_change = {
+				type = conquest
+				save_scope_as = change
+				add_claim_on_loss = yes
+			}
+			# 2026-10-10 乱世霸权（D29）：防守方为被挟持的天子时，以权臣为结算对象
+			hd_court_save_settle_target_effect = yes
+			scope:hd_court_settle = {
+				every_held_title = {
+					limit = {
+						tier >= tier_county
+						tier < tier_hegemony
+						is_landless_type_title = no
+					}
+					add_to_temporary_list = hd_dc_tunbing_titles
+				}
+			}
+			every_in_list = {
+				list = hd_dc_tunbing_titles
+				change_title_holder = {
+					holder = scope:attacker
+					change = scope:change
+					take_baronies = yes
+				}
+			}
+			resolve_title_and_vassal_change = scope:change
+			scope:attacker = { add_prestige_experience = medium_prestige_value }
+			add_truce_attacker_victory_effect = yes
+		}
+	}
+
+	on_white_peace_desc = {
+		first_valid = {
+			triggered_desc = { trigger = { hd_tb_war_kind_trigger = { K = historical } } desc = hd_historical_war_white_peace_desc }
+			triggered_desc = { trigger = { hd_tb_war_kind_trigger = { K = cao } } desc = hd_cao_expansion_cb_white_peace_desc }
+			triggered_desc = { trigger = { hd_tb_war_kind_trigger = { K = yuan } } desc = hd_yuan_expansion_cb_white_peace_desc }
+			triggered_desc = { trigger = { hd_tb_war_kind_trigger = { K = jizhou } } desc = hd_yuan_jizhou_no_conquest_desc }
+			triggered_desc = { trigger = { hd_tb_war_kind_trigger = { K = guandu } } desc = hd4_guandu_white_peace_desc }
+			triggered_desc = { trigger = { hd_tb_war_kind_trigger = { K = xuzhou } } desc = hd4_tao_no_conquest_desc }
+			triggered_desc = {
+				trigger = {
+					OR = {
+						hd_tb_war_kind_trigger = { K = regional }
+						hd_tb_war_kind_trigger = { K = wu }
+					}
+				}
+				desc = hds_war_no_conquest_desc
+			}
+			desc = hd_dc_tunbing_cb_white_peace_desc
+		}
+	}
 	on_white_peace = {
-		scope:attacker = { show_pow_release_message_effect = yes }
-		add_truce_white_peace_effect = yes
+		if = {
+			limit = { hd_tb_war_kind_trigger = { K = historical } }
+			hd_occupation_clear_effect = yes
+			hd_historical_world_war_white_peace_effect = yes
+		}
+		else_if = {
+			limit = {
+				OR = {
+					hd_tb_war_kind_trigger = { K = cao }
+					hd_tb_war_kind_trigger = { K = yuan }
+				}
+			}
+			scope:attacker = { show_pow_release_message_effect = yes }
+			add_truce_white_peace_effect = yes
+			laamp_as_mercenary_payout_tooltip_effect = yes
+		}
+		else_if = {
+			limit = { hd_tb_war_kind_trigger = { K = jizhou } }
+			set_global_variable = hd4_jizhou_finished
+			hd_yuan_jizhou_end_effect = yes
+			add_truce_white_peace_effect = yes
+		}
+		else_if = {
+			limit = { hd_tb_war_kind_trigger = { K = guandu } }
+			hd4_guandu_finish_effect = yes
+			add_truce_white_peace_effect = yes
+		}
+		else_if = {
+			limit = { hd_tb_war_kind_trigger = { K = xuzhou } }
+			add_truce_white_peace_effect = yes
+		}
+		else_if = {
+			limit = {
+				OR = {
+					hd_tb_war_kind_trigger = { K = regional }
+					hd_tb_war_kind_trigger = { K = wu }
+				}
+			}
+			hds_cb_retry_effect = yes
+			add_truce_white_peace_effect = yes
+		}
+		else = {
+			scope:attacker = { show_pow_release_message_effect = yes }
+			add_truce_white_peace_effect = yes
+		}
 	}
 
-	on_defeat_desc = hd_dc_tunbing_cb_defeat_desc
+	on_defeat_desc = {
+		first_valid = {
+			triggered_desc = { trigger = { hd_tb_war_kind_trigger = { K = historical } } desc = hd_historical_war_defeat_desc }
+			triggered_desc = { trigger = { hd_tb_war_kind_trigger = { K = cao } } desc = hd_cao_expansion_cb_defeat_desc }
+			triggered_desc = { trigger = { hd_tb_war_kind_trigger = { K = yuan } } desc = hd_yuan_expansion_cb_defeat_desc }
+			triggered_desc = { trigger = { hd_tb_war_kind_trigger = { K = jizhou } } desc = hd4_gsz_defeat_desc }
+			triggered_desc = { trigger = { hd_tb_war_kind_trigger = { K = guandu } } desc = hd4_guandu_defeat_desc }
+			triggered_desc = { trigger = { hd_tb_war_kind_trigger = { K = xuzhou } } desc = hd4_tao_no_conquest_desc }
+			triggered_desc = {
+				trigger = {
+					OR = {
+						hd_tb_war_kind_trigger = { K = regional }
+						hd_tb_war_kind_trigger = { K = wu }
+					}
+				}
+				desc = hds_war_no_conquest_desc
+			}
+			desc = hd_dc_tunbing_cb_defeat_desc
+		}
+	}
 	on_defeat = {
-		scope:attacker = { show_pow_release_message_effect = yes }
-		scope:attacker = { pay_short_term_gold_reparations_effect = { GOLD_VALUE = 3 } }
-		add_truce_attacker_defeat_effect = yes
+		if = {
+			limit = { hd_tb_war_kind_trigger = { K = historical } }
+			hd_occupation_clear_effect = yes
+			hd_historical_world_war_defeat_effect = yes
+		}
+		else_if = {
+			limit = {
+				OR = {
+					hd_tb_war_kind_trigger = { K = cao }
+					hd_tb_war_kind_trigger = { K = yuan }
+				}
+			}
+			scope:attacker = { show_pow_release_message_effect = yes }
+			add_truce_attacker_defeat_effect = yes
+			laamp_as_mercenary_payout_tooltip_effect = yes
+		}
+		else_if = {
+			limit = { hd_tb_war_kind_trigger = { K = jizhou } }
+			hd4_gsz_defeat_effect = yes
+			set_global_variable = hd4_jizhou_finished
+			hd_yuan_jizhou_end_effect = yes
+			add_truce_attacker_defeat_effect = yes
+		}
+		else_if = {
+			limit = { hd_tb_war_kind_trigger = { K = guandu } }
+			hd4_guandu_defeat_effect = yes
+			add_truce_attacker_defeat_effect = yes
+		}
+		else_if = {
+			limit = { hd_tb_war_kind_trigger = { K = xuzhou } }
+			add_truce_attacker_defeat_effect = yes
+		}
+		else_if = {
+			limit = {
+				OR = {
+					hd_tb_war_kind_trigger = { K = regional }
+					hd_tb_war_kind_trigger = { K = wu }
+				}
+			}
+			hds_cb_retry_effect = yes
+			add_truce_attacker_defeat_effect = yes
+		}
+		else = {
+			scope:attacker = { show_pow_release_message_effect = yes }
+			scope:attacker = { pay_short_term_gold_reparations_effect = { GOLD_VALUE = 3 } }
+			add_truce_attacker_defeat_effect = yes
+		}
 	}
 
 	transfer_behavior = transfer

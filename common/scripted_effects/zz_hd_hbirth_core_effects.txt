@@ -80,6 +80,7 @@ hd_hb_dispatch_now_wrap_effect = {
 		limit = {
 			# 南北朝剧本同理：开局年以前的各桶只沿用、不新建（游标初值仍是 183，靠这一步给开局前的人设指针）
 			OR = {
+				AND = { game_start_date = 190.1.1 global_var:hd_hb_sweep < 190 } # 190 讨董：184~189 各桶只沿用（这些人生于 190 年以前，history 原生；已死的不能再按模板生成活人）
 				AND = { game_start_date = 218.1.1 global_var:hd_hb_sweep < 218 }
 				AND = { game_start_date = 346.12.10 global_var:hd_hb_sweep < 346 }
 				AND = { game_start_date = 404.3.24 global_var:hd_hb_sweep < 404 }
@@ -191,6 +192,15 @@ hd_hb_spawn_new_effect = {
 	}
 	scope:hd_hb_person ?= {
 		add_character_flag = hd_popclean_protect # 人口清除不选历史人物
+		# history 写了性格的模板已关随机特质：只写 1~2 个的补到 3 个，未写教育的补教育（婴儿不补）（2026-10-20）
+		if = {
+			limit = {
+				is_adult = yes
+				number_of_personality_traits >= 1
+			}
+			hd_hb_fill_personality_effect = yes
+			hd_hb_fill_education_effect = yes
+		}
 		scope:hd_hb_father ?= { scope:hd_hb_person = { set_father = scope:hd_hb_father } }
 		scope:hd_hb_mother ?= { scope:hd_hb_person = { set_mother = scope:hd_hb_mother } }
 		# history 里父子同家族（生成器存 hd_hb_follow）且父亲仍在同一王朝时，随父亲当前家族：
@@ -198,7 +208,7 @@ hd_hb_spawn_new_effect = {
 		if = {
 			limit = {
 				exists = scope:hd_hb_follow
-				scope:hd_hb_father ?= { exists = house dynasty = scope:hd_hb_house.dynasty }
+				scope:hd_hb_father ?= { exists = house dynasty = scope:hd_hb_house.house_dynasty }
 			}
 			set_house = scope:hd_hb_father.house
 		}
@@ -206,7 +216,10 @@ hd_hb_spawn_new_effect = {
 			limit = { exists = scope:hd_hb_house }
 			set_house = scope:hd_hb_house
 		}
-		if = { limit = { exists = scope:hd_hb_employer } set_employer = scope:hd_hb_employer }
+		if = {
+			limit = { exists = scope:hd_hb_employer }
+			if = { limit = { NOT = { is_courtier_of = scope:hd_hb_employer } } set_employer = scope:hd_hb_employer }
+		}
 		else_if = { limit = { exists = scope:hd_hb_province } move_to_pool_at = scope:hd_hb_province }
 	}
 }
@@ -237,4 +250,78 @@ hd_hb_clear_effect = {
 	clear_saved_scope = hd_hb_province
 	clear_saved_scope = hd_hb_person
 	clear_saved_scope = hd_hb_spouse
+}
+
+# history 只写了 1~2 个性格的出场人物：模板已关随机特质（否则引擎在 history 性格之外再随机加 3 个），
+# 由 hd_hb_spawn_new_effect 生成后调用，补到 3 个；跳过已有和对立的性格（2026-10-20）。
+hd_hb_fill_personality_effect = {
+	hd_hb_fill_one_personality_effect = yes
+	hd_hb_fill_one_personality_effect = yes
+	hd_hb_fill_one_personality_effect = yes
+}
+
+hd_hb_fill_one_personality_effect = {
+	if = {
+		limit = { number_of_personality_traits < 3 }
+		random_list = {
+			10 = { trigger = { NOR = { has_trait = lustful has_trait = chaste } } add_trait = lustful }
+			10 = { trigger = { NOR = { has_trait = chaste has_trait = lustful } } add_trait = chaste }
+			10 = { trigger = { NOR = { has_trait = gluttonous has_trait = temperate } } add_trait = gluttonous }
+			10 = { trigger = { NOR = { has_trait = temperate has_trait = gluttonous } } add_trait = temperate }
+			10 = { trigger = { NOR = { has_trait = greedy has_trait = generous } } add_trait = greedy }
+			10 = { trigger = { NOR = { has_trait = generous has_trait = greedy } } add_trait = generous }
+			10 = { trigger = { NOR = { has_trait = lazy has_trait = diligent } } add_trait = lazy }
+			10 = { trigger = { NOR = { has_trait = diligent has_trait = lazy } } add_trait = diligent }
+			10 = { trigger = { NOR = { has_trait = wrathful has_trait = calm } } add_trait = wrathful }
+			10 = { trigger = { NOR = { has_trait = calm has_trait = wrathful } } add_trait = calm }
+			10 = { trigger = { NOR = { has_trait = patient has_trait = impatient } } add_trait = patient }
+			10 = { trigger = { NOR = { has_trait = impatient has_trait = patient } } add_trait = impatient }
+			10 = { trigger = { NOR = { has_trait = arrogant has_trait = humble } } add_trait = arrogant }
+			10 = { trigger = { NOR = { has_trait = humble has_trait = arrogant } } add_trait = humble }
+			10 = { trigger = { NOR = { has_trait = deceitful has_trait = honest } } add_trait = deceitful }
+			10 = { trigger = { NOR = { has_trait = honest has_trait = deceitful } } add_trait = honest }
+			10 = { trigger = { NOR = { has_trait = craven has_trait = brave } } add_trait = craven }
+			10 = { trigger = { NOR = { has_trait = brave has_trait = craven } } add_trait = brave }
+			10 = { trigger = { NOR = { has_trait = shy has_trait = gregarious } } add_trait = shy }
+			10 = { trigger = { NOR = { has_trait = gregarious has_trait = shy } } add_trait = gregarious }
+			10 = { trigger = { NOR = { has_trait = ambitious has_trait = content } } add_trait = ambitious }
+			10 = { trigger = { NOR = { has_trait = content has_trait = ambitious } } add_trait = content }
+			10 = { trigger = { NOR = { has_trait = arbitrary has_trait = just } } add_trait = arbitrary }
+			10 = { trigger = { NOR = { has_trait = just has_trait = arbitrary } } add_trait = just }
+			10 = { trigger = { NOR = { has_trait = cynical has_trait = zealous } } add_trait = cynical }
+			10 = { trigger = { NOR = { has_trait = zealous has_trait = cynical } } add_trait = zealous }
+			10 = { trigger = { NOR = { has_trait = paranoid has_trait = trusting } } add_trait = paranoid }
+			10 = { trigger = { NOR = { has_trait = trusting has_trait = paranoid } } add_trait = trusting }
+			10 = { trigger = { NOR = { has_trait = compassionate has_trait = callous has_trait = sadistic } } add_trait = compassionate }
+			10 = { trigger = { NOR = { has_trait = callous has_trait = compassionate has_trait = sadistic } } add_trait = callous }
+			10 = { trigger = { NOR = { has_trait = sadistic has_trait = compassionate has_trait = callous } } add_trait = sadistic }
+			10 = { trigger = { NOR = { has_trait = stubborn has_trait = fickle has_trait = eccentric } } add_trait = stubborn }
+			10 = { trigger = { NOR = { has_trait = fickle has_trait = stubborn has_trait = eccentric } } add_trait = fickle }
+			2 = { trigger = { NOR = { has_trait = eccentric has_trait = fickle has_trait = stubborn } } add_trait = eccentric }
+			10 = { trigger = { NOR = { has_trait = vengeful has_trait = forgiving } } add_trait = vengeful }
+			10 = { trigger = { NOR = { has_trait = forgiving has_trait = vengeful } } add_trait = forgiving }
+		}
+	}
+}
+
+# 同上，history 未写教育的补一个随机教育（关随机特质后引擎不再给）。
+hd_hb_fill_education_effect = {
+	if = {
+		limit = {
+			NOR = {
+				has_trait = education_diplomacy
+				has_trait = education_martial
+				has_trait = education_stewardship
+				has_trait = education_intrigue
+				has_trait = education_learning
+			}
+		}
+		random_list = {
+			10 = { random_list = { 30 = { add_trait = education_diplomacy_1 } 40 = { add_trait = education_diplomacy_2 } 25 = { add_trait = education_diplomacy_3 } 5 = { add_trait = education_diplomacy_4 } } }
+			10 = { random_list = { 30 = { add_trait = education_martial_1 } 40 = { add_trait = education_martial_2 } 25 = { add_trait = education_martial_3 } 5 = { add_trait = education_martial_4 } } }
+			10 = { random_list = { 30 = { add_trait = education_stewardship_1 } 40 = { add_trait = education_stewardship_2 } 25 = { add_trait = education_stewardship_3 } 5 = { add_trait = education_stewardship_4 } } }
+			10 = { random_list = { 30 = { add_trait = education_intrigue_1 } 40 = { add_trait = education_intrigue_2 } 25 = { add_trait = education_intrigue_3 } 5 = { add_trait = education_intrigue_4 } } }
+			10 = { random_list = { 30 = { add_trait = education_learning_1 } 40 = { add_trait = education_learning_2 } 25 = { add_trait = education_learning_3 } 5 = { add_trait = education_learning_4 } } }
+		}
+	}
 }
