@@ -41,13 +41,17 @@ WJ_cr_advance_king = {
  }
 }
 WJ_cr_complete = {
- if = { limit = { WJ_cr_can_plan = yes scope:activity = { has_variable = wj_cr_investiture_done NOT = { has_variable = wj_cr_paid } } }
+ # 2026-10-23 践祚大典并入加冕礼：原版典礼事件会在礼中先授即皇帝位法律，故不再用 WJ_cr_can_plan（要求尚无该法律）；
+ # 活动走到礼成本身就说明典礼已行，不再要求 WJ_cr.2 写入 wj_cr_investiture_done
+ if = { limit = { WJ_cr_emperor = yes scope:activity = { NOT = { has_variable = wj_cr_paid } } }
   scope:activity = { set_variable = wj_cr_paid }
   add_realm_law = crowned_emperor set_variable = crowned_emperor_var remove_variable = crowned_king_var
   WJ_miaoshi_initialize_effect = yes
   # Native rewards are paid once; realm-name options keep their native separate naming effects.
-  if = { limit = { scope:activity = { has_variable = wj_cr_oath var:wj_cr_oath = 1 } } set_variable = { name = diplomacy_oath_1 value = 0 } }
-  else_if = { limit = { scope:activity = { has_variable = wj_cr_oath var:wj_cr_oath = 2 } } set_variable = { name = stewardship_oath_1 value = 0 } }
+  # 2026-10-23 补全立誓流程：照原版 coronation_events.0100 调用 coronation_chosen_oath_setup_effect，写誓言+计时变量并安排到期判背誓
+  # 期限同原版：广结盟友 7300 天、维持和平 18250 天；须在 coronation_upgrade_oath_value_effect 之前（先写 0 再按典礼规模升值）
+  if = { limit = { scope:activity = { has_variable = wj_cr_oath var:wj_cr_oath = 1 } NOT = { has_variable = diplomacy_oath_1 } } coronation_chosen_oath_setup_effect = { VAR = diplomacy_oath_1 TIME = 7300 } }
+  else_if = { limit = { scope:activity = { has_variable = wj_cr_oath var:wj_cr_oath = 2 } NOT = { has_variable = stewardship_oath_1 } } coronation_chosen_oath_setup_effect = { VAR = stewardship_oath_1 TIME = 18250 } }
   coronation_disburse_rewards_effect = yes
   coronation_upgrade_oath_value_effect = yes
   # HD 218 start: finish the king-to-emperor proclamation (no-op without hd218_wang_display)
@@ -67,4 +71,85 @@ tgp_fire_china_realm_name_event_effect = {
   if = { limit = { is_ai = no } trigger_event = { id = tgp_dynastic_cycle.9000 days = 1 } }
   else = { trigger_event = { id = tgp_dynastic_cycle.9000 days = 2 } }
  }
+}
+# 2026-10-23 践祚大典并入加冕礼：覆盖原版 10_ach_effects.txt 的同名效果（1.20 原文），只加践祚大典分支。
+# 原版对非傅油礼一律授「已加冕」法律，原版典礼事件（coronation_events_6）会在礼中调用；践祚大典应授即皇帝位法律。
+coronation_change_law_effect = {
+	if = {
+		limit = {
+			involved_activity ?= {
+				has_activity_option = {
+					category = special_type
+					option = WJ_cr_type_accession
+				}
+			}
+		}
+		if = {
+			limit = {
+				NOT = {
+					has_game_rule = coronation_laws_off
+				}
+			}
+			add_realm_law = crowned_emperor
+		}
+		remove_variable = crowned_king_var
+		set_variable = crowned_emperor_var
+	}
+	else_if = {
+		limit = {
+			involved_activity = {
+				has_activity_option = {
+					category = special_type
+					option = coronation_type_anointment
+				}
+			}
+		}
+		if = {
+			limit = {
+				NOT = {
+					has_game_rule = coronation_laws_off
+				}
+			}
+			add_realm_law = crowned_emperor
+		}
+		set_variable = crowned_emperor_var
+	}
+	else = {
+		if = {
+			limit = {
+				NOT = {
+					has_game_rule = coronation_laws_off
+				}
+			}
+			add_realm_law = crowned_king
+		}
+		set_variable = crowned_king_var
+	}
+}
+# 2026-10-23 践祚大典并入加冕礼：践祚大典不走原版立誓事件 coronation_events.0100（改由 WJ_cr.3 立誓），
+# 但 0100 的 after 还负责推进典礼阶段，这里照搬（不含给宾客的立誓反应事件 0110）。作用域：主办人
+WJ_cr_skip_vanilla_oath_effect = {
+	coronation_ready_effect = yes
+	if = {
+		limit = {
+			has_multiple_players = yes
+			involved_activity ?= {
+				any_attending_character = {
+					NOT = { this = root }
+					is_ai = no
+				}
+			}
+		}
+		involved_activity ?= {
+			progress_activity_phase_after = { weeks = 8 }
+			set_variable = ceremony_complete
+		}
+		trigger_event = {
+			id = coronation_events.0050
+			weeks = 1
+		}
+	}
+	else = {
+		involved_activity ?= { progress_activity_phase_after = { days = 1 } }
+	}
 }

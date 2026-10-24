@@ -15,10 +15,27 @@ celestial_provinces = {
 			is_landless_ruler = no
 		}
 	}
+	# 2026-10-24 军阀契约：君主不能在契约界面改动军阀的编制，只能经「收回权力」互动或讨不臣战争。
+	# 原生写入（vassal_contract_set_obligation_level）同样受此约束，故收回时先清掉头衔变量再写档位。
+	can_be_changed = {
+		custom_tooltip = {
+			text = hd_warlord_contract_locked_tt
+			scope:subject = {
+				NAND = {
+					vassal_contract_has_flag = hd_warlord
+					hd_warlord_trigger = yes
+				}
+			}
+		}
+	}
 	obligation_levels = {
 		celestial_province_standard = {
 			default = yes
 			is_valid = {
+				custom_tooltip = {
+					text = hd_warlord_level_locked_tt
+					scope:subject = { NOT = { hd_warlord_trigger = yes } }
+				}
 				custom_tooltip = {
 					text = WJ_dd_civilian_contract_blocked_tt
 					scope:subject = { NOT = { WJ_dd_contract_head_lock_trigger = yes } }
@@ -389,10 +406,16 @@ celestial_provinces = {
 			}
 
 			is_valid = {
+				custom_tooltip = {
+					text = hd_warlord_level_locked_tt
+					scope:subject = { NOT = { hd_warlord_trigger = yes } }
+				}
 				# Vassal has to be landed and direct vassal of the top liege, or a vassal of another military governor
 				custom_tooltip = {
 					text = liege_is_not_military_desc
 					OR = {
+						# 2026-10-24 收回都督区首领军阀时强设武官（hd_warlord_revoke_effect 临时变量）
+						scope:subject = { has_variable = hd_warlord_force_military }
 						scope:subject = { WJ_name_pass_county_trigger = yes }
 						scope:liege = {
 							trigger_if = {
@@ -441,6 +464,7 @@ celestial_provinces = {
 								}
 							}
 							scope:subject = { vassal_contract_has_flag = celestial_province_military }
+							scope:subject = { has_variable = hd_warlord_force_military }
 						}
 					}
 				}
@@ -619,6 +643,10 @@ celestial_provinces = {
 			is_shown = { scope:subject = { government_has_flag = government_is_celestial } }
 			is_valid = {
 				custom_tooltip = {
+					text = hd_warlord_level_locked_tt
+					scope:subject = { NOT = { hd_warlord_trigger = yes } }
+				}
+				custom_tooltip = {
 					text = WJ_sili_capital_kingdom_required_tt
 					# Contract validation also runs before a successor has contract flags.
 					# Keep the shared AI/lifecycle trigger unchanged; use real identity here.
@@ -664,6 +692,48 @@ celestial_provinces = {
 			flag = celestial_military_appointment
 			flag = obligation_high_levies
 			appointment_trait_flag = military_province
+		}
+		# 2026-10-24 军阀（第 6 档，追加在末尾以免既有按编号写档位的脚本错位）
+		# 不能在契约界面选择：只认主头衔变量 hd_warlord，由「拥兵自重」决议写入、「收回权力」或讨不臣胜利清除。
+		# 不缴赋税、不出征召兵；继承走 hd_warlord_succession_law（欢呼继承，指定继承人加分）；属武官。
+		# 不给 appointment_trait_flag：继承不走功绩任命，候选人无需武官特质。
+		hd_warlord = {
+			position = { 0 2 }
+			icon = "gfx/interface/icons/celestial_administration_types/icon_military_administration.dds"
+			gui_tags = { military }
+			is_shown = { scope:subject = { hd_warlord_trigger = yes } }
+			is_valid = {
+				custom_tooltip = {
+					text = hd_warlord_level_decision_only_tt
+					scope:subject = {
+						hd_warlord_trigger = yes
+						is_independent_ruler = no
+						government_has_flag = government_is_celestial
+					}
+				}
+			}
+			ai_liege_desire = 0
+			ai_subject_desire = 0
+			score = 0
+			color = { 0.55 0.15 0.15 1.0 }
+			tax_factor = -1
+			levies_factor = -1
+			enable_title_maa = yes
+			# 军事编制的军事加成（不含直辖税收 -30%）；不发功绩、不领朝廷军费；常备军 +1
+			# 2026-10-24 追加（用户指定）：征召兵 +30%、兵士维护费 -15%（原版 men_at_arms_maintenance）、
+			# 常备军招募费 -30%、常备军规模再 +2（共 +3），引导 AI 多招兵
+			subject_modifier = {
+				development_growth_factor = -0.2
+				monthly_county_control_growth_factor = 0.1
+				additional_fort_level = 2
+				defender_advantage = 4
+				men_at_arms_limit = 3
+				levy_size = 0.3
+				men_at_arms_maintenance = -0.15
+				men_at_arms_recruitment_cost = -0.3
+			}
+			flag = hd_warlord
+			flag = celestial_military_appointment
 		}
 	}
 }

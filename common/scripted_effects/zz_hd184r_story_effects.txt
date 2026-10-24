@@ -16,7 +16,7 @@ hd184r_retry_effect = {
 ############################################################
 # D36 陶谦 194 年前后病死，徐州按遗命链交刘备
 ############################################################
-# 195.1.1：陶谦（AI）仍在世则病势加重，促成遗命链（hd_lb_bequest_ready_trigger 看健康 <= 2）。
+# 195.1.1：陶谦（AI）仍在世则病势加重（遗命链 2026-10-24 起改为 194.1.1 到点触发，不再看健康值；此处只剩加速病逝）。
 hd184r_tao_worsen_effect = {
 	character:tao_qian ?= {
 		if = {
@@ -139,60 +139,111 @@ hd184r_shi_brother_effect = {
 }
 
 ############################################################
-# D44-1 曹嵩遇害、曹操伐徐（193 前后）
+# D44-1 曹嵩遇害（193 起）
+# 2026-10-24（boki）重做：原先 193.6.1 只看曹操独立有地就触发，190 开局曹操即满足，
+# 又是先杀曹嵩再找前线，陈留不接壤徐州便什么也不发生。现改为：
+#   门槛：曹操已据兖州（hd184r_cao_yanzhou_secured_trigger），且与陶谦的徐州接壤；
+#   不满足每 90 天再查；陶谦已让徐州、三人有一不在、或到 200 年则作罢（曹嵩不死）；
+#   效果：曹嵩遇害、曹操恨陶谦、对陶谦领内的徐州各郡加压宣称，不强制开战；
+#   玩家曹操另弹 hd184r.0207，可选当即兴兵（打一个接壤郡）或暂且隐忍（失威望）。
 ############################################################
 hd184r_caosong_effect = {
 	if = {
 		limit = {
 			NOT = { exists = global_var:hd184r_caosong_done }
-			character:cao_song ?= { is_alive = yes }
-			character:cao_cao ?= { is_alive = yes is_landed = yes hd_court_independent_or_regent_trigger = yes }
-			character:tao_qian ?= { is_alive = yes is_landed = yes is_independent_ruler = yes }
+			hd184r_caosong_ready_trigger = yes
 		}
 		set_global_variable = hd184r_caosong_done
 		character:cao_song = {
 			if = { limit = { is_ai = yes } death = { death_reason = death_murder } }
 		}
-		character:cao_cao = {
-			add_opinion = { target = character:tao_qian modifier = angry_opinion opinion = -100 }
-			save_scope_as = hd_news_a
-		}
 		character:tao_qian = { save_scope_as = hd_news_b }
-		hd_world_news_send_all_effect = { EVENT = hd184r.0201 }
-		# 曹操为 AI 时立即对陶谦宣战：只打与曹操接壤、陶谦领内的徐州郡（不够格则作罢）
 		character:cao_cao = {
-			if = {
-				limit = { is_ai = yes hd184r_director_war_slot_trigger = yes }
-				save_scope_as = hd184r_actor
-				clear_saved_scope = hd184r_target_duchy
-				clear_saved_scope = hd184r_defender
-				title:k_uuii_xuzhou = {
-					random_in_de_jure_hierarchy = {
-						continue = { tier > tier_duchy }
-						limit = {
-							tier = tier_duchy
-							any_de_jure_county = {
-								hd184r_county_valid_front_trigger = yes
-								holder.top_liege ?= character:tao_qian
-							}
-						}
-						save_scope_as = hd184r_target_duchy
-					}
-				}
-				if = {
-					limit = { exists = scope:hd184r_target_duchy }
-					hd_tb_arm_effect = { KIND = historical }
-					start_war = { cb = hd_dc_tunbing_cb target = character:tao_qian target_title = scope:hd184r_target_duchy }
-					debug_log = "HD184R P5 CAO_FA_XU_WAR"
-				}
-				else = { debug_log = "HD184R P5 CAO_FA_XU_NO_FRONT" }
-			}
+			save_scope_as = hd_news_a
+			add_opinion = { target = character:tao_qian modifier = angry_opinion opinion = -100 }
+			hd184r_caosong_claims_effect = yes
 		}
+		every_player = {
+			limit = { NOT = { this = character:cao_cao } }
+			trigger_event = hd184r.0201
+		}
+		character:cao_cao = {
+			if = { limit = { is_ai = no } trigger_event = hd184r.0207 }
+		}
+		debug_log = "HD184R P5 CAOSONG_KILLED_CLAIMS"
 	}
 	else_if = {
 		limit = { NOT = { exists = global_var:hd184r_caosong_done } }
-		title:h_china = { hd184r_retry_effect = { KEY = hd184r_caosong_tries ON_ACTION = hd184r_sched_caosong } }
+		if = {
+			limit = { hd184r_caosong_abort_trigger = yes }
+			set_global_variable = hd184r_caosong_done
+			debug_log = "HD184R P5 CAOSONG_ABANDONED"
+		}
+		else = {
+			title:h_china = { trigger_event = { on_action = hd184r_sched_caosong days = 90 } }
+		}
 	}
+}
+
+# 对陶谦领内（有县归陶谦）的徐州各郡加压宣称，已持有或已有宣称的跳过。
+# 郡头衔无人持有时（190 开局淮阴、广陵等郡如此）宣称郡打不了仗，改为宣称该郡内归陶谦的各县。Scope：曹操。
+hd184r_caosong_claims_effect = {
+	save_scope_as = hd184r_avenger
+	title:k_uuii_xuzhou = {
+		every_in_de_jure_hierarchy = {
+			continue = { tier > tier_duchy }
+			limit = {
+				tier = tier_duchy
+				any_de_jure_county = { holder.top_liege ?= character:tao_qian }
+				NOT = { holder ?= scope:hd184r_avenger }
+			}
+			if = {
+				limit = { exists = holder }
+				save_scope_as = hd184r_claim_title
+				scope:hd184r_avenger = {
+					if = {
+						limit = { NOT = { has_claim_on = scope:hd184r_claim_title } }
+						add_pressed_claim = scope:hd184r_claim_title
+					}
+				}
+			}
+			else = {
+				every_de_jure_county = {
+					limit = { holder.top_liege ?= character:tao_qian }
+					save_scope_as = hd184r_claim_title
+					scope:hd184r_avenger = {
+						if = {
+							limit = { NOT = { has_claim_on = scope:hd184r_claim_title } }
+							add_pressed_claim = scope:hd184r_claim_title
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+# 玩家曹操选择当即兴兵：对陶谦宣战，目标为一个与曹操接壤、有县归陶谦的徐州郡。Scope：曹操。
+hd184r_caosong_player_war_effect = {
+	save_scope_as = hd184r_avenger
+	clear_saved_scope = hd184r_target_duchy
+	title:k_uuii_xuzhou = {
+		random_in_de_jure_hierarchy = {
+			continue = { tier > tier_duchy }
+			limit = {
+				tier = tier_duchy
+				any_de_jure_county = { hd184r_cao_tao_border_county_trigger = yes }
+			}
+			save_scope_as = hd184r_target_duchy
+		}
+	}
+	if = {
+		limit = { exists = scope:hd184r_target_duchy }
+		hd_tb_arm_effect = { KIND = historical }
+		start_war = { cb = hd_dc_tunbing_cb target = character:tao_qian target_title = scope:hd184r_target_duchy }
+		debug_log = "HD184R P5 CAO_FA_XU_PLAYER_WAR"
+	}
+	else = { debug_log = "HD184R P5 CAO_FA_XU_PLAYER_NO_FRONT" }
 }
 
 ############################################################

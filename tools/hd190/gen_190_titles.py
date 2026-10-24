@@ -173,7 +173,7 @@ LEADERS = [
     ('yuan_shao', ['d_bohai', 'd_leling'], '0'),
     ('yuan_shu', ['d_nanyang'], '0'),                       # 2026-10-23 R4：郡级，只有南阳
     ('kong_zhou', ['d_yinchuan', 'd_xiangcheng'], 'k_uuii_yuzhou'),
-    ('zhang_miao', ['d_chenliu_yuzhou', 'd_chenliu'], '0'),
+    ('zhang_miao', ['d_chenliu_yuzhou'], '0'),              # 2026-10-24：济阳（d_chenliu）改逐县独立，见 CIRCLED
     ('yuan_yi', ['d_shanyang'], '0'),
     ('qiao_mao', ['d_dongjun'], '0'),
     ('bao_xin', ['d_jibei_yanzhou'], '0'),
@@ -187,12 +187,12 @@ LEADERS = [
     ('liu_yu_3', ['d_guangyang', 'd_zhuojun', 'd_shanggu'], 'k_uuii_youzhou'),
     ('gong_sun_du', ['d_liaodong', 'd_xuantu', 'd_lelang'], '0'),
     ('zhang_yan_7', ['d_changshan', 'd_leping_jizhou'], '0'),
-    ('liu_chong_4', ['d_chenguo'], '0'),   # 陈王：另持名义王国 k_hd190_wang_chen 作主头衔（见 ZHUHOU_WANG）
+    ('liu_chong_4', ['d_chenguo'], '0'),   # 陈王：王号由开局封爵（宗室王爵）提供
     ('huang_juan', ['d_wuwei', 'd_zhangye'], '0'),
     ('han_sui', ['d_jincheng', 'd_xiping', 'd_longxi'], '0'),
     ('su_gu', ['d_hanzhong'], 'k_uuii_yizhou'),   # 2026-10-23 R10：汉中太守苏固作刘焉封臣；张鲁入刘焉宫廷，191 年春由开局排期谋反据汉中
-    ('liu_biao', ['d_xiangyang'], 'k_uuii_jingzhou'),   # 襄阳：刘表直辖（王国持有人需有首都县）
-    ('huang_zu', ['d_jiangxia'], 'k_uuii_jingzhou'),
+    ('liu_biao', ['d_nanjun'], 'k_uuii_jingzhou'),   # 2026-10-24：襄阳整郡归张虎，刘表改坐南郡（首府江陵，见 KING_CAPITAL）
+    ('huang_zu', ['d_jiangxia'], 'k_uuii_jingzhou'),    # 2026-10-24：军阀契约（开局脚本写入）
     ('chen_wen', ['d_guangling_yangzhou', 'd_huainan', 'd_zhongli'], 'k_uuii_yangzhou'),
     ('lu_kang', ['d_lujiang', 'd_luan'], '0'),
     ('donghai_wang_002', ['d_kuaiji', 'd_dongyang', 'd_linhai'], '0'),   # d_dongyang 在红圈（东阳），3.6 里会被拆成逐县独立
@@ -214,6 +214,12 @@ LEADERS = [
     ('niu_fu', ['d_hedong'], 'k_uuii_sili'),        # 牛辅，屯安邑讨白波（换下曹谦）
     ('runan_ying_012', ['d_taishan'], 'k_uuii_yanzhou'),   # 应劭，泰山太守（换下张举）
     ('ren_qi', ['d_qianwei'], 'k_uuii_yizhou'),     # 任岐，犍为太守
+    # 2026-10-24 boki：徐州、襄阳、济阴
+    ('ze_rong', ['d_xiapei', 'd_pencheng'], 'k_uuii_xuzhou'),   # 笮融，下邳、彭城太守（陶谦部属；军阀契约由开局脚本写入）
+    ('zang_ba', ['d_langya', 'd_donghai'], 'k_uuii_xuzhou'),    # 臧霸，琅琊、东海太守（陶谦部属；军阀契约；郯另归陶谦，见 KING_CAPITAL）
+    ('zhang_hu_2', ['d_xiangyang'], '0'),           # 张虎，据襄阳整郡（开局给农民领袖特质）
+    ('chen_sheng', ['d_nanxiang'], '0'),            # 陈生（boki 原话「张生」），南乡太守，开局与张虎结盟
+    ('zhang_chong', ['d_jiyin'], '0'),              # 张充，济阴郡独立（原隶刘岱）；郡内县主收归直辖
 ]
 
 # 2026-10-23：这些首领的郡与县改用别的政体（默认天朝）
@@ -224,14 +230,12 @@ LEADER_GOV = {
 # 2026-10-23：虚构郡守的郡 (郡, 宗主)。持有人沿用底板里在世的占位人物，否则补占位郡守
 FICT_DUCHIES = [
     ('d_xinye', 'k_uuii_jingzhou'),             # 新野：袁术只给南阳后，作刘表的封臣
-    ('d_runan', 'k_uuii_yuzhou'),               # 汝南：孙坚腾出，作孔伷的封臣（底板郡守赵谦 190 年在朝）
     ('d_yingchuan_jingzhou', 'k_uuii_yuzhou'),  # 舞阳：袁术不再持有，作孔伷的封臣（底板郡守种拂 190 年在朝）
 ]
 
 # 2026-10-23：单县落位，县 -> (持有人, 宗主头衔或 '0', 政体或 None=沿用底板)。在郡分配之后执行，覆盖郡分配的结果
 COUNTY_GRANTS = {
     'c_uuii_p_3062': ('song_jian', '0', None),             # 抱罕：宋建「河首平汉王」（底板政体 tribal）
-    'c_uuii_p_1788': ('zhang_hu_2', '0', CEL),             # 襄阳：张虎、陈生据城；刘表首府由开局脚本改到宜城
     'c_uuii_p_6920': ('yan_bai_hu', 'd_wuxing', CEL),      # 乌程：严白虎根据地
     'c_uuii_p_2125': ('yan_bai_hu', 'd_wuxing', CEL),      # 原乡：原属许贡，划给严白虎
     'c_uuii_p_6060': ('zu_lang_2', '0', 'tribal_government'),   # 泾：祖郎（丹阳山越）
@@ -240,11 +244,15 @@ COUNTY_GRANTS = {
     'c_uuii_p_2105': ('xu_gong', 'd_wujun', CEL),          # 娄：从胡轸收回，给盛宪的都尉许贡
     'c_uuii_p_1010': ('niu_fu', 'd_hedong', CEL),          # 安邑：牛辅屯兵处
     'c_uuii_p_377': ('zang_ba', 'd_langya', CEL),          # 开阳：臧霸
+    # 2026-10-24：鄀（法理竟陵）底板挂在襄阳郡下，襄阳整郡归张虎后会成他的飞地（与襄阳诸县不接壤）；改挂黄祖江夏（同郡云杜、竟陵也在江夏下）
+    'c_uuii_p_1861': ('wj_184_county_c_uuii_p_1861', 'd_jiangxia', None),
 }
 
 # 2026-10-23：州牧的首都县（州牧本人在州内没有县时补一个）
 KING_CAPITAL = {
     'jiao_he': 'c_uuii_p_5041',   # 平原（焦和主块在平原、乐陵、高鱼一带，照旧）
+    'tao_qian': 'c_uuii_p_270',   # 2026-10-24：郯，徐州法理首府（在臧霸的东海郡里）；原直辖状武随城阳郡逐县独立
+    'liu_biao': 'c_uuii_p_1813',  # 2026-10-24：江陵，南郡首府（襄阳整郡归张虎）
 }
 # 飞地判定按「最大块」取主块的真实首领（同虚构刺史的规则）：焦和接手的是 184 虚构刺史的青州，主块照旧
 ENCLAVE_LARGEST_BLOCK = set()   # 2026-10-23 boki：乐陵/高鱼逐县后焦和缩到首府平原郡，主块改按首都县（原为 {'jiao_he'}）
@@ -285,6 +293,7 @@ UNLAND = {
     'chu_gong',            # 褚贡：184 年已死，宛城等三县归袁术（R4）
     'sun_jian',            # 孙坚：R5 只留世族头衔
     'jiao_he',             # 焦和：底板持冀州河间的任丘，190 年是青州刺史（州牧另授，首都县见 KING_CAPITAL）
+    'hd184_char_jiang_pei',   # 2026-10-24：东海郡守江某（184 表虚构人物），东海改授臧霸；人由开局脚本送入臧霸帐下
 }
 
 # 2026-10-23：名门家族（世族）头衔改挂主公之下（人不入宫廷，以世族身份作封臣）
@@ -295,26 +304,8 @@ FAMILY_LIEGE = {
     'zhang_lu': 'k_uuii_yizhou',      # R10：刘焉的督义司马，191 年春谋反据汉中
 }
 
-# 2026-10-23 R3/R12：诸侯王王号头衔（common/landed_titles/zz_hd190_zhuhou_wang_titles.txt）。218 以后由还原条目清空
-ZHUHOU_WANG = {
-    'k_hd190_wang_chen': 'liu_chong_4',       # 陈王刘宠（持陈郡）
-    'k_hd190_wang_hongnong': 'liu_bian',      # 弘农王刘辩（190.3.6 被害）
-    'k_hd190_wang_liang': 'liu_mi',
-    'k_hd190_wang_donghai': 'liu_zhi_2',
-    'k_hd190_wang_pengcheng': 'liu_he',
-    'k_hd190_wang_jinan': 'liu_kang_3',
-    'k_hd190_wang_hejian': 'liu_gai',
-    'k_hd190_wang_rencheng': 'liu_tuo',
-    'k_hd190_wang_ganling': 'liu_zhong_2',
-    'k_hd190_wang_zhao': 'liu_she',
-    'k_hd190_wang_qi': 'liu_cheng_4',
-    'k_hd190_wang_jibei': 'liu_luan',
-    'k_hd190_wang_fuling': 'liu_she_2',
-    'k_hd190_wang_dongping': 'liu_kai_2',
-    'k_hd190_wang_langya': 'liu_rong_2',
-    'k_hd190_wang_changshan': 'hd190_liu_hao',
-    'k_hd190_wang_pei': 'hd190_liu_yao',
-}
+# 2026-10-23 R3/R12 的诸侯王王号头衔（k_hd190_wang_*）已于 2026-10-24 删除：王号改由封爵系统的宗室王爵在开局授予
+# （common/scripted_effects/zz_hd_190_startup_effects.txt 的 hd190_peerage_effect），本表不再生成王号条目。
 
 # 曹操：陈留小根据地（县；与张邈同郡）。宗主 '0' 独立
 CAO_COUNTIES = ['c_uuii_p_2371', 'c_uuii_p_4496', 'c_uuii_p_565']   # 己吾、襄邑、雍丘（相连一串，陈留郡西段）
@@ -356,6 +347,8 @@ CIRCLED = [
     'd_guiyang', 'd_guiyang_guangzhou', 'd_xinggu_guangzhou', 'd_yulin', 'd_cangwu_xiangzhou',
     'd_xindou', 'd_xindou_jiangzhou', 'd_dongyang', 'd_jianan', 'd_jianan_yangzhou',
     'd_linchuan', 'd_nanhai_jiangzhou', 'd_zhuya', 'd_huainan_yuzhou',
+    # 2026-10-24 boki：城阳（含陶谦原直辖状武）、济阳、汝南、南顿、汝阳（汝阴已在 SPLIT_1023）；新蔡不拆
+    'd_chengyang', 'd_chenliu', 'd_runan', 'd_nandun', 'd_ruyang',
 ]
 
 # boki 2026-10-23 第二批逐县独立名单（同 CIRCLED 处理）。郡在真实人物手里时：他保留首府所在的郡，名单里的其余郡照拆；
@@ -623,15 +616,8 @@ for who, lg in FAMILY_LIEGE.items():
         report.append(f'世族改挂 {t}({zh(t)}) {who} -> {lg}')
     if not fams:
         report.append(f'警告: {who} 没有世族头衔，FAMILY_LIEGE 未生效')
-# 3.5a3 诸侯王王号头衔
-for t, h in ZHUHOU_WANG.items():
-    assert tier.get(t) == 'k', t
-    if t == 'k_hd190_wang_chen':
-        # 陈王有地，政体须为郡国制，否则持王国头衔开局会落成封建制
-        setf(t, holder=h, gov=CEL)
-        setf('d_chenguo', gov=CEL)
-    else:
-        setf(t, holder=h)
+# 3.5a3 陈王刘宠持陈郡：政体须为郡国制（王号由开局封爵提供，见上方诸侯王注释）
+setf('d_chenguo', gov=CEL)
 
 # 3.5b 朝官不得再持有有地头衔（黄琬 184 底板还持两个县）：县改给所在郡现持有人，没有就补占位人物；郡改占位人物
 court_people = {hh for hh in COURT.values() if hh != '0'}
@@ -965,6 +951,8 @@ for t, d, why in fill_requests:
         fid = make_filler(t, culture_near(t))
         setf(t, holder=fid, gov=cur(t, 'gov') or CEL)
     elif why == 'dead_title':   # 死人持有的郡
+        if t in CIRCLED:        # 2026-10-24：收地(UNLAND)的郡又在逐县独立名单里（汝南赵谦）：郡头衔保持空缺，不补郡守
+            continue
         fid = make_filler(t, culture_near(t))
         setf(t, holder=fid, gov=cur(t, 'gov') or CEL)
 

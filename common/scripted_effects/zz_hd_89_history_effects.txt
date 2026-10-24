@@ -56,6 +56,12 @@ hd_89_pulse_effect = {
 	hd_89_check_yuchujian_effect = yes   # S3b 於除鞬奉汉（持续检查，复核必改 8）
 	hd_89_check_zhudou_effect = yes      # S4 诛窦
 	hd_89_check_yanqi_effect = yes       # S5 焉耆之战
+	# 2026-10-23 班超线补充（玩家反馈「班超事件太少」，用户拍板四个事件）与 S3 龟兹之战结算
+	hd_89_check_qiuci_effect = yes       # S3 续：讨龟兹
+	hd_89_check_yuezhi_effect = yes      # 班超：月氏副王谢来攻（90）
+	hd_89_check_dingyuan_effect = yes    # 班超：封定远侯（95）
+	hd_89_check_ganying_effect = yes     # 班超：遣甘英使大秦（97）
+	hd_89_check_qiugui_effect = yes      # 班超：上疏求归、任尚接任（100–102）
 }
 
 ############################################################
@@ -143,6 +149,7 @@ hd_89_war_result_effect = {
 	hd_89_war_result_kind_effect = { KIND = yanran RESULT = $RESULT$ }
 	hd_89_war_result_kind_effect = { KIND = jinwei RESULT = $RESULT$ }
 	hd_89_war_result_kind_effect = { KIND = yanqi RESULT = $RESULT$ }
+	hd_89_war_result_kind_effect = { KIND = qiuci RESULT = $RESULT$ }   # 2026-10-23 讨龟兹
 }
 hd_89_war_result_kind_effect = {
 	if = {
@@ -450,6 +457,14 @@ hd_89_yanran_victory_effect = {
 			add_character_modifier = { modifier = hd_89_beiting_modifier years = 5 }
 		}
 	}
+	# 2026-10-23 燕然之败后北单于失去「最伟大的汗」（玩家反馈：开局特质太强，窦宪事件难以完成；用户拍板战败后移除）
+	character:hd_89_bei_chanyu ?= {
+		if = {
+			limit = { has_trait = greatest_of_khans }
+			remove_trait = greatest_of_khans
+			debug_log = "HD_89 S1 CHANYU_LOSES_GREATEST_OF_KHANS"
+		}
+	}
 	# 窦笃封郾侯、窦景封汝阳侯（史实永元二年；拍板项 9）。只取电脑持有的县
 	hd_89_grant_county_effect = { WHO = hd_89_dou_du COUNTY = c_uuii_p_1651 }
 	hd_89_grant_county_effect = { WHO = hd_89_dou_jing COUNTY = c_uuii_p_1624 }
@@ -624,45 +639,203 @@ hd_89_jinwei_victory_effect = {
 	hd_world_news_send_all_effect = { EVENT = hd_89.0625 }
 	debug_log = "HD_89 S2 JINWEI WON"
 }
-# 电脑北单于西遁：先让於除鞬独立并接收北单于的全部头衔与封臣（"立为单于"），再除去北单于；东部三部自号鲜卑
+# 北单于西迁（电脑北单于，或玩家北单于在 hd_89.0230 选西遁）。2026-10-23 用户拍板，取代原「於除鞬接收全部头衔、北单于消失」：
+#   於除鞬只留本部两郡自立；东部三郡自号鲜卑；高昌、车师后国、蒲昌自立；北单于带残部西迁双河（乌孙西北，悦般故地）；
+#   北单于原有的头衔（单于庭嗢昆等）与余下部帅归西鲜卑，漠北各县改鲜卑文化；最后销毁匈奴帝国头衔。
+# 须先存好 scope:hd_89_chanyu（北单于）
 hd_89_beiting_flee_effect = {
+	# ① 右谷蠡王於除鞬：只留本部两郡，自立（93 年款塞、被斩两节点照旧）
+	character:yu_chu_jian ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = yes
+				is_independent_ruler = no
+				NOT = { this = scope:hd_89_chanyu }
+			}
+			hd_nbc_become_independent_effect = yes
+		}
+	}
+	# ② 东部三郡部帅自号鲜卑（原有，要在销毁帝国头衔之前，它读 e_mongolia 持有者）
+	hd_89_xianbei_rise_effect = yes
+	# ③ 西域诸部脱离北庭自立
+	hd_89_beiting_free_effect = { DUCHY = d_kara_khoja }       # 高昌
+	hd_89_beiting_free_effect = { DUCHY = d_cheshihouguo }     # 车师后国
+	hd_89_beiting_free_effect = { DUCHY = d_puchang }          # 蒲昌
+	# ④ 先记下北单于原有的头衔与余下的部帅，再安置到双河
+	scope:hd_89_chanyu = {
+		every_held_title = {
+			limit = {
+				tier >= tier_county
+				tier <= tier_kingdom
+				is_noble_family_title = no
+				is_landless_type_title = no
+			}
+			add_to_list = hd_89_beiting_old_titles
+		}
+		every_vassal = {
+			add_to_list = hd_89_beiting_old_vassals
+		}
+	}
+	hd_89_chanyu_resettle_effect = yes
+	# ⑤ 漠北交西鲜卑（取西鲜卑郡当时的持有者）
+	title:d_xixianbei.holder ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				NOT = { this = scope:hd_89_chanyu }
+			}
+			save_scope_as = hd_89_xb
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_89_xb }
+		create_title_and_vassal_change = { type = granted save_scope_as = hd_89_xb_change add_claim_on_loss = no }
+		every_in_list = {
+			list = hd_89_beiting_old_titles
+			limit = { holder ?= scope:hd_89_chanyu }
+			change_title_holder = { holder = scope:hd_89_xb change = scope:hd_89_xb_change take_baronies = yes }
+		}
+		resolve_title_and_vassal_change = scope:hd_89_xb_change
+		# 头衔结算后再改主君（封臣化要求新主君的最高头衔更高）；够不上的部帅自立
+		create_title_and_vassal_change = { type = swear_fealty save_scope_as = hd_89_xb_change2 add_claim_on_loss = no }
+		every_in_list = {
+			list = hd_89_beiting_old_vassals
+			limit = {
+				is_alive = yes
+				is_landed = yes
+				liege ?= scope:hd_89_chanyu
+				NOT = { this = scope:hd_89_xb }
+				highest_held_title_tier < scope:hd_89_xb.highest_held_title_tier
+			}
+			change_liege = { liege = scope:hd_89_xb change = scope:hd_89_xb_change2 }
+		}
+		resolve_title_and_vassal_change = scope:hd_89_xb_change2
+		every_in_list = {
+			list = hd_89_beiting_old_vassals
+			limit = {
+				is_alive = yes
+				is_landed = yes
+				liege ?= scope:hd_89_chanyu
+				NOT = { this = scope:hd_89_xb }
+			}
+			hd_nbc_become_independent_effect = yes
+		}
+		every_in_list = {
+			list = hd_89_beiting_old_vassals
+			limit = {
+				is_alive = yes
+				is_ai = yes
+				culture = culture:xiongnu
+				liege ?= scope:hd_89_xb
+			}
+			set_culture = culture:xianbei
+		}
+		debug_log = "HD_89 S2 MOBEI_TO_XIANBEI"
+	}
+	else = { debug_log = "HD_89 S2 MOBEI_NO_XIANBEI_HOLDER" }
+	# 漠北各县改鲜卑文化（於除鞬本部两郡不改）
+	hd_89_mobei_culture_effect = { DUCHY = d_orkhon }
+	hd_89_mobei_culture_effect = { DUCHY = d_ovorkhangai }
+	hd_89_mobei_culture_effect = { DUCHY = d_juyan }
+	hd_89_mobei_culture_effect = { DUCHY = d_ogrash }
+	hd_89_mobei_culture_effect = { DUCHY = d_em_tataria }
+	hd_89_mobei_culture_effect = { DUCHY = d_EM_onon }
+	# ⑥ 销毁匈奴帝国头衔
+	scope:hd_89_chanyu = {
+		if = {
+			limit = { has_title = title:e_mongolia }
+			title:e_mongolia = { reset_title_name = yes }   # 开局改的「匈奴」国号不留给以后重建的人
+			destroy_title = title:e_mongolia
+			debug_log = "HD_89 S2 E_MONGOLIA_DESTROYED"
+		}
+		# 双河安置不成（持有者是玩家）的电脑北单于：仍照旧消失
+		if = {
+			limit = {
+				is_alive = yes
+				is_ai = yes
+				NOT = {
+					any_held_title = {
+						tier = tier_county
+					}
+				}
+			}
+			death = { death_reason = death_vanished }
+			debug_log = "HD_89 S2 CHANYU_VANISHED_NO_LAND"
+		}
+	}
+	set_global_variable = hd_hev_89_westward
+	debug_log = "HD_89 S2 CHANYU_FLED_WEST"
+}
+# 北庭的西域属部：脱离北单于自立。$DUCHY$ 的持有者须仍在北单于之下
+hd_89_beiting_free_effect = {
+	title:$DUCHY$.holder ?= {
+		if = {
+			limit = {
+				is_independent_ruler = no
+				top_liege = scope:hd_89_chanyu
+				NOT = { this = scope:hd_89_chanyu }
+			}
+			hd_nbc_become_independent_effect = yes
+			debug_log = "HD_89 S2 BEITING_FREED $DUCHY$"
+		}
+	}
+}
+# 北单于安置到双河（d_shuanghe，首府黑水县 c_uuii_p_5465）：取郡头衔与首府县，原首领留双河县、奉北单于；营帐随迁，牧群只剩四分之一
+# 双河郡或首府县的持有者是玩家时不安置
+hd_89_chanyu_resettle_effect = {
 	if = {
 		limit = {
-			character:yu_chu_jian ?= { is_alive = yes is_landed = yes NOT = { this = scope:hd_89_chanyu } }
-		}
-		character:yu_chu_jian = {
-			if = {
-				limit = { is_independent_ruler = no }
-				hd_nbc_become_independent_effect = yes
+			OR = {
+				NOT = { exists = title:d_shuanghe.holder }
+				title:d_shuanghe.holder ?= { is_ai = yes NOT = { this = scope:hd_89_chanyu } }
 			}
-			save_scope_as = hd_89_new_chanyu
+			OR = {
+				NOT = { exists = title:c_uuii_p_5465.holder }
+				title:c_uuii_p_5465.holder ?= { is_ai = yes NOT = { this = scope:hd_89_chanyu } }
+			}
 		}
-		create_title_and_vassal_change = { type = granted save_scope_as = hd_89_flee_change add_claim_on_loss = no }
-		scope:hd_89_chanyu = {
-			every_held_title = {
+		title:d_shuanghe.holder ?= { save_scope_as = hd_89_sh_old }
+		create_title_and_vassal_change = { type = usurped save_scope_as = hd_89_sh_change add_claim_on_loss = no }
+		title:d_shuanghe = {
+			change_title_holder = { holder = scope:hd_89_chanyu change = scope:hd_89_sh_change }
+		}
+		title:c_uuii_p_5465 = {
+			change_title_holder = { holder = scope:hd_89_chanyu change = scope:hd_89_sh_change take_baronies = yes }
+		}
+		resolve_title_and_vassal_change = scope:hd_89_sh_change
+		scope:hd_89_sh_old ?= {
+			if = {
 				limit = {
-					is_noble_family_title = no
-					is_landless_type_title = no
-					tier >= tier_county
+					is_alive = yes
+					is_landed = yes
+					NOT = { this = scope:hd_89_chanyu }
 				}
-				change_title_holder = { holder = scope:hd_89_new_chanyu change = scope:hd_89_flee_change take_baronies = yes }
-			}
-			every_vassal = {
-				limit = { NOT = { this = scope:hd_89_new_chanyu } }
-				change_liege = { liege = scope:hd_89_new_chanyu change = scope:hd_89_flee_change }
+				hd_nbc_swear_fealty_effect = { LIEGE = scope:hd_89_chanyu }
 			}
 		}
-		resolve_title_and_vassal_change = scope:hd_89_flee_change
 		scope:hd_89_chanyu = {
-			if = {
-				limit = { is_alive = yes is_ai = yes }
-				death = { death_reason = death_vanished }
+			set_realm_capital = title:c_uuii_p_5465
+			domicile ?= {
+				move_domicile = prev.capital_province
+				change_herd = {
+					value = herd
+					multiply = -0.75
+				}
 			}
 		}
-		debug_log = "HD_89 S2 CHANYU_FLED YUCHUJIAN_TAKES"
+		debug_log = "HD_89 S2 CHANYU_RESETTLED_SHUANGHE"
 	}
-	else = { debug_log = "HD_89 S2 CHANYU_FLEE_SKIPPED_NO_YUCHUJIAN" }
-	hd_89_xianbei_rise_effect = yes
+	else = { debug_log = "HD_89 S2 CHANYU_RESETTLE_SKIPPED_PLAYER_HOLDER" }
+}
+# 漠北一郡的匈奴县改鲜卑文化
+hd_89_mobei_culture_effect = {
+	title:$DUCHY$ ?= {
+		every_de_jure_county = {
+			limit = { culture = culture:xiongnu }
+			set_county_culture = culture:xianbei
+		}
+	}
 }
 # 东部三郡部帅独立并改鲜卑文化（"余种十余万落诣辽东杂处，皆自号鲜卑"）。只动电脑
 hd_89_xianbei_rise_one_effect = {
@@ -671,6 +844,7 @@ hd_89_xianbei_rise_one_effect = {
 			limit = {
 				is_ai = yes
 				is_independent_ruler = no
+				exists = title:e_mongolia.holder   # 2026-10-23 匈奴帝国头衔可能已在西迁时销毁
 				top_liege = title:e_mongolia.holder
 				NOT = { this = title:e_mongolia.holder }
 			}
@@ -688,6 +862,8 @@ hd_89_xianbei_rise_effect = {
 
 ############################################################
 # S3 西域都护：永元三年十二月（91.12.29 起）复置西域都护，班超为都护；龟兹、姑墨、温宿皆降，废尤利多，立白霸
+# 2026-10-23 用户拍板改：授真实西域王国 k_uuii_tarim_nandao（仍为汉臣，接受对朝贡国的法理宣称）、事件兵 8000，
+#   龟兹不降则开战（取代直接废立），胜后立白霸并归附班超，它乾城所在的姑墨县归都护作治所
 ############################################################
 hd_89_check_duhu_effect = {
 	if = {
@@ -712,25 +888,27 @@ hd_89_check_duhu_effect = {
 		else = {
 			set_global_variable = hd_89_duhu_done
 			set_global_variable = hd_hev_89_duhu
-			# ② 班超为西域都护：修正与威望，不授西域王国头衔（拍板 E：免得对汉的朝贡国生出法理宣称）
+			# ② 班超为西域都护：修正、威望、西域王国、都护所部
 			character:hd_89_ban_chao = {
 				add_prestige = 500
 				add_character_modifier = { modifier = hd_89_duhu_modifier years = 12 }
+				hd_89_duhu_kingdom_effect = yes
+				hd_nbc_spawn_army_effect = { SIZE = 8000 WHERE = capital_county NAME = hd_89_duhu_army_name }
 			}
-			# ① 龟兹
+			# ① 龟兹：不降则开战
 			title:d_qiuci_tianshanbeilu.holder.top_liege ?= {
 				if = {
 					limit = {
 						is_independent_ruler = yes
 						NOT = { this = title:h_china.holder }
+						NOT = { this = character:hd_89_ban_chao }
 						NOT = { is_tributary_of_suzerain_or_above = title:h_china.holder }
 					}
-					save_scope_as = hd_89_qiuci_king
 					if = {
 						limit = { is_ai = no }
 						trigger_event = hd_89.0310
 					}
-					else = { hd_89_qiuci_depose_effect = yes }
+					else = { hd_89_qiuci_try_war_effect = yes }
 				}
 				else = { debug_log = "HD_89 S3 QIUCI ALREADY_HAN" }
 			}
@@ -741,7 +919,140 @@ hd_89_check_duhu_effect = {
 		}
 	}
 }
-# 电脑龟兹王：废，入洛阳；龟兹交白霸，白霸奉汉。白霸不在时龟兹王本人奉汉
+# 授西域王国（Character：班超）。头衔无人持有或在电脑手里才授；授后若成独立君主则奉天子为主
+hd_89_duhu_kingdom_effect = {
+	if = {
+		limit = {
+			NOT = { has_title = title:k_uuii_tarim_nandao }
+			OR = {
+				NOT = { exists = title:k_uuii_tarim_nandao.holder }
+				title:k_uuii_tarim_nandao.holder ?= { is_ai = yes }
+			}
+		}
+		save_scope_as = hd_89_duhu_holder
+		create_title_and_vassal_change = { type = created save_scope_as = hd_89_duhu_change add_claim_on_loss = no }
+		title:k_uuii_tarim_nandao = {
+			change_title_holder = { holder = scope:hd_89_duhu_holder change = scope:hd_89_duhu_change }
+		}
+		resolve_title_and_vassal_change = scope:hd_89_duhu_change
+		if = {
+			limit = {
+				is_independent_ruler = yes
+				exists = title:h_china.holder
+				NOT = { this = title:h_china.holder }
+			}
+			title:h_china.holder = { save_scope_as = hd_89_duhu_liege }
+			hd_nbc_swear_fealty_effect = { LIEGE = scope:hd_89_duhu_liege }
+		}
+		debug_log = "HD_89 S3 DUHU_KINGDOM_GRANTED"
+	}
+	else = { debug_log = "HD_89 S3 DUHU_KINGDOM_SKIPPED" }
+}
+# 讨龟兹：电脑班超直接出兵（宣战失败的下次心跳重试），玩家班超先问（hd_89.0305）
+hd_89_qiuci_try_war_effect = {
+	set_global_variable = hd_89_qiuci_pending
+	character:hd_89_ban_chao ?= {
+		if = {
+			limit = { is_alive = yes is_landed = yes is_ai = no }
+			if = {
+				limit = { NOT = { exists = global_var:hd_89_qiuci_asked } }
+				set_global_variable = hd_89_qiuci_asked
+				trigger_event = hd_89.0305
+			}
+		}
+		else_if = {
+			limit = { is_alive = yes is_landed = yes }
+			hd_89_qiuci_war_effect = yes
+		}
+	}
+}
+hd_89_qiuci_war_effect = {
+	character:hd_89_ban_chao ?= { save_scope_as = hd_89_qiuci_exec }
+	title:d_qiuci_tianshanbeilu.holder.top_liege ?= { save_scope_as = hd_89_qiuci_def }
+	if = {
+		limit = {
+			exists = scope:hd_89_qiuci_exec
+			scope:hd_89_qiuci_def ?= {
+				is_independent_ruler = yes
+				NOT = { this = title:h_china.holder }
+				NOT = { this = scope:hd_89_qiuci_exec }
+				NOT = { is_tributary_of_suzerain_or_above = title:h_china.holder }
+			}
+		}
+		hd_89_vassal_war_effect = { WHO = scope:hd_89_qiuci_exec DEFENDER = scope:hd_89_qiuci_def TARGET = title:d_qiuci_tianshanbeilu KIND = qiuci }
+		if = {
+			limit = { exists = scope:hd_89_war_qiuci }
+			set_global_variable = hd_89_qiuci_started
+			scope:hd_89_qiuci_exec = { save_scope_as = hd_news_a }
+			scope:hd_89_qiuci_def = { save_scope_as = hd_news_b }
+			hd_world_news_send_skip_both_effect = { EVENT = hd_89.0655 }
+			debug_log = "HD_89 S3 QIUCI STARTED"
+		}
+		else = { debug_log = "HD_89 S3 QIUCI WAR_START_FAILED_RETRY" }
+	}
+	else = {
+		set_global_variable = hd_89_qiuci_done
+		debug_log = "HD_89 S3 QIUCI NO_TARGET"
+	}
+}
+hd_89_check_qiuci_effect = {
+	# 待开战：电脑班超宣战失败的下次心跳重试，93.1.1 截止
+	if = {
+		limit = {
+			exists = global_var:hd_89_qiuci_pending
+			NOT = { exists = global_var:hd_89_qiuci_started }
+			NOT = { exists = global_var:hd_89_qiuci_done }
+		}
+		if = {
+			limit = { current_date >= 93.1.1 }
+			set_global_variable = hd_89_qiuci_done
+			debug_log = "HD_89 S3 QIUCI SKIPPED_DEADLINE"
+		}
+		else_if = {
+			limit = { character:hd_89_ban_chao ?= { is_alive = yes is_landed = yes is_ai = yes } }
+			hd_89_qiuci_war_effect = yes
+		}
+	}
+	# 结算：已开战、且已没有这一场次的战争
+	if = {
+		limit = {
+			exists = global_var:hd_89_qiuci_started
+			NOT = { exists = global_var:hd_89_qiuci_done }
+			NOT = { exists = global_var:hd_89_qiuci_active }
+		}
+		set_global_variable = hd_89_qiuci_done
+		if = {
+			limit = { exists = global_var:hd_89_qiuci_won }
+			hd_89_qiuci_victory_effect = yes
+		}
+		else = { debug_log = "HD_89 S3 QIUCI NOT_WON" }
+	}
+}
+hd_89_qiuci_victory_effect = {
+	title:d_qiuci_tianshanbeilu.holder.top_liege ?= {
+		if = {
+			limit = {
+				NOT = { this = character:hd_89_ban_chao }
+				NOT = { this = title:h_china.holder }
+			}
+			save_scope_as = hd_89_qiuci_king
+			if = {
+				limit = { is_ai = no }
+				trigger_event = hd_89.0330
+			}
+			else = { hd_89_qiuci_depose_effect = yes }
+		}
+	}
+	character:hd_89_ban_chao ?= {
+		if = {
+			limit = { is_alive = yes }
+			add_prestige = 300
+		}
+	}
+	debug_log = "HD_89 S3 QIUCI WON"
+}
+# 龟兹王战败（电脑，或玩家在 hd_89.0330 选让位）：废，入洛阳；龟兹交白霸。白霸不在时龟兹王本人留位。
+# 随后新王归附都护班超，它乾城所在的姑墨县（c_uuii_p_6420）归班超作都护治所；班超不在则奉汉为宗主
 hd_89_qiuci_depose_effect = {
 	if = {
 		limit = {
@@ -760,16 +1071,7 @@ hd_89_qiuci_depose_effect = {
 				limit = { NOT = { has_government = tribal_government } has_government = celestial_government }
 				change_government = tribal_government
 			}
-			if = {
-				limit = { is_independent_ruler = no }
-				hd_nbc_become_independent_effect = yes
-			}
-			hd_89_become_han_tributary_effect = yes
-			if = {
-				limit = { is_tributary = yes }
-				debug_log = "HD_89 S3 BAIBA_TRIBUTARY_OK"
-			}
-			else = { debug_log = "HD_89 S3 BAIBA_TRIBUTARY_FAILED" }
+			save_scope_as = hd_89_qiuci_new
 		}
 		scope:hd_89_qiuci_king = {
 			if = {
@@ -780,8 +1082,50 @@ hd_89_qiuci_depose_effect = {
 		debug_log = "HD_89 S3 QIUCI BAIBA_ENTHRONED"
 	}
 	else = {
-		scope:hd_89_qiuci_king = { hd_89_become_han_tributary_effect = yes }
-		debug_log = "HD_89 S3 QIUCI KING_SUBMITS"
+		scope:hd_89_qiuci_king = { save_scope_as = hd_89_qiuci_new }
+		debug_log = "HD_89 S3 QIUCI KING_KEPT"
+	}
+	character:hd_89_ban_chao ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = yes
+				highest_held_title_tier > scope:hd_89_qiuci_new.highest_held_title_tier
+			}
+			save_scope_as = hd_89_duhu_lord
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_89_duhu_lord }
+		if = {
+			limit = {
+				title:c_uuii_p_6420.holder ?= {
+					OR = {
+						this = scope:hd_89_qiuci_new
+						target_is_liege_or_above = scope:hd_89_qiuci_new
+					}
+					is_ai = yes
+				}
+			}
+			hd_nbc_give_county_effect = { COUNTY = title:c_uuii_p_6420 TO = scope:hd_89_duhu_lord }
+		}
+		scope:hd_89_qiuci_new = {
+			if = {
+				limit = { is_alive = yes is_landed = yes }
+				hd_nbc_swear_fealty_effect = { LIEGE = scope:hd_89_duhu_lord }
+			}
+		}
+		debug_log = "HD_89 S3 QIUCI SUBMITS_TO_DUHU"
+	}
+	else = {
+		scope:hd_89_qiuci_new = {
+			if = {
+				limit = { is_alive = yes is_landed = yes is_independent_ruler = no }
+				hd_nbc_become_independent_effect = yes
+			}
+			hd_89_become_han_tributary_effect = yes
+		}
+		debug_log = "HD_89 S3 QIUCI TRIBUTARY_NO_DUHU"
 	}
 }
 
@@ -833,19 +1177,29 @@ hd_89_check_yuchujian_effect = {
 
 ############################################################
 # S4 诛窦：永元四年六月庚申（92.8.14），和帝与中常侍郑众定议，收窦宪大将军印绶，遣就国，迫令自杀
+# 2026-10-23 用户拍板：燕然、金微山两战都结束（含跳过）满一年才触发，且不早于 92.8.14；去掉 93.1.1 截止
 ############################################################
 hd_89_check_zhudou_effect = {
 	if = {
 		limit = {
+			NOT = { exists = global_var:hd_89_zhudou_wars_settled }
+			exists = global_var:hd_89_yanran_done
+			exists = global_var:hd_89_jinwei_done
+			NOT = { exists = global_var:hd_89_yanran_active }
+			NOT = { exists = global_var:hd_89_jinwei_active }
+		}
+		set_global_variable = hd_89_zhudou_wars_settled
+		set_global_variable = { name = hd_89_zhudou_wait value = 1 days = 365 }
+		debug_log = "HD_89 S4 ZHUDOU WARS_SETTLED_WAIT_1Y"
+	}
+	if = {
+		limit = {
 			NOT = { exists = global_var:hd_89_zhudou_done }
 			current_date >= 92.8.14
+			exists = global_var:hd_89_zhudou_wars_settled
+			NOT = { exists = global_var:hd_89_zhudou_wait }
 		}
 		if = {
-			limit = { current_date >= 93.1.1 }
-			set_global_variable = hd_89_zhudou_done
-			debug_log = "HD_89 S4 ZHUDOU SKIPPED_DEADLINE"
-		}
-		else_if = {
 			limit = { NOT = { character:hd_89_dou_xian ?= { is_alive = yes } } }
 			set_global_variable = hd_89_zhudou_done
 			debug_log = "HD_89 S4 ZHUDOU SKIPPED_DEAD"
@@ -1065,4 +1419,262 @@ hd_89_yanqi_enthrone_effect = {
 		}
 	}
 	debug_log = "HD_89 S5 YANQI YUANMENG_ENTHRONED"
+}
+
+############################################################
+# 班超线补充（2026-10-23，玩家反馈「班超事件太少」，用户拍板四个事件）
+# 电脑班超按史实直接结算，玩家班超收到弹窗（hd_89.0340/0520/0530/0540）
+############################################################
+
+# 月氏来攻：永元二年（90），月氏遣副王谢将兵七万攻班超；超坚壁清野，截杀其求粮于龟兹的使者，谢惶恐请罪，月氏由是岁奉贡献
+hd_89_check_yuezhi_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_89_yuezhi_done }
+			current_date >= 90.6.1
+		}
+		if = {
+			limit = { current_date >= 91.6.1 }
+			set_global_variable = hd_89_yuezhi_done
+			debug_log = "HD_89 BC YUEZHI SKIPPED_DEADLINE"
+		}
+		else_if = {
+			limit = { NOT = { character:hd_89_ban_chao ?= { is_alive = yes } } }
+			set_global_variable = hd_89_yuezhi_done
+			debug_log = "HD_89 BC YUEZHI SKIPPED_DEAD"
+		}
+		else_if = {
+			limit = { character:hd_89_ban_chao = { is_landed = no } }
+			debug_log = "HD_89 BC YUEZHI WAIT_LANDLESS"
+		}
+		else = {
+			set_global_variable = hd_89_yuezhi_done
+			set_global_variable = hd_hev_89_yuezhi
+			character:hd_89_ban_chao = {
+				if = {
+					limit = { is_ai = no }
+					trigger_event = hd_89.0340
+				}
+				else = { hd_89_yuezhi_hold_effect = yes }
+			}
+			debug_log = "HD_89 BC YUEZHI DONE"
+		}
+	}
+}
+# Character：班超。坚壁清野、截杀求粮使者（史实结局）
+hd_89_yuezhi_hold_effect = {
+	add_prestige = 300
+	add_character_modifier = { modifier = hd_89_yuezhi_modifier years = 10 }
+}
+
+# 封定远侯：永元七年（95），诏封班超为定远侯，邑千户。须焉耆之战已胜；焉耆之战未胜则跳过
+hd_89_check_dingyuan_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_89_dingyuan_done }
+			current_date >= 95.3.1
+		}
+		if = {
+			limit = { current_date >= 98.1.1 }
+			set_global_variable = hd_89_dingyuan_done
+			debug_log = "HD_89 BC DINGYUAN SKIPPED_DEADLINE"
+		}
+		else_if = {
+			limit = { NOT = { character:hd_89_ban_chao ?= { is_alive = yes } } }
+			set_global_variable = hd_89_dingyuan_done
+			debug_log = "HD_89 BC DINGYUAN SKIPPED_DEAD"
+		}
+		else_if = {
+			limit = {
+				exists = global_var:hd_89_yanqi_done
+				NOT = { exists = global_var:hd_89_yanqi_won }
+			}
+			set_global_variable = hd_89_dingyuan_done
+			debug_log = "HD_89 BC DINGYUAN SKIPPED_YANQI_NOT_WON"
+		}
+		else_if = {
+			limit = { exists = global_var:hd_89_yanqi_won }
+			set_global_variable = hd_89_dingyuan_done
+			set_global_variable = hd_hev_89_dingyuan
+			character:hd_89_ban_chao = {
+				if = {
+					limit = { is_ai = no }
+					trigger_event = hd_89.0520
+				}
+				else = { hd_89_dingyuan_effect = yes }
+			}
+			character:hd_89_ban_chao = { save_scope_as = hd_news_a }
+			title:h_china.holder ?= { save_scope_as = hd_news_b }
+			hd_world_news_send_skip_both_effect = { EVENT = hd_89.0660 }
+			debug_log = "HD_89 BC DINGYUAN DONE"
+		}
+		# 焉耆之战尚未结束：继续等待
+	}
+}
+# Character：班超。威望与「定远」军号（照军号系统 WJ_mr_initialize_rank 的授号写法；军号已有人占用则只给威望）
+hd_89_dingyuan_effect = {
+	add_prestige = 500
+	set_variable = { name = WJ_mr_choice value = 154 }
+	if = {
+		limit = { WJ_mr_choice_valid = yes }
+		WJ_mr_apply_selected_rank = yes
+	}
+	else = { debug_log = "HD_89 BC DINGYUAN_RANK_UNAVAILABLE" }
+	remove_variable = WJ_mr_choice
+}
+
+# 遣甘英使大秦：永元九年（97），班超遣掾甘英使大秦，抵条支，临大海欲渡，安息西界船人劝阻而还（甘英在人物库里生于 100 年，事件不带他的立绘）
+hd_89_check_ganying_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_89_ganying_done }
+			current_date >= 97.1.1
+		}
+		if = {
+			limit = { current_date >= 99.1.1 }
+			set_global_variable = hd_89_ganying_done
+			debug_log = "HD_89 BC GANYING SKIPPED_DEADLINE"
+		}
+		else_if = {
+			limit = { NOT = { character:hd_89_ban_chao ?= { is_alive = yes } } }
+			set_global_variable = hd_89_ganying_done
+			debug_log = "HD_89 BC GANYING SKIPPED_DEAD"
+		}
+		else_if = {
+			limit = { character:hd_89_ban_chao = { is_landed = no } }
+			debug_log = "HD_89 BC GANYING WAIT_LANDLESS"
+		}
+		else = {
+			set_global_variable = hd_89_ganying_done
+			character:hd_89_ban_chao = {
+				if = {
+					limit = { is_ai = no }
+					trigger_event = hd_89.0530
+				}
+				else = { hd_89_ganying_effect = yes }
+			}
+			debug_log = "HD_89 BC GANYING DONE"
+		}
+	}
+}
+# Character：班超
+hd_89_ganying_effect = {
+	set_global_variable = hd_hev_89_ganying
+	add_prestige = 300
+	add_character_modifier = { modifier = hd_89_daqin_modifier years = 10 }
+}
+
+# 上疏求归：永元十二年（100）上疏「但愿生入玉门关」；永元十四年八月（102.8.1）还洛阳，任尚接任都护（班超 102.9.1 卒仍由心跳执行）
+hd_89_check_qiugui_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_89_qiugui_asked_done }
+			current_date >= 100.6.1
+		}
+		if = {
+			limit = { NOT = { character:hd_89_ban_chao ?= { is_alive = yes is_landed = yes } } }
+			set_global_variable = hd_89_qiugui_asked_done
+			debug_log = "HD_89 BC QIUGUI SKIPPED_DEAD_OR_LANDLESS"
+		}
+		else = {
+			set_global_variable = hd_89_qiugui_asked_done
+			character:hd_89_ban_chao = {
+				if = {
+					limit = { is_ai = no }
+					trigger_event = hd_89.0540
+				}
+				else = { set_global_variable = hd_89_qiugui_requested }
+			}
+			debug_log = "HD_89 BC QIUGUI ASKED"
+		}
+	}
+	if = {
+		limit = {
+			exists = global_var:hd_89_qiugui_requested
+			NOT = { exists = global_var:hd_89_qiugui_done }
+			current_date >= 102.8.1
+		}
+		set_global_variable = hd_89_qiugui_done
+		hd_89_duhu_handover_effect = yes
+	}
+}
+# 任尚接任：西域王国头衔、封臣与领地交任尚（玩家班超保留治所，须至少两县），任尚奉天子为主；电脑班超还洛阳
+hd_89_duhu_handover_effect = {
+	if = {
+		limit = {
+			character:hd_89_ban_chao ?= {
+				is_alive = yes
+				is_landed = yes
+				OR = {
+					is_ai = yes
+					any_held_title = {
+						count >= 2
+						tier = tier_county
+					}
+				}
+			}
+			character:ren_shang ?= {
+				is_alive = yes
+				is_adult = yes
+				NOT = { this = title:h_china.holder }
+				NOT = { this = character:hd_89_ban_chao }
+			}
+		}
+		character:hd_89_ban_chao = { save_scope_as = hd_89_bc }
+		character:ren_shang = { save_scope_as = hd_89_rs }
+		create_title_and_vassal_change = { type = granted save_scope_as = hd_89_ho_change add_claim_on_loss = no }
+		scope:hd_89_bc = {
+			every_held_title = {
+				limit = {
+					tier >= tier_county
+					is_noble_family_title = no
+					is_landless_type_title = no
+					OR = {
+						scope:hd_89_bc = { is_ai = yes }
+						NOT = { this = scope:hd_89_bc.capital_county }
+					}
+				}
+				change_title_holder = { holder = scope:hd_89_rs change = scope:hd_89_ho_change take_baronies = yes }
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_89_ho_change
+		# 头衔结算后再把班超的封臣改投任尚（任尚须已高于他们）
+		create_title_and_vassal_change = { type = swear_fealty save_scope_as = hd_89_ho_change2 add_claim_on_loss = no }
+		scope:hd_89_bc = {
+			every_vassal = {
+				limit = {
+					NOT = { this = scope:hd_89_rs }
+					highest_held_title_tier < scope:hd_89_rs.highest_held_title_tier
+				}
+				change_liege = { liege = scope:hd_89_rs change = scope:hd_89_ho_change2 }
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_89_ho_change2
+		scope:hd_89_rs = {
+			if = {
+				limit = { NOT = { has_government = celestial_government } }
+				change_government = celestial_government
+			}
+			if = {
+				limit = {
+					is_independent_ruler = yes
+					exists = title:h_china.holder
+				}
+				title:h_china.holder = { save_scope_as = hd_89_rs_liege }
+				hd_nbc_swear_fealty_effect = { LIEGE = scope:hd_89_rs_liege }
+			}
+		}
+		scope:hd_89_bc = {
+			if = {
+				limit = { is_ai = yes is_landed = no }
+				title:h_china.holder ?= { add_courtier = scope:hd_89_bc }
+			}
+		}
+		set_global_variable = hd_hev_89_qiugui
+		character:ren_shang = { save_scope_as = hd_news_a }
+		character:hd_89_ban_chao = { save_scope_as = hd_news_b }
+		hd_world_news_send_skip_both_effect = { EVENT = hd_89.0665 }
+		debug_log = "HD_89 BC QIUGUI HANDOVER_DONE"
+	}
+	else = { debug_log = "HD_89 BC QIUGUI HANDOVER_SKIPPED" }
 }

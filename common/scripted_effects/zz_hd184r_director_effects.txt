@@ -81,6 +81,9 @@ hd184r_director_pulse_effect = {
 			game_start_date = 190.1.1
 			exists = global_var:hd184r_director_active
 		}
+		# 2026-10-23 清掉上一季随 trigger_event 带过来的目标作用域
+		clear_saved_scope = hd184r_target_duchy
+		clear_saved_scope = hd184r_defender
 		hd184r_director_mark_roster_effect = yes
 		character:cao_cao ?= { hd184r_director_tick_effect = yes }
 		character:yuan_shao ?= { hd184r_director_tick_effect = yes }
@@ -422,8 +425,23 @@ hd184r_director_declare_one_effect = {
 				}
 			}
 		}
+		# 2026-10-23 宣战前复核：保存作用域会随脉冲的 trigger_event 带到下一季、下一个人，
+		# 曾让别人的目标（辽东、武都等）漏给本人。只认本人本季候选里、仍合法的郡与守方。
 		if = {
-			limit = { exists = scope:hd184r_defender }
+			limit = {
+				exists = scope:hd184r_target_duchy
+				exists = scope:hd184r_defender
+				OR = {
+					is_target_in_variable_list = { name = hd184r_scand target = scope:hd184r_target_duchy }
+					is_target_in_variable_list = { name = hd184r_ocand target = scope:hd184r_target_duchy }
+				}
+				scope:hd184r_target_duchy = {
+					any_de_jure_county = {
+						hd184r_county_valid_front_trigger = yes
+						holder.top_liege ?= scope:hd184r_defender
+					}
+				}
+			}
 			# 宣战前临时解除和平锁（同天意青睐引擎），宣战后恢复
 			if = {
 				limit = { has_character_flag = sworn_peace }
@@ -455,6 +473,10 @@ hd184r_director_declare_one_effect = {
 				debug_log = "HD184R P4 WAR_START_FAILED"
 				debug_log_scopes = yes
 			}
+		}
+		else_if = {
+			limit = { exists = scope:hd184r_target_duchy }
+			debug_log = "HD184R P4 STALE_TARGET_SKIPPED"
 		}
 	}
 }

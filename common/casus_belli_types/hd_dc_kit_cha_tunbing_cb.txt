@@ -76,8 +76,7 @@ hd_dc_tunbing_cb = {
 					this = character:gong_sun_zan
 					is_alive = yes
 					is_landed = yes
-					# 2026-10-21 boki D37：不再要求持有幽州头衔，改为有地且领地与冀州接壤
-					any_realm_county = { any_neighboring_county = { kingdom = title:k_uuii_jizhou } }
+					# 2026-10-24 boki：不再看头衔或是否与冀州接壤，有地即可（开战时间由 191.7.1 邀约决定）
 					has_character_flag = hd4_jizhou_authorized
 				}
 				NOT = { exists = global_var:hd4_jizhou_finished }
@@ -288,6 +287,22 @@ hd_dc_tunbing_cb = {
 						holder.top_liege ?= scope:defender
 					}
 				}
+			}
+			# 2026-10-23：target_titles = all 后，守方每个县/郡/州都各列一条「吞并」；
+			# 普通吞并的目标只是占位，只留守方主头衔一条（与战略 AI 脚本宣战一致），
+			# 主头衔是霸权/无地头衔时改用首府所在县
+			trigger_if = {
+				limit = {
+					scope:defender.primary_title = {
+						tier >= tier_county
+						tier < tier_hegemony
+						is_landless_type_title = no
+					}
+				}
+				scope:target = scope:defender.primary_title
+			}
+			trigger_else = {
+				scope:target = scope:defender.capital_county
 			}
 		}
 	}
@@ -550,7 +565,7 @@ hd_dc_tunbing_cb = {
 			every_in_list = { list = vassals_taken change_liege = { liege = scope:attacker change = scope:hd_world_conquest_change } }
 			every_in_list = { list = titles_taken change_title_holder = { holder = scope:attacker change = scope:hd_world_conquest_change take_baronies = yes } }
 			resolve_title_and_vassal_change = scope:hd_world_conquest_change
-			hd_occupation_settle_effect = yes	# 天朝循环大修：战时占领地一并夺取
+			hd_occupation_settle_adjacent_effect = yes	# 战时占领地一并夺取；2026-10-23 只拿与本国接壤的
 			hd_historical_world_war_victory_effect = yes
 		}
 		else_if = {
@@ -651,6 +666,24 @@ hd_dc_tunbing_cb = {
 					holder = scope:attacker
 					change = scope:change
 					take_baronies = yes
+				}
+			}
+			# 2026-10-23 吞并也收守方直属封臣（玩家反馈：刘秀吞并玄汉，地都在封臣手里，打赢一块没拿到）
+			scope:hd_court_settle = {
+				every_vassal = {
+					limit = {
+						this != scope:attacker
+						is_landed = yes
+						NOT = { government_has_flag = cannot_be_vassal_or_liege }
+					}
+					add_to_temporary_list = hd_dc_tunbing_vassals
+				}
+			}
+			every_in_list = {
+				list = hd_dc_tunbing_vassals
+				change_liege = {
+					liege = scope:attacker
+					change = scope:change
 				}
 			}
 			resolve_title_and_vassal_change = scope:change

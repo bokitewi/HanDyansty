@@ -716,7 +716,9 @@ change_province_metropolitan_effect = {
 		}
 		custom_tooltip = change_province_metropolitan_effect.no_scope
 	}
-	else = {
+	# 2026-10-24 军阀契约只能经「收回权力」改动，跳过军阀（否则档位被锁、继承法却被改掉）
+	else_if = {
+		limit = { scope:province_change_recipient = { NOT = { hd_warlord_trigger = yes } } }
 		scope:province_change_recipient = {
 			vassal_contract_set_obligation_level = {
 				type = celestial_provinces
@@ -736,7 +738,9 @@ change_province_industrial_effect = {
 		}
 		custom_tooltip = change_province_industrial_effect.no_scope
 	}
-	else = {
+	# 2026-10-24 军阀契约只能经「收回权力」改动，跳过军阀（否则档位被锁、继承法却被改掉）
+	else_if = {
+		limit = { scope:province_change_recipient = { NOT = { hd_warlord_trigger = yes } } }
 		scope:province_change_recipient = {
 			vassal_contract_set_obligation_level = {
 				type = celestial_provinces
@@ -756,7 +760,9 @@ change_province_military_effect = {
 		}
 		custom_tooltip = change_province_military_effect.no_scope
 	}
-	else = {
+	# 2026-10-24 军阀契约只能经「收回权力」改动，跳过军阀（否则档位被锁、继承法却被改掉）
+	else_if = {
+		limit = { scope:province_change_recipient = { NOT = { hd_warlord_trigger = yes } } }
 		scope:province_change_recipient = {
 			vassal_contract_set_obligation_level = {
 				type = celestial_provinces
@@ -776,7 +782,9 @@ change_province_protectorate_effect = {
 		}
 		custom_tooltip = change_province_protectorate_effect.no_scope
 	}
-	else = {
+	# 2026-10-24 军阀契约只能经「收回权力」改动，跳过军阀（否则档位被锁、继承法却被改掉）
+	else_if = {
+		limit = { scope:province_change_recipient = { NOT = { hd_warlord_trigger = yes } } }
 		scope:province_change_recipient = {
 			vassal_contract_set_obligation_level = {
 				type = celestial_provinces
@@ -1984,13 +1992,101 @@ display_duchy_to_attack = {
 }
 
 grand_campaign_contribution_effect = {
-	# Legacy grand-campaign transaction disabled; retain the title macro interface.
-	if = {
-		limit = { always = no }
-		set_variable = {
-			name = hd_disabled_grand_campaign_slot
-			value = flag:$TITLE$
+	# 2026-10-23 恢复原版：此前被改成空壳（出资扣钱却不发 tgp_china_ministry.0001，大将军不宣战，玩家反馈「承诺征服后大将军府不宣战」）。
+	save_scope_as = contributor
+	scope:great_project.var:$TITLE$ ?= {
+		save_scope_as = target_title
+	}
+	# the grand marshal should always be the war leader
+	title:e_minister_grand_marshal.holder = {
+		save_scope_as = war_leader
+	}
+
+	scope:great_project ?= {
+		add_to_variable_list = {
+			name = grand_campaign_titles
+			target = scope:target_title
 		}
+	}
+	scope:great_project ?= {
+        every_in_list = {
+            variable = grand_campaign_titles
+            every_in_de_jure_hierarchy = {
+				continue = {
+					tier <= tier_duchy
+					tier >= tier_county
+				}
+                limit = {
+               		tier = tier_county
+                    holder ?= {
+                        top_overlord != scope:war_leader.top_liege
+                        NAND = {
+                            is_independent_ruler = yes
+                            government_allows = redirects_wars_to_overlord
+                        }
+                    }
+                }
+                holder.top_overlord = {
+                    add_to_list = potential_primary_defender
+                }
+            }
+        }
+        ordered_in_list = {
+            list = potential_primary_defender
+            order_by = highest_held_title_tier
+            save_scope_as = defender
+    	}
+        if = {
+            limit = {
+                NOT = { exists = scope:defender }
+            }
+            create_title_and_vassal_change = {
+                type = conquest
+                save_scope_as = change_herders
+                add_claim_on_loss = no
+            }
+            every_in_list = {
+                variable = grand_campaign_titles
+                every_in_de_jure_hierarchy = {
+					continue = {
+						tier <= tier_duchy
+						tier >= tier_county
+					}
+                    limit = {
+                   		tier = tier_county
+                        holder ?= {
+                            top_overlord != scope:war_leader.top_liege
+                            is_independent_ruler = yes
+                            government_allows = redirects_wars_to_overlord
+                        }
+                    }
+                    change_title_holder = {
+                        holder = scope:owner
+                        change = scope:change_herders
+                        take_baronies = no
+                    }
+                }
+            }
+            resolve_title_and_vassal_change = scope:change_herders
+        }
+        # if war does not exist yet, declare it
+        else_if = {
+            limit = {
+            	NOT = { exists = scope:great_project.var:grand_campaign_war }
+            }
+            scope:war_leader = {
+            	trigger_event = tgp_china_ministry.0001
+            }
+            custom_tooltip = grand_campaign_start_tt
+        }
+        # if war exists, pull everyone in
+        else = {
+			grand_campaign_update_war_participants_effect = yes
+            scope:contributor = {
+                trigger_event = tgp_china_ministry.0004
+        	}
+        }
+        custom_tooltip = great_project_type_grand_campaign_project_contribution_tt
 	}
 }
 
@@ -2993,6 +3089,20 @@ coup_ceremonial_liege_scheme_success_effect = {
 				}
 			}
 		}
+	}
+	# HD D49（2026-10-24 历史志向任务卡）：天子权臣夺位即受禅——礼仪头衔并入霸权后销毁，旧礼仪君主得前帝特质
+	if = {
+		limit = {
+			scope:owner = { has_title = title:h_china }
+			title:h_china.var:administrative_ui_special_title ?= scope:ceremonial_title
+		}
+		scope:target = {
+			if = {
+				limit = { is_alive = yes }
+				add_trait = former_emperor
+			}
+		}
+		scope:owner = { hd_court_destroy_ceremonial_effect = yes }
 	}
 }
 

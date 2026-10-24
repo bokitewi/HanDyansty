@@ -8,9 +8,259 @@ tgp_faction_events.0102 = { type = character_event hidden = yes trigger = { alwa
 tgp_faction_events.0103 = { type = character_event hidden = yes trigger = { always = no } }
 tgp_faction_events.0104 = { type = character_event hidden = yes trigger = { always = no } }
 tgp_faction_events.0105 = { type = character_event hidden = yes trigger = { always = no } }
-tgp_faction_events.0201 = { type = character_event hidden = yes trigger = { always = no } }
-tgp_faction_events.0202 = { type = character_event hidden = yes trigger = { always = no } }
-tgp_faction_events.0203 = { type = character_event hidden = yes trigger = { always = no } }
-tgp_faction_events.0204 = { type = character_event hidden = yes trigger = { always = no } }
-tgp_faction_events.0205 = { type = character_event hidden = yes trigger = { always = no } }
-tgp_faction_events.0206 = { type = character_event hidden = yes trigger = { always = no } }
+
+# ===== 「还政天子」派系（原版 restore_ceremonial_liege_faction）=====
+# 2026-10-24 历史志向任务卡 D45~D47 汉化补全，设计见 docs/历史志向任务卡_设计草案.md §3.1。
+# 成功 = 礼仪君主复掌天命（0210 以礼仪君主为 root 执行 hd_court_restore_ceremonial_effect），
+# 权臣交出霸权、连同领地称臣，礼仪头衔随天命交接销毁（D50）。战败沿用原版：派系成员被囚。
+
+scripted_effect faction_demand_restore_emperor_rejected_effect = {
+	# This effect should always be placed here, _before_ all the other effects in the block.
+	trigger_event = { on_action = on_faction_demand_rejected }
+	show_as_tooltip = {
+		scope:faction = {
+			faction_start_war = {}
+		}
+	}
+}
+
+# 要求：寄给权臣（派系目标）
+tgp_faction_events.0201 = {
+	type = letter_event
+	sender = scope:faction_leader
+	opening = hd_cer_restore_demand_opening
+	desc = hd_cer_restore_demand_desc
+
+	trigger = {
+		# May have ceased to exist by the time this triggers
+		exists = scope:faction
+		exists = scope:faction.special_character
+	}
+
+	immediate = {
+		# Grab our scope for loc.
+		save_scope_as = faction_target
+		scope:faction.special_character = { save_scope_as = ceremonial_liege }
+	}
+
+	# 接受：交还天命
+	option = {
+		name = hd_cer_restore_demand.a
+		add_dread = medium_dread_loss
+		# LEGITIMACY LOSS FOR ACCEPTING FACTION DEMANDS
+		faction_accept_demand_legitimacy_effect = yes
+		add_prestige = -500
+		custom_tooltip = hd_cer_restore_reward_tt
+		scope:faction = {
+			faction_leader = {
+				trigger_event = { id = tgp_faction_events.0202 }
+			}
+		}
+		scope:ceremonial_liege = {
+			trigger_event = tgp_faction_events.0210
+		}
+		scope:faction = {
+			if = {
+				limit = { exists = this }
+				destroy_faction = yes
+			}
+		}
+		# This effect should always be placed here, _after_ everything except the ai_chance.
+		trigger_event = { on_action = on_faction_demand_accepted }
+		# 原版权重：按派系实力（派系兵力 / 权臣兵力）
+		ai_chance = {
+			base = 10
+			modifier = {
+				add = 90
+				scope:faction = { faction_power >= 100 }
+			}
+			modifier = {
+				add = 50
+				scope:faction = { faction_power >= 125 }
+			}
+			modifier = {
+				add = 50
+				scope:faction = { faction_power >= 150 }
+			}
+			modifier = {
+				add = 50
+				scope:faction = { faction_power >= 200 }
+			}
+			modifier = {
+				add = 50
+				any_character_war = {
+					is_war_leader = root
+					is_defender = root
+				}
+			}
+			modifier = {
+				factor = 0.1
+				any_ally = {
+					NOR = {
+						target_is_liege_or_above = root
+						target_is_vassal_or_below = root
+					}
+					max_military_strength > root.max_military_strength
+				}
+			}
+			modifier = {
+				add = 10000
+				scope:faction_leader = { is_yes_men_enabled = yes }
+			}
+		}
+	}
+
+	# 拒绝：派系起兵
+	option = {
+		name = hd_cer_restore_demand.b
+		faction_demand_restore_emperor_rejected_effect = yes
+		scope:faction_leader = {
+			trigger_event = {
+				id = tgp_faction_events.0203
+				days = 1
+			}
+		}
+		ai_chance = {
+			base = 100
+			ai_value_modifier = {
+				ai_boldness = 4.0
+			}
+			modifier = {
+				add = 50
+				scope:faction = { faction_power < 80 }
+			}
+			modifier = {
+				add = 100
+				scope:faction = { faction_power < 60 }
+			}
+			modifier = {
+				add = 1000
+				scope:faction = { faction_power < 40 }
+			}
+		}
+	}
+}
+
+# 要求被接受：通知派系领袖
+tgp_faction_events.0202 = {
+	type = letter_event
+	sender = scope:faction_target
+	opening = hd_cer_restore_accepted_opening
+	desc = hd_cer_restore_accepted_desc
+
+	option = {
+		name = hd_cer_restore_accepted.a
+	}
+}
+
+# 要求被拒绝：派系领袖起兵
+tgp_faction_events.0203 = {
+	type = letter_event
+	sender = scope:faction_target
+	opening = hd_cer_restore_refused_opening
+	desc = hd_cer_restore_refused_desc
+
+	option = {
+		name = hd_cer_restore_refused.a
+		scope:faction = {
+			faction_start_war = {}
+			every_faction_member = {
+				limit = {
+					NOT = { this = scope:faction.faction_leader }
+				}
+				trigger_event = tgp_faction_events.0204
+			}
+		}
+	}
+}
+
+# 要求被拒绝：通知其余成员
+tgp_faction_events.0204 = {
+	type = letter_event
+	sender = scope:faction_target
+	opening = hd_cer_restore_refused_opening
+	desc = hd_cer_restore_refused_desc
+
+	option = { name = hd_cer_restore_refused.b }
+}
+
+# 即将递交要求：通知玩家成员
+tgp_faction_events.0205 = {
+	type = letter_event
+	sender = scope:faction_leader
+	opening = hd_cer_restore_notice_opening
+	desc = hd_cer_restore_notice_desc
+
+	option = { name = hd_cer_restore_notice.a }
+}
+
+# 战胜：派系领袖奉迎天子（scope:defender = 被囚的权臣）
+tgp_faction_events.0206 = {
+	type = character_event
+	title = hd_cer_restore_victory.t
+	desc = hd_cer_restore_victory.desc
+	override_background = { reference = throne_room_scope }
+	theme = war
+	left_portrait = {
+		character = root
+		animation = war_over_win
+	}
+	right_portrait = {
+		character = scope:ceremonial_liege
+		animation = happiness
+	}
+	lower_center_portrait = scope:defender
+
+	trigger = {
+		exists = top_liege.primary_title.var:administrative_ui_special_title.holder
+	}
+
+	immediate = {
+		tgp_save_realm_ceremonial_liege_effect = yes
+		scope:ceremonial_liege = { save_scope_as = background_throne_room_scope }
+	}
+
+	option = {
+		name = hd_cer_restore_victory.a
+		custom_tooltip = hd_cer_restore_reward_tt
+		add_hook = {
+			target = scope:ceremonial_liege
+			type = favor_hook
+		}
+		scope:ceremonial_liege = {
+			add_opinion = {
+				target = root
+				modifier = grateful_opinion
+				opinion = 50
+			}
+			trigger_event = tgp_faction_events.0210
+		}
+	}
+}
+
+# 复掌天命（隐藏）。root = 礼仪君主
+tgp_faction_events.0210 = {
+	type = character_event
+	hidden = yes
+
+	trigger = {
+		is_alive = yes
+		title:h_china.var:administrative_ui_special_title.holder ?= root
+	}
+
+	immediate = {
+		save_scope_as = hd_cer_restored_tianzi
+		title:h_china.holder ?= { save_scope_as = hd_cer_old_regent }
+		hd_court_restore_ceremonial_effect = yes
+		every_player = {
+			limit = { tgp_does_this_player_care_about_the_dynastic_cycle = yes }
+			send_interface_message = {
+				type = event_generic_neutral
+				title = hd_cer_restored_msg
+				desc = hd_cer_restored_msg_desc
+				left_icon = root
+				right_icon = scope:hd_cer_old_regent
+			}
+		}
+	}
+}

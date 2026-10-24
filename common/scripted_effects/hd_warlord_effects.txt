@@ -1,0 +1,186 @@
+﻿# 郡国制·军阀契约（2026-10-24 用户指定）
+# - 档位：celestial_provinces 第 6 档 hd_warlord（zz_WJ_celestial_provinces.txt）
+# - 继承：hd_warlord_succession_law（欢呼继承，指定继承人 +100）
+# - 身份：主头衔变量 hd_warlord；写档位前必须先有变量（档位 is_valid），清档位前必须先删变量（celestial_provinces 的 can_be_changed）
+
+# 写入第 6 档与欢呼继承法（root = 军阀，须已有 hd_warlord 变量）
+hd_warlord_apply_contract_effect = {
+	if = {
+		limit = { NOT = { vassal_contract_has_flag = hd_warlord } }
+		vassal_contract_set_obligation_level = { type = celestial_provinces level = 6 }
+	}
+	if = {
+		limit = { NOT = { has_realm_law = hd_warlord_succession_law } }
+		add_realm_law_skip_effects = hd_warlord_succession_law
+	}
+}
+
+# 「拥兵自重」：成为军阀（root = 封臣）
+hd_warlord_establish_effect = {
+	custom_tooltip = hd_warlord_establish_effect_tt
+	hidden_effect = {
+		primary_title = { set_variable = { name = hd_warlord value = yes } }
+		hd_warlord_apply_contract_effect = yes
+	}
+}
+
+# 「收回权力」/讨不臣胜利：变回普通武官（root = 军阀）
+# 军事编制名额已满或不合军事编制条件时退为普通文官（用户拍板）
+# 都督区首领不能当文官（WJ_dd_contract_head_lock_trigger），此时无视名额强设武官（用户拍板）：
+# 临时变量 hd_warlord_force_military 让第 3 档的名额与领主类型检查放行，写入后即删
+# （已是军制管理者本就不受名额限制，删掉变量后档位仍有效）
+hd_warlord_revoke_effect = {
+	if = {
+		limit = {
+			OR = {
+				hd_warlord_can_be_military_trigger = yes
+				WJ_dd_contract_head_lock_trigger = yes
+			}
+		}
+		custom_tooltip = hd_warlord_revoke_to_military_tt
+	}
+	else = {
+		custom_tooltip = hd_warlord_revoke_to_civil_tt
+	}
+	hidden_effect = {
+		every_held_title = {
+			limit = { has_variable = hd_warlord }
+			remove_variable = hd_warlord
+		}
+		if = {
+			limit = {
+				OR = {
+					hd_warlord_can_be_military_trigger = yes
+					WJ_dd_contract_head_lock_trigger = yes
+				}
+			}
+			if = {
+				limit = { NOT = { hd_warlord_can_be_military_trigger = yes } }
+				set_variable = { name = hd_warlord_force_military value = yes days = 1 }
+			}
+			vassal_contract_set_obligation_level = { type = celestial_provinces level = 3 }
+			remove_variable = hd_warlord_force_military
+			if = {
+				limit = { NOT = { has_realm_law = celestial_military_appointment_succession_law } }
+				add_realm_law_skip_effects = celestial_military_appointment_succession_law
+			}
+		}
+		else = {
+			vassal_contract_set_obligation_level = { type = celestial_provinces level = 0 }
+			if = {
+				limit = { NOT = { has_realm_law = celestial_appointment_succession_law } }
+				add_realm_law_skip_effects = celestial_appointment_succession_law
+			}
+		}
+	}
+	add_character_flag = {
+		flag = hd_warlord_revoked_cooldown
+		years = 5
+	}
+}
+
+# 军阀身份自检（root = 角色）：on_title_gain 与季度脉冲调用
+# - 已独立或不再是郡国制：身份作废
+# - 主头衔换了（升迁）：变量挪到新主头衔
+# - 契约或继承法被引擎重置：补回第 6 档与欢呼继承法
+hd_warlord_reconcile_effect = {
+	if = {
+		limit = { any_held_title = { has_variable = hd_warlord } }
+		if = {
+			limit = {
+				OR = {
+					is_independent_ruler = yes
+					NOT = { government_has_flag = government_is_celestial }
+				}
+			}
+			every_held_title = {
+				limit = { has_variable = hd_warlord }
+				remove_variable = hd_warlord
+			}
+		}
+		else = {
+			if = {
+				limit = {
+					primary_title ?= {
+						is_noble_family_title = no
+						NOT = { has_variable = hd_warlord }
+					}
+				}
+				every_held_title = {
+					limit = { has_variable = hd_warlord }
+					remove_variable = hd_warlord
+				}
+				primary_title = { set_variable = { name = hd_warlord value = yes } }
+			}
+			if = {
+				limit = { hd_warlord_trigger = yes }
+				hd_warlord_apply_contract_effect = yes
+			}
+		}
+	}
+}
+
+# 季度脉冲：军阀停发俸禄后，把本应上缴的赋税从金钱转入自家国库（用户拍板「停发俸禄，自留税入国库」「金钱转国库」）
+hd_warlord_quarterly_treasury_effect = {
+	if = {
+		limit = {
+			hd_warlord_trigger = yes
+			vassal_contract_has_flag = hd_warlord
+			has_treasury = yes
+			hd_warlord_quarterly_transfer_value > 0
+		}
+		save_temporary_scope_value_as = {
+			name = hd_warlord_transfer
+			value = hd_warlord_quarterly_transfer_value
+		}
+		remove_short_term_gold = scope:hd_warlord_transfer
+		add_treasury = scope:hd_warlord_transfer
+	}
+}
+
+# 「收回权力」被拒：主君获得讨不臣宣战理由（root = 军阀；scope:actor = 主君）
+hd_warlord_defy_effect = {
+	custom_tooltip = hd_warlord_defy_effect_tt
+	hidden_effect = {
+		set_variable = {
+			name = hd_warlord_defiant
+			value = scope:actor
+			years = 5
+		}
+	}
+}
+
+# 讨不臣胜利：收回权力 + 夺其主头衔归主君 + 下狱（用户拍板）
+hd_warlord_revoke_cb_victory_effect = {
+	scope:attacker = { show_pow_release_message_effect = yes }
+	scope:defender = {
+		primary_title = { save_scope_as = hd_warlord_seized_title }
+		hd_warlord_revoke_effect = yes
+		remove_variable = hd_warlord_defiant
+	}
+	create_title_and_vassal_change = {
+		type = revoked
+		save_scope_as = change
+		add_claim_on_loss = no
+	}
+	scope:hd_warlord_seized_title = {
+		change_title_holder = {
+			holder = scope:attacker
+			change = scope:change
+		}
+	}
+	resolve_title_and_vassal_change = scope:change
+	scope:attacker = {
+		imprison = {
+			target = scope:defender
+			type = dungeon
+		}
+		add_prestige_experience = medium_prestige_value
+		add_truce_both_ways = {
+			character = scope:defender
+			days = 1825
+			war = root.war
+			result = victory
+		}
+	}
+}
