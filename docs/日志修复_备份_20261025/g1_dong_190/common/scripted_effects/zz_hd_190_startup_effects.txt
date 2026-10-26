@@ -1,0 +1,1141 @@
+﻿# 190 年（初平元年正月）「讨董」剧本开局效果（2026-10-22）。只由 common/on_action/zz_hd_190_startup.txt 调用，调用处已带 190 闸门。
+# 设计见 docs/190讨董剧本_设计草案.md。debug.log 搜 HD190。
+# 头衔历史由 tools/hd190/gen_190_titles.py 生成到 history/titles/zz_hd_190_titles.txt；这里做历史文件写不了的事。
+# 写法参照 218 开局（zz_hd_218_startup_effects.txt）：on_game_start 改头衔与预置旗标；after_lobby 装朝官、联盟、朝贡、排期。
+
+############################################################
+# on_game_start
+############################################################
+hd190_game_start_effect = {
+	# 预置 184~189 年已发生剧情的旗标（先于一切依赖这些旗标的月度检查）
+	hd190_preset_flags_effect = yes
+	debug_log = "HD190 GAME_START DONE"
+}
+
+############################################################
+# 预置旗标：只置 190.1.1 时已为真的（黄巾、宫变、废立、桃园、六场旧叛乱等）。
+# 讨董联盟、诛董、群雄割据、冀州交接、陶谦让徐州、孙家线后续等 190 之后才发生的，一律不置。
+############################################################
+hd190_preset_flags_effect = {
+	# 黄巾（主力 184 年已平；三个黄巾营地头衔的首领都已死）
+	set_global_variable = hd_yellow_turban_184_initialized
+	set_global_variable = hd_yellow_turban_outcome_resolved
+	set_global_variable = hd_yellow_turban_han_survived
+	# 历史叛乱 REV-01~06 窗口已过；REV-07 并州休屠各、REV-08 马相窗口到 190.12.31，并州早已解体，益州乱事已平，一并预置（三条必须成对，否则南匈奴内附链被卡死）
+	set_global_variable = hd_revolt_jiaozhi_fired
+	set_global_variable = hd_revolt_beigong_fired
+	set_global_variable = hd_revolt_heishan_fired
+	set_global_variable = hd_revolt_jiangxia_fired
+	set_global_variable = hd_revolt_wangguo_fired
+	set_global_variable = hd_revolt_zhangchun_fired
+	set_global_variable = hd_revolt_bingzhou_hu_fired
+	set_global_variable = hd_revolt_maxiang_fired
+	set_global_variable = { name = hd_wuhu_xiutu_resolved value = yes }
+	# 宫廷危机：started 关掉入口；0023 烧雒迁长安由联盟入口在开局后 31 天触发，它自己改写成 completed
+	set_global_variable = hd_palace_crisis_started
+	set_global_variable = hd_palace_he_jin_killed
+	set_global_variable = hd_palace_purge_completed
+	set_global_variable = hds_dong_entered
+	set_global_variable = hd_hev_184_deposition
+	set_global_variable = hd_hev_184_dingyuan_killed
+	set_global_variable = hd_hev_184_yuan_flee
+	# 董卓：凉州郡守已由 190 头衔历史静态独立，不再释放
+	character:dong_zhuo_2 ?= {
+		if = { limit = { is_alive = yes } add_character_flag = hd_dong_arrival_liangzhou_released }
+	}
+	# 吕布：历史层 184.1.1 块给的丁原养子旗标（无读取者）
+	character:lv_bu ?= {
+		if = { limit = { is_alive = yes } remove_character_flag = hd_ding_yuan_adoptive_son }
+	}
+	# 袁绍、曹操：已「落脚」。联盟重建时的 hd_anti_regent_prepare_core_character_effect 见此旗标就不会交还旧地、也不会把曹操搬去莱芜
+	character:yuan_shao ?= {
+		if = {
+			limit = { is_alive = yes }
+			add_character_flag = hd_anti_regent_core_prepared
+			add_character_flag = hd_yuan_bohai_migration_completed
+			add_character_flag = hd_yuan_bohai_arrived
+		}
+	}
+	character:cao_cao ?= {
+		if = {
+			limit = { is_alive = yes }
+			add_character_flag = hd_anti_regent_core_prepared
+			add_character_flag = hd4_cao_laiwu_settled
+			add_character_flag = hd_cao_chenliu_migration_completed
+			add_character_flag = hd4_cao_escape_processed
+			add_character_flag = hd190_hw_no_relocate	# 诛董后 hd184r_hw_adjust_self_effect 不把他搬去 §4 表里的阳平/东郡（见 zz_hd184r_placement_effects.txt）
+		}
+	}
+	# 桃园结义已完成
+	character:liu_bei ?= {
+		if = {
+			limit = { is_alive = yes }
+			add_character_flag = hd_peach_garden_oath_completed
+			add_character_flag = hd_lb_yellow_seen
+		}
+	}
+	character:guan_yu ?= { if = { limit = { is_alive = yes } add_character_flag = hd_peach_garden_oath_completed } }
+	character:zhang_fei ?= { if = { limit = { is_alive = yes } add_character_flag = hd_peach_garden_oath_completed } }
+	# 孙家线：孙坚夺南阳、投袁术、袁术逃出雒阳都已发生（否则 hds 心跳一开就走 184 年的逃亡和政变，破坏孙坚依附袁术的布置）
+	character:yuan_shu ?= {
+		if = {
+			limit = { is_alive = yes }
+			add_character_flag = hds_yuan_fled
+			add_character_flag = hds_nanyang_acquired
+			add_character_flag = hds_sun_joined_yuan
+		}
+	}
+	character:sun_jian ?= {
+		if = { limit = { is_alive = yes } add_character_flag = hds_sun_under_yuan }
+	}
+	# 刘表已在荆州（188 年起）：否则联盟结束时 hds.1000 会重走「抢荆州」，可能夺别人的首府县
+	character:liu_biao ?= {
+		if = {
+			limit = { is_alive = yes }
+			add_character_flag = hds_liu_established
+			add_character_flag = hd_liu_biao_jingzhou_completed
+		}
+	}
+	debug_log = "HD190 PRESET_FLAGS DONE"
+}
+
+############################################################
+# on_game_start_after_lobby
+############################################################
+hd190_after_lobby_effect = {
+	hd190_court_effect = yes
+	hd190_fire_extras_effect = yes
+	hd190_regency_effect = yes
+	hd190_ministers_effect = yes
+	hd190_dong_troops_effect = yes
+	hd190_era_effect = yes
+	hd190_employers_effect = yes
+	hd190_review_employers_effect = yes
+	hd190_zhuhou_wang_effect = yes
+	hd190_sun_jian_army_effect = yes
+	hd190_liu_biao_capital_effect = yes
+	hd190_yuan_shu_story_effect = yes
+	hd190_relations_effect = yes
+	hd190_rewards_effect = yes
+	hd190_coalition_found_effect = yes
+	hd190_tributary_effect = yes
+	hd190_peerage_effect = yes	# 须在郿国建成（其中会清董卓旧爵）、诸侯王入宫廷之后
+	hd190_xuzhou_xiangyang_effect = yes	# 2026-10-24：笮融/臧霸/黄祖军阀契约，张虎/陈生农民领袖与结盟
+	hd190_truces_effect = yes	# 2026-10-25：曹操—袁绍、袁术—刘表十年停战
+	title:h_china = {
+		trigger_event = { on_action = hd190_sched_liu_bian days = 64 }	# 190.3.6 刘辩被害
+		trigger_event = { on_action = hd190_day10_check days = 10 }
+		trigger_event = { on_action = hd190_sched_burn_prep days = 30 }	# 烧雒前一天：朝官和联盟成员的家族迁出雒阳
+		trigger_event = { on_action = hd190_sched_cao_sword days = 1 }	# 王允的七星刀转给曹操
+		trigger_event = { on_action = hd190_sched_xun_shuang days = 120 }	# 190.5.1 司空荀爽卒
+		trigger_event = { on_action = hd190_sched_zhang_lu days = 424 }	# 191.3.1 张鲁袭杀苏固、据汉中自立
+		trigger_event = { on_action = hd190_sched_kuai_counsel days = 59 }	# 190.3.1 蒯越献策（2026-10-25）
+		trigger_event = { on_action = hd190_sched_kuai_pacify days = 243 }	# 190.9.1 江南悉平（2026-10-25）
+		trigger_event = { on_action = hd190_sched_li_guo days = 1856 }	# 195.2.1 李傕郭汜相攻（2026-10-25）
+	}
+	hd_recommended_starting_resources_effect = yes
+	debug_log = "HD190 AFTER_LOBBY DONE"
+}
+
+# 汉廷官署命名（照 hd_han_setup_184_court_effect 的 set_title_name 部分）。
+# 不沿用它的 grand_marshal_law：190 是丞相法，大将军又已空缺；也不沿用对荆益凉州牧的军戍契约（他们现在是独立朝贡国）。
+hd190_court_effect = {
+	title:h_china.holder ?= {
+		save_scope_as = councillor_liege
+		title:e_minister_chancellor = { set_title_name = hd_han_situ_title }
+		title:e_minister_censor = { set_title_name = hd_han_sikong_title }
+		title:e_minister_grand_marshal = { set_title_name = hd_han_general_in_chief_title }
+		title:e_minister_of_war = { set_title_name = hd_han_taiwei_title }
+		title:e_minister_of_revenue = { set_title_name = hd_han_dasinong_title }
+		title:e_minister_of_works = { set_title_name = hd_han_taipu_title }
+		title:e_minister_of_personnel = { set_title_name = hd_han_shangshuling_title }
+		title:e_minister_of_justice = { set_title_name = hd_han_tingwei_title }
+		title:e_minister_of_rites = { set_title_name = hd_han_taichang_title }
+		title:e_WJ_minister_zong_zheng = { set_title_name = WJ_zong_zheng_hanjin_title }
+		hd_184_ensure_noble_families_effect = yes
+	}
+}
+
+# 184 历史层的 give_council_position 泄漏进 190 的议员，一律解职（人选由 hd190_ministers_effect 重新授座）。Scope：任意
+hd190_fire_extras_effect = {
+	title:h_china.holder ?= {
+		save_scope_as = hd190_emperor
+		every_councillor = {
+			limit = { NOT = { this = scope:hd190_emperor } }
+			save_temporary_scope_as = hd190_extra
+			scope:hd190_emperor = { always_fire_councillor = scope:hd190_extra }
+		}
+	}
+}
+
+# 指定朝官入席。头衔已由 190 头衔历史交给本人，got_minister_position_effect 见已持头衔就只补席位、居所。
+# 照 hd_nbc_minister_effect 的写法，判定改用 NOT has_council_position。需 scope:councillor_liege。
+hd190_minister_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				NOT = { has_council_position = $POS$ }
+				NOT = { this = scope:councillor_liege }
+			}
+			if = {
+				limit = {
+					is_landed = no
+					NOT = { employer ?= scope:councillor_liege }
+				}
+				scope:councillor_liege = { add_courtier = character:$WHO$ }
+			}
+			got_minister_position_effect = { MINISTER_TITLE = $TITLE$ MINISTER_POSITION = $POS$ }
+		}
+	}
+}
+
+# 太傅袁隗、太尉黄琬、司徒杨彪、司空荀爽、尚书令王允（董卓的丞相在 hd190_regency_effect）。其余席位空缺。
+# 2026-10-23：荀爽卒年改回 190.5（库里原写 190.1.1，开局时已死），司空由张温换回荀爽；张温无地在朝。
+hd190_ministers_effect = {
+	title:h_china.holder ?= {
+		save_scope_as = councillor_liege
+		hd190_minister_effect = { WHO = yuan_kui TITLE = e_WJ_minister_tai_fu POS = WJ_minister_tai_fu }
+		hd190_minister_effect = { WHO = huang_wan TITLE = e_minister_of_war POS = councillor_marshal }
+		hd190_minister_effect = { WHO = yang_biao TITLE = e_minister_chancellor POS = councillor_chancellor }
+		hd190_minister_effect = { WHO = xun_shuang TITLE = e_minister_censor POS = councillor_spymaster }
+		hd190_minister_effect = { WHO = wang_yun TITLE = e_minister_of_personnel POS = minister_personnel }
+	}
+	debug_log = "HD190 MINISTERS DONE"
+}
+
+# 袁绍、曹操的起家奖励：沿用 184 流程「渤海立足」「陈留落脚」完成时发的东西，一次性补发
+hd190_rewards_effect = {
+	character:yuan_shao ?= { hd4_yuan_bohai_reward_effect = yes }
+	character:cao_cao ?= { hd4_cao_finish_early_effect = yes }
+}
+
+# 开局后第 1 天：王允的七星刀转给曹操（hd_legendary_weapons_startup 在 after_lobby 无日期闸地把刀给了王允）
+hd190_cao_sword_effect = {
+	character:cao_cao ?= { if = { limit = { is_alive = yes } hd4_cao_sword_effect = yes } }
+}
+
+# 烧雒前一天：hd_luoyang_noble_purge_effect 会处决雒阳每座庄园主的整个家族（成员、廷臣）。
+# 袁隗的家族是汝南袁氏，袁术、袁遗同属；曹嵩的家族里有曹操。把朝官和联盟成员所在家族的庄园先迁长安。
+hd190_burn_prep_effect = {
+	title:b_uuii_p_867.title_province ?= { save_scope_as = hd190_changan }
+	title:h_china.holder ?= {
+		every_councillor = {
+			domicile ?= { move_domicile = scope:hd190_changan }
+		}
+	}
+	title:b_uuii_p_787.title_province ?= {
+		every_province_domicile = {
+			limit = {
+				is_domicile_type = estate
+				owner ?= {
+					house ?= {
+						any_house_member = {
+							OR = {
+								has_character_flag = hd_anti_regent_league_member
+								has_character_flag = hd_anti_regent_league_leader
+								this = character:sun_jian
+								this = character:liu_bei
+								this = character:wang_yun
+								this = character:yang_biao
+								this = character:huang_wan
+							}
+						}
+					}
+				}
+			}
+			move_domicile = scope:hd190_changan
+		}
+	}
+	debug_log = "HD190 BURN_PREP DONE"
+}
+
+# 董卓拜相秉政：先 granted 授丞相再走 WJ 拜相（避开 appointment 辞头衔检查），献帝为傀儡
+hd190_regency_effect = {
+	if = {
+		limit = {
+			exists = title:h_china.holder
+			title:h_china.holder = character:liu_xie
+			character:dong_zhuo_2 ?= { is_alive = yes is_landed = yes }
+		}
+		character:dong_zhuo_2 = {
+			hd_force_dong_regency_effect = yes
+			hd_dong_lock_succession_effect = yes
+			# 郿国：照 hd_palace_crisis.0007 的顺序，拜相之后建封国（董卓主头衔改郿国，司隶法理归它，州头衔注销）
+			hd184r_meiguo_create_effect = yes
+			set_location = { location = title:b_uuii_p_787.title_province stick_to_location = yes }
+			domicile ?= { move_domicile = title:b_uuii_p_787.title_province }
+		}
+		debug_log = "HD190 REGENCY INSTALLED"
+	}
+	else = {
+		debug_log = "HD190 REGENCY FAILED"
+	}
+}
+
+# 西凉兵 3 万（羌骑、湟中义从、重甲步兵），事件兵，董卓死后随之解散
+hd190_dong_troops_effect = {
+	character:dong_zhuo_2 ?= { hd184r_dong_xiliang_troops_effect = yes }
+}
+
+# 年号：初平元年（同 WJ_era_184_start 的写法）
+hd190_era_effect = {
+	character:liu_xie ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				title:h_china.holder ?= this
+				NOT = { has_variable = SG_NianHao_data }
+			}
+			remove_all_NianHao = yes
+			set_variable = data_nianhao_to_SG
+			set_variable = SG_nianhao_chuping
+			set_variable = { name = SG_NianHao_data value = 1 }
+			set_global_variable = { name = SG_nianhao_chuping years = 100 value = yes }
+			add_character_flag = SanGong_NianHao_flag
+		}
+	}
+}
+
+# 董卓朝中人物的雇主（无地者入董卓宫廷）
+hd190_employers_effect = {
+	hd190_employer_fix_effect = { WHO = lv_bu BOSS = dong_zhuo_2 }
+	hd190_employer_fix_effect = { WHO = li_ru BOSS = dong_zhuo_2 }
+	hd190_employer_fix_effect = { WHO = niu_fu BOSS = dong_zhuo_2 }
+	hd190_employer_fix_effect = { WHO = hu_zhen BOSS = dong_zhuo_2 }
+	hd190_employer_fix_effect = { WHO = hua_xiong BOSS = dong_zhuo_2 }
+	hd190_employer_fix_effect = { WHO = xu_rong BOSS = dong_zhuo_2 }
+	hd190_employer_fix_effect = { WHO = li_jue BOSS = dong_zhuo_2 }
+	hd190_employer_fix_effect = { WHO = guo_si BOSS = dong_zhuo_2 }
+	hd190_employer_fix_effect = { WHO = fan_chou BOSS = dong_zhuo_2 }
+	hd190_employer_fix_effect = { WHO = zhang_ji_2 BOSS = dong_zhuo_2 }
+	hd190_employer_fix_effect = { WHO = dong_min BOSS = dong_zhuo_2 }
+	hd190_employer_fix_effect = { WHO = dong_huang BOSS = dong_zhuo_2 }
+	hd190_employer_fix_effect = { WHO = wang_yun BOSS = liu_xie }
+	hd190_employer_fix_effect = { WHO = yang_biao BOSS = liu_xie }
+	hd190_employer_fix_effect = { WHO = huang_wan BOSS = liu_xie }
+	# 孙坚的四名部将（184 开局由 hd_dynasty_startup 处理，190 改在这里）：先去掉名门家族头衔，再入孙坚宫廷。
+	# 2026-10-23 R5 起孙坚不持地（只有世族头衔），入不了他的宫廷时改入袁术宫廷（见 hd190_sun_retainer_effect）
+	hd190_unland_family_effect = { WHO = cheng_pu TITLE = c_hd_nf_famous_h_house_111010191003013 }
+	hd190_unland_family_effect = { WHO = huang_gai TITLE = c_hd_nf_famous_h_house_111010094002013 }
+	hd190_unland_family_effect = { WHO = han_dang TITLE = c_hd_nf_famous_h_house_111010015005013 }
+	hd190_sun_retainer_effect = { WHO = cheng_pu }
+	hd190_sun_retainer_effect = { WHO = huang_gai }
+	hd190_sun_retainer_effect = { WHO = han_dang }
+	hd190_sun_retainer_effect = { WHO = zu_mao }
+	hd190_sun_retainer_effect = { WHO = huan_jie }	# 长沙功曹，孙坚死后为其迎丧
+	# 吕布杀丁原后归董卓为义子（同 hd_palace_crisis.0022）
+	character:dong_zhuo_2 ?= {
+		if = {
+			limit = { is_alive = yes character:lv_bu ?= { is_alive = yes NOT = { father ?= character:dong_zhuo_2 } } }
+			adopt = character:lv_bu
+		}
+	}
+}
+
+# 孙坚部属：孙坚有地就入孙坚宫廷，否则入袁术宫廷
+hd190_sun_retainer_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = { is_alive = yes is_landed = no is_ruler = no }
+			if = {
+				limit = { character:sun_jian ?= { is_alive = yes is_landed = yes } }
+				if = {
+					limit = { NOT = { employer ?= character:sun_jian } }
+					set_employer = character:sun_jian
+					debug_log = "HD190 EMPLOYER_FIX $WHO$ -> sun_jian"
+				}
+			}
+			else_if = {
+				limit = {
+					character:yuan_shu ?= { is_alive = yes is_landed = yes }
+					NOT = { employer ?= character:yuan_shu }
+				}
+				set_employer = character:yuan_shu
+				debug_log = "HD190 EMPLOYER_FIX $WHO$ -> yuan_shu"
+			}
+		}
+	}
+}
+
+hd190_unland_family_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = { is_alive = yes has_title = title:$TITLE$ }
+			destroy_title = title:$TITLE$
+		}
+	}
+}
+
+# 桃园结义已成：关羽、张飞入刘备宫廷，三人结义兄弟（旗标已在预置里设；关系是关系，不是旗标，这里补）
+hd190_relations_effect = {
+	character:liu_bei ?= {
+		if = {
+			limit = { is_alive = yes }
+			character:guan_yu ?= {
+				if = {
+					limit = { is_alive = yes }
+					hd_peach_garden_force_liu_courtier_effect = yes
+					if = { limit = { NOT = { has_relation_blood_brother = character:liu_bei } } set_relation_blood_brother = { target = character:liu_bei } }
+				}
+			}
+			character:zhang_fei ?= {
+				if = {
+					limit = { is_alive = yes }
+					hd_peach_garden_force_liu_courtier_effect = yes
+					if = { limit = { NOT = { has_relation_blood_brother = character:liu_bei } } set_relation_blood_brother = { target = character:liu_bei } }
+					character:guan_yu ?= {
+						if = { limit = { is_alive = yes NOT = { has_relation_blood_brother = character:zhang_fei } } set_relation_blood_brother = { target = character:zhang_fei } }
+					}
+				}
+			}
+		}
+	}
+}
+
+hd190_employer_fix_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = no
+				is_ruler = no
+				character:$BOSS$ ?= { is_alive = yes is_landed = yes }
+				NOT = { employer ?= character:$BOSS$ }
+			}
+			debug_log = "HD190 EMPLOYER_FIX $WHO$ -> $BOSS$"
+			set_employer = character:$BOSS$
+		}
+	}
+}
+
+############################################################
+# 讨董联盟：开局即成立。袁绍盟主，固定名单入盟（不随机邀请）。
+# 不走 hd_anti_regent_prepare_first_war_effect（它会让袁绍重新「落脚渤海」交还旧地、让曹操搬去莱芜），
+# 也不派随机邀请；把后续链条读取的全部状态直接写好，再排期：+31 天烧雒迁长安（190.2），+91 天进入第 1 阶段开战（190.4）。
+############################################################
+hd190_coalition_found_effect = {
+	if = {
+		limit = {
+			hd_history_events_enabled_trigger = yes	# 历史事件开关关闭时不建联盟（同 184 的 hd_try_start_palace_crisis_effect）
+			NOT = { exists = global_var:hd_anti_regent_chain_resolved }
+			NOT = { exists = global_var:hd_anti_regent_founded }
+			character:dong_zhuo_2 ?= { is_alive = yes is_landed = yes }
+			character:yuan_shao ?= { is_alive = yes is_landed = yes is_independent_ruler = yes }
+		}
+		character:yuan_shao = { hd190_coalition_create_effect = yes }
+		hd190_coalition_add_member_effect = { WHO = yuan_shu }
+		hd190_coalition_add_member_effect = { WHO = cao_cao }
+		hd190_coalition_add_member_effect = { WHO = han_fu }
+		hd190_coalition_add_member_effect = { WHO = kong_zhou }
+		hd190_coalition_add_member_effect = { WHO = liu_dai_3 }
+		hd190_coalition_add_member_effect = { WHO = zhang_miao }
+		hd190_coalition_add_member_effect = { WHO = yuan_yi }
+		hd190_coalition_add_member_effect = { WHO = qiao_mao }
+		hd190_coalition_add_member_effect = { WHO = bao_xin }
+		hd190_coalition_add_member_effect = { WHO = wang_kuang }
+		hd190_coalition_add_member_effect = { WHO = kong_rong }
+		hd190_coalition_add_member_effect = { WHO = zhang_chao }
+		hd190_coalition_add_member_effect = { WHO = tao_qian }
+		hd190_coalition_add_member_effect = { WHO = gong_sun_zan }
+		hd190_coalition_add_member_effect = { WHO = ma_teng }
+		hd190_coalition_add_member_effect = { WHO = zhang_yang }
+		# 孙坚是袁术封臣，不单独入盟（随宗主参战）
+		set_global_variable = hd_anti_regent_founded
+		set_global_variable = { name = hd_anti_regent_stage value = 0 }
+		# 烧雒迁长安：开局已成立，不走「成立即 +1 天」，改 +31 天（190.2）
+		set_global_variable = hd_dong_luoyang_burn_scheduled
+		character:dong_zhuo_2 = {
+			set_variable = { name = hd_anti_regent_confederation value = global_var:hd_anti_regent_active_confederation }
+			set_variable = { name = hd_anti_regent_leader value = global_var:hd_anti_regent_league_leader }
+			random_owned_story = { type = hd_story_dong_zhuo_life set_variable = { name = hd_dong_zhuo_life_phase value = flag:hd_dong_zhuo_life_coalition } }
+			trigger_event = { id = hd_palace_crisis.0023 days = 31 }
+			trigger_event = { id = hd_anti_regent.0092 days = 91 }
+		}
+		character:yuan_shao = {
+			random_owned_story = { type = hd_story_yuan_life set_variable = { name = hd_yuan_life_phase value = flag:hd_yuan_life_coalition } }
+			trigger_event = { id = hd_anti_regent.0002 days = 1 }
+		}
+		character:cao_cao ?= {
+			random_owned_story = { type = hd_story_cao_life set_variable = { name = hd_cao_life_phase value = flag:hd_cao_life_coalition } }
+		}
+		hd_lb_dong_open_effect = yes
+		# 每月维护循环（0093）从此接上
+		character:dong_zhuo_2 = { hd_anti_regent_maintain_effect = yes }
+		debug_log = "HD190 COALITION FOUNDED"
+	}
+	else = {
+		debug_log = "HD190 COALITION SKIPPED"
+	}
+}
+
+# Scope：袁绍。建同盟、立盟主
+hd190_coalition_create_effect = {
+	save_scope_as = hd190_leader
+	if = { limit = { exists = confederation } confederation = { remove_confederation_member = scope:hd190_leader } }
+	create_confederation = {
+		name = HD_ANTI_REGENT_LEAGUE_NAME
+		type = confederation_type:hd_anti_regent_league_type
+	}
+	confederation = { save_scope_as = hd190_conf }
+	set_global_variable = { name = hd_anti_regent_active_confederation value = scope:hd190_conf }
+	set_global_variable = { name = hd_anti_regent_league_leader value = this }
+	set_variable = { name = hd_anti_regent_confederation value = scope:hd190_conf }
+	set_variable = { name = hd_anti_regent_target value = character:dong_zhuo_2 }
+	if = { limit = { has_variable_list = hd_anti_regent_members } clear_variable_list = hd_anti_regent_members }
+	add_character_flag = hd_anti_regent_league_leader
+	add_character_flag = hd_anti_regent_core_prepared
+	add_character_flag = hd_anti_regent_creation_started
+	add_to_global_variable_list = { name = hd_anti_regent_invitees target = this }
+	add_to_variable_list = { name = hd_anti_regent_members target = this }
+	debug_log = "HD190 COALITION LEAGUE_CREATED"
+}
+
+# Scope：任意。WHO 为入盟人物
+hd190_coalition_add_member_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = yes
+				is_independent_ruler = yes
+				exists = global_var:hd_anti_regent_active_confederation
+				NOT = { is_member_of_confederation = global_var:hd_anti_regent_active_confederation }
+			}
+			save_scope_as = hd_anti_regent_joiner
+			if = {
+				limit = { exists = confederation }
+				confederation = { remove_confederation_member = scope:hd_anti_regent_joiner }
+			}
+			global_var:hd_anti_regent_league_leader = { hd_anti_regent_add_real_member_effect = yes }
+			if = {
+				limit = { is_member_of_confederation = global_var:hd_anti_regent_active_confederation }
+				set_variable = { name = hd_league_leader value = global_var:hd_anti_regent_league_leader }
+				debug_log = "HD190 COALITION MEMBER_JOINED $WHO$"
+			}
+			else = { debug_log = "HD190 COALITION MEMBER_JOIN_FAILED $WHO$" }
+		}
+		else_if = {
+			limit = { is_alive = yes }
+			debug_log = "HD190 COALITION MEMBER_SKIPPED $WHO$"
+		}
+	}
+}
+
+############################################################
+# 朝贡：非联盟史实势力独立并向汉帝国朝贡（宗主＝天子，tributary_celestial）
+############################################################
+hd190_tributary_effect = {
+	hd190_tribute_one_effect = { WHO = liu_biao }
+	hd190_tribute_one_effect = { WHO = liu_yan_5 }
+	hd190_tribute_one_effect = { WHO = liu_yu_3 }
+	hd190_tribute_one_effect = { WHO = gong_sun_du }
+	hd190_tribute_one_effect = { WHO = zhang_yan_7 }
+	hd190_tribute_one_effect = { WHO = liu_chong_4 }
+	hd190_tribute_one_effect = { WHO = huang_juan }
+	hd190_tribute_one_effect = { WHO = han_sui }
+	hd190_tribute_one_effect = { WHO = chen_wen }
+	hd190_tribute_one_effect = { WHO = lu_kang }
+	hd190_tribute_one_effect = { WHO = donghai_wang_002 }
+	hd190_tribute_one_effect = { WHO = zhou_xin }
+	hd190_tribute_one_effect = { WHO = sheng_xian }
+	hd190_tribute_one_effect = { WHO = zhu_fu }
+	# 2026-10-23 复查新放的汉廷命官（张鲁改作刘焉部属，不再单独朝贡）。黄巾、白波、宗贼、山越、南匈奴、宋建不朝贡
+	hd190_tribute_one_effect = { WHO = jiao_he }
+	hd190_tribute_one_effect = { WHO = cao_yin }
+	hd190_tribute_one_effect = { WHO = zhou_shu }
+	hd190_tribute_one_effect = { WHO = su_dai }
+	hd190_tribute_one_effect = { WHO = bei_yu }
+}
+
+hd190_tribute_one_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = yes
+				is_independent_ruler = yes
+				is_tributary = no
+				is_ai = yes
+				exists = title:h_china.holder
+				title:h_china.holder ?= { is_alive = yes has_government = celestial_government }
+				NOT = { this = title:h_china.holder }
+			}
+			start_tributary = { contract_group = tributary_celestial suzerain = title:h_china.holder }
+			if = {
+				limit = { is_tributary_of = title:h_china.holder }
+				debug_log = "HD190 TRIBUTE_CONFIRMED $WHO$"
+			}
+			else = { debug_log = "HD190 TRIBUTE_FAILED $WHO$" }
+		}
+	}
+}
+
+############################################################
+# 刘辩被害（190.3.6，历史 death 条目是未来日期，开局后不执行）
+############################################################
+hd190_liu_bian_death_effect = {
+	character:liu_bian ?= {
+		if = {
+			limit = { is_alive = yes hd_history_events_enabled_trigger = yes }
+			if = {
+				limit = { character:dong_zhuo_2 ?= { is_alive = yes } }
+				death = { death_reason = death_murder killer = character:dong_zhuo_2 }
+			}
+			else = { death = { death_reason = death_murder } }
+			debug_log = "HD190 LIU_BIAN_KILLED"
+		}
+	}
+}
+
+# 开局第 10 天核对：只写日志
+hd190_day10_check_effect = {
+	character:dong_zhuo_2 ?= {
+		if = {
+			limit = { is_alive = yes }
+			if = { limit = { has_council_position = WJ_minister_cheng_xiang } debug_log = "HD190 DAY10 DONG_CHENGXIANG_OK" }
+			else = { debug_log = "HD190 DAY10 DONG_CHENGXIANG_MISSING" }
+			if = { limit = { exists = global_var:hd184r_meiguo } debug_log = "HD190 DAY10 MEIGUO_OK" }
+			else = { debug_log = "HD190 DAY10 MEIGUO_MISSING" }
+		}
+	}
+	if = { limit = { exists = global_var:hd_anti_regent_founded } debug_log = "HD190 DAY10 COALITION_OK" }
+	else = { debug_log = "HD190 DAY10 COALITION_MISSING" }
+}
+
+############################################################
+# 2026-10-23 复查重做（docs/190讨董剧本_复查报告.md 第 6~7 节）
+############################################################
+
+# R7：收了地的史实人物送去朝廷或主公帐下。有世族头衔的人（张鲁、黄忠、许攸、程昱、陈宫、卢植等）是世族之主，
+# 入不了别人宫廷（hd190_employer_fix_effect 要求 is_ruler = no），他们的世族头衔已由头衔历史改挂主公或仍挂天子。
+# R9：黑山诸帅入张燕、白波诸帅入郭太、葛陂诸帅入刘辟、陈生入张虎。
+hd190_review_employers_effect = {
+	# 190 年在朝
+	hd190_employer_fix_effect = { WHO = zhu_juan BOSS = liu_xie }
+	hd190_employer_fix_effect = { WHO = shujun_zhao_005 BOSS = liu_xie }	# 赵谦
+	hd190_employer_fix_effect = { WHO = shi_sun_rui BOSS = liu_xie }
+	hd190_employer_fix_effect = { WHO = fu_wan BOSS = liu_xie }
+	hd190_employer_fix_effect = { WHO = zhang_wen_2 BOSS = liu_xie }	# 张温：不再任司空，仍在朝
+	# 别人的部属
+	hd190_employer_fix_effect = { WHO = wen_pin BOSS = liu_biao }
+	hd190_employer_fix_effect = { WHO = xiang_lang BOSS = liu_biao }
+	hd190_employer_fix_effect = { WHO = wang_rui BOSS = liu_biao }	# 王叡：前荆州刺史
+	hd190_employer_fix_effect = { WHO = zang_hong BOSS = zhang_chao }
+	hd190_employer_fix_effect = { WHO = xu_qiu BOSS = zhang_chao }
+	hd190_employer_fix_effect = { WHO = zhao_yu BOSS = tao_qian }
+	hd190_employer_fix_effect = { WHO = xu_shao BOSS = tao_qian }
+	hd190_employer_fix_effect = { WHO = yang_hong BOSS = yuan_shu }
+	hd190_employer_fix_effect = { WHO = zhao_wei BOSS = liu_yan_5 }
+	hd190_employer_fix_effect = { WHO = jia_long BOSS = liu_yan_5 }
+	hd190_employer_fix_effect = { WHO = tian_kai BOSS = gong_sun_zan }
+	# 籍贯、经历对不上：回本郡
+	hd190_employer_fix_effect = { WHO = bian_rang BOSS = zhang_miao }	# 陈留
+	hd190_employer_fix_effect = { WHO = liu_zhen_4 BOSS = yingchuan_li_009 }	# 东平
+	hd190_employer_fix_effect = { WHO = zhang_jian BOSS = guo_dian }	# 巨鹿
+	hd190_employer_fix_effect = { WHO = liaodong_li_001 BOSS = liu_yu_3 }
+	hd190_employer_to_title_holder_effect = { WHO = que_xuan TITLE = d_xiapei }	# 下邳
+	hd190_employer_to_title_holder_effect = { WHO = zhang_meng TITLE = d_dunhuang_hexi }	# 敦煌
+	# 黑山诸帅
+	hd190_employer_fix_effect = { WHO = yu_du BOSS = zhang_yan_7 }
+	hd190_employer_fix_effect = { WHO = bai_rao BOSS = zhang_yan_7 }
+	hd190_employer_fix_effect = { WHO = sui_gu BOSS = zhang_yan_7 }
+	hd190_employer_fix_effect = { WHO = sun_qing BOSS = zhang_yan_7 }
+	hd190_employer_fix_effect = { WHO = wang_dang BOSS = zhang_yan_7 }
+	hd190_employer_fix_effect = { WHO = zuo_zi_zhang_ba BOSS = zhang_yan_7 }
+	hd190_employer_fix_effect = { WHO = li_da_mu BOSS = zhang_yan_7 }
+	hd190_employer_fix_effect = { WHO = yu_di_gen BOSS = zhang_yan_7 }
+	hd190_employer_fix_effect = { WHO = zhang_lei_gong BOSS = zhang_yan_7 }
+	hd190_employer_fix_effect = { WHO = du_zhang BOSS = zhang_yan_7 }
+	hd190_employer_fix_effect = { WHO = liu_shi BOSS = zhang_yan_7 }
+	# 白波诸帅
+	hd190_employer_fix_effect = { WHO = yang_feng BOSS = guo_da_xian }
+	hd190_employer_fix_effect = { WHO = han_xian BOSS = guo_da_xian }
+	hd190_employer_fix_effect = { WHO = li_le BOSS = guo_da_xian }
+	hd190_employer_fix_effect = { WHO = hu_cai BOSS = guo_da_xian }
+	# 葛陂黄巾
+	hd190_employer_fix_effect = { WHO = he_yi BOSS = liu_pi }
+	hd190_employer_fix_effect = { WHO = huang_shao BOSS = liu_pi }
+	# 襄阳张虎、陈生：2026-10-24 起陈生任南乡太守（有地），不再入张虎帐下，见 hd190_xuzhou_xiangyang_effect
+	# 2026-10-24：东海郡守江某收地后入臧霸帐下
+	hd190_employer_fix_effect = { WHO = hd184_char_jiang_pei BOSS = zang_ba }
+	# 2026-10-24 boki：陶谦旧部曹豹、丹阳中郎将许耽入陶谦宫廷；托付徐州时转入刘备宫廷，供丹阳兵之乱用（zz_hd_lbxz_effects.txt）
+	hd190_employer_fix_effect = { WHO = cao_bao_2 BOSS = tao_qian }
+	hd190_employer_fix_effect = { WHO = xu_dan BOSS = tao_qian }
+}
+
+# 同 hd190_employer_fix_effect，雇主取某头衔的现持有人（郡守是占位人物时用）
+hd190_employer_to_title_holder_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = no
+				is_ruler = no
+				title:$TITLE$.holder ?= { is_alive = yes is_landed = yes }
+				NOT = { employer ?= title:$TITLE$.holder }
+			}
+			debug_log = "HD190 EMPLOYER_FIX $WHO$ -> $TITLE$"
+			set_employer = title:$TITLE$.holder
+		}
+	}
+}
+
+# R3/R12：诸侯王。2026-10-24 boki：王号头衔（k_hd190_wang_*）已删除，王号改由封爵系统的宗室王爵提供（hd190_peerage_effect）。
+# 陈王刘宠持陈郡；其余诸侯王入本国国相（郡守）的宫廷。常山为黑山所据，常山王入冀州牧韩馥宫廷；弘农王刘辩放进天子宫廷（雒阳）。
+hd190_zhuhou_wang_effect = {
+	character:liu_chong_4 ?= {
+		# 陈国为郡国制
+		if = {
+			limit = { is_alive = yes is_landed = yes NOT = { has_government = celestial_government } }
+			change_government = celestial_government
+			debug_log = "HD190 ZHUHOU CHEN_GOV_FIX"
+		}
+	}
+	# 弘农王刘辩随天子在雒阳：王号头衔删除后他不再持任何头衔、历史里也没有 employer，明确放进天子宫廷
+	character:liu_bian ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = no
+				exists = title:h_china.holder
+				NOT = { this = title:h_china.holder }
+				NOT = { employer ?= title:h_china.holder }
+			}
+			title:h_china.holder = { add_courtier = character:liu_bian }
+			debug_log = "HD190 ZHUHOU_HOST liu_bian -> h_china"
+		}
+	}
+	hd190_wang_host_effect = { WHO = liu_mi TITLE = d_liangguo }	# 梁王
+	hd190_wang_host_effect = { WHO = liu_zhi_2 TITLE = d_donghai }	# 东海王
+	hd190_wang_host_effect = { WHO = liu_he TITLE = d_pencheng }	# 彭城王
+	hd190_wang_host_effect = { WHO = liu_kang_3 TITLE = d_jinan }	# 济南王
+	hd190_wang_host_effect = { WHO = liu_gai TITLE = d_hejian }	# 河间王
+	hd190_wang_host_effect = { WHO = liu_tuo TITLE = d_rencheng }	# 任城王
+	hd190_wang_host_effect = { WHO = liu_zhong_2 TITLE = d_yangping }	# 甘陵王
+	hd190_wang_host_effect = { WHO = liu_she TITLE = d_zhaoguo }	# 赵王
+	hd190_wang_host_effect = { WHO = liu_cheng_4 TITLE = d_qiguo }	# 齐王
+	hd190_wang_host_effect = { WHO = liu_luan TITLE = d_jibei_yanzhou }	# 济北王（济北相鲍信）
+	hd190_wang_host_effect = { WHO = liu_she_2 TITLE = d_guangling_yangzhou }	# 阜陵王（阜陵在九江）
+	hd190_wang_host_effect = { WHO = liu_kai_2 TITLE = d_dongping }	# 东平王
+	hd190_wang_host_effect = { WHO = liu_rong_2 TITLE = d_langya }	# 琅邪王
+	hd190_wang_host_effect = { WHO = hd190_liu_hao TITLE = k_uuii_jizhou }	# 常山王
+	hd190_wang_host_effect = { WHO = hd190_liu_yao TITLE = d_peiguo }	# 沛王
+	debug_log = "HD190 ZHUHOU DONE"
+}
+
+hd190_wang_host_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = no
+				title:$TITLE$.holder ?= { is_alive = yes is_landed = yes }
+				NOT = { employer ?= title:$TITLE$.holder }
+			}
+			title:$TITLE$.holder = { add_courtier = character:$WHO$ }
+			debug_log = "HD190 ZHUHOU_HOST $WHO$ -> $TITLE$"
+		}
+		# 本国郡无人持有（如梁郡逐县独立）时，入郡治所在县持有人的宫廷，免得落成游荡人物
+		else_if = {
+			limit = {
+				is_alive = yes
+				is_landed = no
+				NOT = { exists = title:$TITLE$.holder }
+				title:$TITLE$.title_capital_county.holder ?= { is_alive = yes is_landed = yes }
+				NOT = { employer ?= title:$TITLE$.title_capital_county.holder }
+			}
+			title:$TITLE$.title_capital_county.holder = { add_courtier = character:$WHO$ }
+			debug_log = "HD190 ZHUHOU_HOST $WHO$ -> $TITLE$ capital county"
+		}
+	}
+}
+
+############################################################
+# 2026-10-24 boki：开局封爵走封爵系统（WJ_peerage）。
+#   董卓：县侯「郿侯」，名号与食邑都是郿县，世族爵位、可世袭（照 WJ_peer_commit 的世族分支）。
+#   十七位诸侯王：宗室王爵（个人爵位），王号取本国郡、食邑取该郡首县；阜陵王取阜陵县（照 WJ_peer_commit 的个人分支）。
+# 直接写入并登记入册：不走册封界面、不扣授爵花费、不发册封事件。
+# 王爵（4 级）10-24 起不要求在天子治下（WJ_peer_personal_valid），朝贡国、寄住独立诸侯宫廷的王也保留；县侯仍须在天子治下。
+############################################################
+hd190_peerage_effect = {
+	title:h_china.holder ?= { save_scope_as = hd190_peer_issuer }
+	if = {
+		limit = {
+			exists = scope:hd190_peer_issuer
+			scope:hd190_peer_issuer = { WJ_peer_realm_head = yes }
+		}
+		hd190_peer_hou_effect = yes
+		hd190_peer_wang_effect = { WHO = liu_chong_4 NAME = d_chenguo }	# 陈王
+		hd190_peer_wang_effect = { WHO = liu_bian NAME = d_hongnong }	# 弘农王
+		hd190_peer_wang_effect = { WHO = liu_mi NAME = d_liangguo }	# 梁王
+		hd190_peer_wang_effect = { WHO = liu_zhi_2 NAME = d_donghai }	# 东海王
+		hd190_peer_wang_effect = { WHO = liu_he NAME = d_pencheng }	# 彭城王
+		hd190_peer_wang_effect = { WHO = liu_kang_3 NAME = d_jinan }	# 济南王
+		hd190_peer_wang_effect = { WHO = liu_gai NAME = d_hejian }	# 河间王
+		hd190_peer_wang_effect = { WHO = liu_tuo NAME = d_rencheng }	# 任城王
+		hd190_peer_wang_effect = { WHO = liu_zhong_2 NAME = d_yangping }	# 甘陵王（d_yangping 即甘陵）
+		hd190_peer_wang_effect = { WHO = liu_she NAME = d_zhaoguo }	# 赵王
+		hd190_peer_wang_effect = { WHO = liu_cheng_4 NAME = d_qiguo }	# 齐王
+		hd190_peer_wang_effect = { WHO = liu_luan NAME = d_jibei_yanzhou }	# 济北王
+		hd190_peer_wang_effect = { WHO = liu_she_2 NAME = c_uuii_p_2028 }	# 阜陵王（九江郡阜陵县）
+		hd190_peer_wang_effect = { WHO = liu_kai_2 NAME = d_dongping }	# 东平王
+		hd190_peer_wang_effect = { WHO = liu_rong_2 NAME = d_langya }	# 琅邪王
+		hd190_peer_wang_effect = { WHO = hd190_liu_hao NAME = d_changshan }	# 常山王
+		hd190_peer_wang_effect = { WHO = hd190_liu_yao NAME = d_peiguo }	# 沛王
+		debug_log = "HD190 PEERAGE DONE"
+	}
+	else = { debug_log = "HD190 PEERAGE NO_ISSUER" }
+	clear_saved_scope = hd190_peer_issuer
+}
+
+# 董卓县侯郿侯。Scope：任意；需 scope:hd190_peer_issuer
+hd190_peer_hou_effect = {
+	character:dong_zhuo_2 ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				NOT = { has_variable = wj_peer_rank }
+				NOT = { this = top_liege }
+				top_liege = scope:hd190_peer_issuer
+				title:c_uuii_p_891 = { WJ_peer_county_free = yes WJ_peer_name_free = yes }
+			}
+			# 不是本家家主就先立为家主，免得 WJ_peer_get_family 另分支
+			if = {
+				limit = { exists = house NOT = { this = house.house_head } }
+				house = { set_house_head = character:dong_zhuo_2 }
+				debug_log = "HD190 PEERAGE DONG_HOUSE_HEAD_SET"
+			}
+			WJ_peer_get_family = yes
+			if = {
+				limit = {
+					exists = scope:wj_peer_family
+					scope:wj_peer_family = { holder = character:dong_zhuo_2 NOT = { has_variable = wj_peer_rank } }
+				}
+				scope:wj_peer_family = {
+					set_variable = { name = wj_peer_rank value = 2 }
+					set_variable = { name = wj_peer_name value = title:c_uuii_p_891 }
+					set_variable = { name = wj_peer_food value = title:c_uuii_p_891 }
+					set_variable = { name = wj_peer_realm value = scope:hd190_peer_issuer.primary_title }
+					set_variable = { name = wj_peer_last_paid value = current_year }
+					WJ_peer_bind_family = yes
+				}
+				debug_log = "HD190 PEERAGE DONG_MEIHOU"
+			}
+			else = { debug_log = "HD190 PEERAGE DONG_NO_FAMILY" }
+		}
+		else = { debug_log = "HD190 PEERAGE DONG_SKIPPED" }
+	}
+}
+
+# 宗室王爵。NAME：王号头衔（郡；阜陵为县），食邑取其首县（县则取本身）。Scope：任意；需 scope:hd190_peer_issuer
+hd190_peer_wang_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_male = yes
+				NOT = { has_variable = wj_peer_rank }
+				NOT = { has_trait = WJ_peerage_trait }
+				title:$NAME$ = { WJ_peer_name_free = yes }
+			}
+			title:$NAME$ = {
+				if = {
+					limit = { tier = tier_county }
+					save_scope_as = hd190_peer_food
+				}
+				else = {
+					title_capital_county ?= { save_scope_as = hd190_peer_food }
+				}
+			}
+			if = {
+				limit = {
+					exists = scope:hd190_peer_food
+					scope:hd190_peer_food = { WJ_peer_county_free = yes }
+				}
+				set_variable = { name = wj_peer_personal value = yes }
+				set_variable = { name = wj_peer_rank value = 4 }
+				set_variable = { name = wj_peer_name value = title:$NAME$ }
+				set_variable = { name = wj_peer_food value = scope:hd190_peer_food }
+				set_variable = { name = wj_peer_realm value = scope:hd190_peer_issuer.primary_title }
+				set_variable = { name = wj_peer_last_paid value = current_year }
+				WJ_peer_bind_personal = yes
+				debug_log = "HD190 PEERAGE WANG $WHO$ $NAME$"
+			}
+			else = { debug_log = "HD190 PEERAGE WANG_NO_FOOD $WHO$ $NAME$" }
+			clear_saved_scope = hd190_peer_food
+		}
+		else = { debug_log = "HD190 PEERAGE WANG_SKIPPED $WHO$" }
+	}
+}
+
+# R5：孙坚不持地，开局补 3000 部曲（事件兵，屯于其居所或宗主首府），随袁术参战
+hd190_sun_jian_army_effect = {
+	character:sun_jian ?= {
+		if = {
+			limit = { is_alive = yes NOT = { has_character_flag = hd190_sun_army_paid } }
+			if = { limit = { exists = domicile.domicile_location } domicile.domicile_location = { save_scope_as = hd190_sun_loc } }
+			else_if = { limit = { exists = capital_province } capital_province = { save_scope_as = hd190_sun_loc } }
+			else_if = { limit = { exists = liege.capital_province } liege.capital_province = { save_scope_as = hd190_sun_loc } }
+			if = {
+				limit = { exists = scope:hd190_sun_loc }
+				spawn_army = {
+					name = hd190_sun_jian_army
+					men_at_arms = { type = light_footmen men = 3000 }
+					location = scope:hd190_sun_loc
+					uses_supply = yes
+					inheritable = yes
+				}
+				add_character_flag = hd190_sun_army_paid
+				debug_log = "HD190 SUN_JIAN_ARMY"
+			}
+			else = { debug_log = "HD190 SUN_JIAN_ARMY_NO_LOCATION" }
+		}
+	}
+}
+
+# R9：襄阳被张虎、陈生占据，刘表首府改到别处（荆州法理首府是襄阳）
+# 2026-10-24：张虎得襄阳整郡（含宜城），刘表改坐南郡，首府江陵
+hd190_liu_biao_capital_effect = {
+	character:liu_biao ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				has_title = title:c_uuii_p_1813
+				NOT = { capital_county ?= title:c_uuii_p_1813 }
+			}
+			set_realm_capital = title:c_uuii_p_1813
+			debug_log = "HD190 LIU_BIAO_CAPITAL_JIANGLING"
+		}
+	}
+}
+
+# 2026-10-24 boki：徐州笮融（下邳、彭城）、臧霸（琅琊、东海）与江夏黄祖改军阀契约，宗主不变；
+# 张虎（襄阳）、陈生（南乡）给原版农民领袖特质，开局结盟。三人都不朝贡。
+hd190_xuzhou_xiangyang_effect = {
+	hd190_warlord_one_effect = { WHO = ze_rong }
+	hd190_warlord_one_effect = { WHO = zang_ba }
+	hd190_warlord_one_effect = { WHO = huang_zu }
+	# 2026-10-24 boki：臧霸 3000、笮融 1500 轻步兵事件兵
+	hd190_warlord_army_effect = { WHO = zang_ba MEN = 3000 }
+	hd190_warlord_army_effect = { WHO = ze_rong MEN = 1500 }
+	character:zhang_hu_2 ?= {
+		if = {
+			limit = { is_alive = yes NOT = { has_trait = peasant_leader } }
+			add_trait = peasant_leader
+		}
+	}
+	character:chen_sheng ?= {
+		if = {
+			limit = { is_alive = yes NOT = { has_trait = peasant_leader } }
+			add_trait = peasant_leader
+		}
+	}
+	# 结盟照刘表故事的写法（zzzzzz_hds_liu_biao_effects.txt）：原版 is_alliance_valid 认 event_negotiated_alliance_opinion
+	if = {
+		limit = {
+			exists = character:zhang_hu_2
+			exists = character:chen_sheng
+			character:zhang_hu_2 = { is_alive = yes is_landed = yes }
+			character:chen_sheng = { is_alive = yes is_landed = yes }
+			NOT = { character:zhang_hu_2 = { is_allied_to = character:chen_sheng } }
+		}
+		character:chen_sheng = { add_opinion = { modifier = event_negotiated_alliance_opinion target = character:zhang_hu_2 } }
+		character:zhang_hu_2 = {
+			add_opinion = { modifier = event_negotiated_alliance_opinion target = character:chen_sheng }
+			create_alliance = { target = character:chen_sheng allied_through_owner = character:zhang_hu_2 allied_through_target = character:chen_sheng }
+		}
+		if = {
+			limit = { character:zhang_hu_2 = { is_allied_to = character:chen_sheng } }
+			debug_log = "HD190 ZHANG_HU_CHEN_SHENG_ALLIED"
+		}
+		else = { debug_log = "HD190 ZHANG_HU_CHEN_SHENG_ALLIANCE_FAILED" }
+	}
+}
+
+# 2026-10-25 boki：曹操与袁绍、袁术与刘表开局互订十年停战（190.1.1 起，200.1.1 到期）。
+# 停战名目用原版现成的「和平协议」（TRUCE_COLLABORATION）：原版 add_truce 一律带 war 或 name，不写可能显示空白。
+# mod 的宣战引擎（战略 AI、天意青睐、导演层、hds 地区战争、曹操扩张、官渡）都检查 has_truce，无需另加闸
+hd190_truces_effect = {
+	hd190_truce_pair_effect = { A = cao_cao B = yuan_shao }
+	hd190_truce_pair_effect = { A = yuan_shu B = liu_biao }
+}
+
+hd190_truce_pair_effect = {
+	if = {
+		limit = {
+			exists = character:$A$
+			exists = character:$B$
+			character:$A$ = { is_alive = yes is_landed = yes }
+			character:$B$ = { is_alive = yes is_landed = yes }
+		}
+		character:$A$ = {
+			add_truce_both_ways = {
+				character = character:$B$
+				years = 10
+				name = TRUCE_COLLABORATION
+			}
+		}
+		if = {
+			limit = { character:$A$ = { has_truce = character:$B$ } }
+			debug_log = "HD190 TRUCE_OK $A$ $B$"
+		}
+		else = { debug_log = "HD190 TRUCE_FAILED $A$ $B$" }
+	}
+	else = { debug_log = "HD190 TRUCE_SKIPPED $A$ $B$" }
+}
+
+# 开局事件兵（照孙坚部曲：屯首府、吃补给、可继承）。军队名 hd190_<WHO>_army
+hd190_warlord_army_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = { is_alive = yes is_landed = yes NOT = { has_character_flag = hd190_warlord_army_paid } }
+			if = {
+				limit = { exists = capital_province }
+				spawn_army = {
+					name = hd190_$WHO$_army
+					men_at_arms = { type = light_footmen men = $MEN$ }
+					location = capital_province
+					uses_supply = yes
+					inheritable = yes
+				}
+				add_character_flag = hd190_warlord_army_paid
+				debug_log = "HD190 WARLORD_ARMY $WHO$ $MEN$"
+			}
+			else = { debug_log = "HD190 WARLORD_ARMY_NO_CAPITAL $WHO$" }
+		}
+		else = { debug_log = "HD190 WARLORD_ARMY_SKIPPED $WHO$" }
+	}
+}
+
+# 开局直接成为军阀（不走「拥兵自重」决议，不加主君好感惩罚）。boki 拍板：开局 5 年内 AI 主君不发起「收回权力」
+hd190_warlord_one_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = yes
+				is_independent_ruler = no
+				government_has_flag = government_is_celestial
+				liege ?= { government_has_flag = government_is_celestial }
+				NOT = { hd_warlord_trigger = yes }
+			}
+			hd_warlord_establish_effect = yes
+			add_character_flag = { flag = hd_warlord_revoke_ai_grace years = 5 }
+			if = {
+				limit = { hd_warlord_trigger = yes vassal_contract_has_flag = hd_warlord }
+				debug_log = "HD190 WARLORD_OK $WHO$"
+			}
+			else = { debug_log = "HD190 WARLORD_FAILED $WHO$" }
+		}
+		else = { debug_log = "HD190 WARLORD_SKIPPED $WHO$" }
+	}
+}
+
+# 袁术的「汝南野心」AI 故事：zz_hd_historical_ai_effects 要袁术本人或其封臣持汝南才开启。
+# 10-22 版孙坚以袁术封臣持汝南，开局即开启；2026-10-23 起汝南归孔伷，这里照原写法直接开启，保持袁术北争豫州的走向。
+hd190_yuan_shu_story_effect = {
+	character:yuan_shu ?= {
+		if = {
+			limit = { is_alive = yes NOT = { has_character_flag = hd_yuan_shu_story_activated } }
+			add_character_flag = hd_yuan_shu_story_activated
+			add_character_modifier = { modifier = hd_yuan_shu_assertive_ai }
+			random_owned_story = { type = hd_story_yuan_shu_life set_variable = { name = hd_yuan_shu_life_phase value = flag:hd_story_phase_runan_ambition } }
+			debug_log = "HD190 YUAN_SHU_STORY_ON"
+		}
+	}
+}
+
+# 190.5.1 司空荀爽卒（历史 death 条目是未来日期，开局后不执行）
+hd190_xun_shuang_death_effect = {
+	character:xun_shuang ?= {
+		if = {
+			limit = { is_alive = yes hd_history_events_enabled_trigger = yes }
+			death = { death_reason = death_natural_causes }
+			debug_log = "HD190 XUN_SHUANG_DIED"
+		}
+	}
+}
+
+# R10：191.3.1 张鲁袭杀汉中太守苏固，据汉中，断斜谷阁道，当场脱离刘焉自立（2026-10-24 起连武都一并夺取）。
+# 苏固名下的头衔连同封臣一并交给张鲁，再让苏固死去；184r 诛董后的「张鲁带汉中独立」见他已独立就跳过。
+hd190_zhang_lu_revolt_effect = {
+	if = {
+		limit = {
+			hd_history_events_enabled_trigger = yes
+			character:zhang_lu ?= { is_alive = yes is_landed = no }
+			character:liu_yan_5 ?= { is_alive = yes is_landed = yes }
+			character:su_gu ?= {
+				is_alive = yes
+				has_title = title:d_hanzhong
+				top_liege = character:liu_yan_5
+			}
+		}
+		character:su_gu = { save_scope_as = hd190_su_gu }
+		character:zhang_lu = {
+			save_scope_as = hd190_zhang_lu
+			create_title_and_vassal_change = { type = usurped save_scope_as = hd190_zl_change add_claim_on_loss = no }
+			scope:hd190_su_gu = {
+				every_held_title = {
+					limit = { is_landless_type_title = no }
+					change_title_holder_include_vassals = { holder = scope:hd190_zhang_lu change = scope:hd190_zl_change }
+				}
+			}
+			# 2026-10-24 boki：武都一并夺取。郡头衔与郡守在武都的直辖县（连同县主封臣）归张鲁，郡守变无地；刘焉直辖的武都县也归张鲁
+			title:d_wudou.holder ?= {
+				if = {
+					limit = {
+						NOT = { this = scope:hd190_zhang_lu }
+						OR = {
+							this = character:liu_yan_5
+							top_liege = character:liu_yan_5
+						}
+					}
+					save_scope_as = hd190_wd_gov
+				}
+			}
+			scope:hd190_wd_gov ?= {
+				every_held_title = {
+					limit = {
+						is_landless_type_title = no
+						OR = {
+							this = title:d_wudou
+							AND = { tier = tier_county de_jure_liege = title:d_wudou }
+						}
+					}
+					change_title_holder_include_vassals = { holder = scope:hd190_zhang_lu change = scope:hd190_zl_change }
+				}
+			}
+			title:d_wudou = {
+				every_de_jure_county = {
+					limit = { holder ?= character:liu_yan_5 }
+					change_title_holder = { holder = scope:hd190_zhang_lu change = scope:hd190_zl_change }
+				}
+			}
+			resolve_title_and_vassal_change = scope:hd190_zl_change
+			if = {
+				limit = { has_title = title:d_wudou }
+				debug_log = "HD190 ZHANG_LU_WUDOU_TAKEN"
+			}
+			else = { debug_log = "HD190 ZHANG_LU_WUDOU_NOT_TAKEN" }
+			if = {
+				limit = { has_title = title:d_hanzhong NOT = { primary_title = title:d_hanzhong } }
+				set_primary_title_to = title:d_hanzhong
+			}
+			hd_force_independent_celestial_effect = yes
+			add_character_flag = hd190_zhang_lu_revolted
+		}
+		scope:hd190_su_gu = {
+			if = { limit = { is_alive = yes } death = { death_reason = death_murder killer = scope:hd190_zhang_lu } }
+		}
+		scope:hd190_zhang_lu = { save_scope_as = hd_news_a }
+		scope:hd190_su_gu = { save_scope_as = hd_news_b }
+		every_player = { trigger_event = hd190.0001 }
+		if = {
+			limit = { scope:hd190_zhang_lu = { is_landed = yes is_independent_ruler = yes } }
+			debug_log = "HD190 ZHANG_LU_REVOLT_OK"
+		}
+		else = { debug_log = "HD190 ZHANG_LU_REVOLT_NOT_INDEPENDENT" }
+	}
+	else = { debug_log = "HD190 ZHANG_LU_REVOLT_SKIPPED" }
+}

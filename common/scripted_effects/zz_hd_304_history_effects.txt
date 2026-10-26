@@ -51,6 +51,15 @@ hd_304_pulse_effect = {
 	hd_304_check_shile_effect = yes      # S2 石勒归汉
 	hd_304_check_emperor_effect = yes    # S3 刘渊称帝、迁都平阳
 	hd_304_check_yongjia_effect = yes    # S4 永嘉之乱
+	# 衣冠南渡兜底：311 年起每年查一次，心跳 320 年停（boki 10-26）
+	if = {
+		limit = {
+			current_date >= 311.5.1
+			NOT = { exists = global_var:hd_304_yiguan_check_cd }
+		}
+		set_global_variable = { name = hd_304_yiguan_check_cd value = yes days = 365 }
+		hd_304_yiguan_fallback_effect = yes
+	}
 }
 
 # 刘和在位、刘聪在世时，指定刘聪为储（史实刘聪杀刘和自立；这里让汉国一定传到刘聪手里）
@@ -380,7 +389,13 @@ hd_304_check_yongjia_effect = {
 				scope:hd_304_han = {
 					is_imprisoned = no
 					OR = {
-						any_neighboring_top_liege_realm_owner = { this = title:h_china.holder }
+						# 与天子一系接壤：天子本人，或天子的朝贡国（诸王）（boki 10-26 放宽）
+						any_neighboring_top_liege_realm_owner = {
+							OR = {
+								this = title:h_china.holder
+								is_tributary_of_suzerain_or_above = title:h_china.holder
+							}
+						}
 						any_realm_county = {
 							OR = {
 								duchy = title:d_hedong
@@ -409,6 +424,7 @@ hd_304_check_yongjia_effect = {
 		else = {
 			set_global_variable = hd_304_yongjia_done
 			debug_log = "HD_304 S4 YONGJIA SKIPPED"
+			hd_304_yiguan_fallback_effect = yes
 		}
 	}
 	# 战后：汉主得洛阳且天子是电脑角色，天子被俘
@@ -464,7 +480,41 @@ hd_304_check_yongjia_effect = {
 			hd_yiguan_start_effect = yes
 			debug_log = "HD_304 S4 YONGJIA YIGUAN STARTED"
 		}
+		hd_304_yiguan_fallback_effect = yes
 		debug_log = "HD_304 S4 YONGJIA ENDED"
+	}
+}
+
+# 衣冠南渡兜底（boki 10-26）：洛阳已不在天子一系、归了胡人政权，衣冠南渡还没开就开启。
+# 永嘉跳过、永嘉战后各查一次；311～320 年心跳里每年再查一次（汉国晚些才拿下洛阳，或洛阳落入别的胡人政权）
+hd_304_yiguan_fallback_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_yiguan_started }
+			hd_yiguan_enabled_trigger = yes
+			title:c_luoyang.holder.top_liege ?= { hd_yiguan_is_hu_trigger = yes }
+		}
+		if = {
+			limit = { exists = title:h_china.holder }
+			if = {
+				limit = {
+					NOT = {
+						title:c_luoyang.holder = {
+							OR = {
+								this = title:h_china.holder
+								top_liege = title:h_china.holder
+							}
+						}
+					}
+				}
+				hd_yiguan_start_effect = yes
+				debug_log = "HD_304 YIGUAN FALLBACK STARTED"
+			}
+		}
+		else = {
+			hd_yiguan_start_effect = yes
+			debug_log = "HD_304 YIGUAN FALLBACK STARTED NO_EMPEROR"
+		}
 	}
 }
 
@@ -477,11 +527,14 @@ hd_304_yongjia_war_effect = {
 		limit = { is_allied_to = scope:hd_304_jin }
 		break_alliance_due_to_attack_effect = { TARGET = scope:hd_304_jin }
 	}
-	# 目标经连通筛选（boki 10-18，zz_hd_war_contiguity_effects.txt）
-	hd_wct_add_input_effect = { TARGET = title:d_henan }
-	hd_wct_add_input_effect = { TARGET = title:d_henan_yuzhou }
-	hd_wct_start_war_effect = { CB = hd_nbc_war_cb ATTACKER = root DEFENDER = scope:hd_304_jin }
-	hd_wct_clear_input_effect = yes
+	# 不走连通筛选（boki 10-26）：前置已放宽为与天子或其朝贡国接壤，汉国常不贴着河南，
+	# 筛选会把目标换成别处的边境郡、洛阳不在其中；这里直接以两郡宣战，保证洛阳在目标里
+	start_war = {
+		cb = hd_nbc_war_cb
+		target = scope:hd_304_jin
+		target_title = title:d_henan
+		target_title = title:d_henan_yuzhou
+	}
 	random_character_war = {
 		limit = {
 			using_cb = hd_nbc_war_cb

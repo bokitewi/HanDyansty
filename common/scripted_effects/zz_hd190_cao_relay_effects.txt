@@ -1,0 +1,243 @@
+﻿# 190 曹操陈留—兖州接力（2026-10-26 boki：曹操 190 开局太弱）。
+# - 诛董进入群雄割据（hd184r_warlord_era_begin_effect）后 10 天，曹操对张邈宣战，吞并其全部领地。
+# - 胜后约 20 天，接着对与曹操接壤、持有兖州法理县的独立势力逐家宣战（一次一场），由东往西按郡优先；
+#   实控兖州七成县（hd184r_cao_yanzhou_secured_trigger）或兖州内已无可打的接壤势力即止。
+# - 打输或白和即终止接力；战争作废、宣战不成则换下一家。
+# - 接力期间导演层暂停曹操（hd190_cao_relay_active），结束后从兖州阶段照常接管。
+# - 玩家曹操每场弹事件二选一（hd190.0102 陈留 / hd190.0103 兖州），罢手即终止。
+# - 战争：吞并 CB 的 historical 情境，经连通筛选 hd_wct_start_war_effect 宣战，战争打 hd_world_war_kind = flag:hd190_cao_relay，
+#   胜负钩子在 zz_hd_historical_war_effects.txt。日志关键字 HD190 CAO_RELAY。
+
+# 由 hd184r_warlord_era_begin_effect 调用。Scope：任意
+hd190_cao_relay_begin_effect = {
+	character:cao_cao ?= {
+		if = {
+			limit = {
+				game_start_date = 190.1.1
+				is_alive = yes
+				NOT = { has_character_flag = hd190_cao_relay_begun }
+			}
+			add_character_flag = hd190_cao_relay_begun
+			add_character_flag = hd190_cao_relay_active
+			add_character_flag = { flag = hd190_cao_relay_wait days = 60 }
+			trigger_event = { id = hd190.0104 days = 10 }
+			debug_log = "HD190 CAO_RELAY BEGIN"
+		}
+	}
+}
+
+# 第一步：陈留张邈。Scope：曹操
+hd190_cao_relay_chenliu_effect = {
+	if = {
+		limit = { has_character_flag = hd190_cao_relay_active }
+		if = {
+			limit = { NOT = { hd190_cao_relay_actor_ok_trigger = yes } }
+			hd190_cao_relay_end_effect = { WHY = ACTOR_INVALID }
+		}
+		else_if = {
+			limit = { character:zhang_miao ?= { hd190_cao_relay_zhang_miao_ok_trigger = yes } }
+			character:zhang_miao = { save_scope_as = hd190_relay_def }
+			if = {
+				limit = { is_ai = yes }
+				hd190_cao_relay_declare_effect = { MODE = all }
+			}
+			else = {
+				add_character_flag = { flag = hd190_cao_relay_wait days = 365 }	# 等玩家作答；宣战成功即清
+				trigger_event = hd190.0102
+			}
+		}
+		else = {
+			debug_log = "HD190 CAO_RELAY ZHANG_MIAO_SKIPPED"
+			hd190_cao_relay_next_effect = yes
+		}
+	}
+}
+
+# 兖州接力的下一家。Scope：曹操
+hd190_cao_relay_next_effect = {
+	if = {
+		limit = { has_character_flag = hd190_cao_relay_active }
+		clear_saved_scope = hd190_relay_def
+		if = {
+			limit = { NOT = { hd190_cao_relay_actor_ok_trigger = yes } }
+			hd190_cao_relay_end_effect = { WHY = ACTOR_INVALID }
+		}
+		else_if = {
+			limit = { hd184r_cao_yanzhou_secured_trigger = yes }
+			hd190_cao_relay_end_effect = { WHY = YANZHOU_SECURED }
+		}
+		else = {
+			# 由东往西：济阴、山阳、东郡、濮阳、济北、东平、任城、鲁、泰山、东莞、嬴（泰山东部）、沛、顿丘、济阳、陈留、荥阳
+			hd190_cao_relay_try_duchy_effect = { D = d_jiyin }
+			hd190_cao_relay_try_duchy_effect = { D = d_shanyang }
+			hd190_cao_relay_try_duchy_effect = { D = d_dongjun }
+			hd190_cao_relay_try_duchy_effect = { D = d_puyang }
+			hd190_cao_relay_try_duchy_effect = { D = d_jibei_yanzhou }
+			hd190_cao_relay_try_duchy_effect = { D = d_dongping }
+			hd190_cao_relay_try_duchy_effect = { D = d_rencheng }
+			hd190_cao_relay_try_duchy_effect = { D = d_lujun }
+			hd190_cao_relay_try_duchy_effect = { D = d_taishan }
+			hd190_cao_relay_try_duchy_effect = { D = d_dongguan_yanzhou }
+			hd190_cao_relay_try_duchy_effect = { D = d_taishan_qingzhou }
+			hd190_cao_relay_try_duchy_effect = { D = d_peiguo }
+			hd190_cao_relay_try_duchy_effect = { D = d_dunqiu }
+			hd190_cao_relay_try_duchy_effect = { D = d_chenliu }
+			hd190_cao_relay_try_duchy_effect = { D = d_chenliu_yuzhou }
+			hd190_cao_relay_try_duchy_effect = { D = d_rongyang }
+			if = {
+				limit = { NOT = { exists = scope:hd190_relay_def } }
+				hd190_cao_relay_end_effect = { WHY = NO_TARGET }
+			}
+			else_if = {
+				limit = { is_ai = yes }
+				hd190_cao_relay_declare_effect = { MODE = yanzhou }
+			}
+			else = {
+				add_character_flag = { flag = hd190_cao_relay_wait days = 365 }	# 等玩家作答；宣战成功即清
+				trigger_event = hd190.0103
+			}
+		}
+	}
+}
+
+# 某郡里有与曹操接壤的可打县：取该县的最高领主（接壤县最多的郡先取到）。Scope：曹操
+hd190_cao_relay_try_duchy_effect = {
+	if = {
+		limit = {
+			NOT = { exists = scope:hd190_relay_def }
+			title:$D$ = { any_de_jure_county = { hd190_cao_relay_border_county_trigger = yes } }
+		}
+		title:$D$ = {
+			random_de_jure_county = {
+				limit = { hd190_cao_relay_border_county_trigger = yes }
+				holder.top_liege = { save_scope_as = hd190_relay_def }
+			}
+		}
+	}
+}
+
+# 宣战。scope:hd190_relay_def = 守方；MODE = all（守方全部领地，张邈）/ yanzhou（守方在兖州法理内的领地）。Scope：曹操
+hd190_cao_relay_declare_effect = {
+	hd_wct_clear_input_effect = yes
+	scope:hd190_relay_def = {
+		every_sub_realm_county = { hd190_cao_relay_input_$MODE$_effect = yes }
+	}
+	# 讨董联盟若还没散、两人仍同在一个邦联，先让曹操退出，免得同盟内战或整个邦联卷入
+	if = {
+		limit = {
+			exists = confederation
+			confederation = { any_confederation_member = { this = scope:hd190_relay_def } }
+		}
+		save_scope_as = hd190_relay_leaver
+		confederation = { remove_confederation_member = scope:hd190_relay_leaver }
+		debug_log = "HD190 CAO_RELAY LEFT_CONFEDERATION"
+	}
+	hd_tb_arm_effect = { KIND = historical }
+	hd_wct_start_war_effect = { CB = hd_dc_tunbing_cb ATTACKER = character:cao_cao DEFENDER = scope:hd190_relay_def }
+	hd_wct_clear_input_effect = yes
+	hd_tb_disarm_effect = yes	# 免得玩家 3 天内从界面宣的吞并也被当成史实战争
+	if = {
+		limit = {
+			any_character_war = {
+				using_cb = hd_dc_tunbing_cb
+				primary_attacker = character:cao_cao
+				primary_defender = scope:hd190_relay_def
+			}
+		}
+		# 接力战争按「攻方曹操 + 守方 = var:hd190_cao_relay_def」识别（hd190_cao_relay_war_trigger）；战争变量只作附注
+		set_variable = { name = hd190_cao_relay_def value = scope:hd190_relay_def }
+		random_character_war = {
+			limit = {
+				using_cb = hd_dc_tunbing_cb
+				primary_attacker = character:cao_cao
+				primary_defender = scope:hd190_relay_def
+			}
+			set_variable = { name = hd_world_war_kind value = flag:hd190_cao_relay }
+		}
+		remove_character_flag = hd190_cao_relay_wait
+		debug_log = "HD190 CAO_RELAY WAR_STARTED"
+		debug_log_scopes = yes
+	}
+	else = {
+		# 宣战不成：记下此人，7 天后换下一家
+		add_to_variable_list = { name = hd190_cao_relay_failed target = scope:hd190_relay_def }
+		add_character_flag = { flag = hd190_cao_relay_wait days = 60 }
+		trigger_event = { id = hd190.0101 days = 7 }
+		debug_log = "HD190 CAO_RELAY WAR_FAILED"
+		debug_log_scopes = yes
+	}
+}
+
+# 连通筛选的输入：县所在的郡。Scope：守方疆域内的县
+hd190_cao_relay_input_all_effect = {
+	duchy ?= { hd_wct_add_input_effect = { TARGET = this } }
+}
+
+hd190_cao_relay_input_yanzhou_effect = {
+	if = {
+		limit = { kingdom = title:k_uuii_yanzhou }
+		duchy ?= { hd_wct_add_input_effect = { TARGET = this } }
+	}
+}
+
+# 接力结束，导演层恢复。WHY 只用于日志。Scope：曹操
+hd190_cao_relay_end_effect = {
+	if = {
+		limit = { has_character_flag = hd190_cao_relay_active }
+		remove_character_flag = hd190_cao_relay_active
+		remove_character_flag = hd190_cao_relay_wait
+		add_character_flag = hd190_cao_relay_done
+		clear_variable_list = hd190_cao_relay_failed
+		remove_variable = hd190_cao_relay_def
+		if = { limit = { has_variable = hd184r_idle } set_variable = { name = hd184r_idle value = 0 } }
+		debug_log = "HD190 CAO_RELAY END $WHY$"
+	}
+}
+
+# 战争结束钩子（zz_hd_historical_war_effects.txt）。Scope：战争
+hd190_cao_relay_war_victory_effect = {
+	scope:attacker = {
+		remove_variable = hd190_cao_relay_def
+		if = {
+			limit = { has_character_flag = hd190_cao_relay_active }
+			add_character_flag = { flag = hd190_cao_relay_wait days = 60 }
+			trigger_event = { id = hd190.0101 days = 20 }
+			debug_log = "HD190 CAO_RELAY WAR_WON"
+		}
+	}
+}
+
+hd190_cao_relay_war_lost_effect = {
+	scope:attacker = { hd190_cao_relay_end_effect = { WHY = WAR_LOST_OR_WHITE_PEACE } }
+}
+
+hd190_cao_relay_war_invalidated_effect = {
+	scope:attacker = {
+		remove_variable = hd190_cao_relay_def
+		if = {
+			limit = { has_character_flag = hd190_cao_relay_active }
+			add_character_flag = { flag = hd190_cao_relay_wait days = 60 }
+			trigger_event = { id = hd190.0101 days = 7 }
+			debug_log = "HD190 CAO_RELAY WAR_INVALIDATED"
+		}
+	}
+}
+
+# 兜底：挂在曹操历史心跳上，导演层季度脉冲也调一次。接力进行中、没有待决事件、也没有接力战争（守方死亡等未走钩子）时接着找下一家。Scope：曹操
+hd190_cao_relay_tick_effect = {
+	if = {
+		limit = {
+			has_character_flag = hd190_cao_relay_active
+			NOT = { has_character_flag = hd190_cao_relay_wait }
+			NOT = {
+				var:hd190_cao_relay_def ?= {
+					is_alive = yes
+					is_at_war_with = character:cao_cao
+				}
+			}
+		}
+		remove_variable = hd190_cao_relay_def
+		debug_log = "HD190 CAO_RELAY TICK_RESUME"
+		hd190_cao_relay_next_effect = yes
+	}
+}

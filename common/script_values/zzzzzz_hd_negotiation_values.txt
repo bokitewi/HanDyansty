@@ -1,0 +1,525 @@
+﻿# 归附谈判（2026-10-25 boki 拍板，设计见 docs/归附谈判_设计记录.md）
+# 条件：赐金（三档）、赐威望（两档）、让影响力（两档）、许为军阀（一档）。
+
+# ===== 数额（root = 归附者）=====
+# 赐金按归附者家底：半年 / 1 年 / 2 年收入；下限 10/20/40 防止收入为 0 或负时白给（自拟）
+hd_neg_gold_amount_1_value = {
+	value = monthly_character_income
+	multiply = 6
+	round = yes
+	min = 10
+}
+hd_neg_gold_amount_2_value = {
+	value = monthly_character_income
+	multiply = 12
+	round = yes
+	min = 20
+}
+hd_neg_gold_amount_3_value = {
+	value = monthly_character_income
+	multiply = 24
+	round = yes
+	min = 40
+}
+hd_neg_prestige_amount_1_value = 150
+hd_neg_prestige_amount_2_value = 350
+hd_neg_influence_amount_1_value = 100
+hd_neg_influence_amount_2_value = 250
+
+# ===== 各档接受度（boki：分档值全部减半，军阀不变）=====
+hd_neg_gold_accept_1 = 10
+hd_neg_gold_accept_2 = 20
+hd_neg_gold_accept_3 = 40
+hd_neg_prestige_accept_1 = 12
+hd_neg_prestige_accept_2 = 25
+hd_neg_influence_accept_1 = 12
+hd_neg_influence_accept_2 = 25
+hd_neg_warlord_accept = 60
+
+# 差多少接受度以内才回信索价
+hd_neg_max_gap = 60
+
+# 背约：主君威望 -350
+hd_neg_breach_prestige_value = -350
+
+# ===== 劝其归附 ai_accept 的条件项（interaction scope：actor = 受附者，recipient = 归附者）=====
+# 同时认窗口选项（玩家预开价）与归附者身上的条件变量（AI 预开价、on_send 抄录），二者择一不叠加
+hd_neg_gold_accept_value = {
+	value = 0
+	if = {
+		limit = { exists = scope:hd_neg_o_gold3 scope:hd_neg_o_gold3 = yes }
+		add = hd_neg_gold_accept_3
+	}
+	else_if = {
+		limit = { exists = scope:hd_neg_o_gold2 scope:hd_neg_o_gold2 = yes }
+		add = hd_neg_gold_accept_2
+	}
+	else_if = {
+		limit = { exists = scope:hd_neg_o_gold1 scope:hd_neg_o_gold1 = yes }
+		add = hd_neg_gold_accept_1
+	}
+	else_if = {
+		limit = {
+			scope:recipient = {
+				var:hd_neg_liege ?= scope:actor
+				has_variable = hd_neg_gold_tier
+			}
+		}
+		if = {
+			limit = { scope:recipient.var:hd_neg_gold_tier >= 3 }
+			add = hd_neg_gold_accept_3
+		}
+		else_if = {
+			limit = { scope:recipient.var:hd_neg_gold_tier = 2 }
+			add = hd_neg_gold_accept_2
+		}
+		else = { add = hd_neg_gold_accept_1 }
+	}
+}
+
+hd_neg_prestige_accept_value = {
+	value = 0
+	if = {
+		limit = { exists = scope:hd_neg_o_prestige2 scope:hd_neg_o_prestige2 = yes }
+		add = hd_neg_prestige_accept_2
+	}
+	else_if = {
+		limit = { exists = scope:hd_neg_o_prestige1 scope:hd_neg_o_prestige1 = yes }
+		add = hd_neg_prestige_accept_1
+	}
+	else_if = {
+		limit = {
+			scope:recipient = {
+				var:hd_neg_liege ?= scope:actor
+				has_variable = hd_neg_prestige_tier
+			}
+		}
+		if = {
+			limit = { scope:recipient.var:hd_neg_prestige_tier >= 2 }
+			add = hd_neg_prestige_accept_2
+		}
+		else = { add = hd_neg_prestige_accept_1 }
+	}
+}
+
+hd_neg_influence_accept_value = {
+	value = 0
+	if = {
+		limit = { exists = scope:hd_neg_o_influence2 scope:hd_neg_o_influence2 = yes }
+		add = hd_neg_influence_accept_2
+	}
+	else_if = {
+		limit = { exists = scope:hd_neg_o_influence1 scope:hd_neg_o_influence1 = yes }
+		add = hd_neg_influence_accept_1
+	}
+	else_if = {
+		limit = {
+			scope:recipient = {
+				var:hd_neg_liege ?= scope:actor
+				has_variable = hd_neg_influence_tier
+			}
+		}
+		if = {
+			limit = { scope:recipient.var:hd_neg_influence_tier >= 2 }
+			add = hd_neg_influence_accept_2
+		}
+		else = { add = hd_neg_influence_accept_1 }
+	}
+}
+
+hd_neg_warlord_accept_value = {
+	value = 0
+	if = {
+		limit = {
+			OR = {
+				AND = { exists = scope:hd_neg_o_warlord scope:hd_neg_o_warlord = yes }
+				scope:recipient = {
+					var:hd_neg_liege ?= scope:actor
+					has_variable = hd_neg_warlord
+				}
+			}
+		}
+		add = hd_neg_warlord_accept
+	}
+}
+
+hd_neg_terms_accept_value = {
+	value = hd_neg_gold_accept_value
+	add = hd_neg_prestige_accept_value
+	add = hd_neg_influence_accept_value
+	add = hd_neg_warlord_accept_value
+}
+
+# ===== 劝其归附接受度复算（interaction scope，或已存 scope:actor / scope:recipient 的效果）=====
+# 照抄 hd_warlord_offer_vassalization_interaction 的 ai_accept（不含条件项）；改那边的 ai_accept 时这里要同步
+hd_neg_base_accept_value = {
+	value = -100
+	if = {
+		limit = { scope:recipient = { var:hd_strat_mode ?= flag:hold } }
+		add = 30
+	}
+	if = {
+		limit = {
+			scope:recipient = { hd_court_stance_zunhan_trigger = yes }
+			scope:actor = { has_title = title:h_china }
+		}
+		add = 40
+	}
+	if = {
+		limit = {
+			scope:recipient = { hd_court_stance_zunhan_trigger = yes }
+			scope:actor = {
+				OR = {
+					hd_court_stance_zunhan_trigger = yes
+					hd_court_is_regent_trigger = yes
+				}
+			}
+		}
+		add = 20
+	}
+	if = {
+		limit = {
+			scope:recipient = { hd_court_stance_zunhan_trigger = yes }
+			scope:actor = { hd_court_stance_moni_trigger = yes }
+		}
+		add = -30
+	}
+	if = {
+		limit = {
+			scope:recipient = { hd_court_stance_moni_trigger = yes }
+			scope:actor = { has_title = title:h_china }
+		}
+		add = -20
+	}
+	if = {
+		limit = { scope:actor = { is_rightful_liege_of = scope:recipient } }
+		add = hd_submission_rightful
+	}
+	if = {
+		limit = { hd_submission_higher_de_jure_trigger = yes }
+		add = hd_submission_higher_de_jure
+	}
+	if = {
+		limit = {
+			NOT = { scope:actor = { is_rightful_liege_of = scope:recipient } }
+			NOT = { hd_submission_higher_de_jure_trigger = yes }
+		}
+		add = hd_submission_no_de_jure
+	}
+	if = {
+		limit = { scope:recipient = { sub_realm_size = 1 } }
+		add = hd_submission_size_1
+	}
+	if = {
+		limit = { scope:recipient = { sub_realm_size = 2 } }
+		add = hd_submission_size_2
+	}
+	if = {
+		limit = { scope:recipient = { sub_realm_size = 3 } }
+		add = hd_submission_size_3
+	}
+	if = {
+		limit = { scope:recipient = { sub_realm_size >= 4 sub_realm_size <= 5 } }
+		add = hd_submission_size_4_5
+	}
+	if = {
+		limit = { scope:recipient = { sub_realm_size >= 10 sub_realm_size < 20 } }
+		add = hd_submission_size_10_19
+	}
+	if = {
+		limit = { scope:recipient = { sub_realm_size >= 20 } }
+		add = hd_submission_size_20_plus
+	}
+	if = {
+		limit = { scope:recipient = { has_trait = content } }
+		add = hd_submission_content
+	}
+	if = {
+		limit = { scope:recipient = { has_trait = craven } }
+		add = hd_submission_craven
+	}
+	if = {
+		limit = { scope:recipient = { has_trait = trusting } }
+		add = hd_submission_trusting
+	}
+	if = {
+		limit = { scope:recipient = { has_trait = ambitious } }
+		add = hd_submission_ambitious
+	}
+	if = {
+		limit = { scope:recipient = { has_trait = arrogant } }
+		add = hd_submission_arrogant
+	}
+	if = {
+		limit = { scope:recipient = { has_trait = stubborn } }
+		add = hd_submission_stubborn
+	}
+	if = {
+		limit = { scope:recipient = { has_trait = paranoid } }
+		add = hd_submission_paranoid
+	}
+	if = {
+		limit = { scope:recipient = { has_trait = craven } hd_submission_power_ratio >= 3 }
+		add = hd_submission_craven_pressure
+	}
+	if = {
+		limit = { scope:recipient = { has_trait = ambitious sub_realm_size >= 5 } }
+		add = hd_submission_established_ambition
+	}
+	if = {
+		limit = { scope:recipient = { has_relation_friend = scope:actor NOT = { has_relation_best_friend = scope:actor } } }
+		add = hd_submission_friend
+	}
+	if = {
+		limit = { scope:recipient = { has_relation_best_friend = scope:actor } }
+		add = hd_submission_best_friend
+	}
+	if = {
+		limit = { scope:recipient = { is_allied_to = scope:actor } }
+		add = hd_submission_allied
+	}
+	if = {
+		limit = { hd_submission_power_ratio < 1 }
+		add = hd_submission_power_weak
+	}
+	if = {
+		limit = { hd_submission_power_ratio >= 1.5 hd_submission_power_ratio < 2 }
+		add = hd_submission_power_1_5
+	}
+	if = {
+		limit = { hd_submission_power_ratio >= 2 hd_submission_power_ratio < 3 }
+		add = hd_submission_power_2
+	}
+	if = {
+		limit = { hd_submission_power_ratio >= 3 hd_submission_power_ratio < 5 }
+		add = hd_submission_power_3
+	}
+	if = {
+		limit = { hd_submission_power_ratio >= 5 }
+		add = hd_submission_power_5
+	}
+	if = {
+		limit = { hd_submission_encircled_trigger = yes }
+		add = hd_submission_encircled
+	}
+	if = {
+		limit = { scope:recipient = { highest_held_title_tier >= tier_kingdom } }
+		add = hd_submission_king
+	}
+	if = {
+		limit = { scope:recipient = { highest_held_title_tier >= tier_empire } }
+		add = hd_submission_emperor
+	}
+	if = {
+		limit = { scope:recipient = { any_truce_holder = { this = scope:actor } } }
+		add = hd_submission_recent_war
+	}
+	if = {
+		limit = { scope:recipient.faith != scope:actor.faith }
+		add = hd_submission_faith_value
+	}
+	if = {
+		limit = { scope:actor = { NOT = { has_same_culture_as = scope:recipient } } }
+		add = offer_vassalage_acceptance_value
+	}
+	add = hd_submission_legitimacy_value
+	if = {
+		limit = { scope:actor = { has_variable = hd_submission_momentum } }
+		add = hd_submission_momentum_acceptance_value
+	}
+	if = {
+		limit = { scope:actor = { has_perk = true_ruler_perk } }
+		add = true_ruler_value
+	}
+	if = {
+		limit = { scope:actor = { has_trait_with_flag = offer_vassalisation_25 } }
+		add = 25
+	}
+	if = {
+		limit = { scope:recipient = { has_dread_level_towards = { target = scope:actor level = 1 } } }
+		add = intimidated_external_reason_value
+	}
+	if = {
+		limit = { scope:recipient = { has_dread_level_towards = { target = scope:actor level = 2 } } }
+		add = cowed_external_reason_value
+	}
+	if = {
+		limit = {
+			scope:recipient = { government_has_flag = government_is_feudal }
+			exists = scope:low_obligations
+			scope:low_obligations = yes
+		}
+		add = 30
+	}
+	if = {
+		limit = {
+			scope:recipient = { government_has_flag = government_is_feudal }
+			exists = scope:high_obligations
+			scope:high_obligations = yes
+		}
+		add = -40
+	}
+	if = {
+		limit = {
+			scope:recipient = { government_has_flag = government_is_feudal }
+			exists = scope:religious_exemption
+			scope:religious_exemption = yes
+		}
+		add = 60
+	}
+	if = {
+		limit = {
+			scope:recipient = { government_has_flag = government_is_clan }
+			exists = scope:religious_exemption_clan
+			scope:religious_exemption_clan = yes
+		}
+		add = 30
+	}
+	if = {
+		limit = { scope:recipient = { hd_submission_ai_refuses_trigger = { LIEGE = scope:actor } } }
+		add = -100000
+	}
+	add = {
+		value = "scope:recipient.opinion(scope:actor)"
+		multiply = 0.5
+	}
+}
+
+# 含条件项的总接受度；缺口 = 负数时的绝对值
+hd_neg_total_accept_value = {
+	value = hd_neg_base_accept_value
+	add = hd_neg_terms_accept_value
+}
+
+hd_neg_gap_value = {
+	value = hd_neg_total_accept_value
+	multiply = -1
+}
+
+# ===== 以下需要已存 scope:hd_neg_l（受附者）与 scope:hd_neg_v（归附者）=====
+
+# 受附者付得起的最高档（0 = 付不起或不合资格）
+hd_neg_gold_maxtier_value = {
+	value = 0
+	if = {
+		limit = { scope:hd_neg_l = { gold >= scope:hd_neg_v.hd_neg_gold_amount_3_value } }
+		add = 3
+	}
+	else_if = {
+		limit = { scope:hd_neg_l = { gold >= scope:hd_neg_v.hd_neg_gold_amount_2_value } }
+		add = 2
+	}
+	else_if = {
+		limit = { scope:hd_neg_l = { gold >= scope:hd_neg_v.hd_neg_gold_amount_1_value } }
+		add = 1
+	}
+}
+
+hd_neg_prestige_maxtier_value = {
+	value = 0
+	if = {
+		limit = { scope:hd_neg_l = { prestige >= hd_neg_prestige_amount_2_value } }
+		add = 2
+	}
+	else_if = {
+		limit = { scope:hd_neg_l = { prestige >= hd_neg_prestige_amount_1_value } }
+		add = 1
+	}
+}
+
+hd_neg_influence_maxtier_value = {
+	value = 0
+	if = {
+		limit = { hd_neg_influence_applicable_trigger = { L = scope:hd_neg_l V = scope:hd_neg_v } }
+		if = {
+			limit = { scope:hd_neg_l = { influence >= hd_neg_influence_amount_2_value } }
+			add = 2
+		}
+		else_if = {
+			limit = { scope:hd_neg_l = { influence >= hd_neg_influence_amount_1_value } }
+			add = 1
+		}
+	}
+}
+
+hd_neg_warlord_maxtier_value = {
+	value = 0
+	if = {
+		limit = {
+			hd_neg_warlord_eligible_trigger = { L = scope:hd_neg_l V = scope:hd_neg_v }
+			trigger_if = {
+				limit = { scope:hd_neg_l = { is_ai = yes } }
+				hd_neg_ai_liege_grants_warlord_trigger = { L = scope:hd_neg_l V = scope:hd_neg_v }
+			}
+		}
+		add = 1
+	}
+}
+
+# 偏好权重（boki 拍板）
+hd_neg_warlord_weight_value = {
+	value = 0
+	if = { limit = { scope:hd_neg_v = { has_trait = ambitious } } add = 40 }
+	if = { limit = { scope:hd_neg_v = { has_trait = paranoid } } add = 30 }
+	if = { limit = { scope:hd_neg_v = { has_trait = greedy } } add = 20 }
+	if = {
+		limit = {
+			scope:hd_neg_v.max_military_strength >= {
+				value = scope:hd_neg_l.current_military_strength
+				multiply = 0.5
+			}
+		}
+		add = 30
+	}
+	else_if = {
+		limit = {
+			scope:hd_neg_v.max_military_strength >= {
+				value = scope:hd_neg_l.current_military_strength
+				multiply = 0.25
+			}
+		}
+		add = 15
+	}
+	if = {
+		limit = { scope:hd_neg_v = { opinion = { target = scope:hd_neg_l value < 0 } } }
+		add = 20
+	}
+	if = {
+		limit = { scope:hd_neg_v = { opinion = { target = scope:hd_neg_l value <= -30 } } }
+		add = 20
+	}
+	if = {
+		limit = { scope:hd_neg_v = { opinion = { target = scope:hd_neg_l value >= 50 } } }
+		add = -30
+	}
+}
+
+hd_neg_gold_weight_value = {
+	value = 20
+	if = { limit = { scope:hd_neg_v = { has_trait = greedy } } add = 40 }
+}
+
+hd_neg_prestige_weight_value = {
+	value = 10
+	if = { limit = { scope:hd_neg_v = { has_trait = arrogant } } add = 40 }
+}
+
+hd_neg_influence_weight_value = {
+	value = 10
+	if = { limit = { scope:hd_neg_v = { has_trait = ambitious } } add = 15 }
+}
+
+# 还价/只许无条件的成功率（boki 拍板）：40 + 归附者对受附者好感 × 0.5，贪婪/傲慢 -20，知足/谦逊 +20
+hd_neg_haggle_chance_value = {
+	value = 40
+	add = {
+		value = "scope:hd_neg_v.opinion(scope:hd_neg_l)"
+		multiply = 0.5
+	}
+	if = { limit = { scope:hd_neg_v = { has_trait = greedy } } add = -20 }
+	if = { limit = { scope:hd_neg_v = { has_trait = arrogant } } add = -20 }
+	if = { limit = { scope:hd_neg_v = { has_trait = content } } add = 20 }
+	if = { limit = { scope:hd_neg_v = { has_trait = humble } } add = 20 }
+	min = 0
+	max = 100
+}

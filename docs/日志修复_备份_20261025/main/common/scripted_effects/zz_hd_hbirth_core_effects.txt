@@ -1,0 +1,333 @@
+﻿# 历史人物按年出场：手写核心。逐人出场块由 tools/hd_hbirth/gen_hbirth.py 生成到
+# zz_hd_hbirth_generated_effects.txt；调用前已存好 hd_hb_father / hd_hb_mother / hd_hb_house。
+
+# 年份游标：每年元旦推进到今年。当年的人各排一个 1-364 天的随机延迟事件，全年分散出场；
+# 游标落后（读旧档等）的过去年份直接立即出场。每人出场后留标记，
+# 次年元旦再对上一年名单补跑一次，补出因载体死亡、延迟事件丢失的人。
+hd_hb_yearly_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_hb_cursor } }
+		# 184 年出生即夭折的人在 184 桶，所以从 183 起步。
+		set_global_variable = { name = hd_hb_cursor value = 183 }
+	}
+	set_global_variable = { name = hd_hb_now value = current_year }
+	while = {
+		limit = { global_var:hd_hb_cursor < global_var:hd_hb_now }
+		change_global_variable = { name = hd_hb_cursor add = 1 }
+		if = {
+			limit = { global_var:hd_hb_cursor < global_var:hd_hb_now }
+			set_global_variable = { name = hd_hb_sweep value = global_var:hd_hb_cursor }
+			hd_hb_dispatch_now_wrap_effect = yes
+		}
+		else = {
+			# 先补上一年漏掉的人，再给今年的人排期。
+			set_global_variable = { name = hd_hb_sweep value = global_var:hd_hb_cursor }
+			change_global_variable = { name = hd_hb_sweep add = -1 }
+			hd_hb_dispatch_now_wrap_effect = yes
+			hd_hb_pick_carrier_effect = yes
+			hd_hb_dispatch_schedule_effect = yes
+			clear_saved_scope = hd_hb_carrier
+		}
+	}
+}
+
+# 延迟事件的载体：优先选青壮年 AI 独立统治者，降低一年内死亡导致事件丢失的概率（丢失者次年补出）。
+hd_hb_pick_carrier_effect = {
+	random_independent_ruler = {
+		limit = { is_ai = yes age >= 18 age <= 45 }
+		save_scope_as = hd_hb_carrier
+	}
+	if = {
+		limit = { NOT = { exists = scope:hd_hb_carrier } }
+		random_independent_ruler = { save_scope_as = hd_hb_carrier }
+	}
+}
+
+# 只有王朝没有指定家族：父亲同王朝用父亲家族，否则用该王朝任一成员的家族；都没有则无家族。
+hd_hb_dynasty_house_effect = {
+	scope:hd_hb_father ?= {
+		if = {
+			limit = { exists = house exists = dynasty dynasty = dynasty:$DYN$ }
+			house = { save_scope_as = hd_hb_house }
+		}
+	}
+	if = {
+		limit = { NOT = { exists = scope:hd_hb_house } }
+		dynasty:$DYN$ ?= {
+			random_dynasty_member = {
+				limit = { exists = house }
+				house = { save_scope_as = hd_hb_house }
+			}
+		}
+	}
+}
+
+# 雇主取父亲、母亲、家族族长的宫廷；都没有就进父亲/母亲/族长所在地，最后洛阳的流浪池。
+hd_hb_save_court_effect = {
+	court_owner ?= {
+		if = {
+			limit = { is_alive = yes is_ruler = yes exists = court_owner court_owner = this }
+			save_scope_as = hd_hb_employer
+		}
+	}
+}
+
+# 218 开局补跑 184-217 年各桶时只沿用、不新建：这些人都生于 218 年以前，本该由 history 原生，
+# 找不到就说明已死并被清理，不能再按模板生成活人。只包住"立即出场"，此时 hd_hb_sweep 就是正在补跑的出场年份；
+# 218 年当年排期的延迟事件不经过这里，执行时没有 hd_hb_adopt_only，照常生成（那时 hd_hb_sweep 停在 217，不能在 spawn 里直接判断它）。
+hd_hb_dispatch_now_wrap_effect = {
+	if = {
+		limit = {
+			# 南北朝剧本同理：开局年以前的各桶只沿用、不新建（游标初值仍是 183，靠这一步给开局前的人设指针）
+			OR = {
+				AND = { game_start_date = 190.1.1 global_var:hd_hb_sweep < 190 } # 190 讨董：184~189 各桶只沿用（这些人生于 190 年以前，history 原生；已死的不能再按模板生成活人）
+				AND = { game_start_date = 218.1.1 global_var:hd_hb_sweep < 218 }
+				AND = { game_start_date = 346.12.10 global_var:hd_hb_sweep < 346 }
+				AND = { game_start_date = 404.3.24 global_var:hd_hb_sweep < 404 }
+				AND = { game_start_date = 304.11.20 global_var:hd_hb_sweep < 304 } # 304 刘渊剧本
+				AND = { game_start_date = 253.3.1 global_var:hd_hb_sweep < 253 } # 253 姜维剧本
+				AND = { game_start_date = 263.9.20 global_var:hd_hb_sweep < 263 } # 263 钟会伐蜀剧本
+				AND = { game_start_date = 531.7.1 global_var:hd_hb_sweep < 531 } # 531 高欢剧本
+				AND = { game_start_date = 370.2.13 global_var:hd_hb_sweep < 370 } # 370 苻坚剧本
+				AND = { game_start_date = 617.6.23 global_var:hd_hb_sweep < 617 } # 617 隋末群雄剧本
+			}
+		}
+		set_global_variable = { name = hd_hb_adopt_only value = yes }
+	}
+	hd_hb_dispatch_now_effect = yes
+	if = {
+		limit = { has_global_variable = hd_hb_adopt_only }
+		remove_global_variable = hd_hb_adopt_only
+	}
+}
+
+# 本局 history 已原生此人（218 开局时生于 218 年以前的人）：直接沿用，不再生成，
+# 也不改其父母、家族、雇主；调用方随后照常写出场标记和指针。184 开局时只有改过生年的梁习、杨千万是原生的，同样沿用。
+hd_hb_spawn_effect = {
+	character:$ID$ ?= {
+		save_scope_as = hd_hb_person
+		add_character_flag = hd_popclean_protect
+	}
+	if = {
+		limit = {
+			NOT = { exists = scope:hd_hb_person }
+			NOT = { has_global_variable = hd_hb_adopt_only }
+		}
+		hd_hb_spawn_new_effect = { ID = $ID$ }
+	}
+	# 南北朝剧本：鲜卑各部、柔然、高车按王朝改用新文化（zz_hd_nbc_startup_effects.txt）
+	if = {
+		limit = {
+			OR = {
+				game_start_date = 346.12.10
+				game_start_date = 404.3.24
+				game_start_date = 304.11.20 # 304 刘渊剧本同样按王朝改用新胡族文化
+				game_start_date = 531.7.1 # 531 高欢剧本同样按王朝改用新胡族文化
+				game_start_date = 370.2.13 # 370 苻坚剧本同样按王朝改用新胡族文化
+				game_start_date = 617.6.23 # 617 隋末群雄剧本同样按王朝改用新胡族文化
+			}
+		}
+		scope:hd_hb_person ?= { hd_nbc_assign_culture_effect = yes }
+	}
+}
+
+hd_hb_spawn_new_effect = {
+	scope:hd_hb_father ?= {
+		if = { limit = { is_alive = yes } hd_hb_save_court_effect = yes }
+	}
+	if = {
+		limit = { NOT = { exists = scope:hd_hb_employer } }
+		scope:hd_hb_mother ?= {
+			if = { limit = { is_alive = yes } hd_hb_save_court_effect = yes }
+		}
+	}
+	if = {
+		limit = { NOT = { exists = scope:hd_hb_employer } }
+		scope:hd_hb_house.house_head ?= {
+			if = { limit = { is_alive = yes } hd_hb_save_court_effect = yes }
+		}
+	}
+	if = {
+		limit = { NOT = { exists = scope:hd_hb_employer } }
+		scope:hd_hb_father ?= {
+			if = { limit = { is_alive = yes exists = location } location = { save_scope_as = hd_hb_province } }
+		}
+		if = {
+			limit = { NOT = { exists = scope:hd_hb_province } }
+			scope:hd_hb_mother ?= {
+				if = { limit = { is_alive = yes exists = location } location = { save_scope_as = hd_hb_province } }
+			}
+		}
+		if = {
+			limit = { NOT = { exists = scope:hd_hb_province } }
+			scope:hd_hb_house.house_head ?= {
+				if = { limit = { is_alive = yes exists = location } location = { save_scope_as = hd_hb_province } }
+			}
+		}
+		if = {
+			limit = { NOT = { exists = scope:hd_hb_province } }
+			title:c_luoyang.title_province ?= { save_scope_as = hd_hb_province }
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_hb_employer }
+		scope:hd_hb_employer = {
+			create_character = {
+				template = hd_hb_t_$ID$
+				dynasty = none
+				employer = this
+				save_scope_as = hd_hb_person
+			}
+		}
+	}
+	else = {
+		scope:hd_hb_province ?= {
+			create_character = {
+				template = hd_hb_t_$ID$
+				dynasty = none
+				location = this
+				save_scope_as = hd_hb_person
+			}
+		}
+	}
+	scope:hd_hb_person ?= {
+		add_character_flag = hd_popclean_protect # 人口清除不选历史人物
+		# 佛教东传第 46 项扩展：信此刻还没开放的宗派（多为 OE 模板的禅宗）的，出场时改成大乘（2026-10-25）
+		if = {
+			limit = { hd_fo_has_closed_sect_now_trigger = yes }
+			set_character_rite = rite:mahayana
+		}
+		# history 写了性格的模板已关随机特质：只写 1~2 个的补到 3 个，未写教育的补教育（婴儿不补）（2026-10-20）
+		if = {
+			limit = {
+				is_adult = yes
+				number_of_personality_traits >= 1
+			}
+			hd_hb_fill_personality_effect = yes
+			hd_hb_fill_education_effect = yes
+		}
+		scope:hd_hb_father ?= { scope:hd_hb_person = { set_father = scope:hd_hb_father } }
+		scope:hd_hb_mother ?= { scope:hd_hb_person = { set_mother = scope:hd_hb_mother } }
+		# history 里父子同家族（生成器存 hd_hb_follow）且父亲仍在同一王朝时，随父亲当前家族：
+		# 父亲开局后另立支系，子女也跟过去，不与父亲分家（2026-10-19 孙尚香反馈）。history 刻意分出的支系不打标记，照旧。
+		if = {
+			limit = {
+				exists = scope:hd_hb_follow
+				scope:hd_hb_father ?= { exists = house dynasty = scope:hd_hb_house.house_dynasty }
+			}
+			set_house = scope:hd_hb_father.house
+		}
+		else_if = {
+			limit = { exists = scope:hd_hb_house }
+			set_house = scope:hd_hb_house
+		}
+		if = {
+			limit = { exists = scope:hd_hb_employer }
+			if = { limit = { NOT = { is_courtier_of = scope:hd_hb_employer } } set_employer = scope:hd_hb_employer }
+		}
+		# 2026-10-25 日志：按 location 生成的人已在该省流浪池，再移入会报错；照原版先判 is_in_pool_at
+		else_if = { limit = { exists = scope:hd_hb_province NOT = { is_in_pool_at = scope:hd_hb_province } } move_to_pool_at = scope:hd_hb_province }
+	}
+}
+
+# history 配偶：双方在世、成年、异性且都未婚才结婚。
+hd_hb_try_marry_effect = {
+	if = {
+		limit = {
+			exists = scope:hd_hb_spouse
+			scope:hd_hb_spouse = { is_alive = yes is_adult = yes is_married = no }
+			is_alive = yes
+			is_adult = yes
+			is_married = no
+			NOT = { sex_same_as = scope:hd_hb_spouse }
+		}
+		marry = scope:hd_hb_spouse
+	}
+	clear_saved_scope = hd_hb_spouse
+}
+
+# 每人出场后清空，避免把上一人的父母／家族／雇主带给下一人。
+hd_hb_clear_effect = {
+	clear_saved_scope = hd_hb_father
+	clear_saved_scope = hd_hb_mother
+	clear_saved_scope = hd_hb_house
+	clear_saved_scope = hd_hb_follow
+	clear_saved_scope = hd_hb_employer
+	clear_saved_scope = hd_hb_province
+	clear_saved_scope = hd_hb_person
+	clear_saved_scope = hd_hb_spouse
+}
+
+# history 只写了 1~2 个性格的出场人物：模板已关随机特质（否则引擎在 history 性格之外再随机加 3 个），
+# 由 hd_hb_spawn_new_effect 生成后调用，补到 3 个；跳过已有和对立的性格（2026-10-20）。
+hd_hb_fill_personality_effect = {
+	hd_hb_fill_one_personality_effect = yes
+	hd_hb_fill_one_personality_effect = yes
+	hd_hb_fill_one_personality_effect = yes
+}
+
+hd_hb_fill_one_personality_effect = {
+	if = {
+		limit = { number_of_personality_traits < 3 }
+		random_list = {
+			10 = { trigger = { NOR = { has_trait = lustful has_trait = chaste } } add_trait = lustful }
+			10 = { trigger = { NOR = { has_trait = chaste has_trait = lustful } } add_trait = chaste }
+			10 = { trigger = { NOR = { has_trait = gluttonous has_trait = temperate } } add_trait = gluttonous }
+			10 = { trigger = { NOR = { has_trait = temperate has_trait = gluttonous } } add_trait = temperate }
+			10 = { trigger = { NOR = { has_trait = greedy has_trait = generous } } add_trait = greedy }
+			10 = { trigger = { NOR = { has_trait = generous has_trait = greedy } } add_trait = generous }
+			10 = { trigger = { NOR = { has_trait = lazy has_trait = diligent } } add_trait = lazy }
+			10 = { trigger = { NOR = { has_trait = diligent has_trait = lazy } } add_trait = diligent }
+			10 = { trigger = { NOR = { has_trait = wrathful has_trait = calm } } add_trait = wrathful }
+			10 = { trigger = { NOR = { has_trait = calm has_trait = wrathful } } add_trait = calm }
+			10 = { trigger = { NOR = { has_trait = patient has_trait = impatient } } add_trait = patient }
+			10 = { trigger = { NOR = { has_trait = impatient has_trait = patient } } add_trait = impatient }
+			10 = { trigger = { NOR = { has_trait = arrogant has_trait = humble } } add_trait = arrogant }
+			10 = { trigger = { NOR = { has_trait = humble has_trait = arrogant } } add_trait = humble }
+			10 = { trigger = { NOR = { has_trait = deceitful has_trait = honest } } add_trait = deceitful }
+			10 = { trigger = { NOR = { has_trait = honest has_trait = deceitful } } add_trait = honest }
+			10 = { trigger = { NOR = { has_trait = craven has_trait = brave } } add_trait = craven }
+			10 = { trigger = { NOR = { has_trait = brave has_trait = craven } } add_trait = brave }
+			10 = { trigger = { NOR = { has_trait = shy has_trait = gregarious } } add_trait = shy }
+			10 = { trigger = { NOR = { has_trait = gregarious has_trait = shy } } add_trait = gregarious }
+			10 = { trigger = { NOR = { has_trait = ambitious has_trait = content } } add_trait = ambitious }
+			10 = { trigger = { NOR = { has_trait = content has_trait = ambitious } } add_trait = content }
+			10 = { trigger = { NOR = { has_trait = arbitrary has_trait = just } } add_trait = arbitrary }
+			10 = { trigger = { NOR = { has_trait = just has_trait = arbitrary } } add_trait = just }
+			10 = { trigger = { NOR = { has_trait = cynical has_trait = zealous } } add_trait = cynical }
+			10 = { trigger = { NOR = { has_trait = zealous has_trait = cynical } } add_trait = zealous }
+			10 = { trigger = { NOR = { has_trait = paranoid has_trait = trusting } } add_trait = paranoid }
+			10 = { trigger = { NOR = { has_trait = trusting has_trait = paranoid } } add_trait = trusting }
+			10 = { trigger = { NOR = { has_trait = compassionate has_trait = callous has_trait = sadistic } } add_trait = compassionate }
+			10 = { trigger = { NOR = { has_trait = callous has_trait = compassionate has_trait = sadistic } } add_trait = callous }
+			10 = { trigger = { NOR = { has_trait = sadistic has_trait = compassionate has_trait = callous } } add_trait = sadistic }
+			10 = { trigger = { NOR = { has_trait = stubborn has_trait = fickle has_trait = eccentric } } add_trait = stubborn }
+			10 = { trigger = { NOR = { has_trait = fickle has_trait = stubborn has_trait = eccentric } } add_trait = fickle }
+			2 = { trigger = { NOR = { has_trait = eccentric has_trait = fickle has_trait = stubborn } } add_trait = eccentric }
+			10 = { trigger = { NOR = { has_trait = vengeful has_trait = forgiving } } add_trait = vengeful }
+			10 = { trigger = { NOR = { has_trait = forgiving has_trait = vengeful } } add_trait = forgiving }
+		}
+	}
+}
+
+# 同上，history 未写教育的补一个随机教育（关随机特质后引擎不再给）。
+hd_hb_fill_education_effect = {
+	if = {
+		limit = {
+			NOR = {
+				has_trait = education_diplomacy
+				has_trait = education_martial
+				has_trait = education_stewardship
+				has_trait = education_intrigue
+				has_trait = education_learning
+			}
+		}
+		random_list = {
+			10 = { random_list = { 30 = { add_trait = education_diplomacy_1 } 40 = { add_trait = education_diplomacy_2 } 25 = { add_trait = education_diplomacy_3 } 5 = { add_trait = education_diplomacy_4 } } }
+			10 = { random_list = { 30 = { add_trait = education_martial_1 } 40 = { add_trait = education_martial_2 } 25 = { add_trait = education_martial_3 } 5 = { add_trait = education_martial_4 } } }
+			10 = { random_list = { 30 = { add_trait = education_stewardship_1 } 40 = { add_trait = education_stewardship_2 } 25 = { add_trait = education_stewardship_3 } 5 = { add_trait = education_stewardship_4 } } }
+			10 = { random_list = { 30 = { add_trait = education_intrigue_1 } 40 = { add_trait = education_intrigue_2 } 25 = { add_trait = education_intrigue_3 } 5 = { add_trait = education_intrigue_4 } } }
+			10 = { random_list = { 30 = { add_trait = education_learning_1 } 40 = { add_trait = education_learning_2 } 25 = { add_trait = education_learning_3 } 5 = { add_trait = education_learning_4 } } }
+		}
+	}
+}

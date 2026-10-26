@@ -1,0 +1,286 @@
+﻿# 184 剧本：刘备入主徐州之后。吕布来投 -> 吕布夺徐州 -> 刘备投刘表。
+# 全部为固定人物判断，不做全图扫描。所有触发器可在任意作用域调用。
+# 当事人被俘不作为节点条件（刘备本人被俘时由既有心跳入口 hd_lb_actor_trigger 暂停）；执行前先放人。
+
+# 刘备仍据有徐州（让徐州已完成，且未升到帝国级）。
+hd_lbxz_liu_holds_xuzhou_trigger = {
+	game_start_date = 190.1.1
+	exists = global_var:hd_lb_bequest_completed
+	exists = character:liu_bei
+	character:liu_bei = {
+		is_alive = yes
+		is_landed = yes
+		has_title = title:k_uuii_xuzhou
+		highest_held_title_tier <= tier_kingdom
+	}
+}
+
+# 吕布是无地冒险者，长安败走、东奔陈留流程已走完（或从未进入），且不是任何战争的主攻、主守方。
+hd_lbxz_lubu_landless_trigger = {
+	exists = character:lv_bu
+	character:lv_bu = {
+		is_alive = yes
+		is_adult = yes
+		is_landed = no
+		has_government = landless_adventurer_government
+		exists = domicile
+		NOT = { has_character_flag = hd_lbx_exile_pending }
+		OR = {
+			NOT = { has_character_flag = hd_lbx_exile_started }
+			has_character_flag = hd_lbx_east_war_started
+			has_character_flag = hd_lbx_exile_superseded
+		}
+		NOT = { any_character_war = { primary_attacker = character:lv_bu } }
+		NOT = { any_character_war = { primary_defender = character:lv_bu } }
+	}
+}
+
+# 节点 1：吕布来投（史实 195 年）。
+hd_lbxz_shelter_ready_trigger = {
+	current_date >= 195.1.1
+	NOT = { exists = global_var:hd_lbxz_shelter_resolved }
+	hd_lbxz_liu_holds_xuzhou_trigger = yes
+	hd_lbxz_lubu_landless_trigger = yes
+	character:lv_bu = {
+		is_travelling = no
+		NOT = { is_at_war_with = character:liu_bei }
+	}
+}
+
+# 节点 2：吕布夺徐州。需要冒险者 DLC，刘备失地后才能建营。
+hd_lbxz_seize_ready_trigger = {
+	has_dlc_feature = roads_to_power
+	exists = global_var:hd_lbxz_shelter_done
+	NOT = { exists = global_var:hd_lbxz_seize_resolved }
+	hd_lbxz_liu_holds_xuzhou_trigger = yes
+	hd_lbxz_lubu_landless_trigger = yes
+	character:lv_bu = {
+		has_character_flag = hd_lbxz_sheltered
+		NOT = { has_character_flag = hd_lbxz_shelter_wait }
+		NOT = { imprisoner ?= character:liu_bei }
+		NOT = { is_at_war_with = character:liu_bei }
+	}
+}
+
+# 节点 2b：丹阳兵之乱（2026-10-24 boki）。吕布没来投、或来投后已死/已有地/被刘备所囚时的兜底；
+# 玩家吕布守约、玩家刘备逐走吕布（都会记 hd_lbxz_seize_resolved）后不再兜底。需要冒险者 DLC。
+hd_lbxz_danyang_ready_trigger = {
+	has_dlc_feature = roads_to_power
+	current_date >= 196.1.1
+	NOT = { exists = global_var:hd_lbxz_danyang_resolved }
+	NOT = { exists = global_var:hd_lbxz_seize_resolved }
+	NOT = { exists = global_var:hd_lbxz_shelter_pending }
+	NOT = { exists = global_var:hd_lbxz_seize_pending }
+	hd_lbxz_liu_holds_xuzhou_trigger = yes
+	OR = {
+		NOT = { exists = global_var:hd_lbxz_shelter_done }
+		NOT = { exists = character:lv_bu }
+		character:lv_bu = {
+			OR = {
+				is_alive = no
+				is_landed = yes
+				NOT = { has_government = landless_adventurer_government }
+				imprisoner ?= character:liu_bei
+			}
+		}
+	}
+	character:liu_bei = {
+		OR = {
+			current_date >= 198.1.1
+			any_character_war = { primary_attacker = character:liu_bei }
+			any_character_war = { primary_defender = character:liu_bei }
+		}
+	}
+}
+
+# 节点 2c：托付后被别人打掉徐州（2026-10-24 boki）。刘备不再持徐州王国头衔且无地，还没记「已失徐州」。
+hd_lbxz_lost_xuzhou_ready_trigger = {
+	game_start_date = 190.1.1
+	has_dlc_feature = roads_to_power
+	exists = global_var:hd_lb_bequest_completed
+	NOT = { exists = global_var:hd_lbxz_seized }
+	NOT = { exists = global_var:hd_lbxz_seize_pending }
+	exists = character:liu_bei
+	character:liu_bei = {
+		is_alive = yes
+		is_adult = yes
+		is_imprisoned = no
+		is_landed = no
+		NOT = { has_title = title:k_uuii_xuzhou }
+	}
+}
+
+# 刘表「存在」：活着、有地、高于县级。
+hd_lbxz_liu_biao_valid_trigger = {
+	exists = character:liu_biao
+	character:liu_biao = {
+		is_alive = yes
+		is_landed = yes
+		highest_held_title_tier > tier_county
+	}
+}
+
+# 刘备失徐州后的流浪状态（节点 3 与 AI 屏蔽共用，不含计时与旅行）。
+hd_lbxz_liu_wandering_trigger = {
+	game_start_date = 190.1.1
+	exists = global_var:hd_lbxz_seized
+	NOT = { exists = global_var:hd_lbxz_jing_resolved }
+	hd_lbxz_liu_biao_valid_trigger = yes
+	exists = character:liu_bei
+	character:liu_bei = {
+		is_alive = yes
+		is_landed = no
+		has_government = landless_adventurer_government
+		exists = domicile
+		NOT = { is_at_war_with = character:liu_biao }
+	}
+}
+
+# 节点 3：刘备投刘表。
+hd_lbxz_jing_ready_trigger = {
+	hd_lbxz_liu_wandering_trigger = yes
+	character:liu_bei = {
+		is_adult = yes
+		is_travelling = no
+		NOT = { has_character_flag = hd_lbxz_jing_wait }
+	}
+}
+
+# 刘表本人直接持有、可授给刘备的县（非都城、在荆州）。Scope：县头衔。
+hd_lbxz_jing_grantable_county_trigger = {
+	tier = tier_county
+	is_noble_family_title = no
+	is_landless_type_title = no
+	holder ?= character:liu_biao
+	NOT = { this = character:liu_biao.capital_county }
+	target_is_de_jure_liege_or_above = title:k_uuii_jingzhou
+}
+
+# 原版冒险者 AI 闸门用。Scope：角色。实时判断，当事人一失效即自动放开；非 184 开局恒为假。
+# 吕布寄居徐州期间，以及刘备失徐州后两年内等待投刘表期间，不让原版 AI 把营地开走。
+hd_lbxz_block_adventurer_ai_trigger = {
+	game_start_date = 190.1.1
+	trigger_if = {
+		limit = { exists = character:lv_bu this = character:lv_bu }
+		has_character_flag = hd_lbxz_sheltered
+		NOT = { exists = global_var:hd_lbxz_seize_resolved }
+		hd_lbxz_liu_holds_xuzhou_trigger = yes
+	}
+	trigger_else_if = {
+		limit = { exists = character:liu_bei this = character:liu_bei }
+		has_character_flag = hd_lbxz_jing_block
+		hd_lbxz_liu_wandering_trigger = yes
+	}
+	trigger_else = { always = no }
+}
+
+# ===== 第二段：三顾茅庐、隆中对、入蜀 =====
+
+# 诸葛亮可被刘备请来。Scope：诸葛亮。
+# boki 定：玩家诸葛亮也请（由他在 0401 选择），只要不是刘备的上级、未被玩家囚禁。
+# 电脑诸葛亮：被玩家囚禁不请；无地者不能在玩家宫廷；有地者只能是电脑领主（或刘备本人）手下的地方官或世族家主，独立统治者不请。
+hd_lbxz_zgl_recruitable_trigger = {
+	is_alive = yes
+	is_adult = yes
+	NOT = { this = character:liu_bei }
+	NOT = { any_vassal_or_below = { this = character:liu_bei } }
+	trigger_if = {
+		limit = { is_ai = no }
+		trigger_if = {
+			limit = { is_imprisoned = yes }
+			imprisoner ?= { is_ai = yes }
+		}
+	}
+	trigger_else = {
+		hd_lbxz_zgl_ai_recruitable_trigger = yes
+	}
+}
+
+hd_lbxz_zgl_ai_recruitable_trigger = {
+	trigger_if = {
+		limit = { is_imprisoned = yes }
+		imprisoner ?= { is_ai = yes }
+	}
+	trigger_if = {
+		limit = { is_ruler = yes }
+		is_independent_ruler = no
+		liege ?= {
+			OR = {
+				is_ai = yes
+				this = character:liu_bei
+			}
+		}
+	}
+	trigger_else_if = {
+		limit = { exists = court_owner }
+		court_owner = { is_ai = yes }
+	}
+	trigger_else = { always = yes }
+}
+
+# 节点 4：三顾茅庐。依附刘表满一年，诸葛亮年满 20。
+hd_lbxz_zgl_ready_trigger = {
+	game_start_date = 190.1.1
+	current_date >= 201.7.1
+	exists = global_var:hd_lbxz_jing_done
+	exists = global_var:hd_lbxz_zgl_clock
+	NOT = { exists = global_var:hd_lbxz_zgl_resolved }
+	exists = character:liu_bei
+	character:liu_bei = {
+		is_alive = yes
+		is_adult = yes
+		is_ruler = yes
+		NOT = { has_character_flag = hd_lbxz_zgl_wait }
+	}
+}
+
+# 益州之主可作入蜀目标、可出降：以益州为根据地，不持天下、汉帝国头衔，不高于王国级。Scope：益州之主。
+hd_lbxz_shu_lord_valid_trigger = {
+	is_alive = yes
+	is_landed = yes
+	NOT = { this = character:liu_bei }
+	NOT = { target_is_liege_or_above = character:liu_bei }
+	NOT = { has_title = title:h_china }
+	NOT = { has_title = title:e_han }
+	highest_held_title_tier <= tier_kingdom
+	exists = capital_county
+	capital_county = { target_is_de_jure_liege_or_above = title:k_uuii_yizhou }
+}
+
+# 节点 6：入蜀。益州之主 = 成都县持有者的最高领主。刘备无地（冒险者）也可入蜀。
+hd_lbxz_shu_ready_trigger = {
+	game_start_date = 190.1.1
+	current_date >= 211.1.1
+	OR = {
+		exists = global_var:hd_lbxz_longzhong_done
+		exists = global_var:hd_lbxz_zgl_skipped
+	}
+	NOT = { exists = global_var:hd_lbxz_shu_done }
+	NOT = { exists = global_var:hd_lbxz_shu_war_started }
+	NOT = { exists = global_var:hd_chibi_world_active }
+	trigger_if = {
+		limit = { exists = global_var:hd_lbxz_shu_tries }
+		global_var:hd_lbxz_shu_tries < 2
+	}
+	exists = character:liu_bei
+	character:liu_bei = {
+		is_alive = yes
+		is_adult = yes
+		is_ruler = yes
+		NOT = { has_character_flag = hd_lbxz_shu_cooldown }
+		NOT = { any_character_war = { primary_attacker = character:liu_bei } }
+		NOT = { any_character_war = { primary_defender = character:liu_bei } }
+		OR = {
+			exists = capital_county
+			exists = domicile.domicile_location.county
+		}
+	}
+	exists = title:c_uuii_p_4282.holder
+	title:c_uuii_p_4282.holder.top_liege = {
+		hd_lbxz_shu_lord_valid_trigger = yes
+		NOT = { this = character:liu_bei.top_liege }
+		NOT = { is_allied_to = character:liu_bei }
+		NOT = { has_truce = character:liu_bei }
+	}
+	character:liu_bei = { NOT = { has_truce = title:c_uuii_p_4282.holder.top_liege } }
+}

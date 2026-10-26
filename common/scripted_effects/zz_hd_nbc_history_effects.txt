@@ -88,7 +88,7 @@ hd_nbc_vassal_war_effect = {
 	}
 }
 
-# 战争结局。Root：战争（hd_nbc_war_cb 的 on_victory 等）
+# 战争结局。Root：战争理由（hd_nbc_war_cb 的 on_victory 等；战争是 root.war）
 hd_nbc_war_result_effect = {
 	hd_nbc_war_result_kind_effect = { KIND = fashu RESULT = $RESULT$ }
 	hd_nbc_war_result_kind_effect = { KIND = yannan RESULT = $RESULT$ }
@@ -101,7 +101,12 @@ hd_nbc_war_result_effect = {
 }
 hd_nbc_war_result_kind_effect = {
 	if = {
-		limit = { var:hd_nbc_war_kind ?= flag:$KIND$ }
+		# CB 结算时 root 是战争理由不是战争，变量要走 root.war（照 hd218_war_result_kind_effect，10-14 已在 218 修过）。
+		# 10-26 前直接读 var: 永远为空，_won 等标记从未设上，灭蜀封赏、前秦瓦解都不触发
+		limit = {
+			exists = root.war
+			root.war.var:hd_nbc_war_kind ?= flag:$KIND$
+		}
 		set_global_variable = hd_nbc_$KIND$_$RESULT$
 		if = {
 			limit = { has_global_variable = hd_nbc_$KIND$_active }
@@ -223,6 +228,39 @@ hd_nbc_hist_death_effect = {
 # A1 灭蜀：桓温伐蜀得胜。巴蜀帝国头衔交还天子，李势归建康
 ############################################################
 hd_nbc_check_fashu_effect = {
+	# 兜底（boki 10-26）：伐蜀战争已结束而结局标记没设上，按成都（c_uuii_p_4282）是否归天子一系补判
+	if = {
+		limit = {
+			has_global_variable = hd_nbc_fashu_active
+			NOT = { has_global_variable = hd_nbc_fashu_done }
+			NOT = { has_global_variable = hd_nbc_fashu_won }
+			NOT = { has_global_variable = hd_nbc_fashu_lost }
+			NOT = { has_global_variable = hd_nbc_fashu_white }
+			NOT = { has_global_variable = hd_nbc_fashu_invalid }
+			NOT = { character:longkang_huan_017 ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:fashu } } }
+			NOT = { character:bacong_li_026 ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:fashu } } }
+			NOT = { title:k_uuii_jingzhou.holder ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:fashu } } }
+			NOT = { title:e_bashu.holder ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:fashu } } }
+		}
+		remove_global_variable = hd_nbc_fashu_active
+		if = {
+			limit = {
+				exists = title:h_china.holder
+				title:c_uuii_p_4282.holder ?= {
+					OR = {
+						this = title:h_china.holder
+						top_liege = title:h_china.holder
+					}
+				}
+			}
+			set_global_variable = hd_nbc_fashu_won
+			debug_log = "HD_NBC WAR_RESULT_FALLBACK fashu won"
+		}
+		else = {
+			set_global_variable = hd_nbc_fashu_lost
+			debug_log = "HD_NBC WAR_RESULT_FALLBACK fashu lost"
+		}
+	}
 	if = {
 		limit = {
 			NOT = { has_global_variable = hd_nbc_fashu_done }
@@ -398,6 +436,37 @@ hd_nbc_check_feishui_effect = {
 			limit = { current_date >= 386.1.1 }
 			set_global_variable = hd_nbc_feishui_done
 			debug_log = "HD_NBC SKIP feishui"
+		}
+	}
+	# 兜底（boki 10-26）：淝水之战已结束而结局标记没设上，按寿春（c_uuii_p_1961）是否归苻坚一系补判
+	if = {
+		limit = {
+			has_global_variable = hd_nbc_feishui_active
+			has_global_variable = hd_nbc_feishui_done
+			NOT = { has_global_variable = hd_nbc_feishui_result_done }
+			NOT = { has_global_variable = hd_nbc_feishui_won }
+			NOT = { has_global_variable = hd_nbc_feishui_lost }
+			NOT = { has_global_variable = hd_nbc_feishui_white }
+			NOT = { has_global_variable = hd_nbc_feishui_invalid }
+			NOT = { character:lueyang_fu_020 ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:feishui } } }
+			NOT = { title:h_china.holder ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:feishui } } }
+		}
+		remove_global_variable = hd_nbc_feishui_active
+		if = {
+			limit = {
+				title:c_uuii_p_1961.holder ?= {
+					OR = {
+						this = character:lueyang_fu_020
+						top_liege = character:lueyang_fu_020
+					}
+				}
+			}
+			set_global_variable = hd_nbc_feishui_won
+			debug_log = "HD_NBC WAR_RESULT_FALLBACK feishui won"
+		}
+		else = {
+			set_global_variable = hd_nbc_feishui_lost
+			debug_log = "HD_NBC WAR_RESULT_FALLBACK feishui lost"
 		}
 	}
 	# 淝水结局：苻坚败（或白和），前秦瓦解

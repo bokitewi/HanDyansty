@@ -1,0 +1,1091 @@
+﻿# 归附谈判（2026-10-25 boki 拍板，设计见 docs/归附谈判_设计记录.md）
+#
+# 条件记在归附者（将为封臣的一方）身上：
+#   hd_neg_liege            对手（受附者）
+#   hd_neg_gold / _tier     赐金数额 / 档位（1 半年、2 一年、3 两年收入）
+#   hd_neg_prestige / _tier 赐威望数额 / 档位（1 = 150、2 = 350）
+#   hd_neg_influence / _tier 让影响力数额 / 档位（1 = 100、2 = 250）
+#   hd_neg_warlord          许为军阀
+#   hd_neg_last             最后要的一项（1 军阀 2 赐金 3 威望 4 影响力），还价时降这一项
+#   hd_neg_preoffer         受附者已预开价：对方不再趁机要价，回信只能再加一项
+#   hd_neg_mode             1 回信索价、2 趁机要价、3 请求归附开价、4 玩家被劝开价
+#   hd_neg_haggle_chance    还价 / 只许无条件的成功率（事件显示用）
+# 计算用的临时变量（hd_neg_w_* / hd_neg_mt_* / hd_neg_pick* / hd_neg_need / hd_neg_covered）用完即删；
+# 结果 hd_neg_ok（1 谈成、0 谈不拢）留给调用方读，随 hd_neg_clear_effect 一并删除。
+# 归附者同一时间只会有一场谈判：劝其归附的收件锁、请求归附的发件锁互斥（见各自 can_send / 候选筛选）。
+
+# ===== 存取 =====
+
+# root = 归附者
+hd_neg_clear_work_effect = {
+	remove_variable = hd_neg_w_war
+	remove_variable = hd_neg_w_gold
+	remove_variable = hd_neg_w_pres
+	remove_variable = hd_neg_w_inf
+	remove_variable = hd_neg_mt_war
+	remove_variable = hd_neg_mt_gold
+	remove_variable = hd_neg_mt_pres
+	remove_variable = hd_neg_mt_inf
+	remove_variable = hd_neg_pick
+	remove_variable = hd_neg_pick1
+	remove_variable = hd_neg_need
+	remove_variable = hd_neg_covered
+}
+
+# root = 归附者
+hd_neg_clear_effect = {
+	if = {
+		limit = { is_alive = yes }
+		hd_neg_clear_work_effect = yes
+		remove_variable = hd_neg_liege
+		remove_variable = hd_neg_gold
+		remove_variable = hd_neg_gold_tier
+		remove_variable = hd_neg_prestige
+		remove_variable = hd_neg_prestige_tier
+		remove_variable = hd_neg_influence
+		remove_variable = hd_neg_influence_tier
+		remove_variable = hd_neg_warlord
+		remove_variable = hd_neg_last
+		remove_variable = hd_neg_preoffer
+		remove_variable = hd_neg_mode
+		remove_variable = hd_neg_haggle_chance
+		remove_variable = hd_neg_ok
+		remove_variable = hd_neg_viable
+	}
+}
+
+# 只清与 $L$ 的谈判，别人的不动。root = 归附者
+hd_neg_clear_pair_effect = {
+	if = {
+		limit = { var:hd_neg_liege ?= $L$ }
+		hd_neg_clear_effect = yes
+	}
+}
+
+# 开一场新谈判。root = 归附者
+hd_neg_begin_effect = {
+	hd_neg_clear_effect = yes
+	set_variable = { name = hd_neg_liege value = $L$ days = 365 }
+}
+
+# root = 归附者；$TIER$ = 1/2/3
+hd_neg_set_gold_effect = {
+	set_variable = { name = hd_neg_gold_tier value = $TIER$ days = 365 }
+	set_variable = { name = hd_neg_gold value = hd_neg_gold_amount_$TIER$_value days = 365 }
+	set_variable = { name = hd_neg_last value = 2 days = 365 }
+}
+
+# root = 归附者；$TIER$ = 1/2
+hd_neg_set_prestige_effect = {
+	set_variable = { name = hd_neg_prestige_tier value = $TIER$ days = 365 }
+	set_variable = { name = hd_neg_prestige value = hd_neg_prestige_amount_$TIER$_value days = 365 }
+	set_variable = { name = hd_neg_last value = 3 days = 365 }
+}
+
+# root = 归附者；$TIER$ = 1/2
+hd_neg_set_influence_effect = {
+	set_variable = { name = hd_neg_influence_tier value = $TIER$ days = 365 }
+	set_variable = { name = hd_neg_influence value = hd_neg_influence_amount_$TIER$_value days = 365 }
+	set_variable = { name = hd_neg_last value = 4 days = 365 }
+}
+
+# root = 归附者
+hd_neg_set_warlord_effect = {
+	set_variable = { name = hd_neg_warlord value = yes days = 365 }
+	set_variable = { name = hd_neg_last value = 1 days = 365 }
+}
+
+# ===== 开价计算（root = 归附者；需已存 scope:hd_neg_l 受附者、scope:hd_neg_v 归附者）=====
+
+# 可用条件与偏好权重。不可用的权重压到 -10000 以下。$MID$ = yes：只算中档付得起的条件
+hd_neg_prepare_weights_effect = {
+	set_variable = { name = hd_neg_mt_war value = hd_neg_warlord_maxtier_value }
+	set_variable = { name = hd_neg_mt_gold value = hd_neg_gold_maxtier_value }
+	set_variable = { name = hd_neg_mt_pres value = hd_neg_prestige_maxtier_value }
+	set_variable = { name = hd_neg_mt_inf value = hd_neg_influence_maxtier_value }
+	# 已谈下的一项（受附者预开价）不再重复要
+	if = {
+		limit = { has_variable = hd_neg_warlord }
+		set_variable = { name = hd_neg_mt_war value = 0 }
+	}
+	if = {
+		limit = { has_variable = hd_neg_gold_tier }
+		set_variable = { name = hd_neg_mt_gold value = 0 }
+	}
+	if = {
+		limit = { has_variable = hd_neg_prestige_tier }
+		set_variable = { name = hd_neg_mt_pres value = 0 }
+	}
+	if = {
+		limit = { has_variable = hd_neg_influence_tier }
+		set_variable = { name = hd_neg_mt_inf value = 0 }
+	}
+	if = {
+		limit = { always = $MID$ }
+		if = {
+			limit = { var:hd_neg_mt_gold < 2 }
+			set_variable = { name = hd_neg_mt_gold value = 0 }
+		}
+		if = {
+			limit = { var:hd_neg_mt_pres < 2 }
+			set_variable = { name = hd_neg_mt_pres value = 0 }
+		}
+		if = {
+			limit = { var:hd_neg_mt_inf < 2 }
+			set_variable = { name = hd_neg_mt_inf value = 0 }
+		}
+	}
+	set_variable = { name = hd_neg_w_war value = hd_neg_warlord_weight_value }
+	set_variable = { name = hd_neg_w_gold value = hd_neg_gold_weight_value }
+	set_variable = { name = hd_neg_w_pres value = hd_neg_prestige_weight_value }
+	set_variable = { name = hd_neg_w_inf value = hd_neg_influence_weight_value }
+	if = {
+		limit = { var:hd_neg_mt_war < 1 }
+		set_variable = { name = hd_neg_w_war value = -10000 }
+	}
+	if = {
+		limit = { var:hd_neg_mt_gold < 1 }
+		set_variable = { name = hd_neg_w_gold value = -10000 }
+	}
+	if = {
+		limit = { var:hd_neg_mt_pres < 1 }
+		set_variable = { name = hd_neg_w_pres value = -10000 }
+	}
+	if = {
+		limit = { var:hd_neg_mt_inf < 1 }
+		set_variable = { name = hd_neg_w_inf value = -10000 }
+	}
+}
+
+# 取权重最高的可用条件 → var:hd_neg_pick（0 = 没有）。权重相同：军阀 > 赐金 > 威望 > 影响力（自拟）
+hd_neg_pick_best_effect = {
+	set_variable = { name = hd_neg_pick value = 0 }
+	if = {
+		limit = {
+			var:hd_neg_w_war > -1000
+			var:hd_neg_w_war >= var:hd_neg_w_gold
+			var:hd_neg_w_war >= var:hd_neg_w_pres
+			var:hd_neg_w_war >= var:hd_neg_w_inf
+		}
+		set_variable = { name = hd_neg_pick value = 1 }
+	}
+	else_if = {
+		limit = {
+			var:hd_neg_w_gold > -1000
+			var:hd_neg_w_gold >= var:hd_neg_w_pres
+			var:hd_neg_w_gold >= var:hd_neg_w_inf
+		}
+		set_variable = { name = hd_neg_pick value = 2 }
+	}
+	else_if = {
+		limit = {
+			var:hd_neg_w_pres > -1000
+			var:hd_neg_w_pres >= var:hd_neg_w_inf
+		}
+		set_variable = { name = hd_neg_pick value = 3 }
+	}
+	else_if = {
+		limit = { var:hd_neg_w_inf > -1000 }
+		set_variable = { name = hd_neg_pick value = 4 }
+	}
+}
+
+# 把刚选中的一项排除出下一轮
+hd_neg_exclude_pick_effect = {
+	if = {
+		limit = { var:hd_neg_pick = 1 }
+		set_variable = { name = hd_neg_w_war value = -10000 }
+	}
+	else_if = {
+		limit = { var:hd_neg_pick = 2 }
+		set_variable = { name = hd_neg_w_gold value = -10000 }
+	}
+	else_if = {
+		limit = { var:hd_neg_pick = 3 }
+		set_variable = { name = hd_neg_w_pres value = -10000 }
+	}
+	else_if = {
+		limit = { var:hd_neg_pick = 4 }
+		set_variable = { name = hd_neg_w_inf value = -10000 }
+	}
+}
+
+# 撤掉 var:hd_neg_pick 那一项
+hd_neg_remove_pick_effect = {
+	if = {
+		limit = { var:hd_neg_pick = 1 }
+		remove_variable = hd_neg_warlord
+	}
+	else_if = {
+		limit = { var:hd_neg_pick = 2 }
+		remove_variable = hd_neg_gold
+		remove_variable = hd_neg_gold_tier
+	}
+	else_if = {
+		limit = { var:hd_neg_pick = 3 }
+		remove_variable = hd_neg_prestige
+		remove_variable = hd_neg_prestige_tier
+	}
+	else_if = {
+		limit = { var:hd_neg_pick = 4 }
+		remove_variable = hd_neg_influence
+		remove_variable = hd_neg_influence_tier
+	}
+}
+
+# 按缺口 var:hd_neg_need 写入选中的一项：取补得上的最低档，补不上取最高可付档；补上的接受度记入 var:hd_neg_covered
+hd_neg_apply_pick_for_need_effect = {
+	if = {
+		limit = { var:hd_neg_pick = 1 }
+		hd_neg_set_warlord_effect = yes
+		set_variable = { name = hd_neg_covered value = hd_neg_warlord_accept }
+	}
+	else_if = {
+		limit = { var:hd_neg_pick = 2 }
+		if = {
+			limit = { var:hd_neg_need <= hd_neg_gold_accept_1 }
+			hd_neg_set_gold_effect = { TIER = 1 }
+			set_variable = { name = hd_neg_covered value = hd_neg_gold_accept_1 }
+		}
+		else_if = {
+			limit = {
+				var:hd_neg_need <= hd_neg_gold_accept_2
+				var:hd_neg_mt_gold >= 2
+			}
+			hd_neg_set_gold_effect = { TIER = 2 }
+			set_variable = { name = hd_neg_covered value = hd_neg_gold_accept_2 }
+		}
+		else_if = {
+			limit = { var:hd_neg_mt_gold >= 3 }
+			hd_neg_set_gold_effect = { TIER = 3 }
+			set_variable = { name = hd_neg_covered value = hd_neg_gold_accept_3 }
+		}
+		else_if = {
+			limit = { var:hd_neg_mt_gold >= 2 }
+			hd_neg_set_gold_effect = { TIER = 2 }
+			set_variable = { name = hd_neg_covered value = hd_neg_gold_accept_2 }
+		}
+		else = {
+			hd_neg_set_gold_effect = { TIER = 1 }
+			set_variable = { name = hd_neg_covered value = hd_neg_gold_accept_1 }
+		}
+	}
+	else_if = {
+		limit = { var:hd_neg_pick = 3 }
+		if = {
+			limit = { var:hd_neg_need <= hd_neg_prestige_accept_1 }
+			hd_neg_set_prestige_effect = { TIER = 1 }
+			set_variable = { name = hd_neg_covered value = hd_neg_prestige_accept_1 }
+		}
+		else_if = {
+			limit = { var:hd_neg_mt_pres >= 2 }
+			hd_neg_set_prestige_effect = { TIER = 2 }
+			set_variable = { name = hd_neg_covered value = hd_neg_prestige_accept_2 }
+		}
+		else = {
+			hd_neg_set_prestige_effect = { TIER = 1 }
+			set_variable = { name = hd_neg_covered value = hd_neg_prestige_accept_1 }
+		}
+	}
+	else_if = {
+		limit = { var:hd_neg_pick = 4 }
+		if = {
+			limit = { var:hd_neg_need <= hd_neg_influence_accept_1 }
+			hd_neg_set_influence_effect = { TIER = 1 }
+			set_variable = { name = hd_neg_covered value = hd_neg_influence_accept_1 }
+		}
+		else_if = {
+			limit = { var:hd_neg_mt_inf >= 2 }
+			hd_neg_set_influence_effect = { TIER = 2 }
+			set_variable = { name = hd_neg_covered value = hd_neg_influence_accept_2 }
+		}
+		else = {
+			hd_neg_set_influence_effect = { TIER = 1 }
+			set_variable = { name = hd_neg_covered value = hd_neg_influence_accept_1 }
+		}
+	}
+}
+
+# 中档写入（趁机要价、请求归附）：赐金一年收入、威望 350、影响力 250、军阀
+hd_neg_apply_pick_mid_effect = {
+	if = {
+		limit = { var:hd_neg_pick = 1 }
+		hd_neg_set_warlord_effect = yes
+	}
+	else_if = {
+		limit = { var:hd_neg_pick = 2 }
+		hd_neg_set_gold_effect = { TIER = 2 }
+	}
+	else_if = {
+		limit = { var:hd_neg_pick = 3 }
+		hd_neg_set_prestige_effect = { TIER = 2 }
+	}
+	else_if = {
+		limit = { var:hd_neg_pick = 4 }
+		hd_neg_set_influence_effect = { TIER = 2 }
+	}
+}
+
+# 按缺口开价（回信索价、AI 预开价）。须先设 var:hd_neg_need（要补足的接受度，> 0）。
+# $TWO$ = yes：主条件 + 加价，至多两项；no：已有一项预开价，只能再加一项且须一项补足
+hd_neg_build_gap_package_effect = {
+	set_variable = { name = hd_neg_ok value = 0 }
+	set_variable = { name = hd_neg_liege value = scope:hd_neg_l days = 365 }
+	hd_neg_prepare_weights_effect = { MID = no }
+	hd_neg_pick_best_effect = yes
+	if = {
+		limit = { var:hd_neg_pick > 0 }
+		set_variable = { name = hd_neg_pick1 value = var:hd_neg_pick }
+		hd_neg_apply_pick_for_need_effect = yes
+		change_variable = { name = hd_neg_need subtract = var:hd_neg_covered }
+		if = {
+			limit = { var:hd_neg_need <= 0 }
+			set_variable = { name = hd_neg_ok value = 1 }
+		}
+		else_if = {
+			limit = { always = $TWO$ }
+			hd_neg_exclude_pick_effect = yes
+			hd_neg_pick_best_effect = yes
+			if = {
+				limit = { var:hd_neg_pick > 0 }
+				hd_neg_apply_pick_for_need_effect = yes
+				if = {
+					limit = { var:hd_neg_covered >= var:hd_neg_need }
+					set_variable = { name = hd_neg_ok value = 1 }
+				}
+				else = { hd_neg_remove_pick_effect = yes }
+			}
+		}
+		# 谈不拢：撤掉本轮写入的主条件（受附者的预开价不动）
+		if = {
+			limit = { var:hd_neg_ok = 0 }
+			set_variable = { name = hd_neg_pick value = var:hd_neg_pick1 }
+			hd_neg_remove_pick_effect = yes
+		}
+	}
+	hd_neg_clear_work_effect = yes
+}
+
+# 开一项中档（趁机要价、请求归附）。野心者要军阀，不够格则影响力；
+# $STRICT$ = yes（请求归附）：野心/傲慢者必须开价，傲慢者要威望，给不了就不成；no：给不了就按权重另挑
+hd_neg_build_mid_package_effect = {
+	set_variable = { name = hd_neg_ok value = 0 }
+	set_variable = { name = hd_neg_liege value = scope:hd_neg_l days = 365 }
+	hd_neg_prepare_weights_effect = { MID = yes }
+	set_variable = { name = hd_neg_pick value = 0 }
+	if = {
+		limit = { has_trait = ambitious }
+		if = {
+			limit = { var:hd_neg_mt_war >= 1 }
+			set_variable = { name = hd_neg_pick value = 1 }
+		}
+		else_if = {
+			limit = { var:hd_neg_mt_inf >= 2 }
+			set_variable = { name = hd_neg_pick value = 4 }
+		}
+	}
+	else_if = {
+		limit = {
+			always = $STRICT$
+			has_trait = arrogant
+		}
+		if = {
+			limit = { var:hd_neg_mt_pres >= 2 }
+			set_variable = { name = hd_neg_pick value = 3 }
+		}
+	}
+	if = {
+		limit = {
+			var:hd_neg_pick = 0
+			NOT = {
+				AND = {
+					always = $STRICT$
+					hd_neg_must_demand_trigger = yes
+				}
+			}
+		}
+		hd_neg_pick_best_effect = yes
+	}
+	if = {
+		limit = { var:hd_neg_pick > 0 }
+		hd_neg_apply_pick_mid_effect = yes
+		set_variable = { name = hd_neg_ok value = 1 }
+	}
+	hd_neg_clear_work_effect = yes
+}
+
+# 还价：把最后要的一项降一档；军阀降为影响力高档，没有影响力则大额赐金，再不行改为无条件（自拟）。
+# root = 归附者；需已存 scope:hd_neg_l、scope:hd_neg_v
+hd_neg_downgrade_last_effect = {
+	if = {
+		limit = {
+			has_variable = hd_neg_last
+			var:hd_neg_last = 2
+			has_variable = hd_neg_gold_tier
+		}
+		if = {
+			limit = { var:hd_neg_gold_tier >= 3 }
+			hd_neg_set_gold_effect = { TIER = 2 }
+		}
+		else_if = {
+			limit = { var:hd_neg_gold_tier = 2 }
+			hd_neg_set_gold_effect = { TIER = 1 }
+		}
+		else = {
+			remove_variable = hd_neg_gold
+			remove_variable = hd_neg_gold_tier
+		}
+	}
+	else_if = {
+		limit = {
+			has_variable = hd_neg_last
+			var:hd_neg_last = 3
+			has_variable = hd_neg_prestige_tier
+		}
+		if = {
+			limit = { var:hd_neg_prestige_tier >= 2 }
+			hd_neg_set_prestige_effect = { TIER = 1 }
+		}
+		else = {
+			remove_variable = hd_neg_prestige
+			remove_variable = hd_neg_prestige_tier
+		}
+	}
+	else_if = {
+		limit = {
+			has_variable = hd_neg_last
+			var:hd_neg_last = 4
+			has_variable = hd_neg_influence_tier
+		}
+		if = {
+			limit = { var:hd_neg_influence_tier >= 2 }
+			hd_neg_set_influence_effect = { TIER = 1 }
+		}
+		else = {
+			remove_variable = hd_neg_influence
+			remove_variable = hd_neg_influence_tier
+		}
+	}
+	else_if = {
+		limit = { has_variable = hd_neg_warlord }
+		remove_variable = hd_neg_warlord
+		if = {
+			limit = {
+				NOT = { has_variable = hd_neg_influence_tier }
+				hd_neg_influence_applicable_trigger = { L = scope:hd_neg_l V = scope:hd_neg_v }
+				scope:hd_neg_l = { influence >= hd_neg_influence_amount_2_value }
+			}
+			hd_neg_set_influence_effect = { TIER = 2 }
+		}
+		else_if = {
+			limit = {
+				NOT = { has_variable = hd_neg_gold_tier }
+				scope:hd_neg_l = { gold >= scope:hd_neg_v.hd_neg_gold_amount_3_value }
+			}
+			hd_neg_set_gold_effect = { TIER = 3 }
+		}
+	}
+}
+
+# ===== 兑现 =====
+
+# 许为军阀：照 hd190_warlord_one_effect，直接成为军阀（不走「拥兵自重」、不扣主君好感），
+# AI 主君 10 年内不发起收回权力；承诺记在军阀本人身上，提前收回算背约。root = 新封臣
+hd_neg_grant_warlord_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			is_landed = yes
+			liege ?= $L$
+			government_has_flag = government_is_celestial
+			liege = { government_has_flag = government_is_celestial }
+			NOT = { hd_warlord_trigger = yes }
+		}
+		hd_warlord_establish_effect = yes
+		add_character_flag = { flag = hd_warlord_revoke_ai_grace years = 10 }
+		set_variable = { name = hd_neg_warlord_promise value = $L$ years = 10 }
+		debug_log = "HD_NEG WARLORD_GRANTED"
+		debug_log_scopes = yes
+		# 归附当日引擎可能还在补契约：3 天后再对一次档位与继承法
+		trigger_event = { id = hd_neg.0100 days = 3 }
+	}
+}
+
+# 兑现条件（$L$ 受附者，$V$ 归附者；$V$ 须已是 $L$ 的封臣）。提示里显示具体数额
+hd_neg_pay_terms_effect = {
+	if = {
+		limit = { hd_neg_has_terms_trigger = { L = $L$ V = $V$ } }
+		if = {
+			limit = { $V$ = { has_variable = hd_neg_gold } }
+			$L$ = {
+				pay_short_term_gold = {
+					target = $V$
+					gold = $V$.var:hd_neg_gold
+				}
+			}
+		}
+		if = {
+			limit = { $V$ = { has_variable = hd_neg_prestige } }
+			$L$ = {
+				add_prestige = {
+					value = 0
+					subtract = $V$.var:hd_neg_prestige
+				}
+			}
+			$V$ = { add_prestige = var:hd_neg_prestige }
+		}
+		if = {
+			limit = { $V$ = { has_variable = hd_neg_influence } }
+			$L$ = {
+				change_influence = {
+					value = 0
+					subtract = $V$.var:hd_neg_influence
+				}
+			}
+			$V$ = { change_influence = var:hd_neg_influence }
+		}
+		if = {
+			limit = { $V$ = { has_variable = hd_neg_warlord } }
+			custom_tooltip = hd_neg_warlord_term_tt
+			hidden_effect = {
+				$V$ = { hd_neg_grant_warlord_effect = { L = $L$ } }
+			}
+		}
+	}
+}
+
+# 事件路径用的封臣化（不带原版契约选项；封建制默认普通义务）
+hd_neg_vassalize_effect = {
+	create_title_and_vassal_change = {
+		type = swear_fealty
+		save_scope_as = change
+	}
+	$V$ = {
+		change_liege = {
+			liege = $L$
+			change = scope:change
+		}
+		add_opinion = {
+			modifier = became_vassal
+			target = $L$
+			opinion = 10
+		}
+	}
+	resolve_title_and_vassal_change = scope:change
+	hidden_effect = {
+		fp3_struggle_apply_independent_vassalage_catalyst_effect = {
+			NEW_LIEGE = $L$
+			NEW_VASSAL = $V$
+		}
+	}
+}
+
+# 条件付不起，整笔作废：通知双方中的玩家
+hd_neg_void_toast_effect = {
+	scope:hd_neg_l = {
+		if = {
+			limit = { is_alive = yes is_ai = no }
+			send_interface_toast = {
+				type = event_toast_effect_neutral
+				title = hd_neg_void_title
+				desc = hd_neg_void_desc
+				left_icon = scope:hd_neg_l
+				right_icon = scope:hd_neg_v
+			}
+		}
+	}
+	scope:hd_neg_v = {
+		if = {
+			limit = { is_alive = yes is_ai = no }
+			send_interface_toast = {
+				type = event_toast_effect_neutral
+				title = hd_neg_void_title
+				desc = hd_neg_void_desc
+				left_icon = scope:hd_neg_l
+				right_icon = scope:hd_neg_v
+			}
+		}
+	}
+}
+
+# ===== 劝其归附（interaction scope 或已存 scope:actor = 受附者、scope:recipient = 归附者）=====
+
+# AI 预开价：发出劝其归附之前调用（scope:actor、scope:recipient 须为 AI 双方）。
+# 结果 scope:recipient 的 var:hd_neg_viable：1 = 可招降（本来肯降，或已写好预开价），0 = 差距超过 60 或付不起
+hd_neg_ai_prepare_offer_effect = {
+	scope:actor = { save_scope_as = hd_neg_l }
+	scope:recipient = { save_scope_as = hd_neg_v }
+	scope:recipient = {
+		hd_neg_clear_pair_effect = { L = scope:actor }
+		set_variable = { name = hd_neg_viable value = 0 }
+	}
+	if = {
+		limit = {
+			scope:recipient = {
+				is_ai = yes
+				NOT = { has_character_flag = hd_submission_incoming_pending }
+				NOT = { has_character_flag = hd_petition_outgoing_pending }
+				NOT = { has_variable = hd_neg_liege }
+			}
+		}
+		if = {
+			limit = { hd_neg_base_accept_value > 0 }
+			scope:recipient = { set_variable = { name = hd_neg_viable value = 1 } }
+			debug_log = "HD_NEG PREPARE_UNCONDITIONAL"
+		}
+		else_if = {
+			limit = {
+				hd_neg_base_accept_value >= {
+					value = hd_neg_max_gap
+					multiply = -1
+				}
+			}
+			scope:recipient = {
+				hd_neg_begin_effect = { L = scope:actor }
+				set_variable = {
+					name = hd_neg_need
+					value = {
+						value = hd_neg_base_accept_value
+						multiply = -1
+						add = 1
+					}
+				}
+				hd_neg_build_gap_package_effect = { TWO = yes }
+				if = {
+					limit = { var:hd_neg_ok = 1 }
+					set_variable = { name = hd_neg_preoffer value = 1 days = 365 }
+					set_variable = { name = hd_neg_viable value = 1 }
+					debug_log = "HD_NEG PREPARE_PREOFFER"
+				}
+				else = {
+					hd_neg_clear_effect = yes
+					set_variable = { name = hd_neg_viable value = 0 }
+					debug_log = "HD_NEG PREPARE_UNAFFORDABLE"
+				}
+			}
+		}
+	}
+}
+
+# 发出后没成行（引擎冷却等）就把预开价撤掉。scope:actor、scope:recipient
+hd_neg_ai_offer_cleanup_effect = {
+	scope:recipient = {
+		remove_variable = hd_neg_viable
+		if = {
+			limit = {
+				var:hd_neg_liege ?= scope:actor
+				NOT = { var:hd_submission_incoming_actor ?= scope:actor }
+			}
+			hd_neg_clear_effect = yes
+		}
+	}
+}
+
+# AI 劝玩家归附：改走事件，玩家可开价（boki 拍板）。scope:actor = AI 受附者，scope:recipient = 玩家
+hd_neg_offer_to_player_effect = {
+	if = {
+		limit = {
+			scope:recipient = {
+				is_ai = no
+				hd_submission_inbox_free_trigger = { LIEGE = scope:actor }
+				hd_submission_recipient_legal_trigger = { LIEGE = scope:actor }
+				NOT = { has_character_flag = hd_petition_outgoing_pending }
+			}
+			scope:actor = { NOT = { has_character_flag = hd_submission_outgoing_pending } }
+		}
+		hd_submission_request_sent_effect = yes
+		scope:recipient = {
+			hd_neg_begin_effect = { L = scope:actor }
+			set_variable = { name = hd_neg_mode value = 4 days = 365 }
+			trigger_event = hd_neg.0011
+		}
+		debug_log = "HD_NEG OFFER_TO_PLAYER"
+		debug_log_scopes = yes
+	}
+}
+
+# 劝其归附 on_send：玩家在窗口预开的条件抄到归附者身上（AI 预开价已在发出前写好）
+hd_neg_offer_sent_effect = {
+	if = {
+		limit = {
+			OR = {
+				AND = { exists = scope:hd_neg_o_gold1 scope:hd_neg_o_gold1 = yes }
+				AND = { exists = scope:hd_neg_o_gold2 scope:hd_neg_o_gold2 = yes }
+				AND = { exists = scope:hd_neg_o_gold3 scope:hd_neg_o_gold3 = yes }
+				AND = { exists = scope:hd_neg_o_prestige1 scope:hd_neg_o_prestige1 = yes }
+				AND = { exists = scope:hd_neg_o_prestige2 scope:hd_neg_o_prestige2 = yes }
+				AND = { exists = scope:hd_neg_o_influence1 scope:hd_neg_o_influence1 = yes }
+				AND = { exists = scope:hd_neg_o_influence2 scope:hd_neg_o_influence2 = yes }
+				AND = { exists = scope:hd_neg_o_warlord scope:hd_neg_o_warlord = yes }
+			}
+		}
+		scope:recipient = {
+			hd_neg_begin_effect = { L = scope:actor }
+			set_variable = { name = hd_neg_preoffer value = 1 days = 365 }
+			if = {
+				limit = { exists = scope:hd_neg_o_gold3 scope:hd_neg_o_gold3 = yes }
+				hd_neg_set_gold_effect = { TIER = 3 }
+			}
+			else_if = {
+				limit = { exists = scope:hd_neg_o_gold2 scope:hd_neg_o_gold2 = yes }
+				hd_neg_set_gold_effect = { TIER = 2 }
+			}
+			else_if = {
+				limit = { exists = scope:hd_neg_o_gold1 scope:hd_neg_o_gold1 = yes }
+				hd_neg_set_gold_effect = { TIER = 1 }
+			}
+			else_if = {
+				limit = { exists = scope:hd_neg_o_prestige2 scope:hd_neg_o_prestige2 = yes }
+				hd_neg_set_prestige_effect = { TIER = 2 }
+			}
+			else_if = {
+				limit = { exists = scope:hd_neg_o_prestige1 scope:hd_neg_o_prestige1 = yes }
+				hd_neg_set_prestige_effect = { TIER = 1 }
+			}
+			else_if = {
+				limit = { exists = scope:hd_neg_o_influence2 scope:hd_neg_o_influence2 = yes }
+				hd_neg_set_influence_effect = { TIER = 2 }
+			}
+			else_if = {
+				limit = { exists = scope:hd_neg_o_influence1 scope:hd_neg_o_influence1 = yes }
+				hd_neg_set_influence_effect = { TIER = 1 }
+			}
+			else_if = {
+				limit = { exists = scope:hd_neg_o_warlord scope:hd_neg_o_warlord = yes }
+				hd_neg_set_warlord_effect = yes
+			}
+		}
+	}
+}
+
+# 成交（互动答复路径）：先验付得起，再走原有结算，归附成了再兑现条件
+hd_neg_offer_finalize_effect = {
+	scope:actor = { save_scope_as = hd_neg_l }
+	scope:recipient = { save_scope_as = hd_neg_v }
+	if = {
+		limit = {
+			hd_neg_has_terms_trigger = { L = scope:actor V = scope:recipient }
+			NOT = { hd_neg_liege_can_pay_trigger = { L = scope:actor V = scope:recipient } }
+		}
+		debug_log = "HD_NEG VOID_UNAFFORDABLE"
+		hd_neg_void_toast_effect = yes
+		hd_submission_request_declined_effect = yes
+	}
+	else = {
+		hd_submission_request_accepted_effect = yes
+		if = {
+			limit = { scope:recipient = { liege ?= scope:actor } }
+			if = {
+				limit = { hd_neg_has_terms_trigger = { L = scope:actor V = scope:recipient } }
+				debug_log = "HD_NEG DEAL_WITH_TERMS"
+				debug_log_scopes = yes
+			}
+			hd_neg_pay_terms_effect = { L = scope:actor V = scope:recipient }
+		}
+	}
+	scope:recipient = { hd_neg_clear_pair_effect = { L = scope:actor } }
+}
+
+# 成交（事件路径：回信索价、玩家被劝开价）
+hd_neg_offer_finalize_by_event_effect = {
+	scope:actor = { save_scope_as = hd_neg_l }
+	scope:recipient = { save_scope_as = hd_neg_v }
+	if = {
+		limit = {
+			hd_neg_pending_pair_legal_trigger = yes
+			hd_neg_liege_can_pay_trigger = { L = scope:actor V = scope:recipient }
+		}
+		hd_neg_vassalize_effect = { L = scope:actor V = scope:recipient }
+		if = {
+			limit = { scope:recipient = { liege ?= scope:actor } }
+			debug_log = "HD_NEG EVENT_DEAL"
+			debug_log_scopes = yes
+			hd_submission_post_accept_effect = yes
+			hd_neg_pay_terms_effect = { L = scope:actor V = scope:recipient }
+		}
+		hd_submission_clear_request_effect = yes
+	}
+	else_if = {
+		limit = { hd_neg_pending_pair_legal_trigger = yes }
+		debug_log = "HD_NEG EVENT_VOID_UNAFFORDABLE"
+		hd_neg_void_toast_effect = yes
+		hd_submission_request_declined_effect = yes
+	}
+	else = {
+		scope:actor = {
+			if = {
+				limit = { is_alive = yes is_ai = no }
+				send_interface_toast = {
+					type = event_toast_effect_neutral
+					title = hd_sub_cancelled_title
+					desc = hd_sub_cancelled_desc
+					left_icon = scope:actor
+				}
+			}
+			hd_submission_queue_followup_effect = { DELAY_MIN = 90 DELAY_MAX = 180 }
+		}
+		scope:recipient = {
+			if = {
+				limit = { is_alive = yes is_ai = no }
+				send_interface_toast = {
+					type = event_toast_effect_neutral
+					title = hd_sub_cancelled_title
+					desc = hd_sub_cancelled_desc
+					left_icon = scope:recipient
+				}
+			}
+		}
+		hd_submission_clear_request_effect = yes
+	}
+	scope:recipient = { hd_neg_clear_pair_effect = { L = scope:actor } }
+}
+
+# 交给受附者定夺：玩家弹回信事件，AI 直接答应（开出的条件本就在其付得起、愿意的范围内）
+hd_neg_counter_to_liege_effect = {
+	if = {
+		limit = { scope:actor = { is_ai = no } }
+		scope:recipient = {
+			set_variable = { name = hd_neg_haggle_chance value = hd_neg_haggle_chance_value days = 365 }
+		}
+		scope:actor = { trigger_event = hd_neg.0001 }
+		debug_log = "HD_NEG COUNTER_TO_PLAYER"
+		debug_log_scopes = yes
+	}
+	else = {
+		debug_log = "HD_NEG COUNTER_AI_AUTO_ACCEPT"
+		hd_neg_offer_finalize_effect = yes
+	}
+}
+
+# 劝其归附 on_accept
+hd_neg_offer_accepted_effect = {
+	scope:actor = { save_scope_as = hd_neg_l }
+	scope:recipient = { save_scope_as = hd_neg_v }
+	scope:recipient = { remove_variable = hd_neg_ok }
+	if = {
+		# 趁机要价：AI 归附者、贪婪/野心/傲慢、受附者没有预开价（boki 拍板：必开中档，不答应就不降）
+		limit = {
+			scope:recipient = { hd_neg_opportunist_trigger = yes }
+			NOT = { hd_neg_has_terms_trigger = { L = scope:actor V = scope:recipient } }
+			hd_neg_pending_pair_legal_trigger = yes
+		}
+		scope:recipient = {
+			hd_neg_begin_effect = { L = scope:actor }
+			hd_neg_build_mid_package_effect = { STRICT = no }
+		}
+		if = {
+			limit = { scope:recipient = { var:hd_neg_ok ?= 1 } }
+			scope:recipient = { set_variable = { name = hd_neg_mode value = 2 days = 365 } }
+			hd_neg_counter_to_liege_effect = yes
+		}
+		else = {
+			# 一项中档都付不起：照常无条件归附（自拟）
+			scope:recipient = { hd_neg_clear_effect = yes }
+			hd_neg_offer_finalize_effect = yes
+		}
+	}
+	else = { hd_neg_offer_finalize_effect = yes }
+}
+
+# 劝其归附 on_decline：差 60 以内回信索价，否则照常拒绝
+hd_neg_offer_declined_effect = {
+	scope:actor = { save_scope_as = hd_neg_l }
+	scope:recipient = { save_scope_as = hd_neg_v }
+	scope:recipient = { remove_variable = hd_neg_ok }
+	if = {
+		limit = {
+			scope:recipient = { is_ai = yes }
+			hd_neg_pending_pair_legal_trigger = yes
+			hd_neg_gap_value >= 0
+			hd_neg_gap_value <= hd_neg_max_gap
+		}
+		if = {
+			limit = { hd_neg_has_terms_trigger = { L = scope:actor V = scope:recipient } }
+			scope:recipient = {
+				set_variable = {
+					name = hd_neg_need
+					value = {
+						value = hd_neg_gap_value
+						add = 1
+					}
+				}
+				hd_neg_build_gap_package_effect = { TWO = no }
+			}
+		}
+		else = {
+			scope:recipient = {
+				hd_neg_begin_effect = { L = scope:actor }
+				set_variable = {
+					name = hd_neg_need
+					value = {
+						value = hd_neg_gap_value
+						add = 1
+					}
+				}
+				hd_neg_build_gap_package_effect = { TWO = yes }
+			}
+		}
+	}
+	if = {
+		limit = { scope:recipient = { var:hd_neg_ok ?= 1 } }
+		scope:recipient = { set_variable = { name = hd_neg_mode value = 1 days = 365 } }
+		hd_neg_counter_to_liege_effect = yes
+	}
+	else = {
+		debug_log = "HD_NEG DECLINE_NO_COUNTER"
+		scope:recipient = { hd_neg_clear_pair_effect = { L = scope:actor } }
+		hd_submission_request_declined_effect = yes
+	}
+}
+
+# 还价（回信事件里玩家受附者选「还价」）：降一档掷骰，成则按新价成交，败则谈崩
+hd_neg_haggle_effect = {
+	scope:actor = { save_scope_as = hd_neg_l }
+	scope:recipient = { save_scope_as = hd_neg_v }
+	random = {
+		chance = scope:recipient.var:hd_neg_haggle_chance
+		scope:recipient = { set_variable = { name = hd_neg_haggle_ok value = 1 } }
+	}
+	if = {
+		limit = { scope:recipient = { has_variable = hd_neg_haggle_ok } }
+		scope:recipient = {
+			remove_variable = hd_neg_haggle_ok
+			hd_neg_downgrade_last_effect = yes
+		}
+		debug_log = "HD_NEG HAGGLE_OK"
+		scope:actor = {
+			send_interface_toast = {
+				type = event_toast_effect_good
+				title = hd_neg_haggle_ok_title
+				left_icon = scope:recipient
+				right_icon = scope:actor
+			}
+		}
+		hd_neg_offer_finalize_by_event_effect = yes
+	}
+	else = {
+		debug_log = "HD_NEG HAGGLE_FAIL"
+		scope:actor = {
+			send_interface_toast = {
+				type = event_toast_effect_bad
+				title = hd_neg_haggle_fail_title
+				desc = hd_neg_haggle_fail_desc
+				left_icon = scope:recipient
+				right_icon = scope:actor
+			}
+		}
+		scope:recipient = { hd_neg_clear_pair_effect = { L = scope:actor } }
+		hd_submission_request_declined_effect = yes
+	}
+}
+
+# hd_neg.0011 选项执行前清掉显示用变量。root = 玩家
+hd_neg_0011_cleanup_effect = {
+	remove_variable = hd_neg_show_gold
+	remove_variable = hd_neg_show_prestige
+	remove_variable = hd_neg_show_influence
+}
+
+# ===== 请求归附（scope:actor = 投靠者，scope:recipient = 受附者）=====
+
+# 请求归附成交（事件路径：玩家受附者答应条件或只许无条件且对方同意）
+hd_neg_petition_finalize_by_event_effect = {
+	scope:recipient = { save_scope_as = hd_neg_l }
+	scope:actor = { save_scope_as = hd_neg_v }
+	if = {
+		limit = {
+			hd_neg_petition_pair_legal_trigger = yes
+			hd_neg_liege_can_pay_trigger = { L = scope:recipient V = scope:actor }
+		}
+		hd_neg_vassalize_effect = { L = scope:recipient V = scope:actor }
+		if = {
+			limit = { scope:actor = { liege ?= scope:recipient } }
+			debug_log = "HD_NEG PETITION_EVENT_DEAL"
+			debug_log_scopes = yes
+			hd_petition_post_accept_effect = yes
+			hd_neg_pay_terms_effect = { L = scope:recipient V = scope:actor }
+		}
+		hd_petition_clear_request_effect = yes
+	}
+	else_if = {
+		limit = { hd_neg_petition_pair_legal_trigger = yes }
+		hd_neg_void_toast_effect = yes
+		hd_petition_request_declined_effect = yes
+	}
+	else = {
+		scope:recipient = {
+			if = {
+				limit = { is_alive = yes is_ai = no }
+				send_interface_toast = {
+					type = event_toast_effect_neutral
+					title = hd_petition_cancelled_title
+					desc = hd_petition_cancelled_desc
+					left_icon = scope:recipient
+				}
+			}
+		}
+		hd_petition_clear_request_effect = yes
+	}
+	scope:actor = { hd_neg_clear_pair_effect = { L = scope:recipient } }
+}
+
+# 只许无条件：必须开价者一律不投；其余套用还价掷骰（boki 拍板）
+hd_neg_petition_unconditional_effect = {
+	scope:recipient = { save_scope_as = hd_neg_l }
+	scope:actor = { save_scope_as = hd_neg_v }
+	if = {
+		limit = { scope:actor = { NOT = { hd_neg_must_demand_trigger = yes } } }
+		random = {
+			chance = scope:actor.var:hd_neg_haggle_chance
+			scope:actor = { set_variable = { name = hd_neg_haggle_ok value = 1 } }
+		}
+	}
+	if = {
+		limit = { scope:actor = { has_variable = hd_neg_haggle_ok } }
+		scope:actor = {
+			remove_variable = hd_neg_haggle_ok
+			hd_neg_begin_effect = { L = scope:recipient }
+		}
+		scope:recipient = {
+			send_interface_toast = {
+				type = event_toast_effect_good
+				title = hd_neg_petition_uncond_ok_title
+				left_icon = scope:actor
+				right_icon = scope:recipient
+			}
+		}
+		hd_neg_petition_finalize_by_event_effect = yes
+	}
+	else = {
+		scope:recipient = {
+			send_interface_toast = {
+				type = event_toast_effect_bad
+				title = hd_neg_petition_uncond_fail_title
+				desc = hd_neg_petition_uncond_fail_desc
+				left_icon = scope:actor
+				right_icon = scope:recipient
+			}
+		}
+		hd_petition_request_declined_effect = yes
+	}
+}
+
+# ===== 军阀背约（收回权力互动：scope:actor = 主君，scope:recipient = 军阀）=====
+hd_neg_warlord_breach_effect = {
+	if = {
+		limit = { scope:recipient = { var:hd_neg_warlord_promise ?= scope:actor } }
+		custom_tooltip = hd_neg_breach_tt
+		scope:actor = {
+			add_prestige = hd_neg_breach_prestige_value
+			every_vassal = {
+				add_opinion = {
+					target = scope:actor
+					modifier = hd_neg_breach_opinion
+				}
+			}
+		}
+		hidden_effect = {
+			scope:recipient = { remove_variable = hd_neg_warlord_promise }
+		}
+	}
+}

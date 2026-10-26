@@ -1,0 +1,323 @@
+﻿# 归附谈判（2026-10-25 boki 拍板，设计见 docs/归附谈判_设计记录.md）
+# hd_neg.0001：回信索价 —— 玩家劝 AI 归附，对方开出条件（差距不大时回信，或贪婪/野心/傲慢者趁机要价）
+#              Root = 玩家受附者 = scope:actor；scope:recipient = AI 归附者
+# hd_neg.0011：AI 劝玩家归附，玩家可开价。Root = 玩家 = scope:recipient；scope:actor = AI 受附者
+# hd_neg.0021：AI 带条件请求归附玩家。Root = 玩家受附者 = scope:recipient；scope:actor = AI 投靠者
+# hd_neg.0100：谈判得来的军阀归附 3 天后再对一次契约档位与继承法（隐藏）
+
+namespace = hd_neg
+
+hd_neg.0001 = {
+	type = character_event
+	title = hd_neg.0001.t
+	desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { scope:recipient = { var:hd_neg_mode ?= 2 } }
+				desc = hd_neg.0001.desc_opportunist
+			}
+			desc = hd_neg.0001.desc_gap
+		}
+		desc = hd_neg_terms_header
+		triggered_desc = {
+			trigger = { scope:hd_neg_v = { has_variable = hd_neg_gold } }
+			desc = hd_neg_term_gold_line
+		}
+		triggered_desc = {
+			trigger = { scope:hd_neg_v = { has_variable = hd_neg_prestige } }
+			desc = hd_neg_term_prestige_line
+		}
+		triggered_desc = {
+			trigger = { scope:hd_neg_v = { has_variable = hd_neg_influence } }
+			desc = hd_neg_term_influence_line
+		}
+		triggered_desc = {
+			trigger = { scope:hd_neg_v = { has_variable = hd_neg_warlord } }
+			desc = hd_neg_term_warlord_line
+		}
+	}
+	theme = diplomacy
+	left_portrait = {
+		character = scope:recipient
+		animation = scheme
+	}
+	right_portrait = {
+		character = root
+		animation = thinking
+	}
+
+	trigger = {
+		exists = scope:actor
+		exists = scope:recipient
+	}
+
+	immediate = {
+		scope:actor = { save_scope_as = hd_neg_l }
+		scope:recipient = { save_scope_as = hd_neg_v }
+	}
+
+	# 答应
+	option = {
+		name = hd_neg.0001.a
+		trigger = { hd_neg_liege_can_pay_trigger = { L = scope:actor V = scope:recipient } }
+		show_as_tooltip = { hd_neg_pay_terms_effect = { L = scope:actor V = scope:recipient } }
+		hidden_effect = { hd_neg_offer_finalize_by_event_effect = yes }
+		ai_chance = { base = 100 }
+	}
+
+	# 还价：降一档掷骰
+	option = {
+		name = hd_neg.0001.b
+		custom_tooltip = hd_neg.0001.b.tt
+		hidden_effect = { hd_neg_haggle_effect = yes }
+		ai_chance = { base = 0 }
+	}
+
+	# 拒绝
+	option = {
+		name = hd_neg.0001.c
+		custom_tooltip = hd_neg.0001.c.tt
+		hidden_effect = { hd_submission_request_declined_effect = yes }
+		ai_chance = { base = 0 }
+	}
+}
+
+hd_neg.0011 = {
+	type = character_event
+	title = hd_neg.0011.t
+	desc = hd_neg.0011.desc
+	theme = diplomacy
+	left_portrait = {
+		character = scope:actor
+		animation = personality_bold
+	}
+	right_portrait = {
+		character = root
+		animation = thinking
+	}
+
+	trigger = {
+		exists = scope:actor
+		exists = scope:recipient
+	}
+
+	immediate = {
+		scope:actor = { save_scope_as = hd_neg_l }
+		root = { save_scope_as = hd_neg_v }
+		# 各项按对方付得起的最高档开（boki 拍板），数额先记下供选项显示
+		if = {
+			limit = { hd_neg_gold_maxtier_value >= 3 }
+			set_variable = { name = hd_neg_show_gold value = hd_neg_gold_amount_3_value days = 365 }
+		}
+		else_if = {
+			limit = { hd_neg_gold_maxtier_value = 2 }
+			set_variable = { name = hd_neg_show_gold value = hd_neg_gold_amount_2_value days = 365 }
+		}
+		else_if = {
+			limit = { hd_neg_gold_maxtier_value = 1 }
+			set_variable = { name = hd_neg_show_gold value = hd_neg_gold_amount_1_value days = 365 }
+		}
+		if = {
+			limit = { hd_neg_prestige_maxtier_value >= 2 }
+			set_variable = { name = hd_neg_show_prestige value = hd_neg_prestige_amount_2_value days = 365 }
+		}
+		else_if = {
+			limit = { hd_neg_prestige_maxtier_value = 1 }
+			set_variable = { name = hd_neg_show_prestige value = hd_neg_prestige_amount_1_value days = 365 }
+		}
+		if = {
+			limit = { hd_neg_influence_maxtier_value >= 2 }
+			set_variable = { name = hd_neg_show_influence value = hd_neg_influence_amount_2_value days = 365 }
+		}
+		else_if = {
+			limit = { hd_neg_influence_maxtier_value = 1 }
+			set_variable = { name = hd_neg_show_influence value = hd_neg_influence_amount_1_value days = 365 }
+		}
+	}
+
+	# 无条件归附
+	option = {
+		name = hd_neg.0011.a
+		custom_tooltip = hd_neg.0011.a.tt
+		hidden_effect = {
+			hd_neg_0011_cleanup_effect = yes
+			hd_neg_offer_finalize_by_event_effect = yes
+		}
+	}
+
+	# 索赐金
+	option = {
+		name = hd_neg.0011.b
+		trigger = { hd_neg_gold_maxtier_value >= 1 }
+		custom_tooltip = hd_neg.0011.paid.tt
+		hidden_effect = {
+			hd_neg_0011_cleanup_effect = yes
+			if = {
+				limit = { hd_neg_gold_maxtier_value >= 3 }
+				hd_neg_set_gold_effect = { TIER = 3 }
+			}
+			else_if = {
+				limit = { hd_neg_gold_maxtier_value = 2 }
+				hd_neg_set_gold_effect = { TIER = 2 }
+			}
+			else = { hd_neg_set_gold_effect = { TIER = 1 } }
+			hd_neg_offer_finalize_by_event_effect = yes
+		}
+	}
+
+	# 索威望
+	option = {
+		name = hd_neg.0011.c
+		trigger = { hd_neg_prestige_maxtier_value >= 1 }
+		custom_tooltip = hd_neg.0011.paid.tt
+		hidden_effect = {
+			hd_neg_0011_cleanup_effect = yes
+			if = {
+				limit = { hd_neg_prestige_maxtier_value >= 2 }
+				hd_neg_set_prestige_effect = { TIER = 2 }
+			}
+			else = { hd_neg_set_prestige_effect = { TIER = 1 } }
+			hd_neg_offer_finalize_by_event_effect = yes
+		}
+	}
+
+	# 索影响力
+	option = {
+		name = hd_neg.0011.d
+		trigger = { hd_neg_influence_maxtier_value >= 1 }
+		custom_tooltip = hd_neg.0011.paid.tt
+		hidden_effect = {
+			hd_neg_0011_cleanup_effect = yes
+			if = {
+				limit = { hd_neg_influence_maxtier_value >= 2 }
+				hd_neg_set_influence_effect = { TIER = 2 }
+			}
+			else = { hd_neg_set_influence_effect = { TIER = 1 } }
+			hd_neg_offer_finalize_by_event_effect = yes
+		}
+	}
+
+	# 索军阀：AI 按「兵力 ≥ 对方 3 倍、不多疑、好感 > -30」答复，不答应即谈崩
+	option = {
+		name = hd_neg.0011.e
+		trigger = { hd_neg_warlord_eligible_trigger = { L = scope:actor V = root } }
+		if = {
+			limit = { hd_neg_ai_liege_grants_warlord_trigger = { L = scope:actor V = root } }
+			custom_tooltip = hd_neg.0011.e.yes
+		}
+		else = {
+			custom_tooltip = hd_neg.0011.e.no
+		}
+		hidden_effect = {
+			hd_neg_0011_cleanup_effect = yes
+			if = {
+				limit = { hd_neg_ai_liege_grants_warlord_trigger = { L = scope:actor V = root } }
+				hd_neg_set_warlord_effect = yes
+				hd_neg_offer_finalize_by_event_effect = yes
+			}
+			else = {
+				send_interface_toast = {
+					type = event_toast_effect_bad
+					title = hd_neg_warlord_refused_title
+					desc = hd_neg_warlord_refused_desc
+					left_icon = scope:actor
+					right_icon = root
+				}
+				hd_submission_request_declined_effect = yes
+			}
+		}
+	}
+
+	# 拒绝
+	option = {
+		name = hd_neg.0011.f
+		custom_tooltip = hd_sub_decline_summary_tt
+		hidden_effect = {
+			hd_neg_0011_cleanup_effect = yes
+			hd_submission_request_declined_effect = yes
+		}
+	}
+}
+
+hd_neg.0021 = {
+	type = character_event
+	title = hd_neg.0021.t
+	desc = {
+		desc = hd_neg.0021.desc
+		desc = hd_neg_terms_header
+		triggered_desc = {
+			trigger = { scope:hd_neg_v = { has_variable = hd_neg_gold } }
+			desc = hd_neg_term_gold_line
+		}
+		triggered_desc = {
+			trigger = { scope:hd_neg_v = { has_variable = hd_neg_prestige } }
+			desc = hd_neg_term_prestige_line
+		}
+		triggered_desc = {
+			trigger = { scope:hd_neg_v = { has_variable = hd_neg_influence } }
+			desc = hd_neg_term_influence_line
+		}
+		triggered_desc = {
+			trigger = { scope:hd_neg_v = { has_variable = hd_neg_warlord } }
+			desc = hd_neg_term_warlord_line
+		}
+	}
+	theme = diplomacy
+	left_portrait = {
+		character = scope:actor
+		animation = personality_honorable
+	}
+	right_portrait = {
+		character = root
+		animation = thinking
+	}
+
+	trigger = {
+		exists = scope:actor
+		exists = scope:recipient
+	}
+
+	immediate = {
+		scope:recipient = { save_scope_as = hd_neg_l }
+		scope:actor = { save_scope_as = hd_neg_v }
+	}
+
+	# 答应条件
+	option = {
+		name = hd_neg.0021.a
+		trigger = { hd_neg_liege_can_pay_trigger = { L = scope:recipient V = scope:actor } }
+		show_as_tooltip = { hd_neg_pay_terms_effect = { L = scope:recipient V = scope:actor } }
+		hidden_effect = { hd_neg_petition_finalize_by_event_effect = yes }
+	}
+
+	# 只许无条件
+	option = {
+		name = hd_neg.0021.b
+		if = {
+			limit = { scope:actor = { hd_neg_must_demand_trigger = yes } }
+			custom_tooltip = hd_neg.0021.b.must
+		}
+		else = {
+			custom_tooltip = hd_neg.0021.b.tt
+		}
+		hidden_effect = { hd_neg_petition_unconditional_effect = yes }
+	}
+
+	# 拒绝
+	option = {
+		name = hd_neg.0021.c
+		custom_tooltip = hd_petition_decline_summary_tt
+		hidden_effect = { hd_petition_request_declined_effect = yes }
+	}
+}
+
+hd_neg.0100 = {
+	type = character_event
+	hidden = yes
+
+	trigger = { is_alive = yes }
+
+	immediate = {
+		hd_warlord_reconcile_effect = yes
+	}
+}

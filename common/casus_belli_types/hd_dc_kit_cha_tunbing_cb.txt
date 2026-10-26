@@ -291,18 +291,14 @@ hd_dc_tunbing_cb = {
 			# 2026-10-23：target_titles = all 后，守方每个县/郡/州都各列一条「吞并」；
 			# 普通吞并的目标只是占位，只留守方主头衔一条（与战略 AI 脚本宣战一致），
 			# 主头衔是霸权/无地头衔时改用首府所在县
+			# 2026-10-25：主头衔无法理县在守方疆域内（袁术僭号的动态帝国）时同样改用首府县
 			trigger_if = {
-				limit = {
-					scope:defender.primary_title = {
-						tier >= tier_county
-						tier < tier_hegemony
-						is_landless_type_title = no
-					}
-				}
-				scope:target = scope:defender.primary_title
+				limit = { scope:target = scope:defender.primary_title }	# 先比对，免得每个候选目标都跑一遍法理县遍历
+				scope:defender.primary_title = { hd_tb_primary_title_target_trigger = { DEF = scope:defender } }
 			}
 			trigger_else = {
 				scope:target = scope:defender.capital_county
+				scope:defender.primary_title = { NOT = { hd_tb_primary_title_target_trigger = { DEF = scope:defender } } }
 			}
 		}
 	}
@@ -632,12 +628,21 @@ hd_dc_tunbing_cb = {
 					hd_tb_war_kind_trigger = { K = wu }
 				}
 			}
+			# 2026-10-25：得地前先记下营地头衔（孙坚的营地从未记过），得地后才能销毁。
+			if = {
+				limit = { hd_tb_war_kind_trigger = { K = wu } }
+				scope:attacker = { hds_sun_record_camp_effect = yes }
+			}
 			hds_cb_victory_effect = yes
 			add_truce_attacker_victory_effect = yes
 			if = {
 				limit = { hd_tb_war_kind_trigger = { K = wu } }
 				# 2026-10-17：孙坚/孙策/孙权打赢丹阳入侵，奖 3000 威望。
-				scope:attacker = { add_prestige = 3000 }
+				# 2026-10-25：营地身份得地当天即转天朝政体、销毁营地（不再等孙家线 60 天心跳）。
+				scope:attacker = {
+					add_prestige = 3000
+					hds_sun_landed_from_camp_effect = yes
+				}
 			}
 		}
 		else = {
@@ -657,7 +662,12 @@ hd_dc_tunbing_cb = {
 						tier < tier_hegemony
 						is_landless_type_title = no
 					}
-					add_to_temporary_list = hd_dc_tunbing_titles
+					# 2026-10-25：僭号帝国不归胜者，结算后销毁
+					if = {
+						limit = { hd_tb_pseudo_empire_trigger = { DEF = scope:hd_court_settle } }
+						add_to_temporary_list = hd_dc_tunbing_pseudo_empires
+					}
+					else = { add_to_temporary_list = hd_dc_tunbing_titles }
 				}
 			}
 			every_in_list = {
@@ -687,6 +697,11 @@ hd_dc_tunbing_cb = {
 				}
 			}
 			resolve_title_and_vassal_change = scope:change
+			every_in_list = {
+				list = hd_dc_tunbing_pseudo_empires
+				save_temporary_scope_as = hd_dc_tunbing_pseudo_empire
+				scope:attacker = { destroy_title = scope:hd_dc_tunbing_pseudo_empire }
+			}
 			scope:attacker = { add_prestige_experience = medium_prestige_value }
 			add_truce_attacker_victory_effect = yes
 		}

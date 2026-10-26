@@ -48,22 +48,76 @@ hd_petition_try_effect = {
                     # 至多发出一份
                     if = {
                         limit = { scope:hd_petition_actor = { NOT = { has_character_flag = hd_petition_request_issued } } }
-                        if = {
-                            limit = { is_ai = no }
-                            run_interaction = {
-                                interaction = hd_petition_vassalage_interaction
-                                actor = scope:hd_petition_actor
-                                recipient = this
-                                send_threshold = decline
+                        # 2026-10-25 归附谈判（boki 拍板）：贪婪/野心/傲慢/多疑或兵力 ≥ 对方 1/4 的开一项中档条件；
+                        # 野心/傲慢者必须开价，对这个受附者开不出就不投
+                        save_scope_as = hd_neg_l
+                        scope:hd_petition_actor = {
+                            save_scope_as = hd_neg_v
+                            hd_neg_begin_effect = { L = scope:hd_neg_l }
+                            set_variable = { name = hd_neg_ok value = 0 }
+                            if = {
+                                limit = { hd_neg_petition_demands_trigger = { L = scope:hd_neg_l } }
+                                hd_neg_build_mid_package_effect = { STRICT = yes }
                             }
                         }
-                        else = {
-                            run_interaction = {
-                                interaction = hd_petition_vassalage_interaction
-                                actor = scope:hd_petition_actor
-                                recipient = this
-                                send_threshold = accept
+                        if = {
+                            limit = {
+                                scope:hd_petition_actor = {
+                                    OR = {
+                                        var:hd_neg_ok = 1
+                                        NOT = { hd_neg_must_demand_trigger = yes }
+                                    }
+                                }
                             }
+                            if = {
+                                # 玩家受附者收到附条件的投靠：走事件（答应条件 / 只许无条件 / 拒绝）
+                                limit = {
+                                    is_ai = no
+                                    scope:hd_petition_actor = { var:hd_neg_ok = 1 }
+                                }
+                                save_scope_as = recipient
+                                scope:hd_petition_actor = { save_scope_as = actor }
+                                hd_petition_request_sent_effect = yes
+                                scope:hd_petition_actor = {
+                                    set_variable = { name = hd_neg_mode value = 3 days = 365 }
+                                    set_variable = { name = hd_neg_haggle_chance value = hd_neg_haggle_chance_value days = 365 }
+                                }
+                                trigger_event = hd_neg.0021
+                                debug_log = "HD_NEG PETITION_TO_PLAYER_WITH_TERMS"
+                                clear_saved_scope = actor
+                                clear_saved_scope = recipient
+                            }
+                            else_if = {
+                                limit = { is_ai = no }
+                                run_interaction = {
+                                    interaction = hd_petition_vassalage_interaction
+                                    actor = scope:hd_petition_actor
+                                    recipient = this
+                                    send_threshold = decline
+                                }
+                            }
+                            else = {
+                                run_interaction = {
+                                    interaction = hd_petition_vassalage_interaction
+                                    actor = scope:hd_petition_actor
+                                    recipient = this
+                                    send_threshold = accept
+                                }
+                            }
+                        }
+                        if = {
+                            limit = {
+                                scope:hd_petition_actor = {
+                                    has_character_flag = hd_petition_request_issued
+                                    var:hd_neg_ok ?= 1
+                                }
+                            }
+                            debug_log = "HD_NEG PETITION_SENT_WITH_TERMS"
+                        }
+                        # 没发出去就撤掉条件
+                        if = {
+                            limit = { scope:hd_petition_actor = { NOT = { has_character_flag = hd_petition_request_issued } } }
+                            scope:hd_petition_actor = { hd_neg_clear_effect = yes }
                         }
                     }
                 }
@@ -114,24 +168,23 @@ hd_petition_request_accepted_effect = {
                 var:hd_petition_outgoing_target = scope:recipient
             }
         }
-        offer_fealty_interaction_effect = yes
+        # 2026-10-25 归附谈判：所开条件付不起，整笔作废
         if = {
-            limit = { scope:actor = { exists = liege liege = scope:recipient } }
-            scope:actor = {
-                add_character_modifier = { modifier = hd_submission_recently_submitted years = 5 }
-                if = { limit = { is_ai = yes } add_faction_cooldown_effect = { YEARS = 5 } }
+            limit = {
+                hd_neg_has_terms_trigger = { L = scope:recipient V = scope:actor }
+                NOT = { hd_neg_liege_can_pay_trigger = { L = scope:recipient V = scope:actor } }
             }
-            scope:recipient = {
-                add_prestige = 50
-                if = {
-                    limit = { is_ai = no }
-                    send_interface_toast = {
-                        type = event_toast_effect_good
-                        title = hd_petition_success_title
-                        left_icon = scope:actor
-                        right_icon = scope:recipient
-                    }
-                }
+            scope:recipient = { save_scope_as = hd_neg_l }
+            scope:actor = { save_scope_as = hd_neg_v }
+            hd_neg_void_toast_effect = yes
+            hd_petition_request_declined_effect = yes
+        }
+        else = {
+            offer_fealty_interaction_effect = yes
+            if = {
+                limit = { scope:actor = { exists = liege liege = scope:recipient } }
+                hd_petition_post_accept_effect = yes
+                hd_neg_pay_terms_effect = { L = scope:recipient V = scope:actor }
             }
         }
     }
@@ -152,6 +205,10 @@ hd_petition_request_accepted_effect = {
         }
     }
     hd_petition_clear_request_effect = yes
+    if = {
+        limit = { exists = scope:actor }
+        scope:actor = { hd_neg_clear_pair_effect = { L = scope:recipient } }
+    }
 }
 
 hd_petition_request_declined_effect = {
@@ -160,7 +217,30 @@ hd_petition_request_declined_effect = {
         scope:actor = {
             set_variable = { name = hd_petition_declined_liege value = scope:recipient years = 2 }
             add_character_flag = { flag = hd_petition_cooldown years = 1 }
+            # 2026-10-25 归附谈判：谈崩即撤掉条件
+            hd_neg_clear_pair_effect = { L = scope:recipient }
         }
     }
     hd_petition_clear_request_effect = yes
+}
+
+# 2026-10-25 归附谈判：投靠成功后的善后（原在上面的成交效果里，事件路径成交也要用）。
+# scope:actor = 新封臣，scope:recipient = 主君
+hd_petition_post_accept_effect = {
+    scope:actor = {
+        add_character_modifier = { modifier = hd_submission_recently_submitted years = 5 }
+        if = { limit = { is_ai = yes } add_faction_cooldown_effect = { YEARS = 5 } }
+    }
+    scope:recipient = {
+        add_prestige = 50
+        if = {
+            limit = { is_ai = no }
+            send_interface_toast = {
+                type = event_toast_effect_good
+                title = hd_petition_success_title
+                left_icon = scope:actor
+                right_icon = scope:recipient
+            }
+        }
+    }
 }

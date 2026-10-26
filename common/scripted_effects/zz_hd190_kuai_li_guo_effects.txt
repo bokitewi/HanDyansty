@@ -1,0 +1,645 @@
+﻿# 2026-10-25 boki：190 历史事件新增两条。排期见 hd190_after_lobby_effect（title:h_china 上的 on_action），
+# 事件见 events/zz_hd190_events.txt（hd190.0002~0007），触发器见 common/scripted_triggers/zz_hd190_kuai_li_guo_triggers.txt。
+
+############################################################
+# 一、蒯越献策、平定江南
+# 史实：初平元年刘表单马入宜城，请蒯良、蒯越共谋。蒯越劝其「诛其无道，抚而用之」，诱宗贼帅五十五人皆斩之；
+# 又与庞季单骑往说据襄阳的江夏贼张虎、陈生，二人皆降，江南悉平，刘表遂理兵襄阳。
+# - 190.3.1 献策：蒯越、蒯良入刘表宫廷；玩家刘表可不采纳（整条线作罢），AI 必采纳。蒯越已死则整条线跳过。
+# - 190.9.1 平定：长沙苏代、南平贝羽赴宴伏诛，襄阳张虎、南乡陈生受降入幕；四人领地全归刘表直辖，刘表徙治襄阳。
+# - 只有玩家能拒绝：拒绝者由刘表以「吞并」史实情境（hd_tb_arm_effect = historical）宣战，目标为其原郡。
+############################################################
+
+# 190.3.1（开局第 59 天）
+hd190_kuai_counsel_effect = {
+	if = {
+		limit = {
+			game_start_date = 190.1.1
+			NOT = { exists = global_var:hd190_kuai_counsel_done }
+			character:liu_biao ?= { is_alive = yes is_landed = yes }
+			character:kuai_yue ?= { is_alive = yes }
+		}
+		set_global_variable = hd190_kuai_counsel_done
+		# 有地或已是别人封臣的不动（hd190_employer_fix_effect 只收无地非统治者）
+		hd190_employer_fix_effect = { WHO = kuai_yue BOSS = liu_biao }
+		hd190_employer_fix_effect = { WHO = kuai_liang BOSS = liu_biao }
+		character:liu_biao = {
+			if = {
+				limit = { is_ai = yes }
+				hd190_kuai_adopt_effect = yes
+			}
+			else = { trigger_event = hd190.0002 }
+		}
+	}
+	else = { debug_log = "HD190 KUAI_COUNSEL_SKIPPED" }
+}
+
+hd190_kuai_adopt_effect = {
+	set_global_variable = hd190_kuai_plan_adopted
+	debug_log = "HD190 KUAI_PLAN_ADOPTED"
+}
+
+# 190.9.1（开局第 243 天）
+hd190_kuai_pacify_effect = {
+	if = {
+		limit = {
+			exists = global_var:hd190_kuai_plan_adopted
+			NOT = { exists = global_var:hd190_kuai_pacify_done }
+			character:liu_biao ?= { is_alive = yes is_landed = yes }
+		}
+		set_global_variable = hd190_kuai_pacify_done
+		hd190_kuai_feast_target_effect = { WHO = su_dai DUCHY = d_changsha }
+		hd190_kuai_feast_target_effect = { WHO = bei_yu DUCHY = d_nanping }
+		hd190_kuai_surrender_target_effect = { WHO = zhang_hu_2 DUCHY = d_xiangyang }
+		hd190_kuai_surrender_target_effect = { WHO = chen_sheng DUCHY = d_nanxiang }
+		character:liu_biao = {
+			if = { limit = { is_ai = no } trigger_event = hd190.0005 }
+		}
+		debug_log = "HD190 KUAI_PACIFY_DONE"
+	}
+	else = { debug_log = "HD190 KUAI_PACIFY_SKIPPED" }
+}
+
+# 苏代、贝羽：AI 赴宴伏诛；玩家弹 hd190.0003 自选。
+hd190_kuai_feast_target_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = { hd190_kuai_target_valid_trigger = yes }
+			if = {
+				limit = { is_ai = yes }
+				hd190_kuai_feast_execute_effect = yes
+			}
+			else = {
+				set_variable = { name = hd190_kuai_target_duchy value = title:$DUCHY$ }
+				trigger_event = hd190.0003
+			}
+		}
+		else = { debug_log = "HD190 KUAI_TARGET_SKIPPED $WHO$" }
+	}
+}
+
+# 张虎、陈生：AI 受降入幕；玩家弹 hd190.0004 自选。
+hd190_kuai_surrender_target_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = { hd190_kuai_target_valid_trigger = yes }
+			if = {
+				limit = { is_ai = yes }
+				hd190_kuai_surrender_execute_effect = yes
+			}
+			else = {
+				set_variable = { name = hd190_kuai_target_duchy value = title:$DUCHY$ }
+				trigger_event = hd190.0004
+			}
+		}
+		else = { debug_log = "HD190 KUAI_TARGET_SKIPPED $WHO$" }
+	}
+}
+
+# 角色作用域：把其全部县以上领地交给刘表直辖，其余封臣改投刘表。
+hd190_kuai_take_lands_effect = {
+	save_scope_as = hd190_kuai_loser
+	character:liu_biao = { save_scope_as = hd190_kuai_lord }
+	# 先收集，再改动，避免一边遍历一边换主。
+	every_held_title = {
+		limit = { tier >= tier_county is_landless_type_title = no is_noble_family_title = no }
+		add_to_temporary_list = hd190_kuai_titles
+	}
+	create_title_and_vassal_change = { type = conquest save_scope_as = hd190_kuai_change add_claim_on_loss = no }
+	every_in_list = {
+		list = hd190_kuai_titles
+		limit = { tier = tier_county }
+		change_title_holder = { holder = scope:hd190_kuai_lord change = scope:hd190_kuai_change take_baronies = yes }
+	}
+	every_in_list = {
+		list = hd190_kuai_titles
+		limit = { tier > tier_county }
+		change_title_holder_include_vassals = { holder = scope:hd190_kuai_lord change = scope:hd190_kuai_change }
+	}
+	resolve_title_and_vassal_change = scope:hd190_kuai_change
+	# 不在上述郡法理下的封臣也一并改投刘表
+	if = {
+		limit = { any_vassal = { highest_held_title_tier < scope:hd190_kuai_lord.highest_held_title_tier } }
+		create_title_and_vassal_change = { type = conquest save_scope_as = hd190_kuai_vassal_change add_claim_on_loss = no }
+		every_vassal = {
+			limit = { highest_held_title_tier < scope:hd190_kuai_lord.highest_held_title_tier }
+			change_liege = { liege = scope:hd190_kuai_lord change = scope:hd190_kuai_vassal_change }
+		}
+		resolve_title_and_vassal_change = scope:hd190_kuai_vassal_change
+	}
+}
+
+# 角色作用域：苏代、贝羽赴宜城之宴，被刘表所斩。先交地再处死，免得领地落到继承人手里。
+hd190_kuai_feast_execute_effect = {
+	remove_variable = hd190_kuai_target_duchy
+	hd190_kuai_take_lands_effect = yes
+	hd_dc_begin_protection_reason_effect = { TARGET = this ACTOR = character:liu_biao ACTION = execute REASON = has_execute_reason }
+	death = { death_reason = death_execution killer = character:liu_biao }
+	debug_log = "HD190 KUAI_FEAST_EXECUTED"
+}
+
+# 角色作用域：张虎、陈生受降，交地入刘表宫廷；刘表得襄阳即徙治。
+hd190_kuai_surrender_execute_effect = {
+	remove_variable = hd190_kuai_target_duchy
+	hd190_kuai_take_lands_effect = yes
+	if = {
+		limit = { is_alive = yes is_ruler = no NOT = { employer ?= character:liu_biao } }
+		set_employer = character:liu_biao
+	}
+	hd190_kuai_capital_effect = yes
+	debug_log = "HD190 KUAI_SURRENDERED"
+}
+
+# 刘表徙治襄阳（须已持有襄阳县）。
+hd190_kuai_capital_effect = {
+	character:liu_biao ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				has_title = title:c_uuii_p_1788
+				NOT = { capital_county ?= title:c_uuii_p_1788 }
+			}
+			set_realm_capital = title:c_uuii_p_1788
+			debug_log = "HD190 LIU_BIAO_CAPITAL_XIANGYANG"
+		}
+	}
+}
+
+# 角色作用域：拒绝赴宴/受降的玩家。刘表以吞并（史实情境）宣战，目标为其原郡；原郡已无其县时改打其首府所在郡。
+hd190_kuai_refuse_effect = {
+	save_scope_as = hd190_kuai_rebel
+	if = {
+		limit = { var:hd190_kuai_target_duchy ?= { any_de_jure_county = { holder ?= scope:hd190_kuai_rebel } } }
+		var:hd190_kuai_target_duchy = { save_scope_as = hd190_kuai_war_title }
+	}
+	else = { capital_county ?= { duchy ?= { save_scope_as = hd190_kuai_war_title } } }
+	remove_variable = hd190_kuai_target_duchy
+	character:liu_biao ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = yes
+				exists = scope:hd190_kuai_war_title
+				scope:hd190_kuai_rebel = { is_alive = yes is_landed = yes }
+				NOT = { is_at_war_with = scope:hd190_kuai_rebel }
+			}
+			hd_tb_arm_effect = { KIND = historical }
+			start_war = { cb = hd_dc_tunbing_cb target = scope:hd190_kuai_rebel target_title = scope:hd190_kuai_war_title }
+			if = {
+				limit = { any_character_war = { primary_attacker = character:liu_biao primary_defender = scope:hd190_kuai_rebel } }
+				debug_log = "HD190 KUAI_REFUSED_WAR_STARTED"
+			}
+			else = { debug_log = "HD190 KUAI_REFUSED_WAR_NOT_CREATED" }
+		}
+		else = { debug_log = "HD190 KUAI_REFUSED_NO_WAR" }
+	}
+}
+
+############################################################
+# 二、李傕郭汜相攻
+# 史实：兴平二年（195）二月李傕于座中杀樊稠，郭汜疑李傕下毒，二人治兵相攻。
+# - 开局第 1856 天（195.2.1）检查；条件不全每 30 天再查，198.1.1（李傕史实死年）为止。
+#   前提：李傕已攻破长安（hd_hev_184_changan_fall）、在世有地且独立；郭汜在世，不是李傕领外的有地统治者。
+#   李傕长安之战已了结却没攻破长安，或二人有一人已死，不再等。
+# - 樊稠在世且在李傕领内：被李傕所杀。
+# - 李傕留京兆（领内已无京兆县时留首府所在郡）。郭汜一律夺扶风，不管现归谁（玩家也夺，另收通知 hd190.0008）：
+#   扶风郡衔归郭汜；境内不属李傕的县，县级持有人连地带人改投郭汜，郡级以上势力直辖的县归郭汜直辖。
+#   只有李傕所留之郡就是扶风时，才改给弘农（法理县至少一半在李傕领内），再不行取与李傕之郡接壤、
+#   李傕领内县最多的郡；仍无则作罢。
+# - 两郡内的封臣跟随所在郡的新主；两郡以外：封臣及其下级各自独立，李傕直辖的县各生一个本地豪强独立。
+# - 李傕手里其余的郡头衔销毁（免得凭法理宣称收回）。不加防回吞保护。
+# - 二人结为宿敌。AI 郭汜即以「吞并」史实情境对李傕宣战，开战成功才发事件兵（重步兵 35 队、重骑兵 60 队，
+#   李傕攻长安时的一半）；玩家郭汜弹 hd190.0007 自选是否开战；玩家李傕只收通知 hd190.0006。
+############################################################
+
+hd190_li_guo_try_effect = {
+	if = {
+		limit = {
+			game_start_date = 190.1.1
+			NOT = { exists = global_var:hd190_li_guo_done }
+		}
+		if = {
+			limit = { hd190_li_guo_ready_trigger = yes }
+			hd190_li_guo_split_effect = yes
+		}
+		else_if = {
+			limit = {
+				current_date < 198.1.1
+				character:li_jue ?= { is_alive = yes }
+				character:guo_si ?= { is_alive = yes }
+				NOT = {
+					AND = {
+						exists = global_var:hd_li_jue_war_resolved
+						NOT = { exists = global_var:hd_hev_184_changan_fall }
+					}
+				}
+			}
+			debug_log = "HD190 LI_GUO_WAIT"
+			title:h_china = { trigger_event = { on_action = hd190_sched_li_guo days = 30 } }
+		}
+		else = {
+			set_global_variable = hd190_li_guo_done
+			debug_log = "HD190 LI_GUO_EXPIRED_OR_ACTOR_MISSING"
+		}
+	}
+}
+
+hd190_li_guo_split_effect = {
+	set_global_variable = hd190_li_guo_done
+	character:li_jue = { save_scope_as = hd190_lg_li }
+	character:guo_si = {
+		save_scope_as = hd190_lg_guo
+		if = { limit = { is_imprisoned = yes } release_from_prison = yes }
+	}
+	# 樊稠：李傕于座中使胡封拉杀之。先杀，其头衔由继承人接手后再一并分。
+	character:fan_chou ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				NOT = { this = scope:hd190_lg_guo }
+				hd_dong_inside_realm_trigger = { RULER = scope:hd190_lg_li }
+			}
+			death = { death_reason = death_murder killer = scope:hd190_lg_li }
+			set_global_variable = hd190_li_guo_fan_chou_killed
+			debug_log = "HD190 LI_GUO_FAN_CHOU_KILLED"
+		}
+	}
+	# 李傕所留之郡
+	if = {
+		limit = { title:d_jingzhao = { any_de_jure_county = { hd190_lg_county_in_li_realm_trigger = yes } } }
+		title:d_jingzhao = { save_scope_as = hd190_lg_li_duchy }
+	}
+	else = {
+		scope:hd190_lg_li.capital_county ?= { duchy ?= { save_scope_as = hd190_lg_li_duchy } }
+	}
+	# 郭汜之郡
+	if = {
+		limit = { exists = scope:hd190_lg_li_duchy }
+		# 2026-10-25 boki 补定：郭汜一律夺扶风，不管扶风现归谁；只有李傕所留之郡就是扶风时才退回弘农等。
+		if = {
+			limit = { NOT = { scope:hd190_lg_li_duchy = title:d_fufeng } }
+			title:d_fufeng = { save_scope_as = hd190_lg_guo_duchy }
+		}
+		else_if = {
+			limit = {
+				NOT = { scope:hd190_lg_li_duchy = title:d_hongnong }
+				hd190_lg_majority_trigger = { DUCHY = title:d_hongnong }
+			}
+			title:d_hongnong = { save_scope_as = hd190_lg_guo_duchy }
+		}
+		else = {
+			scope:hd190_lg_li = {
+				every_realm_county = {
+					limit = {
+						exists = duchy
+						NOT = { duchy = scope:hd190_lg_li_duchy }
+						NOT = { duchy = { is_in_list = hd190_lg_cand } }
+					}
+					duchy = { add_to_temporary_list = hd190_lg_cand }
+				}
+			}
+			ordered_in_list = {
+				list = hd190_lg_cand
+				limit = {
+					any_de_jure_county = {
+						any_neighboring_county = { duchy ?= scope:hd190_lg_li_duchy }
+					}
+				}
+				order_by = {
+					value = 0
+					every_de_jure_county = {
+						limit = { hd190_lg_county_in_li_realm_trigger = yes }
+						add = 1
+					}
+				}
+				save_scope_as = hd190_lg_guo_duchy
+			}
+		}
+	}
+	if = {
+		limit = { exists = scope:hd190_lg_li_duchy exists = scope:hd190_lg_guo_duchy }
+		hd190_li_guo_divide_effect = yes
+	}
+	else = { debug_log = "HD190 LI_GUO_ABORTED_NO_DUCHY" }
+}
+
+hd190_li_guo_divide_effect = {
+	set_global_variable = { name = hd190_li_guo_li_duchy value = scope:hd190_lg_li_duchy }
+	# 1. 先分类，再改动。
+	scope:hd190_lg_li = {
+		every_vassal_or_below = {
+			limit = {
+				NOT = { this = scope:hd190_lg_guo }
+				any_held_title = { tier = tier_county }
+			}
+			if = {
+				limit = { capital_county ?= { duchy ?= scope:hd190_lg_li_duchy } }
+				add_to_temporary_list = hd190_lg_vassals_li
+			}
+			else_if = {
+				limit = { capital_county ?= { duchy ?= scope:hd190_lg_guo_duchy } }
+				add_to_temporary_list = hd190_lg_vassals_guo
+			}
+			else = { add_to_temporary_list = hd190_lg_vassals_out }
+		}
+		every_held_title = {
+			limit = {
+				tier = tier_county
+				NOT = { duchy ?= scope:hd190_lg_li_duchy }
+			}
+			if = {
+				limit = { duchy ?= scope:hd190_lg_guo_duchy }
+				add_to_temporary_list = hd190_lg_counties_guo
+			}
+			else = { add_to_temporary_list = hd190_lg_counties_out }
+		}
+		every_held_title = {
+			limit = {
+				tier = tier_duchy
+				NOT = { this = scope:hd190_lg_li_duchy }
+				NOT = { this = scope:hd190_lg_guo_duchy }
+			}
+			add_to_temporary_list = hd190_lg_duchies_destroy
+		}
+	}
+	# 1b. 扶风境内不在李傕领内的县（郭汜一律夺取，见 2b）；失地或被迫改投的玩家记下，最后发通知。
+	if = {
+		limit = { scope:hd190_lg_guo_duchy = title:d_fufeng }
+		title:d_fufeng = {
+			every_de_jure_county = {
+				limit = {
+					exists = holder
+					NOT = { hd190_lg_county_in_li_realm_trigger = yes }
+					NOT = { holder = scope:hd190_lg_guo }
+				}
+				add_to_temporary_list = hd190_lg_outsider_counties
+				holder = {
+					if = {
+						limit = { is_ai = no NOT = { is_in_list = hd190_lg_fufeng_losers } }
+						add_to_temporary_list = hd190_lg_fufeng_losers
+					}
+				}
+			}
+			holder ?= {
+				if = {
+					limit = {
+						is_ai = no
+						NOT = { this = scope:hd190_lg_li }
+						NOT = { this = scope:hd190_lg_guo }
+						NOT = { is_in_list = hd190_lg_fufeng_losers }
+					}
+					add_to_temporary_list = hd190_lg_fufeng_losers
+				}
+			}
+		}
+	}
+	# 2. 郭汜得郡：郡头衔（李傕持有或无主时；扶风不论谁持有）与李傕在该郡直辖的县。
+	create_title_and_vassal_change = { type = granted save_scope_as = hd190_lg_guo_change add_claim_on_loss = no }
+	scope:hd190_lg_guo_duchy = {
+		if = {
+			limit = {
+				OR = {
+					NOT = { exists = holder }
+					holder = scope:hd190_lg_li
+					this = title:d_fufeng
+				}
+			}
+			change_title_holder = { holder = scope:hd190_lg_guo change = scope:hd190_lg_guo_change }
+		}
+	}
+	every_in_list = {
+		list = hd190_lg_counties_guo
+		change_title_holder = { holder = scope:hd190_lg_guo change = scope:hd190_lg_guo_change take_baronies = yes }
+	}
+	resolve_title_and_vassal_change = scope:hd190_lg_guo_change
+	scope:hd190_lg_guo = {
+		hd_force_independent_celestial_effect = yes
+		if = {
+			limit = { is_landed = yes }
+			# 史实郭汜据郿
+			if = {
+				limit = { has_title = title:c_uuii_p_891 }
+				set_realm_capital = title:c_uuii_p_891
+			}
+			else_if = {
+				limit = { scope:hd190_lg_guo_duchy.title_capital_county ?= { holder ?= scope:hd190_lg_guo } }
+				set_realm_capital = scope:hd190_lg_guo_duchy.title_capital_county
+			}
+		}
+		else = { debug_log = "HD190 LI_GUO_GUO_NOT_LANDED" }
+	}
+	# 2b. 扶风境内不属李傕的县：县级持有人连地带人改投郭汜（不论是否独立），郡级以上势力直辖的县归郭汜直辖。
+	if = {
+		limit = {
+			scope:hd190_lg_guo = { is_landed = yes }
+			any_in_list = { list = hd190_lg_outsider_counties always = yes }
+		}
+		# 天子失去所持之县时霸权头衔须为无地型（同 hd_dong_grant_duchy_effect）
+		if = {
+			limit = { any_in_list = { list = hd190_lg_outsider_counties holder ?= { has_title = title:h_china } } }
+			title:h_china = { if = { limit = { exists = holder } set_landless_title = yes } }
+		}
+		create_title_and_vassal_change = { type = conquest save_scope_as = hd190_lg_outsider_change add_claim_on_loss = no }
+		every_in_list = {
+			list = hd190_lg_outsider_counties
+			limit = { exists = holder NOT = { holder = scope:hd190_lg_guo } }
+			holder = { save_temporary_scope_as = hd190_lg_outsider_holder }
+			if = {
+				limit = {
+					scope:hd190_lg_outsider_holder = {
+						highest_held_title_tier <= tier_county
+						highest_held_title_tier < scope:hd190_lg_guo.highest_held_title_tier
+					}
+				}
+				# 同一县主名下多县只改投一次
+				scope:hd190_lg_outsider_holder = {
+					if = {
+						limit = {
+							NOT = { is_in_list = hd190_lg_outsider_moved }
+							NOT = { liege ?= scope:hd190_lg_guo }
+						}
+						add_to_temporary_list = hd190_lg_outsider_moved
+						change_liege = { liege = scope:hd190_lg_guo change = scope:hd190_lg_outsider_change }
+					}
+				}
+			}
+			else = {
+				change_title_holder = { holder = scope:hd190_lg_guo change = scope:hd190_lg_outsider_change take_baronies = yes }
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd190_lg_outsider_change
+		debug_log = "HD190 LI_GUO_FUFENG_OUTSIDERS_TAKEN"
+	}
+	# 3. 两郡内的封臣跟随所在郡的新主（郭汜等级不够收编时改为独立）。
+	#    主君也在同一郡的下级封臣随主君走，不单独改投。
+	create_title_and_vassal_change = { type = granted save_scope_as = hd190_lg_vassal_change add_claim_on_loss = no }
+	every_in_list = {
+		list = hd190_lg_vassals_guo
+		limit = {
+			is_alive = yes
+			NOT = { liege ?= { is_in_list = hd190_lg_vassals_guo } }
+		}
+		if = {
+			limit = {
+				scope:hd190_lg_guo = { is_landed = yes }
+				highest_held_title_tier < scope:hd190_lg_guo.highest_held_title_tier
+			}
+			change_liege = { liege = scope:hd190_lg_guo change = scope:hd190_lg_vassal_change }
+		}
+		else = { add_to_temporary_list = hd190_lg_vassals_out }
+	}
+	every_in_list = {
+		list = hd190_lg_vassals_li
+		limit = {
+			is_alive = yes
+			NOT = { liege ?= scope:hd190_lg_li }
+			NOT = { liege ?= { is_in_list = hd190_lg_vassals_li } }
+			highest_held_title_tier < scope:hd190_lg_li.highest_held_title_tier
+		}
+		change_liege = { liege = scope:hd190_lg_li change = scope:hd190_lg_vassal_change }
+	}
+	resolve_title_and_vassal_change = scope:hd190_lg_vassal_change
+	# 4. 两郡以外：封臣及其下级各自独立。
+	every_in_list = {
+		list = hd190_lg_vassals_out
+		limit = { is_alive = yes is_independent_ruler = no }
+		create_title_and_vassal_change = { type = independency save_scope_as = hd190_lg_out_change add_claim_on_loss = no }
+		becomes_independent = { change = scope:hd190_lg_out_change }
+		resolve_title_and_vassal_change = scope:hd190_lg_out_change
+	}
+	# 5. 李傕在两郡以外直辖的县：各生一个本地豪强，独立（同 hd_anti_regent_henan_counties_independence_effect）。
+	every_in_list = {
+		list = hd190_lg_counties_out
+		save_temporary_scope_as = seceding_county
+		# 原版 post_migration_minor_warlord_template 从 scope:seceding_county 取文化信仰。
+		create_character = {
+			location = scope:seceding_county.title_province
+			template = post_migration_minor_warlord_template
+			save_scope_as = hd190_lg_county_holder
+		}
+		create_title_and_vassal_change = { type = usurped save_scope_as = hd190_lg_county_grant_change add_claim_on_loss = no }
+		scope:seceding_county = {
+			change_title_holder = { holder = scope:hd190_lg_county_holder change = scope:hd190_lg_county_grant_change take_baronies = yes }
+		}
+		resolve_title_and_vassal_change = scope:hd190_lg_county_grant_change
+		scope:hd190_lg_county_holder = {
+			if = {
+				limit = { is_independent_ruler = no }
+				create_title_and_vassal_change = { type = independency save_scope_as = hd190_lg_county_indep_change add_claim_on_loss = no }
+				becomes_independent = { change = scope:hd190_lg_county_indep_change }
+				resolve_title_and_vassal_change = scope:hd190_lg_county_indep_change
+			}
+		}
+	}
+	# 6. 李傕其余郡头衔销毁；主头衔先改为所留之郡。
+	scope:hd190_lg_li = {
+		if = {
+			limit = {
+				has_title = scope:hd190_lg_li_duchy
+				NOT = { primary_title = scope:hd190_lg_li_duchy }
+			}
+			set_primary_title_to = scope:hd190_lg_li_duchy
+		}
+	}
+	every_in_list = {
+		list = hd190_lg_duchies_destroy
+		save_temporary_scope_as = hd190_lg_dead_title
+		scope:hd190_lg_li = {
+			if = {
+				limit = { has_title = scope:hd190_lg_dead_title }
+				destroy_title = scope:hd190_lg_dead_title
+			}
+		}
+	}
+	# 7. 李傕首府留在所留之郡（长安优先）。
+	scope:hd190_lg_li = {
+		if = {
+			limit = {
+				is_landed = yes
+				NOT = { capital_county ?= { duchy ?= scope:hd190_lg_li_duchy } }
+			}
+			if = {
+				limit = { has_title = title:c_uuii_p_867 }
+				set_realm_capital = title:c_uuii_p_867
+			}
+			else = {
+				random_held_title = {
+					limit = { tier = tier_county duchy ?= scope:hd190_lg_li_duchy }
+					save_scope_as = hd190_lg_li_capital
+				}
+				if = {
+					limit = { exists = scope:hd190_lg_li_capital }
+					set_realm_capital = scope:hd190_lg_li_capital
+				}
+			}
+		}
+	}
+	# 8. 宿敌、通知、开战。
+	scope:hd190_lg_li = {
+		if = {
+			limit = { NOT = { has_relation_rival = scope:hd190_lg_guo } }
+			set_relation_rival = { target = scope:hd190_lg_guo reason = hd190_rival_li_guo }
+		}
+		if = { limit = { is_ai = no } trigger_event = hd190.0006 }
+	}
+	scope:hd190_lg_guo = {
+		if = {
+			limit = { is_ai = yes }
+			hd190_li_guo_war_effect = yes
+		}
+		else = { trigger_event = hd190.0007 }
+	}
+	every_in_list = {
+		list = hd190_lg_fufeng_losers
+		limit = { is_alive = yes }
+		trigger_event = hd190.0008
+	}
+	debug_log = "HD190 LI_GUO_SPLIT_DONE"
+}
+
+# 郭汜作用域：以吞并（史实情境）攻李傕所留之郡（无其县时改打李傕首府所在郡）；开战成功才发事件兵。
+hd190_li_guo_war_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			is_landed = yes
+			is_independent_ruler = yes
+			character:li_jue ?= { is_alive = yes is_landed = yes }
+			NOT = { is_at_war_with = character:li_jue }
+		}
+		save_scope_as = hd190_lg_attacker
+		character:li_jue = { save_scope_as = hd190_lg_defender }
+		if = {
+			limit = { global_var:hd190_li_guo_li_duchy ?= { any_de_jure_county = { holder ?= scope:hd190_lg_defender } } }
+			global_var:hd190_li_guo_li_duchy = { save_scope_as = hd190_lg_war_title }
+		}
+		else = {
+			scope:hd190_lg_defender.capital_county ?= { duchy ?= { save_scope_as = hd190_lg_war_title } }
+		}
+		if = {
+			limit = { exists = scope:hd190_lg_war_title }
+			hd_tb_arm_effect = { KIND = historical }
+			start_war = { cb = hd_dc_tunbing_cb target = scope:hd190_lg_defender target_title = scope:hd190_lg_war_title }
+			if = {
+				limit = { any_character_war = { primary_attacker = scope:hd190_lg_attacker primary_defender = scope:hd190_lg_defender } }
+				debug_log = "HD190 LI_GUO_WAR_STARTED"
+				if = {
+					limit = { NOT = { has_character_flag = hd190_guo_si_event_troops_received } exists = capital_province }
+					spawn_army = {
+						name = hd190_guo_si_event_troops
+						location = capital_province
+						origin = capital_province
+						men_at_arms = { type = armored_footmen stacks = 35 }
+						men_at_arms = { type = armored_horsemen stacks = 60 }
+						inheritable = no
+						uses_supply = yes
+					}
+					add_character_flag = hd190_guo_si_event_troops_received
+				}
+			}
+			else = { debug_log = "HD190 LI_GUO_WAR_NOT_CREATED" }
+		}
+		else = { debug_log = "HD190 LI_GUO_WAR_NO_TARGET_TITLE" }
+	}
+	else = { debug_log = "HD190 LI_GUO_WAR_SKIPPED" }
+}

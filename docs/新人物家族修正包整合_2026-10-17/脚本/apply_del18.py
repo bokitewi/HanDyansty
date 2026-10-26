@@ -12,6 +12,13 @@ M = {r['删除ID']: r['并入ID'] for r in
 # 2026-10-19 吴郡孙氏合并：OE 孙氏宗室副本同样删块改指
 M.update({r['删除ID']: r['并入ID'] for r in
           csv.DictReader(open(os.path.join(mod, 'docs/人物审查/合并记录_2026-10-19.csv'), encoding='utf-8-sig'))})
+# 2026-10-25 貂蝉、二乔、清河公主、太原郭氏、潘岳、裴楷去重：同样删块改指
+M.update({r['删除ID']: r['并入ID'] for r in
+          csv.DictReader(open(os.path.join(mod, 'docs/人物审查/合并记录_2026-10-25.csv'), encoding='utf-8-sig'))})
+# 2026-10-25「某氏」甄别：UUII 无关联的某氏 1,000 人纯删除，没有并入方，只删块、不改引用
+DROP = {r['角色ID'] for r in
+        csv.DictReader(open(os.path.join(mod, 'docs/人物审查/某氏甄别记录_2026-10-25.csv'), encoding='utf-8-sig'))
+        if r['处理'] == '删除'}
 # 2026-10-19：人物文件里的富春孙氏改回吴郡孙氏（只改 characters 目录，不碰家族定义文件）
 HOUSE_REMAP = {'house_fuchun_sun': 'wujun_sun'}
 TOK = re.compile(r'(?<![A-Za-z0-9_.:$])([A-Za-z0-9_]+)(?![A-Za-z0-9_])')
@@ -56,13 +63,14 @@ for root, _, fs in os.walk(out):
         p = os.path.join(root, f)
         raw = open(p, 'rb').read()
         is_char = os.path.basename(os.path.dirname(p)) == 'characters'
-        if not any(k.encode() in raw for k in M) and not (is_char and any(k.encode() in raw for k in HOUSE_REMAP)):
+        if not any(k.encode() in raw for k in M) and not (is_char and any(k.encode() in raw for k in HOUSE_REMAP)) \
+                and not (is_char and any(k.encode() in raw for k in DROP)):
             continue
         bom = raw.startswith(b'\xef\xbb\xbf')
         t = raw.decode('utf-8-sig')
         if is_char:
             for k, s, e in sorted(spans(t), key=lambda x: -x[1]):
-                if k in M:
+                if k in M or k in DROP:
                     t = t[:s] + t[e:]; dropped += 1
             for a, b in HOUSE_REMAP.items():
                 t = re.sub(r'(dynasty_house\s*=\s*"?)' + a + r'\b', r'\g<1>' + b, t)

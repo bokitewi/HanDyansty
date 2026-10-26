@@ -1,0 +1,1707 @@
+﻿# 184 剧本：刘备入主徐州之后。吕布来投 -> 吕布夺徐州 -> 刘备投刘表。
+# 入口只有刘备的月度心跳 hd_lb_tick_effect（已过 hd_lb_actor_trigger）；条件不满足就等下个月，
+# 只有完成或玩家拒绝才结束节点。每个节点一把带期限的全局待决锁，双方都是玩家时按先后串行。
+
+# Scope：刘备。
+hd_lbxz_tick_effect = {
+	if = {
+		limit = { this = character:liu_bei }
+		# 屏蔽期间结束已有的原版冒险者 AI 故事（闸门只挡新建）。
+		character:lv_bu ?= {
+			if = {
+				limit = { hd_lbxz_block_adventurer_ai_trigger = yes }
+				every_owned_story = {
+					limit = { story_type = story_adventurer_ai }
+					end_story = yes
+				}
+			}
+		}
+		if = {
+			limit = { hd_lbxz_block_adventurer_ai_trigger = yes }
+			every_owned_story = {
+				limit = { story_type = story_adventurer_ai }
+				end_story = yes
+			}
+		}
+		# 得地后原版 on_action 可能重设政体，短期内补回天朝制。
+		character:lv_bu ?= {
+			if = {
+				limit = { has_character_flag = hd_lbxz_gov_check }
+				hd_force_celestial_effect = yes
+			}
+		}
+		if = {
+			limit = { has_character_flag = hd_lbxz_gov_check }
+			hd_force_celestial_effect = yes
+		}
+		# 屯驻荆州的军阀身份因政体被重设而作废时补回（被「收回权力」的不补）
+		if = {
+			limit = {
+				has_character_flag = hd_lbxz_jing_warlord_recheck
+				NOT = { has_character_flag = hd_warlord_revoked_cooldown }
+				NOT = { hd_warlord_trigger = yes }
+			}
+			hd_lbxz_jing_warlord_effect = yes
+		}
+		# 丹阳兵首领夺徐州后同样补天朝制
+		global_var:hd_lbxz_seizer ?= {
+			if = {
+				limit = {
+					is_alive = yes
+					has_character_flag = hd_lbxz_gov_check
+					NOT = { this = character:lv_bu }
+				}
+				hd_force_celestial_effect = yes
+			}
+		}
+		hd_lbxz_recall_retinue_effect = yes
+		# 夺城收尾失败（刘备仍有残留头衔等）时按月重试清扫与收尾。
+		if = {
+			limit = {
+				exists = global_var:hd_lbxz_seize_failed
+				NOT = { exists = global_var:hd_lbxz_seized }
+			}
+			hd_lbxz_sweep_remainder_effect = yes
+			hd_lbxz_finish_seize_effect = yes
+			hd_lb_sync_story_effect = yes
+		}
+		# 没有冒险者 DLC 时刘备失地无法建营，夺城节点直接跳过。
+		if = {
+			limit = {
+				exists = global_var:hd_lbxz_shelter_done
+				NOT = { exists = global_var:hd_lbxz_seize_resolved }
+				NOT = { has_dlc_feature = roads_to_power }
+			}
+			character:lv_bu ?= { remove_character_flag = hd_lbxz_sheltered }
+			set_global_variable = hd_lbxz_seize_resolved
+			debug_log = "HD_LBXZ SEIZE_SKIPPED_NO_RTP"
+		}
+		if = {
+			limit = {
+				NOT = { exists = global_var:hd_lbxz_shelter_pending }
+				hd_lbxz_shelter_ready_trigger = yes
+			}
+			hd_lbxz_open_shelter_effect = yes
+		}
+		if = {
+			limit = {
+				NOT = { exists = global_var:hd_lbxz_seize_pending }
+				hd_lbxz_seize_ready_trigger = yes
+			}
+			hd_lbxz_open_seize_effect = yes
+		}
+		# 2026-10-24 boki：吕布不来夺徐州时的兜底
+		hd_lbxz_danyang_effect = yes
+		if = {
+			limit = {
+				NOT = { exists = global_var:hd_lbxz_jing_pending }
+				hd_lbxz_jing_ready_trigger = yes
+			}
+			hd_lbxz_open_jing_effect = yes
+		}
+		# 第二段：依附刘表后三顾茅庐、隆中对、入蜀。
+		hd_lbxz_zgl_tick_effect = yes
+		hd_lbxz_shu_tick_effect = yes
+	}
+}
+
+# 两个角色互结同盟，双向附原版 is_alliance_valid 认可的议定同盟理由。Scope：任意。
+hd_lbxz_alliance_effect = {
+	$A$ = {
+		if = {
+			limit = { NOT = { is_at_war_with = $B$ } }
+			add_opinion = { modifier = event_negotiated_alliance_opinion target = $B$ }
+			$B$ = { add_opinion = { modifier = event_negotiated_alliance_opinion target = $A$ } }
+			if = {
+				limit = { NOT = { is_allied_to = $B$ } }
+				create_alliance = {
+					target = $B$
+					allied_through_owner = $A$
+					allied_through_target = $B$
+				}
+			}
+		}
+	}
+}
+
+# Scope：刚得地的前冒险者。原版 on_action 通常已销毁营地头衔，这里只补漏。
+hd_lbxz_destroy_camp_title_effect = {
+	save_scope_as = hd_lbxz_camp_owner
+	every_held_title = {
+		limit = { has_variable = adventurer_creation_reason }
+		save_scope_as = hd_lbxz_camp_title
+		scope:hd_lbxz_camp_owner = { destroy_title = scope:hd_lbxz_camp_title }
+	}
+}
+
+########## 节点 1：吕布来投 ##########
+
+hd_lbxz_open_shelter_effect = {
+	set_global_variable = { name = hd_lbxz_shelter_pending value = yes days = 60 }
+	if = {
+		limit = { character:lv_bu = { is_ai = no } }
+		character:lv_bu = { trigger_event = hd_lbxz.0100 }
+	}
+	else = { hd_lbxz_lubu_requests_shelter_effect = yes }
+}
+
+# 吕布已决意来投，由刘备决定收留与否（两人都是玩家时在此串行）。
+hd_lbxz_lubu_requests_shelter_effect = {
+	if = {
+		limit = { character:liu_bei = { is_ai = no } }
+		set_global_variable = { name = hd_lbxz_shelter_pending value = yes days = 60 }
+		character:liu_bei = { trigger_event = hd_lbxz.0101 }
+	}
+	else = { hd_lbxz_shelter_effect = yes }
+}
+
+hd_lbxz_shelter_declined_effect = {
+	if = {
+		limit = { NOT = { exists = global_var:hd_lbxz_shelter_resolved } }
+		set_global_variable = hd_lbxz_shelter_resolved
+		set_global_variable = hd_lbxz_shelter_declined
+		debug_log = "HD_LBXZ SHELTER_DECLINED"
+	}
+	remove_global_variable = hd_lbxz_shelter_pending
+}
+
+# 迁营与结盟都回读成功才算完成，否则下月重试。
+hd_lbxz_shelter_effect = {
+	if = {
+		limit = { hd_lbxz_shelter_ready_trigger = yes }
+		character:lv_bu = {
+			if = { limit = { is_imprisoned = yes } release_from_prison = yes }
+		}
+		clear_saved_scope = hd_lbxz_camp_destination
+		# 史实刘备使吕布屯小沛（沛县）；沛县不在刘备治下时，改在刘备治下徐州境内一个非都城的县，最后才用都城。
+		if = {
+			limit = {
+				exists = title:c_uuii_p_4349.holder
+				title:c_uuii_p_4349.holder = {
+					OR = {
+						this = character:liu_bei
+						is_vassal_or_below_of = character:liu_bei
+					}
+				}
+			}
+			title:c_uuii_p_4349.title_province = { save_scope_as = hd_lbxz_camp_destination }
+		}
+		else = {
+			character:liu_bei = {
+				random_sub_realm_county = {
+					limit = {
+						target_is_de_jure_liege_or_above = title:k_uuii_xuzhou
+						NOT = { this = character:liu_bei.capital_county }
+					}
+					title_province = { save_scope_as = hd_lbxz_camp_destination }
+				}
+			}
+		}
+		if = {
+			limit = { NOT = { exists = scope:hd_lbxz_camp_destination } }
+			character:liu_bei.capital_province ?= { save_scope_as = hd_lbxz_camp_destination }
+		}
+		if = {
+			limit = { exists = scope:hd_lbxz_camp_destination }
+			character:lv_bu = {
+				if = {
+					limit = { NOT = { has_variable = hd_lbxz_origin } }
+					domicile.domicile_location ?= {
+						save_scope_as = hd_lbxz_origin_province
+						character:lv_bu = { set_variable = { name = hd_lbxz_origin value = scope:hd_lbxz_origin_province } }
+					}
+				}
+				domicile = { move_domicile = scope:hd_lbxz_camp_destination }
+			}
+			hd_lbxz_alliance_effect = { A = character:liu_bei B = character:lv_bu }
+		}
+		if = {
+			limit = {
+				exists = scope:hd_lbxz_camp_destination
+				character:lv_bu = {
+					domicile.domicile_location ?= scope:hd_lbxz_camp_destination
+					is_allied_to = character:liu_bei
+				}
+			}
+			character:lv_bu = {
+				add_character_flag = hd_lbxz_sheltered
+				add_character_flag = { flag = hd_lbxz_shelter_wait days = 365 }
+			}
+			set_global_variable = hd_lbxz_shelter_resolved
+			set_global_variable = hd_lbxz_shelter_done
+			debug_log = "HD_LBXZ SHELTER_DONE"
+		}
+		else = { debug_log = "HD_LBXZ SHELTER_RETRY" }
+	}
+	remove_global_variable = hd_lbxz_shelter_pending
+}
+
+########## 节点 2：吕布夺徐州 ##########
+
+hd_lbxz_open_seize_effect = {
+	set_global_variable = { name = hd_lbxz_seize_pending value = yes days = 60 }
+	if = {
+		limit = { character:lv_bu = { is_ai = no } }
+		character:lv_bu = { trigger_event = hd_lbxz.0200 }
+	}
+	else = { hd_lbxz_lubu_moves_effect = yes }
+}
+
+# 吕布已决意袭取下邳。刘备是玩家时一律由他选择（两人都是玩家时在此串行）。
+hd_lbxz_lubu_moves_effect = {
+	if = {
+		limit = { character:liu_bei = { is_ai = no } }
+		set_global_variable = { name = hd_lbxz_seize_pending value = yes days = 60 }
+		character:liu_bei = { trigger_event = hd_lbxz.0201 }
+	}
+	else = { hd_lbxz_seize_effect = yes }
+}
+
+# 玩家吕布守约不动。
+hd_lbxz_seize_declined_effect = {
+	if = {
+		limit = { NOT = { exists = global_var:hd_lbxz_seize_resolved } }
+		set_global_variable = hd_lbxz_seize_resolved
+		set_global_variable = hd_lbxz_seize_declined
+		character:lv_bu ?= { remove_character_flag = hd_lbxz_sheltered }
+		debug_log = "HD_LBXZ SEIZE_DECLINED_BY_LUBU"
+	}
+	remove_global_variable = hd_lbxz_seize_pending
+}
+
+# 玩家刘备先发制人，逐走吕布：断盟，吕布营地迁回来投前的位置。
+hd_lbxz_expel_lubu_effect = {
+	if = {
+		limit = { NOT = { exists = global_var:hd_lbxz_seize_resolved } }
+		character:liu_bei = {
+			if = {
+				limit = { is_allied_to = character:lv_bu }
+				break_alliance = character:lv_bu
+			}
+		}
+		character:lv_bu ?= {
+			remove_character_flag = hd_lbxz_sheltered
+			if = {
+				limit = {
+					has_variable = hd_lbxz_origin
+					exists = domicile
+					is_travelling = no
+				}
+				domicile = { move_domicile = character:lv_bu.var:hd_lbxz_origin }
+			}
+		}
+		set_global_variable = hd_lbxz_seize_resolved
+		set_global_variable = hd_lbxz_lubu_expelled
+		debug_log = "HD_LBXZ LUBU_EXPELLED_BY_LIU"
+	}
+	remove_global_variable = hd_lbxz_seize_pending
+}
+
+# Scope：任意。仍在刘备治下有地、没有世族头衔的电脑亲随，夺城时先剥地再随刘备出走。
+hd_lbxz_mark_follower_effect = {
+	$FOLLOWER$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_ai = yes
+				is_landed = yes
+				is_vassal_or_below_of = character:liu_bei
+				NOT = { any_held_title = { is_noble_family_title = yes } }
+			}
+			add_to_list = hd_lbxz_stripped_followers
+			add_to_list = hd_lbxz_retinue
+			add_character_flag = { flag = hd_lbxz_stripped days = 730 }
+		}
+	}
+}
+
+# 一个事务内整包移交，再校验；无论成败都结束节点，不重复执行半截事务。
+hd_lbxz_seize_effect = {
+	if = {
+		limit = { hd_lbxz_seize_ready_trigger = yes }
+		character:lv_bu = {
+			if = { limit = { is_imprisoned = yes } release_from_prison = yes }
+		}
+		set_global_variable = { name = hd_lbxz_seizer value = character:lv_bu }
+		hd_lbxz_transfer_xuzhou_effect = yes
+		character:lv_bu = {
+			if = {
+				limit = { is_landed = yes has_title = title:c_uuii_p_284 }
+				set_realm_capital = title:c_uuii_p_284
+			}
+			remove_character_flag = hd_lbxz_sheltered
+		}
+
+		# 先清扫刘备与被剥地亲随残留的男爵领等普通头衔，再收尾；收尾失败时由心跳按月重试。
+		hd_lbxz_sweep_remainder_effect = yes
+		hd_lbxz_finish_seize_effect = yes
+		set_global_variable = hd_lbxz_seize_resolved
+		hd_lb_sync_story_effect = yes
+	}
+	remove_global_variable = hd_lbxz_seize_pending
+}
+
+# 夺徐州者存在 global_var:hd_lbxz_seizer（吕布或丹阳兵首领），取出存为 scope:hd_lbxz_seizer_s；没有该变量时认吕布。
+hd_lbxz_save_seizer_effect = {
+	if = {
+		limit = { exists = global_var:hd_lbxz_seizer }
+		global_var:hd_lbxz_seizer = { save_scope_as = hd_lbxz_seizer_s }
+	}
+	else = { character:lv_bu ?= { save_scope_as = hd_lbxz_seizer_s } }
+}
+
+# 夺徐州的整包移交（吕布、丹阳兵之乱共用）：刘备全部县级以上普通头衔、电脑封臣、被剥地的电脑亲随一并交给夺徐州者。
+# 调用前须设好 global_var:hd_lbxz_seizer。迁都与收尾由调用方处理。
+hd_lbxz_transfer_xuzhou_effect = {
+	hd_lbxz_save_seizer_effect = yes
+	if = {
+		limit = { exists = scope:hd_lbxz_seizer_s }
+		clear_saved_scope = hd_lbxz_old_liege
+		character:liu_bei = {
+			if = {
+				limit = { is_allied_to = scope:hd_lbxz_seizer_s }
+				break_alliance = scope:hd_lbxz_seizer_s
+			}
+			# 夺徐州者取代刘备的政治位置：刘备原为帝国级主君的封臣时，夺徐州者改投该主君。
+			liege ?= {
+				if = {
+					limit = {
+						is_alive = yes
+						NOT = { this = character:liu_bei }
+						highest_held_title_tier > tier_kingdom
+					}
+					save_scope_as = hd_lbxz_old_liege
+				}
+			}
+			every_held_title = {
+				limit = {
+					tier >= tier_county # baronies move with their county
+					is_noble_family_title = no
+					is_landless_type_title = no
+				}
+				add_to_list = hd_lbxz_ceded_titles
+			}
+			every_vassal = {
+				limit = { is_alive = yes NOT = { this = scope:hd_lbxz_seizer_s } }
+				if = {
+					limit = { is_ai = yes }
+					add_to_list = hd_lbxz_ceded_vassals
+				}
+				else = { add_to_list = hd_lbxz_player_vassals }
+			}
+			# 夺徐州者本人（丹阳兵首领原是刘备廷臣）与随他作乱的人不随刘备出走。
+			every_courtier = {
+				limit = {
+					is_alive = yes
+					NOT = { this = scope:hd_lbxz_seizer_s }
+					NOT = { has_character_flag = hd_lbxz_follows_seizer }
+				}
+				add_to_list = hd_lbxz_retinue
+			}
+		}
+		hd_lbxz_mark_follower_effect = { FOLLOWER = character:guan_yu }
+		hd_lbxz_mark_follower_effect = { FOLLOWER = character:zhang_fei }
+		hd_lbxz_mark_follower_effect = { FOLLOWER = character:zhao_yun }
+		hd_lbxz_mark_follower_effect = { FOLLOWER = character:mi_zhu }
+		hd_lbxz_mark_follower_effect = { FOLLOWER = character:mi_fang }
+		hd_lbxz_mark_follower_effect = { FOLLOWER = character:sun_gan }
+		hd_lbxz_mark_follower_effect = { FOLLOWER = character:jian_yong }
+		hd_lbxz_mark_follower_effect = { FOLLOWER = character:chen_dao }
+		# 回收名单存成刘备身上的变量列表，回收不成功按月重试。
+		character:liu_bei = {
+			clear_variable_list = hd_lbxz_retinue_var
+			set_variable = { name = hd_lbxz_recall_tries value = 0 }
+		}
+		every_in_list = {
+			list = hd_lbxz_retinue
+			save_scope_as = hd_lbxz_retinue_member
+			character:liu_bei = { add_to_variable_list = { name = hd_lbxz_retinue_var target = scope:hd_lbxz_retinue_member } }
+		}
+		# 玩家直属封臣、被剥地亲随的玩家封臣，都不被强制改投吕布：转移前先让其独立。
+		every_in_list = {
+			list = hd_lbxz_stripped_followers
+			every_vassal = {
+				limit = { is_ai = no }
+				add_to_list = hd_lbxz_player_vassals
+			}
+		}
+		if = {
+			limit = { any_in_list = { list = hd_lbxz_player_vassals always = yes } }
+			create_title_and_vassal_change = { type = independency save_scope_as = hd_lbxz_player_release add_claim_on_loss = no }
+			every_in_list = {
+				list = hd_lbxz_player_vassals
+				becomes_independent = { change = scope:hd_lbxz_player_release }
+			}
+			resolve_title_and_vassal_change = scope:hd_lbxz_player_release
+		}
+		# 原版建营会让非家人宗教顾问消失、其余议员革职：先革掉全部议员。
+		character:liu_bei = {
+			every_councillor = {
+				limit = { NOT = { has_council_position = councillor_spouse } }
+				save_scope_as = hd_lbxz_fired
+				character:liu_bei = { fire_councillor = scope:hd_lbxz_fired }
+			}
+		}
+		# 照搬吕布长安败走：失地前先让无地、不在旅行的非家人廷臣脱离，建营后再收回；家人原版本来就留着。
+		every_in_list = {
+			list = hd_lbxz_retinue
+			limit = {
+				is_alive = yes
+				is_ruler = no
+				is_landed = no
+				is_travelling = no
+				NOT = { is_in_list = hd_lbxz_stripped_followers }
+				NOR = {
+					is_close_or_extended_family_of = character:liu_bei
+					is_consort_of = character:liu_bei
+				}
+			}
+			move_to_pool = yes
+		}
+		create_title_and_vassal_change = {
+			type = conquest
+			save_scope_as = hd_lbxz_seize_change
+			add_claim_on_loss = no
+		}
+		every_in_list = {
+			list = hd_lbxz_stripped_followers
+			every_held_title = {
+				limit = {
+					tier >= tier_county
+					is_noble_family_title = no
+					is_landless_type_title = no
+				}
+				change_title_holder_include_vassals = { holder = scope:hd_lbxz_seizer_s change = scope:hd_lbxz_seize_change }
+			}
+			every_vassal = {
+				limit = { is_ai = yes }
+				change_liege = { liege = scope:hd_lbxz_seizer_s change = scope:hd_lbxz_seize_change }
+			}
+		}
+		every_in_list = {
+			list = hd_lbxz_ceded_titles
+			change_title_holder_include_vassals = { holder = scope:hd_lbxz_seizer_s change = scope:hd_lbxz_seize_change }
+		}
+		every_in_list = {
+			list = hd_lbxz_ceded_vassals
+			limit = {
+				is_alive = yes
+				NOT = { is_in_list = hd_lbxz_stripped_followers }
+			}
+			change_liege = { liege = scope:hd_lbxz_seizer_s change = scope:hd_lbxz_seize_change }
+		}
+		if = {
+			limit = { exists = scope:hd_lbxz_old_liege }
+			scope:hd_lbxz_seizer_s = { change_liege = { liege = scope:hd_lbxz_old_liege change = scope:hd_lbxz_seize_change } }
+		}
+		resolve_title_and_vassal_change = scope:hd_lbxz_seize_change
+
+		scope:hd_lbxz_seizer_s = {
+			if = {
+				limit = { is_landed = yes }
+				hd_force_celestial_effect = yes
+				hd_lbxz_destroy_camp_title_effect = yes
+				add_character_flag = { flag = hd_lbxz_gov_check days = 60 }
+			}
+		}
+	}
+}
+
+# Scope：任意。夺徐州者（吕布或丹阳兵首领）已据徐州且刘备已无地时，让刘备建营、收回部众、记完成；否则记失败等下月重试。
+hd_lbxz_finish_seize_effect = {
+	hd_lbxz_save_seizer_effect = yes
+	if = {
+		limit = {
+			exists = scope:hd_lbxz_seizer_s
+			scope:hd_lbxz_seizer_s = { is_alive = yes has_title = title:k_uuii_xuzhou }
+			character:liu_bei = {
+				is_alive = yes
+				NOT = { any_held_title = { is_noble_family_title = no is_landless_type_title = no } }
+			}
+		}
+		# 刘备复为冒险者，史实败后屯小沛。用 historical 理由建营，免得原版把营地从所在省驱逐。
+		character:liu_bei = {
+			if = {
+				limit = { NOT = { any_held_title = { is_noble_family_title = no is_landless_type_title = no } } }
+				if = {
+					limit = {
+						OR = {
+							NOT = { has_government = landless_adventurer_government }
+							NOT = { any_held_title = { has_variable = adventurer_creation_reason } }
+						}
+					}
+					if = { limit = { is_ruler = no } move_to_pool = yes }
+					if = {
+						limit = { exists = title:c_uuii_p_4349 }
+						set_location = { location = title:c_uuii_p_4349.title_province stick_to_location = no }
+					}
+					create_landless_adventurer_title_effect = {
+						REASON = flag:historical
+						FLAVOR_CHAR = scope:hd_lbxz_seizer_s
+					}
+				}
+				if = {
+					limit = { is_ruler = yes is_independent_ruler = no has_government = landless_adventurer_government }
+					create_title_and_vassal_change = { type = independency save_scope_as = hd_lbxz_liu_independence add_claim_on_loss = no }
+					becomes_independent = { change = scope:hd_lbxz_liu_independence }
+					resolve_title_and_vassal_change = scope:hd_lbxz_liu_independence
+				}
+				if = {
+					limit = {
+						has_government = landless_adventurer_government
+						exists = domicile
+						exists = title:c_uuii_p_4349
+						is_travelling = no
+						NOT = { domicile.domicile_location ?= title:c_uuii_p_4349.title_province }
+					}
+					domicile = { move_domicile = title:c_uuii_p_4349.title_province }
+				}
+			}
+		}
+		hd_lbxz_recall_retinue_effect = yes
+		character:guan_yu ?= {
+			if = { limit = { is_alive = yes is_adult = yes is_courtier_of = character:liu_bei } set_knight_status = force }
+		}
+		character:zhang_fei ?= {
+			if = { limit = { is_alive = yes is_adult = yes is_courtier_of = character:liu_bei } set_knight_status = force }
+		}
+		character:zhao_yun ?= {
+			if = { limit = { is_alive = yes is_adult = yes is_courtier_of = character:liu_bei } set_knight_status = force }
+		}
+		set_global_variable = hd_lbxz_seized
+		remove_global_variable = hd_lbxz_seize_failed
+		character:liu_bei = {
+			add_character_flag = { flag = hd_lbxz_jing_wait days = 90 }
+			add_character_flag = { flag = hd_lbxz_jing_block days = 730 }
+			# 2026-10-24 boki：已失徐州，「徐州未附」提前结束
+			if = {
+				limit = { has_character_modifier = hd_lbxz_xuzhou_unsettled }
+				remove_character_modifier = hd_lbxz_xuzhou_unsettled
+			}
+		}
+		debug_log = "HD_LBXZ SEIZED"
+	}
+	else = {
+		set_global_variable = hd_lbxz_seize_failed
+		debug_log = "HD_LBXZ SEIZE_POSTCONDITION_FAILED"
+	}
+}
+
+# Scope：任意。夺城事务只按县及以上转移；刘备与被剥地亲随手里残留的普通头衔（多为男爵领）一并转给夺徐州者。
+hd_lbxz_sweep_remainder_effect = {
+	hd_lbxz_save_seizer_effect = yes
+	if = {
+		limit = {
+			exists = scope:hd_lbxz_seizer_s
+			scope:hd_lbxz_seizer_s = { is_alive = yes is_landed = yes }
+		}
+		create_title_and_vassal_change = {
+			type = conquest
+			save_scope_as = hd_lbxz_sweep_change
+			add_claim_on_loss = no
+		}
+		character:liu_bei ?= {
+			every_held_title = {
+				limit = { is_noble_family_title = no is_landless_type_title = no }
+				change_title_holder = { holder = scope:hd_lbxz_seizer_s change = scope:hd_lbxz_sweep_change }
+			}
+		}
+		hd_lbxz_sweep_follower_effect = { FOLLOWER = character:guan_yu }
+		hd_lbxz_sweep_follower_effect = { FOLLOWER = character:zhang_fei }
+		hd_lbxz_sweep_follower_effect = { FOLLOWER = character:zhao_yun }
+		hd_lbxz_sweep_follower_effect = { FOLLOWER = character:mi_zhu }
+		hd_lbxz_sweep_follower_effect = { FOLLOWER = character:mi_fang }
+		hd_lbxz_sweep_follower_effect = { FOLLOWER = character:sun_gan }
+		hd_lbxz_sweep_follower_effect = { FOLLOWER = character:jian_yong }
+		hd_lbxz_sweep_follower_effect = { FOLLOWER = character:chen_dao }
+		resolve_title_and_vassal_change = scope:hd_lbxz_sweep_change
+	}
+}
+
+hd_lbxz_sweep_follower_effect = {
+	$FOLLOWER$ ?= {
+		if = {
+			limit = { is_alive = yes has_character_flag = hd_lbxz_stripped }
+			every_held_title = {
+				limit = { is_noble_family_title = no is_landless_type_title = no }
+				change_title_holder = { holder = scope:hd_lbxz_seizer_s change = scope:hd_lbxz_sweep_change }
+			}
+		}
+	}
+}
+
+# Scope：任意。把刘备身上回收名单里的人收回营中；成功或死亡即出名单，最多试 12 个月。
+hd_lbxz_recall_retinue_effect = {
+	character:liu_bei ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				has_variable_list = hd_lbxz_retinue_var
+				has_government = landless_adventurer_government
+			}
+			every_in_list = {
+				variable = hd_lbxz_retinue_var
+				limit = {
+					is_alive = yes
+					is_ruler = no
+					is_imprisoned = no
+					is_travelling = no
+					NOT = { is_courtier_of = character:liu_bei }
+				}
+				set_employer = character:liu_bei
+			}
+			every_in_list = {
+				variable = hd_lbxz_retinue_var
+				limit = {
+					OR = {
+						is_alive = no
+						is_courtier_of = character:liu_bei
+					}
+				}
+				save_scope_as = hd_lbxz_recalled
+				character:liu_bei = { remove_list_variable = { name = hd_lbxz_retinue_var target = scope:hd_lbxz_recalled } }
+			}
+			change_variable = { name = hd_lbxz_recall_tries add = 1 }
+			if = {
+				limit = {
+					OR = {
+						var:hd_lbxz_recall_tries >= 12
+						NOT = { any_in_list = { variable = hd_lbxz_retinue_var always = yes } }
+					}
+				}
+				clear_variable_list = hd_lbxz_retinue_var
+				remove_variable = hd_lbxz_recall_tries
+			}
+		}
+	}
+}
+
+########## 节点 0：托付徐州后徐州不附（2026-10-24 boki） ##########
+# 由 hd_lb_commit_bequest_effect 在交接成功、陶谦身死之前调用。
+# 史实陶谦死后臧霸据开阳不附刘备、笮融早已南走；陶谦旧部曹豹、丹阳兵中郎将许耽留在下邳。
+
+# Scope：曹豹或许耽。在陶谦宫廷（或无雇主）的电脑廷臣转入刘备宫廷。
+hd_lbxz_old_staff_join_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			is_ai = yes
+			is_ruler = no
+			is_imprisoned = no
+			OR = {
+				is_courtier_of = character:tao_qian
+				NOT = { exists = court_owner }
+			}
+		}
+		set_employer = character:liu_bei
+		if = {
+			limit = { is_courtier_of = character:liu_bei }
+			debug_log = "HD_LBXZ OLD_STAFF_JOINED_LIU"
+		}
+	}
+}
+
+# Scope：臧霸或笮融。托付后仍是刘备直属封臣时记入自立名单。
+hd_lbxz_unrest_mark_leaver_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			is_landed = yes
+			liege ?= character:liu_bei
+		}
+		add_to_list = hd_lbxz_unrest_leavers
+	}
+}
+
+hd_lbxz_unrest_effect = {
+	character:cao_bao_2 ?= { hd_lbxz_old_staff_join_effect = yes }
+	character:xu_dan ?= { hd_lbxz_old_staff_join_effect = yes }
+	# 臧霸、笮融各自独立，不给停战；3 年内不主动请求归附
+	character:zang_ba ?= { hd_lbxz_unrest_mark_leaver_effect = yes }
+	character:ze_rong ?= { hd_lbxz_unrest_mark_leaver_effect = yes }
+	if = {
+		limit = { any_in_list = { list = hd_lbxz_unrest_leavers always = yes } }
+		create_title_and_vassal_change = { type = independency save_scope_as = hd_lbxz_unrest_change add_claim_on_loss = no }
+		every_in_list = {
+			list = hd_lbxz_unrest_leavers
+			becomes_independent = { change = scope:hd_lbxz_unrest_change }
+		}
+		resolve_title_and_vassal_change = scope:hd_lbxz_unrest_change
+		every_in_list = {
+			list = hd_lbxz_unrest_leavers
+			if = {
+				limit = { is_independent_ruler = yes }
+				add_character_flag = { flag = hd_dc_recently_independent years = 3 }
+				debug_log = "HD_LBXZ UNREST_INDEPENDENT"
+			}
+			else = { debug_log = "HD_LBXZ UNREST_INDEPENDENCE_FAILED" }
+		}
+	}
+	character:liu_bei = {
+		if = {
+			limit = { NOT = { has_character_modifier = hd_lbxz_xuzhou_unsettled } }
+			add_character_modifier = { modifier = hd_lbxz_xuzhou_unsettled years = 3 }
+		}
+	}
+	debug_log = "HD_LBXZ UNREST_DONE"
+}
+
+########## 节点 2b：丹阳兵之乱（2026-10-24 boki） ##########
+# 吕布没来投（或来投后已死、已有地）时的兜底：196 年起刘备一打仗（198 年起不必打仗），张飞杀曹豹，
+# 丹阳兵中郎将许耽据城作乱，整套接手刘备的徐州（同吕布夺徐州），刘备复为冒险者屯小沛，之后投刘表照常。
+# 玩家刘备同样失徐州，只收到通知事件 hd_lbxz.0210。
+
+# Scope：许耽。可当作乱首领：电脑、在世成年、未被囚、不是统治者。
+hd_lbxz_danyang_leader_valid_trigger = {
+	is_alive = yes
+	is_ai = yes
+	is_adult = yes
+	is_imprisoned = no
+	is_ruler = no
+	NOT = { this = character:liu_bei }
+}
+
+# 许耽不可用时新立一名无名丹阳兵首领（扬州文化）。结果：scope:hd_lbxz_dy_leader
+hd_lbxz_danyang_create_leader_effect = {
+	character:liu_bei.capital_county ?= {
+		title_province = { save_scope_as = hd_lbxz_dy_leader_province }
+		faith = { save_scope_as = hd_lbxz_dy_leader_faith }
+		rite ?= { save_scope_as = hd_lbxz_dy_leader_rite }
+	}
+	if = {
+		limit = {
+			exists = scope:hd_lbxz_dy_leader_province
+			exists = scope:hd_lbxz_dy_leader_rite
+		}
+		create_character = {
+			location = scope:hd_lbxz_dy_leader_province
+			employer = character:liu_bei
+			template = new_commander_character
+			age = { 30 40 }
+			gender_female_chance = 0
+			dynasty = generate
+			culture = culture:yangzhou
+			faith = scope:hd_lbxz_dy_leader_faith
+			rite = scope:hd_lbxz_dy_leader_rite
+			martial = { 12 16 }
+			trait = brave
+			save_scope_as = hd_lbxz_dy_leader
+		}
+		debug_log = "HD_LBXZ DANYANG_LEADER_CREATED"
+	}
+}
+
+hd_lbxz_danyang_effect = {
+	if = {
+		limit = { hd_lbxz_danyang_ready_trigger = yes }
+		set_global_variable = hd_lbxz_danyang_resolved
+		clear_saved_scope = hd_lbxz_dy_leader
+		clear_saved_scope = hd_lbxz_dy_cao_bao
+		clear_saved_scope = hd_lbxz_dy_old_capital
+		remove_global_variable = hd_lbxz_dy_cao_bao_killed
+		character:xu_dan ?= {
+			if = {
+				limit = { hd_lbxz_danyang_leader_valid_trigger = yes }
+				save_scope_as = hd_lbxz_dy_leader
+			}
+		}
+		if = {
+			limit = { NOT = { exists = scope:hd_lbxz_dy_leader } }
+			hd_lbxz_danyang_create_leader_effect = yes
+		}
+		character:cao_bao_2 ?= {
+			if = {
+				limit = { is_alive = yes is_ai = yes is_ruler = no is_courtier_of = character:liu_bei }
+				save_scope_as = hd_lbxz_dy_cao_bao
+			}
+		}
+		# 张飞杀曹豹：张飞须在世、在刘备宫廷或治下；否则曹豹随丹阳兵作乱
+		if = {
+			limit = {
+				exists = scope:hd_lbxz_dy_cao_bao
+				character:zhang_fei ?= {
+					is_alive = yes
+					OR = {
+						is_courtier_of = character:liu_bei
+						is_vassal_or_below_of = character:liu_bei
+					}
+				}
+			}
+			scope:hd_lbxz_dy_cao_bao = {
+				death = { death_reason = death_murder_known killer = character:zhang_fei }
+			}
+			set_global_variable = hd_lbxz_dy_cao_bao_killed
+			debug_log = "HD_LBXZ DANYANG_CAO_BAO_KILLED"
+		}
+		else_if = {
+			limit = { exists = scope:hd_lbxz_dy_cao_bao }
+			scope:hd_lbxz_dy_cao_bao = { add_character_flag = { flag = hd_lbxz_follows_seizer days = 30 } }
+		}
+		if = {
+			limit = { exists = scope:hd_lbxz_dy_leader }
+			character:liu_bei.capital_county ?= { save_scope_as = hd_lbxz_dy_old_capital }
+			set_global_variable = { name = hd_lbxz_seizer value = scope:hd_lbxz_dy_leader }
+			hd_lbxz_transfer_xuzhou_effect = yes
+			scope:hd_lbxz_dy_leader = {
+				if = {
+					limit = {
+						is_landed = yes
+						exists = scope:hd_lbxz_dy_old_capital
+						has_title = scope:hd_lbxz_dy_old_capital
+					}
+					set_realm_capital = scope:hd_lbxz_dy_old_capital
+				}
+			}
+			scope:hd_lbxz_dy_cao_bao ?= {
+				if = {
+					limit = {
+						is_alive = yes
+						has_character_flag = hd_lbxz_follows_seizer
+						scope:hd_lbxz_dy_leader = { is_landed = yes }
+					}
+					set_employer = scope:hd_lbxz_dy_leader
+				}
+			}
+			# 吕布若曾来投（后已死或已有地），清掉寄居标记
+			character:lv_bu ?= { remove_character_flag = hd_lbxz_sheltered }
+			hd_lbxz_sweep_remainder_effect = yes
+			hd_lbxz_finish_seize_effect = yes
+			set_global_variable = hd_lbxz_seize_resolved
+			hd_lb_sync_story_effect = yes
+			debug_log = "HD_LBXZ DANYANG_REVOLT"
+			character:liu_bei = {
+				if = { limit = { is_ai = no } trigger_event = hd_lbxz.0210 }
+			}
+		}
+		else = { debug_log = "HD_LBXZ DANYANG_NO_LEADER" }
+	}
+}
+
+########## 节点 2c：被别人打掉徐州（2026-10-24 boki） ##########
+# 托付后、吕布或丹阳兵夺城前，刘备已不持徐州王国头衔且无地：还不是冒险者就替他建营屯小沛（同失徐州），
+# 记「已失徐州」并关掉吕布、丹阳兵两个节点，投刘表照常。
+# 入口在 hd_lb_tick_effect 最前：刘备失地成了廷臣时 hd_lb_actor_trigger 不成立，不能放进心跳主体。Scope：刘备。
+hd_lbxz_lost_xuzhou_effect = {
+	if = {
+		limit = {
+			this = character:liu_bei
+			hd_lbxz_lost_xuzhou_ready_trigger = yes
+		}
+		clear_saved_scope = hd_lbxz_lost_flavor
+		if = {
+			limit = { NOT = { has_government = landless_adventurer_government } }
+			title:k_uuii_xuzhou.holder ?= { save_scope_as = hd_lbxz_lost_flavor }
+			if = {
+				limit = { NOT = { exists = scope:hd_lbxz_lost_flavor } }
+				save_scope_as = hd_lbxz_lost_flavor
+			}
+			if = { limit = { is_ruler = no } move_to_pool = yes }
+			if = {
+				limit = { exists = title:c_uuii_p_4349 }
+				set_location = { location = title:c_uuii_p_4349.title_province stick_to_location = no }
+			}
+			create_landless_adventurer_title_effect = {
+				REASON = flag:historical
+				FLAVOR_CHAR = scope:hd_lbxz_lost_flavor
+			}
+		}
+		if = {
+			limit = { is_ruler = yes is_independent_ruler = no has_government = landless_adventurer_government }
+			create_title_and_vassal_change = { type = independency save_scope_as = hd_lbxz_lost_independence add_claim_on_loss = no }
+			becomes_independent = { change = scope:hd_lbxz_lost_independence }
+			resolve_title_and_vassal_change = scope:hd_lbxz_lost_independence
+		}
+		if = {
+			limit = {
+				has_government = landless_adventurer_government
+				exists = domicile
+				exists = title:c_uuii_p_4349
+				is_travelling = no
+				NOT = { domicile.domicile_location ?= title:c_uuii_p_4349.title_province }
+			}
+			domicile = { move_domicile = title:c_uuii_p_4349.title_province }
+		}
+		if = {
+			limit = { has_government = landless_adventurer_government }
+			# 无地、未被囚的亲随收回营中（同吕布夺徐州后的回收）
+			character:guan_yu ?= { hd_lb_join_liu_court_effect = yes }
+			character:zhang_fei ?= { hd_lb_join_liu_court_effect = yes }
+			character:zhao_yun ?= { hd_lb_join_liu_court_effect = yes }
+			character:mi_zhu ?= { hd_lb_join_liu_court_effect = yes }
+			character:mi_fang ?= { hd_lb_join_liu_court_effect = yes }
+			character:sun_gan ?= { hd_lb_join_liu_court_effect = yes }
+			character:jian_yong ?= { hd_lb_join_liu_court_effect = yes }
+			character:chen_dao ?= { hd_lb_join_liu_court_effect = yes }
+			set_global_variable = hd_lbxz_seized
+			set_global_variable = hd_lbxz_seize_resolved
+			set_global_variable = hd_lbxz_danyang_resolved
+			remove_global_variable = hd_lbxz_seize_failed
+			character:lv_bu ?= { remove_character_flag = hd_lbxz_sheltered }
+			add_character_flag = { flag = hd_lbxz_jing_wait days = 90 }
+			add_character_flag = { flag = hd_lbxz_jing_block days = 730 }
+			if = {
+				limit = { has_character_modifier = hd_lbxz_xuzhou_unsettled }
+				remove_character_modifier = hd_lbxz_xuzhou_unsettled
+			}
+			hd_lb_sync_story_effect = yes
+			debug_log = "HD_LBXZ LOST_XUZHOU_OTHERWISE"
+		}
+		else = { debug_log = "HD_LBXZ LOST_XUZHOU_CAMP_FAILED" }
+	}
+}
+
+########## 节点 3：刘备投刘表 ##########
+
+hd_lbxz_open_jing_effect = {
+	set_global_variable = { name = hd_lbxz_jing_pending value = yes days = 60 }
+	if = {
+		limit = { character:liu_bei = { is_ai = no } }
+		character:liu_bei = { trigger_event = hd_lbxz.0300 }
+	}
+	else = { hd_lbxz_liu_requests_jing_effect = yes }
+}
+
+# 刘备已决意南投，由刘表决定接纳与否（两人都是玩家时在此串行）。
+hd_lbxz_liu_requests_jing_effect = {
+	if = {
+		limit = { character:liu_biao = { is_ai = no } }
+		set_global_variable = { name = hd_lbxz_jing_pending value = yes days = 60 }
+		character:liu_biao = { trigger_event = hd_lbxz.0301 }
+	}
+	else = { hd_lbxz_join_liu_biao_effect = yes }
+}
+
+hd_lbxz_jing_declined_effect = {
+	if = {
+		limit = { NOT = { exists = global_var:hd_lbxz_jing_resolved } }
+		set_global_variable = hd_lbxz_jing_resolved
+		set_global_variable = hd_lbxz_jing_declined
+		debug_log = "HD_LBXZ JING_DECLINED"
+	}
+	remove_global_variable = hd_lbxz_jing_pending
+}
+
+# boki 定：刘备作刘表封臣屯新野。先授县，再走 hds_join_liege_effect（含等级判断和群雄逐鹿保护）。
+hd_lbxz_join_liu_biao_effect = {
+	if = {
+		limit = { hd_lbxz_jing_ready_trigger = yes }
+		character:liu_biao = {
+			if = { limit = { is_imprisoned = yes } release_from_prison = yes }
+		}
+		clear_saved_scope = hd_lbxz_jing_county
+		# 只用刘表本人直接持有的县，绝不拿其封臣或第三方的地；新野不归刘表本人时随机挑一个。
+		if = {
+			limit = { title:c_uuii_p_1723 = { hd_lbxz_jing_grantable_county_trigger = yes } }
+			title:c_uuii_p_1723 = { save_scope_as = hd_lbxz_jing_county }
+		}
+		else = {
+			character:liu_biao = {
+				random_held_title = {
+					limit = { hd_lbxz_jing_grantable_county_trigger = yes }
+					save_scope_as = hd_lbxz_jing_county
+				}
+			}
+		}
+		if = {
+			limit = { exists = scope:hd_lbxz_jing_county }
+			character:liu_bei = {
+				every_courtier = {
+					limit = { is_alive = yes }
+					add_to_list = hd_lbxz_jing_followers
+				}
+			}
+			create_title_and_vassal_change = {
+				type = granted
+				save_scope_as = hd_lbxz_jing_change
+				add_claim_on_loss = no
+			}
+			scope:hd_lbxz_jing_county = {
+				change_title_holder = {
+					holder = character:liu_bei
+					change = scope:hd_lbxz_jing_change
+					take_baronies = yes
+				}
+			}
+			resolve_title_and_vassal_change = scope:hd_lbxz_jing_change
+			character:liu_bei = {
+				if = {
+					limit = { is_landed = yes }
+					hd_force_celestial_effect = yes
+					hd_lbxz_destroy_camp_title_effect = yes
+					if = {
+						limit = { has_title = scope:hd_lbxz_jing_county }
+						set_realm_capital = scope:hd_lbxz_jing_county
+					}
+					hds_join_liege_effect = { LIEGE = character:liu_biao }
+					add_character_flag = { flag = hd_lbxz_gov_check days = 60 }
+					hd_lbxz_jing_warlord_effect = yes
+				}
+			}
+			every_in_list = {
+				list = hd_lbxz_jing_followers
+				hd_lb_join_liu_court_effect = yes
+			}
+			if = {
+				limit = { character:liu_bei = { is_landed = yes liege ?= character:liu_biao } }
+				debug_log = "HD_LBXZ JING_VASSAL"
+			}
+			else = { debug_log = "HD_LBXZ JING_VASSAL_POSTCONDITION_FAILED" }
+			# 已授县，无论改投是否成功都结束节点，不重复授县。
+			set_global_variable = hd_lbxz_jing_resolved
+			set_global_variable = hd_lbxz_jing_done
+		}
+		else = {
+			# 刘表本人除都城外一县也给不出：营地移到刘表都城，与刘表结盟。
+			character:liu_bei = {
+				if = {
+					limit = { exists = character:liu_biao.capital_province }
+					domicile = { move_domicile = character:liu_biao.capital_province }
+				}
+			}
+			hd_lbxz_alliance_effect = { A = character:liu_bei B = character:liu_biao }
+			if = {
+				limit = { character:liu_bei = { is_allied_to = character:liu_biao } }
+				set_global_variable = hd_lbxz_jing_resolved
+				set_global_variable = hd_lbxz_jing_done
+				debug_log = "HD_LBXZ JING_CAMP_ALLIANCE"
+			}
+			else = { debug_log = "HD_LBXZ JING_CAMP_ALLIANCE_RETRY" }
+		}
+		hd_lb_sync_story_effect = yes
+	}
+	remove_global_variable = hd_lbxz_jing_pending
+}
+
+# 2026-10-25 boki：刘备屯驻荆州作刘表封臣即为军阀（不走「拥兵自重」决议、不扣主君好感），10 年内 AI 刘表不发起「收回权力」。
+# 写法照 hd190_warlord_one_effect。结盟兜底分支（刘表无县可授）刘备不是封臣，不在此列。Scope：刘备
+hd_lbxz_jing_warlord_effect = {
+	if = {
+		limit = {
+			this = character:liu_bei
+			is_alive = yes
+			is_landed = yes
+			liege ?= character:liu_biao
+			government_has_flag = government_is_celestial
+			liege = { government_has_flag = government_is_celestial }
+			NOT = { hd_warlord_trigger = yes }
+		}
+		hd_warlord_establish_effect = yes
+		add_character_flag = { flag = hd_warlord_revoke_ai_grace years = 10 }
+		# 得地后原版可能重设政体（见 hd_lbxz_gov_check），身份随之作废时由月度心跳在 60 天内补回
+		add_character_flag = { flag = hd_lbxz_jing_warlord_recheck days = 60 }
+		if = {
+			limit = { hd_warlord_trigger = yes vassal_contract_has_flag = hd_warlord }
+			debug_log = "HD_LBXZ JING_WARLORD_OK"
+		}
+		else = { debug_log = "HD_LBXZ JING_WARLORD_FAILED" }
+	}
+	else = { debug_log = "HD_LBXZ JING_WARLORD_SKIPPED" }
+}
+
+# ===== 第二段：三顾茅庐、隆中对、入蜀 =====
+
+# 取诸葛亮存为 global_var:hd_lbxz_zgl：先认开局收编的那位，没有再用历史人物。
+hd_lbxz_save_zgl_effect = {
+	if = {
+		limit = { exists = global_var:wj_hchar_zhu_ge_liang }
+		set_global_variable = { name = hd_lbxz_zgl value = global_var:wj_hchar_zhu_ge_liang }
+	}
+	else_if = {
+		limit = { exists = character:zhu_ge_liang }
+		set_global_variable = { name = hd_lbxz_zgl value = character:zhu_ge_liang }
+	}
+	else = { remove_global_variable = hd_lbxz_zgl }
+}
+
+# 结束三顾、隆中对节点时调用：撤销给诸葛亮的辞谢任命。
+hd_lbxz_zgl_close_effect = {
+	set_global_variable = hd_lbxz_zgl_resolved
+	global_var:hd_lbxz_zgl ?= {
+		if = {
+			limit = { is_alive = yes has_character_flag = hd_lbxz_zgl_refusing }
+			clear_appointment_timeout = yes
+			remove_character_flag = hd_lbxz_zgl_refusing
+		}
+	}
+}
+
+# 节点 4、5 的每月入口。Scope：刘备。
+hd_lbxz_zgl_tick_effect = {
+	# 第一次见到投刘表完成时起算一年；史实诸葛亮隐居不仕，无地的电脑诸葛亮先辞谢天朝任命。
+	if = {
+		limit = {
+			exists = global_var:hd_lbxz_jing_done
+			NOT = { exists = global_var:hd_lbxz_zgl_clock }
+		}
+		set_global_variable = hd_lbxz_zgl_clock
+		add_character_flag = { flag = hd_lbxz_zgl_wait days = 365 }
+		hd_lbxz_save_zgl_effect = yes
+		global_var:hd_lbxz_zgl ?= {
+			if = {
+				limit = { is_alive = yes is_ai = yes is_landed = no appointment_timeout_days = 0 }
+				# 只设到约 215 年三顾截止前后，刘备中途身死也会自行失效。
+				set_appointment_timeout = {
+					years = 15
+					desc = appointment_timeout_desc_refusing
+				}
+				add_character_flag = hd_lbxz_zgl_refusing
+			}
+		}
+	}
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_lbxz_zgl_pending }
+			hd_lbxz_zgl_ready_trigger = yes
+		}
+		hd_lbxz_open_zgl_effect = yes
+	}
+}
+
+hd_lbxz_open_zgl_effect = {
+	hd_lbxz_save_zgl_effect = yes
+	if = {
+		limit = { NOT = { global_var:hd_lbxz_zgl ?= { is_alive = yes } } }
+		hd_lbxz_zgl_close_effect = yes
+		set_global_variable = hd_lbxz_zgl_skipped
+		debug_log = "HD_LBXZ ZGL_SKIPPED_DEAD"
+	}
+	else_if = {
+		limit = { global_var:hd_lbxz_zgl = { is_ruler = no court_owner ?= character:liu_bei } }
+		hd_lbxz_longzhong_effect = yes
+	}
+	# 截止排在可请之前：可请但屡次入宫失败时，到 215 年同样跳过，入蜀照常。
+	else_if = {
+		limit = { current_date >= 215.1.1 }
+		hd_lbxz_zgl_close_effect = yes
+		set_global_variable = hd_lbxz_zgl_skipped
+		debug_log = "HD_LBXZ ZGL_SKIPPED_DEADLINE"
+	}
+	else_if = {
+		limit = { global_var:hd_lbxz_zgl = { hd_lbxz_zgl_recruitable_trigger = yes } }
+		set_global_variable = { name = hd_lbxz_zgl_pending value = yes days = 60 }
+		# 玩家刘备在 0400 允过一次后，之后的重试不再弹事件。
+		if = {
+			limit = {
+				character:liu_bei = { is_ai = no }
+				NOT = { exists = global_var:hd_lbxz_zgl_liu_agreed }
+			}
+			character:liu_bei = { trigger_event = hd_lbxz.0400 }
+		}
+		else = { hd_lbxz_zgl_visit_effect = yes }
+	}
+}
+
+# 刘备已决意三顾：玩家诸葛亮由他在 0401 决定出山与否（两人都是玩家时在此串行）。
+hd_lbxz_zgl_visit_effect = {
+	if = {
+		limit = { global_var:hd_lbxz_zgl ?= { is_ai = no } }
+		set_global_variable = { name = hd_lbxz_zgl_pending value = yes days = 60 }
+		global_var:hd_lbxz_zgl = { trigger_event = hd_lbxz.0401 }
+	}
+	else = { hd_lbxz_longzhong_effect = yes }
+}
+
+hd_lbxz_zgl_declined_effect = {
+	if = {
+		limit = { NOT = { exists = global_var:hd_lbxz_zgl_resolved } }
+		hd_lbxz_zgl_close_effect = yes
+		set_global_variable = hd_lbxz_zgl_skipped
+		debug_log = "HD_LBXZ ZGL_DECLINED"
+	}
+	remove_global_variable = hd_lbxz_zgl_pending
+}
+
+# 诸葛亮交地入宫。Scope：诸葛亮。
+# 接收人：有上级交上级；独立（只会是玩家诸葛亮）交刘备。电脑诸葛亮的世族无人可接时什么都不动，等到截止。
+# 先让玩家直属封臣独立，再分两次事务转县级以上头衔与残留普通头衔，销毁营地等无地类头衔，无地后入刘备宫廷。
+hd_lbxz_zgl_unland_effect = {
+	save_scope_as = hd_lbxz_zgl_unland
+	if = {
+		limit = { any_held_title = { is_noble_family_title = yes } }
+		house ?= {
+			random_house_member = {
+				limit = {
+					is_alive = yes
+					is_adult = yes
+					is_male = yes
+					is_ai = yes
+					NOT = { this = scope:hd_lbxz_zgl_unland }
+					NOT = { this = character:liu_bei }
+				}
+				save_scope_as = hd_lbxz_zgl_heir
+			}
+		}
+	}
+	if = {
+		limit = {
+			is_ai = yes
+			any_held_title = { is_noble_family_title = yes }
+			NOT = { exists = scope:hd_lbxz_zgl_heir }
+		}
+		debug_log = "HD_LBXZ ZGL_FAMILY_NO_HEIR"
+	}
+	else = {
+		if = {
+			limit = { liege ?= { NOT = { this = scope:hd_lbxz_zgl_unland } } }
+			liege = { save_scope_as = hd_lbxz_zgl_recipient }
+		}
+		else = { character:liu_bei = { save_scope_as = hd_lbxz_zgl_recipient } }
+		# 世族头衔：有人接就交出，玩家诸葛亮无人可接则废除。
+		if = {
+			limit = { exists = scope:hd_lbxz_zgl_heir }
+			create_title_and_vassal_change = { type = granted save_scope_as = hd_lbxz_zgl_family_change add_claim_on_loss = no }
+			every_held_title = {
+				limit = { is_noble_family_title = yes }
+				change_title_holder_include_vassals = { holder = scope:hd_lbxz_zgl_heir change = scope:hd_lbxz_zgl_family_change }
+			}
+			resolve_title_and_vassal_change = scope:hd_lbxz_zgl_family_change
+			debug_log = "HD_LBXZ ZGL_FAMILY_HANDED_OVER"
+		}
+		else_if = {
+			limit = { any_held_title = { is_noble_family_title = yes } }
+			every_held_title = {
+				limit = { is_noble_family_title = yes }
+				save_scope_as = hd_lbxz_zgl_family_title
+				scope:hd_lbxz_zgl_unland = { destroy_title = scope:hd_lbxz_zgl_family_title }
+			}
+			debug_log = "HD_LBXZ ZGL_FAMILY_DESTROYED_PLAYER"
+		}
+		# 玩家直属封臣先独立，不随头衔改投。
+		every_vassal = {
+			limit = { is_alive = yes is_ai = no }
+			add_to_list = hd_lbxz_zgl_player_vassals
+		}
+		if = {
+			limit = { any_in_list = { list = hd_lbxz_zgl_player_vassals always = yes } }
+			create_title_and_vassal_change = { type = independency save_scope_as = hd_lbxz_zgl_player_release add_claim_on_loss = no }
+			every_in_list = {
+				list = hd_lbxz_zgl_player_vassals
+				becomes_independent = { change = scope:hd_lbxz_zgl_player_release }
+			}
+			resolve_title_and_vassal_change = scope:hd_lbxz_zgl_player_release
+		}
+		# 第一次事务：县级以上普通头衔，连同其下电脑封臣。
+		if = {
+			limit = { any_held_title = { tier >= tier_county is_noble_family_title = no is_landless_type_title = no } }
+			create_title_and_vassal_change = { type = granted save_scope_as = hd_lbxz_zgl_land_change add_claim_on_loss = no }
+			every_held_title = {
+				limit = { tier >= tier_county is_noble_family_title = no is_landless_type_title = no }
+				change_title_holder_include_vassals = { holder = scope:hd_lbxz_zgl_recipient change = scope:hd_lbxz_zgl_land_change }
+			}
+			resolve_title_and_vassal_change = scope:hd_lbxz_zgl_land_change
+		}
+		# 第二次事务：清扫残留的普通男爵领。
+		if = {
+			limit = { any_held_title = { is_noble_family_title = no is_landless_type_title = no } }
+			create_title_and_vassal_change = { type = granted save_scope_as = hd_lbxz_zgl_sweep_change add_claim_on_loss = no }
+			every_held_title = {
+				limit = { is_noble_family_title = no is_landless_type_title = no }
+				change_title_holder = { holder = scope:hd_lbxz_zgl_recipient change = scope:hd_lbxz_zgl_sweep_change }
+			}
+			resolve_title_and_vassal_change = scope:hd_lbxz_zgl_sweep_change
+		}
+		# 营地等无地类头衔销毁。
+		every_held_title = {
+			limit = { is_landless_type_title = yes }
+			save_scope_as = hd_lbxz_zgl_landless_title
+			scope:hd_lbxz_zgl_unland = { destroy_title = scope:hd_lbxz_zgl_landless_title }
+		}
+		if = {
+			limit = { scope:hd_lbxz_zgl_recipient = { this = character:liu_bei } }
+			character:liu_bei = { hd_lbxz_shu_landed_fix_effect = yes }
+		}
+		if = {
+			limit = { is_alive = yes is_ruler = no }
+			set_employer = character:liu_bei
+		}
+	}
+}
+
+# 节点 5：隆中对。诸葛亮入刘备宫廷，结为至交。
+hd_lbxz_longzhong_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_lbxz_zgl_resolved }
+			global_var:hd_lbxz_zgl ?= {
+				OR = {
+					court_owner ?= character:liu_bei
+					hd_lbxz_zgl_recruitable_trigger = yes
+				}
+			}
+			character:liu_bei = { is_alive = yes is_ruler = yes }
+		}
+		global_var:hd_lbxz_zgl = { save_scope_as = hd_lbxz_zgl_s }
+		scope:hd_lbxz_zgl_s = {
+			if = {
+				limit = { is_imprisoned = yes imprisoner ?= { is_ai = yes } }
+				release_from_prison = yes
+			}
+			if = {
+				limit = { is_ruler = yes }
+				hd_lbxz_zgl_unland_effect = yes
+			}
+		}
+		if = {
+			limit = {
+				scope:hd_lbxz_zgl_s = {
+					is_ruler = no
+					NOT = { court_owner ?= character:liu_bei }
+				}
+			}
+			character:liu_bei = { add_courtier = scope:hd_lbxz_zgl_s }
+		}
+		if = {
+			limit = { scope:hd_lbxz_zgl_s = { is_ruler = no court_owner ?= character:liu_bei } }
+			character:liu_bei = {
+				if = {
+					limit = { has_relation_nemesis = scope:hd_lbxz_zgl_s }
+					remove_relation_nemesis = scope:hd_lbxz_zgl_s
+				}
+				if = {
+					limit = { has_relation_rival = scope:hd_lbxz_zgl_s }
+					remove_relation_rival = scope:hd_lbxz_zgl_s
+				}
+				if = {
+					limit = { NOT = { has_relation_best_friend = scope:hd_lbxz_zgl_s } }
+					set_relation_best_friend = { reason = best_friend_counsel_and_support copy_reason = friend target = scope:hd_lbxz_zgl_s }
+				}
+			}
+			if = {
+				limit = { character:liu_bei = { has_relation_best_friend = scope:hd_lbxz_zgl_s } }
+				debug_log = "HD_LBXZ LONGZHONG_BEST_FRIEND"
+			}
+			else = { debug_log = "HD_LBXZ LONGZHONG_BEST_FRIEND_FAILED" }
+			# 若已入 WJ 隐士，走唯一出山出口。
+			scope:hd_lbxz_zgl_s = {
+				if = { limit = { has_trait = WJ_yangwang_trait } WJ_yangwang_exit_effect = yes }
+			}
+			hd_lbxz_zgl_close_effect = yes
+			set_global_variable = hd_lbxz_longzhong_done
+			debug_log = "HD_LBXZ LONGZHONG_DONE"
+			character:liu_bei = {
+				if = { limit = { is_ai = no } trigger_event = hd_lbxz.0410 }
+			}
+		}
+		else_if = {
+			limit = { scope:hd_lbxz_zgl_s = { is_ai = no } }
+			# 玩家选了出山仍没能入宫：不再反复弹事件，按跳过处理。
+			hd_lbxz_zgl_close_effect = yes
+			set_global_variable = hd_lbxz_zgl_skipped
+			debug_log = "HD_LBXZ LONGZHONG_PLAYER_JOIN_FAILED"
+		}
+		else = { debug_log = "HD_LBXZ LONGZHONG_JOIN_FAILED_RETRY" }
+	}
+	remove_global_variable = hd_lbxz_zgl_pending
+}
+
+# 刘备一有地：补天朝制、销毁营地头衔、60 天内每月复查政体（同第一段）。Scope：刘备。
+hd_lbxz_shu_landed_fix_effect = {
+	if = {
+		limit = { is_alive = yes is_landed = yes }
+		hd_force_celestial_effect = yes
+		hd_lbxz_destroy_camp_title_effect = yes
+		add_character_flag = { flag = hd_lbxz_gov_check days = 60 }
+	}
+}
+
+# 节点 6、7 的每月入口。Scope：刘备。
+hd_lbxz_shu_tick_effect = {
+	# 战后判定：入蜀之战已不在刘备的战争中（胜、负、白和、作废都算结束）。
+	if = {
+		limit = {
+			exists = global_var:hd_lbxz_shu_war_started
+			NOT = { any_character_war = { var:hd_world_war_kind ?= flag:lb_yizhou } }
+		}
+		remove_global_variable = hd_lbxz_shu_war_started
+		hd_lbxz_shu_landed_fix_effect = yes
+		if = {
+			limit = {
+				title:c_uuii_p_4282.holder ?= {
+					OR = {
+						this = character:liu_bei
+						target_is_liege_or_above = character:liu_bei
+					}
+				}
+			}
+			debug_log = "HD_LBXZ SHU_CHENGDU_TAKEN"
+			set_global_variable = hd_hev_184_lbxz_chengdu
+			hd_lbxz_shu_after_win_effect = yes
+		}
+		else_if = {
+			limit = { global_var:hd_lbxz_shu_tries >= 2 }
+			set_global_variable = hd_lbxz_shu_done
+			debug_log = "HD_LBXZ SHU_GAVE_UP"
+		}
+		else = {
+			add_character_flag = { flag = hd_lbxz_shu_cooldown years = 3 }
+			debug_log = "HD_LBXZ SHU_WAR_LOST"
+		}
+	}
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_lbxz_shu_pending }
+			hd_lbxz_shu_ready_trigger = yes
+		}
+		hd_lbxz_open_shu_effect = yes
+	}
+}
+
+hd_lbxz_open_shu_effect = {
+	set_global_variable = { name = hd_lbxz_shu_pending value = yes days = 60 }
+	# 玩家刘备在 0500 允过一次后，开战失败的重试不再弹事件。
+	if = {
+		limit = {
+			character:liu_bei = { is_ai = no }
+			NOT = { exists = global_var:hd_lbxz_shu_liu_agreed }
+		}
+		character:liu_bei = { trigger_event = hd_lbxz.0500 }
+	}
+	else = { hd_lbxz_shu_start_effect = yes }
+}
+
+hd_lbxz_shu_declined_effect = {
+	if = {
+		limit = { NOT = { exists = global_var:hd_lbxz_shu_done } }
+		set_global_variable = hd_lbxz_shu_done
+		debug_log = "HD_LBXZ SHU_DECLINED"
+	}
+	remove_global_variable = hd_lbxz_shu_pending
+}
+
+# 刘备若仍是封臣先独立，与原领主互给停战；宣战回读成功后补兵。目标在此重新取。
+hd_lbxz_shu_start_effect = {
+	if = {
+		limit = { hd_lbxz_shu_ready_trigger = yes }
+		title:c_uuii_p_4282.holder.top_liege = { save_scope_as = hd_lbxz_shu_target }
+		character:liu_bei = {
+			# 冒险者本就独立，自然跳过这一步。
+			if = {
+				limit = { is_independent_ruler = no }
+				liege = { save_scope_as = hd_lbxz_shu_old_liege }
+				create_title_and_vassal_change = { type = independency save_scope_as = hd_lbxz_shu_indep_change add_claim_on_loss = no }
+				becomes_independent = { change = scope:hd_lbxz_shu_indep_change }
+				resolve_title_and_vassal_change = scope:hd_lbxz_shu_indep_change
+				if = {
+					limit = { is_independent_ruler = yes }
+					debug_log = "HD_LBXZ SHU_INDEPENDENT"
+					# 原领主就是益州之主或在其阵营内时不给停战，免得宣战即毁约。
+					if = {
+						limit = {
+							NOT = { is_at_war_with = scope:hd_lbxz_shu_old_liege }
+							scope:hd_lbxz_shu_old_liege = {
+								NOT = { this = scope:hd_lbxz_shu_target }
+								NOT = { top_liege = scope:hd_lbxz_shu_target }
+							}
+						}
+						add_truce_both_ways = {
+							character = scope:hd_lbxz_shu_old_liege
+							years = 5
+							name = hd_lbxz_shu_truce
+						}
+					}
+					scope:hd_lbxz_shu_old_liege = {
+						if = { limit = { is_ai = no } trigger_event = hd_lbxz.0501 }
+					}
+				}
+			}
+			if = {
+				limit = { is_independent_ruler = yes }
+				hd_tb_arm_effect = { KIND = historical }
+				start_war = {
+					cb = hd_dc_tunbing_cb
+					target = scope:hd_lbxz_shu_target
+					target_title = title:d_shujun
+				}
+				random_character_war = {
+					limit = {
+						hd_tb_is_war_trigger = { K = historical }
+						primary_attacker = character:liu_bei
+						primary_defender = scope:hd_lbxz_shu_target
+					}
+					set_variable = { name = hd_world_war_kind value = flag:lb_yizhou }
+					save_scope_as = hd_lbxz_shu_war
+				}
+			}
+			if = {
+				limit = { any_character_war = { var:hd_world_war_kind ?= flag:lb_yizhou } }
+				if = {
+					limit = { NOT = { exists = global_var:hd_lbxz_shu_tries } }
+					set_global_variable = { name = hd_lbxz_shu_tries value = 0 }
+				}
+				change_global_variable = { name = hd_lbxz_shu_tries add = 1 }
+				set_global_variable = hd_lbxz_shu_war_started
+				set_global_variable = { name = hd_lbxz_shu_lord value = scope:hd_lbxz_shu_target }
+				scope:hd_lbxz_shu_target.primary_title ?= {
+					set_global_variable = { name = hd_lbxz_shu_lord_title value = this }
+				}
+				# 兵力取益州之主最大兵力的一半，6000 至 30000；有地在都城，无地在营地所在县。
+				if = {
+					limit = { exists = capital_county }
+					capital_county = { save_scope_as = hd_lbxz_shu_army_county }
+				}
+				else = {
+					domicile.domicile_location.county ?= { save_scope_as = hd_lbxz_shu_army_county }
+				}
+				if = {
+					limit = {
+						exists = scope:hd_lbxz_shu_army_county
+						exists = scope:hd_lbxz_shu_war
+					}
+					spawn_army = {
+						levies = {
+							value = scope:hd_lbxz_shu_target.max_military_strength
+							multiply = 0.5
+							min = 6000
+							max = 30000
+						}
+						location = scope:hd_lbxz_shu_army_county.title_province
+						origin = scope:hd_lbxz_shu_army_county.title_province
+						inheritable = no
+						uses_supply = yes
+						war = scope:hd_lbxz_shu_war
+						name = hd_lbxz_shu_army_name
+					}
+				}
+				debug_log = "HD_LBXZ SHU_WAR_STARTED"
+			}
+			else = { debug_log = "HD_LBXZ SHU_WAR_START_FAILED_RETRY" }
+		}
+	}
+	remove_global_variable = hd_lbxz_shu_pending
+}
+
+# 拿下成都后：益州之主出降。存的人已死或已不合条件时，改认其原主头衔的现任持有人。玩家益州之主可以拒绝。
+hd_lbxz_shu_after_win_effect = {
+	if = {
+		limit = {
+			NOT = { global_var:hd_lbxz_shu_lord ?= { hd_lbxz_shu_lord_valid_trigger = yes } }
+			exists = global_var:hd_lbxz_shu_lord_title
+			global_var:hd_lbxz_shu_lord_title.holder ?= { hd_lbxz_shu_lord_valid_trigger = yes }
+		}
+		set_global_variable = { name = hd_lbxz_shu_lord value = global_var:hd_lbxz_shu_lord_title.holder }
+		debug_log = "HD_LBXZ SHU_LORD_REPLACED_BY_HEIR"
+	}
+	if = {
+		limit = { global_var:hd_lbxz_shu_lord ?= { hd_lbxz_shu_lord_valid_trigger = yes } }
+		if = {
+			limit = { global_var:hd_lbxz_shu_lord = { is_ai = no } }
+			set_global_variable = { name = hd_lbxz_shu_pending value = yes days = 60 }
+			global_var:hd_lbxz_shu_lord = { trigger_event = hd_lbxz.0510 }
+		}
+		else = { hd_lbxz_shu_surrender_effect = yes }
+	}
+	else = {
+		debug_log = "HD_LBXZ SHU_SURRENDER_SKIPPED"
+		hd_lbxz_shu_finish_effect = yes
+	}
+}
+
+# 节点 7：益州之主交出全部县级以上普通头衔与电脑直属封臣，玩家直属封臣先独立；转完不再是统治者才入刘备宫廷。
+hd_lbxz_shu_surrender_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_lbxz_shu_done }
+			character:liu_bei = { is_alive = yes is_ruler = yes }
+			global_var:hd_lbxz_shu_lord ?= { hd_lbxz_shu_lord_valid_trigger = yes }
+		}
+		global_var:hd_lbxz_shu_lord = { save_scope_as = hd_lbxz_shu_lord_s }
+		scope:hd_lbxz_shu_lord_s = {
+			if = { limit = { is_imprisoned = yes } release_from_prison = yes }
+			every_vassal = {
+				limit = { is_alive = yes }
+				if = {
+					limit = { is_ai = yes }
+					add_to_list = hd_lbxz_shu_ai_vassals
+				}
+				else = { add_to_list = hd_lbxz_shu_player_vassals }
+			}
+		}
+		if = {
+			limit = { any_in_list = { list = hd_lbxz_shu_player_vassals always = yes } }
+			create_title_and_vassal_change = { type = independency save_scope_as = hd_lbxz_shu_player_release add_claim_on_loss = no }
+			every_in_list = {
+				list = hd_lbxz_shu_player_vassals
+				becomes_independent = { change = scope:hd_lbxz_shu_player_release }
+			}
+			resolve_title_and_vassal_change = scope:hd_lbxz_shu_player_release
+		}
+		# 第一次事务：县级以上普通头衔（男爵领随县走）与电脑直属封臣。
+		create_title_and_vassal_change = { type = conquest save_scope_as = hd_lbxz_shu_change add_claim_on_loss = no }
+		every_in_list = {
+			list = hd_lbxz_shu_ai_vassals
+			change_liege = { liege = character:liu_bei change = scope:hd_lbxz_shu_change }
+		}
+		scope:hd_lbxz_shu_lord_s = {
+			every_held_title = {
+				limit = {
+					tier >= tier_county
+					is_noble_family_title = no
+					is_landless_type_title = no
+				}
+				change_title_holder = {
+					holder = character:liu_bei
+					change = scope:hd_lbxz_shu_change
+					take_baronies = yes
+				}
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_lbxz_shu_change
+		# 第二次事务：清扫残留的普通男爵领。
+		if = {
+			limit = {
+				scope:hd_lbxz_shu_lord_s = {
+					any_held_title = { is_noble_family_title = no is_landless_type_title = no }
+				}
+			}
+			create_title_and_vassal_change = { type = conquest save_scope_as = hd_lbxz_shu_sweep_change add_claim_on_loss = no }
+			scope:hd_lbxz_shu_lord_s = {
+				every_held_title = {
+					limit = { is_noble_family_title = no is_landless_type_title = no }
+					change_title_holder = { holder = character:liu_bei change = scope:hd_lbxz_shu_sweep_change }
+				}
+			}
+			resolve_title_and_vassal_change = scope:hd_lbxz_shu_sweep_change
+		}
+		if = {
+			limit = { scope:hd_lbxz_shu_lord_s = { is_alive = yes is_ruler = no } }
+			character:liu_bei = { add_courtier = scope:hd_lbxz_shu_lord_s }
+			debug_log = "HD_LBXZ SHU_SURRENDERED"
+		}
+		else = { debug_log = "HD_LBXZ SHU_SURRENDER_LORD_STILL_RULER" }
+	}
+	hd_lbxz_shu_finish_effect = yes
+	remove_global_variable = hd_lbxz_shu_pending
+}
+
+hd_lbxz_shu_surrender_refused_effect = {
+	debug_log = "HD_LBXZ SHU_SURRENDER_REFUSED"
+	hd_lbxz_shu_finish_effect = yes
+	remove_global_variable = hd_lbxz_shu_pending
+}
+
+# 收尾：补政体，刘备本人持有成都才迁都，检查封臣层级，结束入蜀。
+hd_lbxz_shu_finish_effect = {
+	if = {
+		limit = { NOT = { exists = global_var:hd_lbxz_shu_done } }
+		character:liu_bei = {
+			hd_lbxz_shu_landed_fix_effect = yes
+			if = {
+				limit = { is_alive = yes has_title = title:c_uuii_p_4282 }
+				set_realm_capital = title:c_uuii_p_4282
+			}
+			else_if = {
+				limit = { title:c_uuii_p_4282.holder ?= { target_is_liege_or_above = character:liu_bei } }
+				debug_log = "HD_LBXZ SHU_CAPITAL_HELD_BY_VASSAL"
+			}
+			if = {
+				limit = {
+					is_alive = yes
+					any_vassal = { highest_held_title_tier >= character:liu_bei.highest_held_title_tier }
+				}
+				debug_log = "HD_LBXZ SHU_VASSAL_TIER_WARN"
+			}
+		}
+		set_global_variable = hd_lbxz_shu_done
+		debug_log = "HD_LBXZ SHU_DONE"
+	}
+}

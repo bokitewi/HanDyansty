@@ -503,6 +503,8 @@ hd_sg218_check_hanzhong_result_effect = {
 # 再设 hd_sg218_hanzhong_won，下次心跳走汉中归属（0060）和夺取东三郡。
 # 魏王是玩家时发 0066 让他选割让或拒绝；魏国一方有玩家持汉中的县时不兜底。不兜底就按刘备未胜处理，改走吕蒙袭荆州（E）
 hd_sg218_check_hanzhong_invalid_effect = {
+	# 魏主：魏国持有者，受禅销毁魏国后为天子（boki 10-25）
+	hd_sg218_save_wei_ruler_effect = yes
 	if = {
 		limit = {
 			OR = {
@@ -512,7 +514,7 @@ hd_sg218_check_hanzhong_invalid_effect = {
 			NOT = { has_global_variable = hd_sg218_hanzhong_won }
 			NOT = { has_global_variable = hd_sg218_hanzhong_result_done }
 			exists = global_var:hd218_hanzhong_title.holder
-			exists = title:e_hd218_wei.holder
+			exists = scope:hd_sg218_wei_ruler
 		}
 		if = {
 			limit = { has_global_variable = hd_sg218_hanzhong_invalid }
@@ -523,28 +525,28 @@ hd_sg218_check_hanzhong_invalid_effect = {
 			remove_global_variable = hd_sg218_hanzhong_white
 		}
 		if = {
-			limit = { title:e_hd218_wei.holder = { is_ai = no } }
+			limit = { scope:hd_sg218_wei_ruler = { is_ai = no } }
 			set_global_variable = { name = hd_sg218_hanzhong_asking value = yes days = 60 }
 			debug_log = "HD218 HANZHONG WHITE_OR_INVALID ASK_WEI_PLAYER"
-			title:e_hd218_wei.holder = { trigger_event = hd_sg218.0066 }
+			scope:hd_sg218_wei_ruler = { trigger_event = hd_sg218.0066 }
 		}
 		else_if = {
 			limit = {
 				OR = {
 					title:d_hanzhong.holder ?= {
 						is_ai = no
-						is_vassal_or_below_of = title:e_hd218_wei.holder
+						is_vassal_or_below_of = scope:hd_sg218_wei_ruler
 					}
 					title:d_hanzhong = {
 						any_in_de_jure_hierarchy = {
 							tier = tier_county
 							holder ?= {
-								is_vassal_or_below_of = title:e_hd218_wei.holder
+								is_vassal_or_below_of = scope:hd_sg218_wei_ruler
 								OR = {
 									is_ai = no
 									any_liege_or_above = {
 										is_ai = no
-										NOT = { this = title:e_hd218_wei.holder }
+										NOT = { this = scope:hd_sg218_wei_ruler }
 									}
 								}
 							}
@@ -561,15 +563,17 @@ hd_sg218_check_hanzhong_invalid_effect = {
 }
 
 # 魏国一方把汉中郡里的县交给蜀主，记为汉中之战刘备胜。兜底和 0066 选项 a 用。Root：任意
+# 魏国一方 = 魏主（魏国持有者，受禅销毁魏国后为天子，boki 10-25）
 hd_sg218_hanzhong_cede_effect = {
+	hd_sg218_save_wei_ruler_effect = yes
 	if = {
 		limit = {
 			exists = global_var:hd218_hanzhong_title.holder
-			exists = title:e_hd218_wei.holder
+			exists = scope:hd_sg218_wei_ruler
 		}
 		set_global_variable = hd_sg218_hanzhong_won
 		global_var:hd218_hanzhong_title.holder = { save_scope_as = hd_sg218_annexer }
-		title:e_hd218_wei.holder = { save_scope_as = hd_sg218_annex_from }
+		scope:hd_sg218_wei_ruler = { save_scope_as = hd_sg218_annex_from }
 		create_title_and_vassal_change = { type = conquest save_scope_as = hd_sg218_annex_change add_claim_on_loss = no }
 		hd_sg218_annex_duchy_effect = { DUCHY = title:d_hanzhong }
 		resolve_title_and_vassal_change = scope:hd_sg218_annex_change
@@ -781,6 +785,53 @@ hd_sg218_xiangfan_war_effect = {
 		limit = { exists = scope:hd_sg218_war_xiangfan }
 		# 白衣渡江至少等三个月
 		set_global_variable = { name = hd_sg218_baiyi_wait value = yes days = 90 }
+	}
+}
+
+# 关羽事件兵（boki 10-25）：218 开局在关羽首府发 1000 披甲步兵，不绑战争、不可继承。
+# 由 hd_sg218_history_start 调用（开局一次）
+hd_sg218_guan_yu_troops_effect = {
+	character:guan_yu ?= {
+		if = {
+			limit = {
+				hd_history_events_enabled_trigger = yes
+				is_alive = yes
+				is_landed = yes
+				exists = capital_province
+			}
+			spawn_army = {
+				name = hd218_guan_yu_jingzhou_army
+				men_at_arms = { type = armored_footmen men = 1000 }
+				location = capital_province
+				origin = capital_province
+				uses_supply = yes
+				inheritable = no
+			}
+			debug_log = "HD218 GUAN_YU_TROOPS"
+		}
+	}
+}
+
+# 襄樊首战受伤（boki 10-25）：关羽作统帅或骑士参加的第一场襄樊之战战斗结束即轻伤，不论胜负，一次；
+# 已带伤不再加重。7 天后直接查刮骨疗毒。由 hd_sg218_xiangfan_combat_end 调用
+hd_sg218_xiangfan_wound_effect = {
+	set_global_variable = hd_sg218_xiangfan_wound_done
+	character:guan_yu ?= {
+		if = {
+			limit = { is_alive = yes }
+			if = {
+				limit = {
+					NOR = {
+						has_trait = wounded_1
+						has_trait = wounded_2
+						has_trait = wounded_3
+					}
+				}
+				add_trait = wounded_1
+			}
+			debug_log = "HD218 XIANGFAN GUAN_YU_WOUNDED"
+			trigger_event = { on_action = hd_sg218_guagu_check days = 7 }
+		}
 	}
 }
 
@@ -1077,7 +1128,8 @@ hd_sg218_create_hua_tuo_effect = {
 }
 
 ############################################################
-# 刮骨疗毒（boki 10-18）：关羽受伤、华佗在世，一次
+# 刮骨疗毒（boki 10-18）：关羽受伤，一次。
+# 10-25 起不再要求华佗在世：华佗已死、被囚或从未生成，就先新建一个（hd_sg218_guagu_hua_tuo_effect）
 ############################################################
 hd_sg218_check_guagu_effect = {
 	if = {
@@ -1092,14 +1144,56 @@ hd_sg218_check_guagu_effect = {
 					has_trait = wounded_3
 				}
 			}
-			global_var:hd_sg218_hua_tuo ?= {
-				is_alive = yes
-				is_imprisoned = no
-			}
 		}
 		set_global_variable = hd_sg218_guagu_done
+		hd_sg218_guagu_hua_tuo_effect = yes
 		debug_log = "HD218 GUAGU"
 		character:guan_yu = { trigger_event = hd_sg218.0096 }
+	}
+}
+
+# 刮骨疗毒前补华佗（boki 10-25）：现有华佗已死、被囚或从未生成时，在关羽所在地新建一个游方华佗（不归任何人），
+# 改记为 global_var:hd_sg218_hua_tuo，之后开颅也用他；旧华佗若仍在世（被囚）令其消失，只留一个
+hd_sg218_guagu_hua_tuo_effect = {
+	if = {
+		limit = {
+			NOT = {
+				global_var:hd_sg218_hua_tuo ?= {
+					is_alive = yes
+					is_imprisoned = no
+				}
+			}
+		}
+		global_var:hd_sg218_hua_tuo ?= {
+			if = {
+				limit = { is_alive = yes }
+				death = { death_reason = death_vanished }
+			}
+		}
+		create_character = {
+			name = uuii_book_hua_tuo_name
+			age = 74
+			gender_female_chance = 0
+			random_traits = no
+			trait = historical_character
+			culture = culture:han
+			faith = character:guan_yu.faith
+			dynasty_house = house:uuii_book_house_d146232eeee8
+			location = character:guan_yu.location
+			diplomacy = 7
+			martial = 3
+			stewardship = 7
+			intrigue = 7
+			learning = 20
+			prowess = 6
+			save_scope_as = hd_sg218_guagu_new_hua_tuo
+		}
+		scope:hd_sg218_guagu_new_hua_tuo = {
+			set_character_rite = rite:jingxue
+			add_character_modifier = { modifier = hd_sg218_wuqinxi_modifier }
+		}
+		set_global_variable = { name = hd_sg218_hua_tuo value = scope:hd_sg218_guagu_new_hua_tuo }
+		debug_log = "HD218 GUAGU HUA_TUO RECREATED"
 	}
 }
 
@@ -1351,7 +1445,11 @@ hd_sg218_wei_succession_effect = {
 	if = {
 		limit = { exists = global_var:hd218_wei_wang_title }
 		if = {
-			limit = { NOT = { primary_title ?= global_var:hd218_wei_wang_title } }
+			limit = {
+				# 魏国可能已在篡位决议、WJ 禅让里销毁（boki 10-25）
+				has_title = global_var:hd218_wei_wang_title
+				NOT = { primary_title ?= global_var:hd218_wei_wang_title }
+			}
 			set_primary_title_to = global_var:hd218_wei_wang_title
 		}
 	}
@@ -1493,12 +1591,8 @@ hd_sg218_shouchan_effect = {
 			debug_log = "HD218 SHOUCHAN PRIMARY_H_CHINA"
 		}
 		else = { debug_log = "HD218 SHOUCHAN NO_H_CHINA" }
-		# 受禅后曹丕应仍持魏国（e_han 处理复核）
-		if = {
-			limit = { has_title = title:e_hd218_wei }
-			debug_log = "HD218 SHOUCHAN WEI_KEPT"
-		}
-		else = { debug_log = "HD218 SHOUCHAN WEI_LOST" }
+		# 受禅后销毁魏国（boki 10-25：留着曹丕总把它封出去）
+		hd_sg218_destroy_wei_effect = yes
 		# 国号"魏"（记到曹氏王朝上），3 天后复查一次，防天命交接的命名事件覆盖（照 263 魏晋禅代）
 		hd_sg218_wei_name_effect = yes
 		title:h_china = { trigger_event = { on_action = hd_sg218_wei_name_recheck days = 3 } }
@@ -1508,6 +1602,69 @@ hd_sg218_shouchan_effect = {
 		hd_world_news_send_skip_both_effect = { EVENT = hd_sg218.0620 }
 	}
 	else = { debug_log = "HD218 SHOUCHAN SKIPPED" }
+}
+
+# 销毁魏国（boki 10-25）：受禅时不论在谁手里都销毁。九州法理仍挂在未建的魏国下，can_create = no 不会重建；
+# 魏国 rank 2 且无 wj_rf_constituent_fief，WJ_rf_destroyed 钩子不动它。邺城的国都标记和世家继承法照
+# WJ_rf_restore_destroyed_fief 的收尾一并去掉。旧档已封出去的魏国不兜底（boki 选"只管新局"）。Root：曹丕
+hd_sg218_destroy_wei_effect = {
+	if = {
+		limit = { exists = title:e_hd218_wei.holder }
+		title:e_hd218_wei.holder = { save_scope_as = hd_sg218_wei_last_holder }
+		title:e_hd218_wei = {
+			remove_variable = wj_rf_rank
+			remove_variable = wj_rf_name_code
+			remove_variable = wj_rf_stem_capital
+		}
+		destroy_title = title:e_hd218_wei
+		# 魏主回退（hd_sg218_save_wei_ruler_effect、0066）看这个标记
+		set_global_variable = hd_sg218_wei_destroyed
+		scope:hd_sg218_wei_last_holder = {
+			if = {
+				limit = { is_alive = yes }
+				WJ_rf_refresh_holder = yes
+			}
+		}
+		if = {
+			limit = { scope:hd_sg218_wei_last_holder = root }
+			debug_log = "HD218 SHOUCHAN WEI_DESTROYED"
+		}
+		else = { debug_log = "HD218 SHOUCHAN WEI_DESTROYED OTHER_HOLDER" }
+	}
+	else = { debug_log = "HD218 SHOUCHAN WEI_NOT_HELD" }
+	title:c_uuii_p_1172 = {
+		if = {
+			limit = { var:wj_rf_capital_of ?= title:e_hd218_wei }
+			remove_variable = wj_rf_capital_of
+			remove_title_law = noble_family_succession_law
+			debug_log = "HD218 SHOUCHAN YECHENG_CLEARED"
+		}
+	}
+	# 法理复核：州仍挂魏国、魏国仍挂霸权
+	if = {
+		limit = {
+			title:k_uuii_sili = { target_is_de_jure_liege_or_above = title:e_hd218_wei }
+			title:e_hd218_wei = { target_is_de_jure_liege_or_above = title:h_china }
+		}
+		debug_log = "HD218 SHOUCHAN WEI_DEJURE OK"
+	}
+	else = { debug_log = "HD218 SHOUCHAN WEI_DEJURE BAD" }
+}
+
+# 魏主：魏国持有者；魏国销毁后改认天子（boki 10-25）。存为 scope:hd_sg218_wei_ruler，都不满足则不存
+hd_sg218_save_wei_ruler_effect = {
+	clear_saved_scope = hd_sg218_wei_ruler
+	if = {
+		limit = { exists = title:e_hd218_wei.holder }
+		title:e_hd218_wei.holder = { save_scope_as = hd_sg218_wei_ruler }
+	}
+	else_if = {
+		limit = {
+			has_global_variable = hd_sg218_wei_destroyed
+			exists = title:h_china.holder
+		}
+		title:h_china.holder = { save_scope_as = hd_sg218_wei_ruler }
+	}
 }
 
 # 国号"魏"：h_china 持有者是曹氏时设名并记到王朝上（照 hd263_jin_name_effect）

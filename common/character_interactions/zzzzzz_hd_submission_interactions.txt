@@ -68,10 +68,26 @@ hd_warlord_offer_vassalization_interaction = {
                 text = hd_sub_inbox_free_tt
                 hd_submission_inbox_free_trigger = { LIEGE = scope:actor }
             }
+            # 2026-10-25 归附谈判：对方正向别人请求归附，等那边谈完
+            custom_tooltip = {
+                text = hd_neg_not_petitioning_tt
+                NOT = { has_character_flag = hd_petition_outgoing_pending }
+            }
         }
     }
+    # 2026-10-25 归附谈判：窗口里预开价的数额
+    localization_values = {
+        HD_NEG_GOLD1 = scope:recipient.hd_neg_gold_amount_1_value
+        HD_NEG_GOLD2 = scope:recipient.hd_neg_gold_amount_2_value
+        HD_NEG_GOLD3 = scope:recipient.hd_neg_gold_amount_3_value
+        HD_NEG_PRESTIGE1 = hd_neg_prestige_amount_1_value
+        HD_NEG_PRESTIGE2 = hd_neg_prestige_amount_2_value
+        HD_NEG_INFLUENCE1 = hd_neg_influence_amount_1_value
+        HD_NEG_INFLUENCE2 = hd_neg_influence_amount_2_value
+    }
     ai_accept = {
-        base = -50
+        # 2026-10-25 归附谈判（boki 拍板）：-50 → -100，靠谈判条件补缺口
+        base = -100
         # 天朝循环大修：守成型战略 AI 更容易接受招降
         modifier = {
             desc = hd_strat_hold_accept_reason
@@ -317,6 +333,27 @@ hd_warlord_offer_vassalization_interaction = {
             trigger = { scope:recipient = { government_has_flag = government_is_clan } scope:religious_exemption_clan = yes }
             add = 30
         }
+        # 2026-10-25 归附谈判：所许条件（窗口预开价或 AI 预开价，二者择一）
+        modifier = {
+            desc = hd_neg_reason_gold
+            trigger = { hd_neg_gold_accept_value > 0 }
+            add = hd_neg_gold_accept_value
+        }
+        modifier = {
+            desc = hd_neg_reason_prestige
+            trigger = { hd_neg_prestige_accept_value > 0 }
+            add = hd_neg_prestige_accept_value
+        }
+        modifier = {
+            desc = hd_neg_reason_influence
+            trigger = { hd_neg_influence_accept_value > 0 }
+            add = hd_neg_influence_accept_value
+        }
+        modifier = {
+            desc = hd_neg_reason_warlord
+            trigger = { hd_neg_warlord_accept_value > 0 }
+            add = hd_neg_warlord_accept_value
+        }
         modifier = {
             desc = hd_sub_reason_absolute_refusal
             trigger = { scope:recipient = { hd_submission_ai_refuses_trigger = { LIEGE = scope:actor } } }
@@ -366,7 +403,63 @@ hd_warlord_offer_vassalization_interaction = {
         localization = no_exemption
         starts_enabled = { always = yes }
     }
-    on_send = { hidden_effect = { hd_submission_request_sent_effect = yes } }
+    # 2026-10-25 归附谈判（boki 拍板）：预先让步，一次只选一项；归附当日兑现
+    send_option = {
+        is_valid = { scope:actor = { gold >= scope:recipient.hd_neg_gold_amount_1_value } }
+        flag = hd_neg_o_gold1
+        localization = hd_neg_o_gold1
+        current_description = hd_neg_o_gold_desc
+    }
+    send_option = {
+        is_valid = { scope:actor = { gold >= scope:recipient.hd_neg_gold_amount_2_value } }
+        flag = hd_neg_o_gold2
+        localization = hd_neg_o_gold2
+        current_description = hd_neg_o_gold_desc
+    }
+    send_option = {
+        is_valid = { scope:actor = { gold >= scope:recipient.hd_neg_gold_amount_3_value } }
+        flag = hd_neg_o_gold3
+        localization = hd_neg_o_gold3
+        current_description = hd_neg_o_gold_desc
+    }
+    send_option = {
+        is_valid = { scope:actor = { prestige >= hd_neg_prestige_amount_1_value } }
+        flag = hd_neg_o_prestige1
+        localization = hd_neg_o_prestige1
+        current_description = hd_neg_o_prestige_desc
+    }
+    send_option = {
+        is_valid = { scope:actor = { prestige >= hd_neg_prestige_amount_2_value } }
+        flag = hd_neg_o_prestige2
+        localization = hd_neg_o_prestige2
+        current_description = hd_neg_o_prestige_desc
+    }
+    send_option = {
+        is_shown = { hd_neg_influence_applicable_trigger = { L = scope:actor V = scope:recipient } }
+        is_valid = { scope:actor = { influence >= hd_neg_influence_amount_1_value } }
+        flag = hd_neg_o_influence1
+        localization = hd_neg_o_influence1
+        current_description = hd_neg_o_influence_desc
+    }
+    send_option = {
+        is_shown = { hd_neg_influence_applicable_trigger = { L = scope:actor V = scope:recipient } }
+        is_valid = { scope:actor = { influence >= hd_neg_influence_amount_2_value } }
+        flag = hd_neg_o_influence2
+        localization = hd_neg_o_influence2
+        current_description = hd_neg_o_influence_desc
+    }
+    send_option = {
+        is_shown = { hd_neg_warlord_eligible_trigger = { L = scope:actor V = scope:recipient } }
+        flag = hd_neg_o_warlord
+        localization = hd_neg_o_warlord
+        current_description = hd_neg_o_warlord_desc
+    }
+    on_send = {
+        hidden_effect = {
+            hd_submission_request_sent_effect = yes
+            hd_neg_offer_sent_effect = yes
+        }
+    }
     on_accept = {
         custom_tooltip = hd_sub_accept_summary_tt
         # 实际结算在隐藏效果中（答复时复检合法性），此处仅展示成功后的主要效果。
@@ -375,11 +468,13 @@ hd_warlord_offer_vassalization_interaction = {
             scope:recipient = { add_character_modifier = { modifier = hd_submission_recently_submitted years = 5 } }
             scope:actor = { add_prestige = 50 }
         }
-        hidden_effect = { hd_submission_request_accepted_effect = yes }
+        custom_tooltip = hd_neg_accept_terms_tt
+        hidden_effect = { hd_neg_offer_accepted_effect = yes }
     }
     on_decline = {
         custom_tooltip = hd_sub_decline_summary_tt
-        hidden_effect = { hd_submission_request_declined_effect = yes }
+        custom_tooltip = hd_neg_decline_counter_tt
+        hidden_effect = { hd_neg_offer_declined_effect = yes }
     }
     on_blocked_effect = { hidden_effect = { hd_submission_request_declined_effect = yes } }
     ai_potential = {

@@ -1,0 +1,198 @@
+﻿# 佛教东传（hd_fo，2026-10-25）：高僧出场、接纳、移居的共用效果。设计见 docs/佛教东传_设计草案.md 第 7、13、14、21–23 项。
+# 共用 scope：hd_fo_place（史实城市所在省）、hd_fo_receiver（接纳者，可由调用方预先指定史实接纳者）、hd_fo_monk（高僧）。
+
+# 出场：未出过场才生成；生成后给接纳者礼遇 / 婉拒 / 驱逐的选择（AI 直接礼遇）。
+# ID = 人物键；PLACE = 史实城市的县头衔；AGE = 出场年龄。
+hd_fo_spawn_monk_effect = {
+	hd_fo_create_monk_effect = { ID = $ID$ PLACE = $PLACE$ AGE = $AGE$ }
+	if = {
+		limit = { exists = scope:hd_fo_monk }
+		hd_fo_offer_monk_effect = yes
+	}
+	hd_fo_clear_scopes_effect = yes
+}
+
+# 开局摆放：同上，但不弹选择（开局时史实上就在那里）。
+hd_fo_place_monk_effect = {
+	hd_fo_create_monk_effect = { ID = $ID$ PLACE = $PLACE$ AGE = $AGE$ }
+	hd_fo_clear_scopes_effect = yes
+}
+
+hd_fo_create_monk_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_fo_s_$ID$ } }
+		title:$PLACE$.title_province ?= { save_scope_as = hd_fo_place }
+		hd_fo_find_receiver_effect = yes
+		if = {
+			limit = { exists = scope:hd_fo_receiver }
+			hd_fo_make_$ID$_effect = { AGE = $AGE$ }
+			scope:hd_fo_monk ?= {
+				add_character_flag = hd_fo_monk
+				add_character_flag = hd_popclean_protect # 人口清除不选历史人物
+				set_global_variable = { name = hd_fo_p_$ID$ value = this }
+			}
+			set_global_variable = { name = hd_fo_s_$ID$ value = yes }
+			debug_log = "hd_fo: 高僧出场 $ID$"
+		}
+		else = {
+			debug_log = "hd_fo: 高僧出场失败，找不到接纳者 $ID$"
+		}
+	}
+}
+
+# 移居：已出场的高僧（global_var:hd_fo_p_<ID>）按 PLACE 重新找接纳者并移过去；不弹选择。
+# 调用方可预先存 hd_fo_receiver 指定史实接纳者。
+hd_fo_move_monk_effect = {
+	global_var:hd_fo_p_$ID$ ?= {
+		if = {
+			limit = { is_alive = yes }
+			save_scope_as = hd_fo_monk
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_fo_monk }
+		title:$PLACE$.title_province ?= { save_scope_as = hd_fo_place }
+		hd_fo_find_receiver_effect = yes
+		scope:hd_fo_receiver ?= {
+			if = {
+				limit = { NOT = { scope:hd_fo_monk = { is_courtier_of = scope:hd_fo_receiver } } }
+				add_courtier = scope:hd_fo_monk
+			}
+		}
+		debug_log = "hd_fo: 高僧移居 $ID$"
+	}
+	hd_fo_clear_scopes_effect = yes
+}
+
+hd_fo_clear_scopes_effect = {
+	clear_saved_scope = hd_fo_place
+	clear_saved_scope = hd_fo_receiver
+	clear_saved_scope = hd_fo_monk
+	clear_saved_scope = hd_fo_kingdom
+}
+
+# 接纳者：独立统治者、在世、没有灭佛标记、没婉拒或驱逐过这位高僧（第 21 项：只有灭佛君主算敌视佛教）。
+# 第 13 项退路：①调用方指定的史实接纳者 ②史实城市所在县持有者的最高领主 ③史实城市所在州里领地最大的独立君主 ④离史实城市最近的独立君主。
+hd_fo_find_receiver_effect = {
+	if = {
+		limit = {
+			exists = scope:hd_fo_receiver
+			NOT = { scope:hd_fo_receiver = { hd_fo_can_receive_trigger = yes } }
+		}
+		clear_saved_scope = hd_fo_receiver
+	}
+	if = {
+		limit = { NOT = { exists = scope:hd_fo_receiver } }
+		scope:hd_fo_place ?= {
+			county.holder.top_liege ?= {
+				if = {
+					limit = { hd_fo_can_receive_trigger = yes }
+					save_scope_as = hd_fo_receiver
+				}
+			}
+		}
+	}
+	if = {
+		limit = {
+			NOT = { exists = scope:hd_fo_receiver }
+			exists = scope:hd_fo_place.county.kingdom
+		}
+		scope:hd_fo_place.county.kingdom = { save_scope_as = hd_fo_kingdom }
+		ordered_independent_ruler = {
+			limit = {
+				hd_fo_can_receive_trigger = yes
+				any_realm_county = { kingdom = scope:hd_fo_kingdom }
+			}
+			order_by = realm_size
+			save_scope_as = hd_fo_receiver
+		}
+	}
+	if = {
+		limit = {
+			NOT = { exists = scope:hd_fo_receiver }
+			exists = scope:hd_fo_place
+		}
+		ordered_independent_ruler = {
+			limit = {
+				hd_fo_can_receive_trigger = yes
+				exists = capital_province
+			}
+			order_by = {
+				capital_province = { add = "squared_distance(scope:hd_fo_place)" }
+				multiply = -1
+			}
+			save_scope_as = hd_fo_receiver
+		}
+	}
+}
+
+# 交给接纳者：AI 直接礼遇；玩家弹出礼遇 / 婉拒 / 驱逐（hd_fo.0001）。
+hd_fo_offer_monk_effect = {
+	scope:hd_fo_receiver = {
+		if = {
+			limit = { is_ai = yes }
+			hd_fo_welcome_monk_effect = yes
+		}
+		else = {
+			trigger_event = hd_fo.0001
+		}
+	}
+}
+
+# 礼遇（接纳者作用域）：留在宫廷，虔诚 +100（第 23 项）。
+hd_fo_welcome_monk_effect = {
+	save_scope_as = hd_fo_welcomer
+	if = {
+		limit = { NOT = { scope:hd_fo_monk = { is_courtier_of = scope:hd_fo_welcomer } } }
+		add_courtier = scope:hd_fo_monk
+	}
+	add_piety = 100
+}
+
+# 婉拒（接纳者作用域）：记下，去下一家（按第 13 项退路，跳过已婉拒或驱逐的人）。
+hd_fo_refuse_monk_effect = {
+	save_scope_as = hd_fo_refuser
+	scope:hd_fo_monk = {
+		add_to_variable_list = { name = hd_fo_refused target = scope:hd_fo_refuser }
+		location = { save_scope_as = hd_fo_place }
+	}
+	clear_saved_scope = hd_fo_receiver
+	hd_fo_find_receiver_effect = yes
+	if = {
+		limit = { exists = scope:hd_fo_receiver }
+		scope:hd_fo_receiver = { add_courtier = scope:hd_fo_monk }
+		hd_fo_offer_monk_effect = yes
+	}
+	else = {
+		scope:hd_fo_monk = { move_to_pool = yes }
+	}
+}
+
+# 驱逐（接纳者作用域）：经学礼仪的封臣、朝臣 +10，境内佛教人物与各位高僧 −20，各 10 年（第 22 项）；然后同婉拒去下一家。
+hd_fo_expel_monk_effect = {
+	save_scope_as = hd_fo_expeller
+	every_vassal_or_below = {
+		limit = { rite = rite:jingxue }
+		add_opinion = { target = scope:hd_fo_expeller modifier = hd_fo_expelled_monk_jingxue_opinion }
+	}
+	every_courtier = {
+		limit = { rite = rite:jingxue }
+		add_opinion = { target = scope:hd_fo_expeller modifier = hd_fo_expelled_monk_jingxue_opinion }
+	}
+	every_vassal_or_below = {
+		limit = { faith.religion = religion:buddhism_religion }
+		add_opinion = { target = scope:hd_fo_expeller modifier = hd_fo_expelled_monk_buddhist_opinion }
+	}
+	every_courtier = {
+		limit = {
+			faith.religion = religion:buddhism_religion
+			NOT = { has_character_flag = hd_fo_monk }
+		}
+		add_opinion = { target = scope:hd_fo_expeller modifier = hd_fo_expelled_monk_buddhist_opinion }
+	}
+	every_living_character = {
+		limit = { has_character_flag = hd_fo_monk }
+		add_opinion = { target = scope:hd_fo_expeller modifier = hd_fo_expelled_monk_buddhist_opinion }
+	}
+	hd_fo_refuse_monk_effect = yes
+}

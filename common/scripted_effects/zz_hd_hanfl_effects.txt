@@ -1,0 +1,678 @@
+﻿# 汉代风味内容（2026-10-25）共用效果。计划：/mnt/project-files/汉代风味内容/汉代风味内容_计划.md
+# debug.log 关键词 HD_HANFL
+
+############################################################
+# 开局（on_game_start → hd_hanfl_game_start）
+############################################################
+hd_hanfl_game_start_effect = {
+	# D11：次日才开始响应得帝国头衔
+	title:h_china = { trigger_event = { on_action = hd_hanfl_dewu_arm days = 1 } }
+	hd_hanfl_dewu_prefill_all_effect = yes
+	# D9：开局播种淫祀（长期机制，不挂历史事件开关）
+	hd_hanfl_yinsi_seed_effect = yes
+	# 6.5：张机只在 190 开局新建（长期机制 5001 也用得到，不挂开关）
+	if = {
+		limit = { game_start_date = 190.1.1 }
+		hd_hanfl_create_zhang_ji_effect = yes
+	}
+	# 6.2：时间线（挂历史事件开关）
+	if = {
+		limit = { hd_history_events_enabled_trigger = yes }
+		hd_hanfl_timeline_start_effect = yes
+	}
+}
+
+############################################################
+# D11 定德运
+############################################################
+# Scope：王朝。开局静默预填，已有就不动
+hd_hanfl_dewu_prefill_effect = {
+	if = {
+		limit = { NOT = { has_variable = hd_hanfl_dewu } }
+		set_variable = { name = hd_hanfl_dewu value = flag:$DEWU$ }
+		add_dynasty_modifier = { modifier = hd_hanfl_dewu_$DEWU$_modifier }
+		# 天子王朝的德运另记一份，供下一位天子（受禅时可能没有前持有人）取前朝德运
+		if = {
+			limit = {
+				exists = title:h_china.holder.dynasty
+				title:h_china.holder.dynasty = this
+			}
+			set_global_variable = { name = hd_hanfl_last_tianzi_dewu value = flag:$DEWU$ }
+		}
+	}
+}
+
+hd_hanfl_dewu_prefill_all_effect = {
+	if = {
+		limit = { game_start_date = 22.11.13 }
+		character:wang_mang ?= { dynasty ?= { hd_hanfl_dewu_prefill_effect = { DEWU = tu } } }
+		character:liu_xiu ?= { dynasty ?= { hd_hanfl_dewu_prefill_effect = { DEWU = huo } } }
+	}
+	else_if = {
+		limit = {
+			OR = {
+				game_start_date = 89.1.30
+				game_start_date = 190.1.1
+				game_start_date = 218.1.1
+				game_start_date = 617.6.23
+			}
+		}
+		title:h_china.holder ?= { dynasty ?= { hd_hanfl_dewu_prefill_effect = { DEWU = huo } } }
+	}
+	else_if = {
+		limit = {
+			OR = {
+				game_start_date = 253.3.1
+				game_start_date = 263.9.20
+			}
+		}
+		title:h_china.holder ?= { dynasty ?= { hd_hanfl_dewu_prefill_effect = { DEWU = tu } } }
+	}
+	else_if = {
+		limit = {
+			OR = {
+				game_start_date = 304.11.20
+				game_start_date = 346.12.10
+				game_start_date = 370.2.13
+			}
+		}
+		title:h_china.holder ?= { dynasty ?= { hd_hanfl_dewu_prefill_effect = { DEWU = jin } } }
+	}
+	else_if = {
+		limit = { game_start_date = 531.7.1 }
+		title:h_china.holder ?= { dynasty ?= { hd_hanfl_dewu_prefill_effect = { DEWU = shui } } }
+	}
+	# 404（桓楚）史无明文，不填
+}
+
+# Scope：角色（新君）。定德运：换王朝变量和王朝修正
+hd_hanfl_dewu_set_effect = {
+	dynasty = {
+		remove_dynasty_modifier = hd_hanfl_dewu_tu_modifier
+		remove_dynasty_modifier = hd_hanfl_dewu_jin_modifier
+		remove_dynasty_modifier = hd_hanfl_dewu_shui_modifier
+		remove_dynasty_modifier = hd_hanfl_dewu_mu_modifier
+		remove_dynasty_modifier = hd_hanfl_dewu_huo_modifier
+		set_variable = { name = hd_hanfl_dewu value = flag:$DEWU$ }
+		add_dynasty_modifier = { modifier = hd_hanfl_dewu_$DEWU$_modifier }
+		# 天子王朝的德运另记一份，供下一位天子（受禅时可能没有前持有人）取前朝德运
+		if = {
+			limit = {
+				exists = title:h_china.holder.dynasty
+				title:h_china.holder.dynasty = this
+			}
+			set_global_variable = { name = hd_hanfl_last_tianzi_dewu value = flag:$DEWU$ }
+		}
+	}
+}
+
+# Scope：角色（hd_hanfl.1301 选项）。$DEWU$ = 所选；$PREV$ = 按五行相生，承它就是正（火生土、土生金、金生水、水生木、木生火）
+hd_hanfl_dewu_choose_effect = {
+	hd_hanfl_dewu_set_effect = { DEWU = $DEWU$ }
+	if = {
+		limit = { NOT = { exists = scope:hd_hanfl_dewu_prev } }
+		add_legitimacy = minor_legitimacy_gain
+	}
+	else_if = {
+		limit = { scope:hd_hanfl_dewu_prev = flag:$PREV$ }
+		custom_tooltip = hd_hanfl_dewu_right_tt
+		add_legitimacy = medium_legitimacy_gain
+	}
+	else = {
+		custom_tooltip = hd_hanfl_dewu_wrong_tt
+		add_prestige = minor_prestige_loss
+	}
+	debug_log = "HD_HANFL DEWU $DEWU$"
+}
+
+############################################################
+# D9 毁淫祀
+############################################################
+# Scope：县
+hd_hanfl_yinsi_add_effect = {
+	if = {
+		limit = {
+			hd_hanfl_county_not_chuwu_trigger = yes
+			NOT = { has_county_modifier = hd_hanfl_yinsi_modifier }
+		}
+		add_county_modifier = { modifier = hd_hanfl_yinsi_modifier }
+	}
+}
+
+hd_hanfl_yinsi_seed_effect = {
+	if = {
+		limit = {
+			OR = {
+				game_start_date = 22.11.13
+				game_start_date = 89.1.30
+				game_start_date = 190.1.1
+			}
+		}
+		# 会稽：第五伦禁牛祭
+		title:d_kuaiji = {
+			every_de_jure_county = { hd_hanfl_yinsi_add_effect = yes }
+		}
+	}
+	if = {
+		limit = { game_start_date = 190.1.1 }
+		# 济南：城阳景王祠
+		title:d_jinan = {
+			every_de_jure_county = {
+				hd_hanfl_yinsi_add_effect = yes
+				set_variable = { name = hd_hanfl_yinsi_chengyang value = yes }
+			}
+		}
+	}
+	debug_log = "HD_HANFL YINSI SEEDED"
+}
+
+############################################################
+# 6.1 考课公务：事件 immediate 的快照，照 wj_kaoke_duties.1001
+############################################################
+hd_hanfl_kaoke_snapshot_effect = {
+	if = {
+		limit = { NOT = { has_character_flag = wj_kaoke_duties_cooldown } }
+		add_character_flag = { flag = wj_kaoke_duties_cooldown years = 3 }
+	}
+	save_scope_value_as = { name = wj_kaoke_choice_epoch value = var:wj_kaoke_window_epoch }
+	save_scope_value_as = { name = wj_kaoke_choice_start value = var:wj_kaoke_start }
+	var:wj_kaoke_realm = { save_scope_as = wj_kaoke_choice_realm }
+	random_held_title = {
+		limit = { tier = tier_county holder = root }
+		save_scope_as = wj_kaoke_duty_county
+	}
+}
+
+############################################################
+# D5 天人感应（季度脉冲 hd_hanfl_quarterly_ruler）
+############################################################
+hd_hanfl_tianren_pulse_effect = {
+	if = {
+		limit = { NOT = { has_character_flag = hd_hanfl_zaiyi_cd } }
+		if = {
+			limit = { hd_hanfl_in_disaster_trigger = yes }
+			random = {
+				chance = 50
+				save_scope_value_as = { name = hd_hanfl_zaiyi_kind value = flag:disaster }
+				save_scope_value_as = { name = hd_hanfl_zaiyi_sent value = yes }
+				trigger_event = hd_hanfl.1101
+			}
+		}
+		else = {
+			random = {
+				chance = 2
+				save_scope_value_as = { name = hd_hanfl_zaiyi_kind value = flag:sky }
+				save_scope_value_as = { name = hd_hanfl_zaiyi_sent value = yes }
+				trigger_event = hd_hanfl.1101
+			}
+		}
+	}
+	if = {
+		limit = {
+			NOT = { exists = scope:hd_hanfl_zaiyi_sent }
+			NOT = { has_character_flag = hd_hanfl_xiangrui_cd }
+			is_at_war = no
+			any_vassal = { government_has_flag = government_is_celestial }
+		}
+		random = {
+			chance = 1.5
+			trigger_event = hd_hanfl.1104
+		}
+	}
+}
+
+# Scope：天子（1104 受贺、因瑞改元）。上报人欺诈时记下他，40% 于 1~3 年后发 1105 祥瑞造假
+hd_hanfl_xiangrui_accept_effect = {
+	add_legitimacy = minor_legitimacy_gain
+	add_prestige = minor_prestige_gain
+	if = {
+		limit = { scope:hd_hanfl_reporter ?= { has_trait = deceitful } }
+		hidden_effect = {
+			set_variable = { name = hd_hanfl_xiangrui_reporter value = scope:hd_hanfl_reporter years = 4 }
+			random = {
+				chance = 40
+				trigger_event = { id = hd_hanfl.1105 days = { 365 1095 } }
+			}
+		}
+	}
+}
+
+############################################################
+# 通用
+############################################################
+# Scope：角色。宫中学识高的人对本人的好感（$MODIFIER$ 用原版通用好感，$OPINION$ 可为负）
+hd_hanfl_scholars_opinion_effect = {
+	save_scope_as = hd_hanfl_scholar_target
+	every_courtier = {
+		limit = {
+			is_adult = yes
+			learning >= 14
+		}
+		add_opinion = {
+			target = scope:hd_hanfl_scholar_target
+			modifier = $MODIFIER$
+			opinion = $OPINION$
+		}
+	}
+}
+
+############################################################
+# A4 幸阙里：孔氏家主（特邀宾客 → 孔氏世家头衔持有人 → 曲阜孔氏最年长成年人 → 都没有就新建一位长者）
+############################################################
+hd_hanfl_queli_find_kong_effect = {
+	if = {
+		limit = {
+			exists = scope:activity.special_guest:hd_hanfl_kongshi
+			scope:activity.special_guest:hd_hanfl_kongshi = { is_alive = yes }
+		}
+		scope:activity.special_guest:hd_hanfl_kongshi = { save_scope_as = hd_hanfl_kong }
+	}
+	else_if = {
+		limit = { title:c_hd_nf_famous_h_house_111010025003013.holder ?= { is_alive = yes } }
+		title:c_hd_nf_famous_h_house_111010025003013.holder = { save_scope_as = hd_hanfl_kong }
+	}
+	else_if = {
+		limit = {
+			house:qufu_kong = {
+				any_house_member = {
+					is_alive = yes
+					is_adult = yes
+				}
+			}
+		}
+		house:qufu_kong = {
+			ordered_house_member = {
+				limit = {
+					is_alive = yes
+					is_adult = yes
+				}
+				order_by = age
+				save_scope_as = hd_hanfl_kong
+			}
+		}
+	}
+	else = {
+		create_character = {
+			age = 60
+			gender_female_chance = 0
+			dynasty_house = house:qufu_kong
+			culture = root.culture
+			faith = root.faith
+			employer = root
+			learning = 14
+			trait = education_learning_3
+			save_scope_as = hd_hanfl_kong
+		}
+		debug_log = "HD_HANFL QUELI KONG CREATED"
+	}
+}
+
+############################################################
+# 宝物（照 zz_hd_han_treasures_effects.txt 的 hd_han_create_shanghan_zabing_lun_effect）
+############################################################
+# 6.2《汉书》
+hd_hanfl_create_hanshu_effect = {
+	$OWNER$ = {
+		save_scope_as = owner
+		create_artifact = {
+			name = hd_hanfl_artifact_hanshu_name
+			description = hd_hanfl_artifact_hanshu_description
+			rarity = illustrious
+			type = book
+			template = hd_han_unique_book_template
+			visuals = book
+			wealth = 90
+			quality = 100
+			max_durability = 120
+			decaying = no
+			creator = scope:owner
+			modifier = artifact_learning_3_modifier
+			save_scope_as = newly_created_artifact
+		}
+		scope:newly_created_artifact = {
+			add_artifact_modifier = artifact_monthly_learning_lifestyle_xp_3_modifier
+			add_artifact_modifier = artifact_monthly_prestige_2_modifier
+			set_variable = { name = historical_unique_artifact value = yes }
+			set_variable = hd_hanfl_artifact_hanshu
+		}
+	}
+}
+
+# A6 封禅玉牒
+hd_hanfl_create_yudie_effect = {
+	$OWNER$ = {
+		save_scope_as = owner
+		create_artifact = {
+			name = hd_hanfl_artifact_yudie_name
+			description = hd_hanfl_artifact_yudie_description
+			rarity = illustrious
+			type = book
+			template = hd_han_unique_book_template
+			visuals = book
+			wealth = 100
+			quality = 100
+			max_durability = 150
+			decaying = no
+			creator = scope:owner
+			modifier = artifact_learning_2_modifier
+			save_scope_as = newly_created_artifact
+		}
+		scope:newly_created_artifact = {
+			add_artifact_modifier = artifact_monthly_prestige_3_modifier
+			set_variable = { name = historical_unique_artifact value = yes }
+			set_variable = hd_hanfl_artifact_yudie
+		}
+	}
+}
+
+############################################################
+# 6.5 张机（190 开局新建，照 hd_sg218_create_hua_tuo_effect）
+############################################################
+hd_hanfl_create_zhang_ji_effect = {
+	if = {
+		limit = { NOT = { exists = global_var:hd_hanfl_zhang_ji } }
+		if = {
+			limit = { exists = title:d_nanyang.holder }
+			title:d_nanyang.holder = { save_scope_as = hd_hanfl_zhang_ji_court }
+		}
+		else_if = {
+			limit = { exists = title:h_china.holder }
+			title:h_china.holder = { save_scope_as = hd_hanfl_zhang_ji_court }
+		}
+		if = {
+			limit = { exists = scope:hd_hanfl_zhang_ji_court }
+			create_character = {
+				name = uuii_book_zhang_ji_2_name
+				age = 40
+				gender_female_chance = 0
+				random_traits = no
+				trait = historical_character
+				trait = lifestyle_physician
+				trait = education_learning_3
+				trait = diligent
+				trait = compassionate
+				culture = culture:jingzhou
+				faith = scope:hd_hanfl_zhang_ji_court.faith
+				employer = scope:hd_hanfl_zhang_ji_court
+				diplomacy = 6
+				martial = 3
+				stewardship = 8
+				intrigue = 4
+				learning = 18
+				prowess = 4
+				save_scope_as = hd_hanfl_new_zhang_ji
+			}
+			scope:hd_hanfl_new_zhang_ji = {
+				set_character_rite = rite:jingxue
+				# 入南阳张氏（张衡一家）；该家族不存在就不入
+				if = {
+					limit = { exists = character:nanyang_zhang_000.house }
+					set_house = character:nanyang_zhang_000.house
+				}
+			}
+			set_global_variable = { name = hd_hanfl_zhang_ji value = scope:hd_hanfl_new_zhang_ji }
+			debug_log = "HD_HANFL ZHANGJI CREATED"
+		}
+		else = {
+			debug_log = "HD_HANFL ZHANGJI SKIP"
+		}
+	}
+}
+
+############################################################
+# 6.2 / 6.5 剧本时间线
+############################################################
+hd_hanfl_timeline_start_effect = {
+	if = {
+		limit = { game_start_date = 22.11.13 }
+		title:h_china = {
+			trigger_event = { on_action = hd_hanfl_timeline_pulse days = 10 }
+			# 4001a/b/c 新莽弊政：开局 +20 / +80 / +140 天
+			trigger_event = { on_action = hd_hanfl_tl_xinmang_a days = 20 }
+			trigger_event = { on_action = hd_hanfl_tl_xinmang_b days = 80 }
+			trigger_event = { on_action = hd_hanfl_tl_xinmang_c days = 140 }
+		}
+		hd_hanfl_xinmang_seed_effect = yes
+	}
+	else_if = {
+		limit = {
+			OR = {
+				game_start_date = 89.1.30
+				game_start_date = 190.1.1
+				game_start_date = 218.1.1
+			}
+		}
+		title:h_china = { trigger_event = { on_action = hd_hanfl_timeline_pulse days = 30 } }
+	}
+}
+
+# 22 开局：新朝直辖与封臣各县挂"新莽弊政"（3 年）
+hd_hanfl_xinmang_seed_effect = {
+	character:wang_mang ?= {
+		every_realm_county = {
+			add_county_modifier = { modifier = hd_hanfl_xinmang_modifier years = 3 }
+		}
+	}
+	debug_log = "HD_HANFL TL XINMANG SEEDED"
+}
+
+# 4001a/b/c：发给王莽领内的玩家（含王莽本人）
+hd_hanfl_tl_xinmang_send_effect = {
+	if = {
+		limit = {
+			hd_history_events_enabled_trigger = yes
+			current_date < 23.6.1
+			character:wang_mang ?= { is_alive = yes }
+		}
+		if = {
+			limit = { NOT = { exists = global_var:hd_hev_22_hanfl_xinmang } }
+			set_global_variable = hd_hev_22_hanfl_xinmang
+		}
+		every_player = {
+			limit = {
+				OR = {
+					this = character:wang_mang
+					top_liege = character:wang_mang
+				}
+			}
+			trigger_event = $EVENT$
+		}
+		debug_log = "HD_HANFL TL XINMANG $EVENT$ FIRED"
+	}
+	else = {
+		debug_log = "HD_HANFL TL XINMANG $EVENT$ SKIP"
+	}
+}
+
+# root = title:h_china。每 90 天一次，过了本剧本最后截止日或关了开关就不再排
+hd_hanfl_timeline_pulse_effect = {
+	if = {
+		limit = { hd_history_events_enabled_trigger = yes }
+		if = {
+			limit = { game_start_date = 22.11.13 }
+			hd_hanfl_tl_22_effect = yes
+		}
+		else_if = {
+			limit = { game_start_date = 89.1.30 }
+			hd_hanfl_tl_89_effect = yes
+		}
+		else_if = {
+			limit = { game_start_date = 190.1.1 }
+			hd_hanfl_tl_190_effect = yes
+		}
+		else_if = {
+			limit = { game_start_date = 218.1.1 }
+			hd_hanfl_tl_218_effect = yes
+		}
+		if = {
+			limit = {
+				OR = {
+					AND = { game_start_date = 22.11.13 current_date < 30.1.1 }
+					AND = { game_start_date = 89.1.30 current_date < 140.1.1 }
+					AND = { game_start_date = 190.1.1 current_date < 215.1.1 }
+					AND = { game_start_date = 218.1.1 current_date < 230.1.1 }
+				}
+			}
+			title:h_china = { trigger_event = { on_action = hd_hanfl_timeline_pulse days = 90 } }
+		}
+		else = {
+			debug_log = "HD_HANFL TL PULSE END"
+		}
+	}
+	else = {
+		debug_log = "HD_HANFL TL PULSE STOP RULE_OFF"
+	}
+}
+
+# 22：4002 始正火德
+hd_hanfl_tl_22_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_hev_22_hanfl_huode }
+			exists = global_var:hd_22_xiu_emperor
+			current_date < 30.1.1
+			character:liu_xiu ?= { is_alive = yes }
+		}
+		character:liu_xiu = { trigger_event = hd_hanfl.4002 }
+	}
+}
+
+# 89：4101 班昭续书、4103 蔡侯纸、4104 宋贵人旧案、4105 地动仪、★4107 弃凉州（4102、4106 由前一件排）
+hd_hanfl_tl_89_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_hev_89_hanfl_xushu }
+			current_date < 110.1.1
+			character:hd_89_ban_gu ?= { is_alive = no }
+			character:hd_89_ban_zhao ?= { is_alive = yes }
+			exists = title:h_china.holder
+		}
+		title:h_china.holder = { trigger_event = hd_hanfl.4101 }
+	}
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_hev_89_hanfl_caihouzhi }
+			current_date >= 105.1.1
+			current_date < 112.1.1
+			character:cai_lun ?= { is_alive = yes }
+			exists = title:h_china.holder
+		}
+		title:h_china.holder = { trigger_event = hd_hanfl.4103 }
+	}
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_hev_89_hanfl_cailun }
+			current_date >= 121.1.1
+			current_date < 125.1.1
+			character:cai_lun ?= {
+				is_alive = yes
+				is_imprisoned = no
+			}
+			exists = title:h_china.holder
+			NOT = { title:h_china.holder = character:cai_lun }
+		}
+		title:h_china.holder = { trigger_event = hd_hanfl.4104 }
+	}
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_hev_89_hanfl_didongyi }
+			current_date >= 132.1.1
+			current_date < 138.1.1
+			character:nanyang_zhang_000 ?= { is_alive = yes }
+			exists = title:h_china.holder
+		}
+		title:h_china.holder = { trigger_event = hd_hanfl.4105 }
+	}
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_hev_89_hanfl_liangzhou }
+			current_date >= 110.1.1
+			current_date < 113.1.1
+			character:xingye_deng_011 ?= { is_alive = yes }
+			exists = title:h_china.holder
+			title:h_china.holder = {
+				any_realm_county = { kingdom ?= title:k_uuii_liangzhou }
+			}
+		}
+		title:h_china.holder = { trigger_event = hd_hanfl.4107 }
+	}
+}
+
+# 190：4201 坏五铢、4202 千里草、4203 闻卓死而叹、4205 张机著书（4204 由 4203 排）
+hd_hanfl_tl_190_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_hev_184_hanfl_wuzhu }
+			exists = global_var:hd_palace_crisis_completed
+			current_date < 191.12.31
+			character:dong_zhuo_2 ?= { is_alive = yes }
+		}
+		set_global_variable = hd_hev_184_hanfl_wuzhu
+		title:d_jingzhao = { every_de_jure_county = { add_county_modifier = { modifier = hd_hanfl_wuzhu_modifier years = 5 } } }
+		title:d_fufeng = { every_de_jure_county = { add_county_modifier = { modifier = hd_hanfl_wuzhu_modifier years = 5 } } }
+		title:d_fengyi = { every_de_jure_county = { add_county_modifier = { modifier = hd_hanfl_wuzhu_modifier years = 5 } } }
+		hd_world_news_send_all_effect = { EVENT = hd_hanfl.4201 }
+		debug_log = "HD_HANFL TL WUZHU FIRED"
+	}
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_hev_184_hanfl_qianlicao }
+			current_date >= 190.9.1
+			current_date < 191.5.20
+			character:dong_zhuo_2 ?= {
+				is_alive = yes
+				hd_court_is_regent_trigger = yes
+			}
+		}
+		set_global_variable = hd_hev_184_hanfl_qianlicao
+		hd_world_news_send_all_effect = { EVENT = hd_hanfl.4202 }
+		debug_log = "HD_HANFL TL QIANLICAO FIRED"
+	}
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_hev_184_hanfl_caiyong }
+			exists = global_var:hd_hev_184_wangyun_kill_dong
+			current_date < 200.1.1
+			character:cai_yong ?= {
+				is_alive = yes
+				is_imprisoned = no
+			}
+			character:wang_yun ?= { is_alive = yes }
+		}
+		character:cai_yong = { trigger_event = hd_hanfl.4203 }
+	}
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_hev_184_hanfl_shanghan }
+			current_date >= 205.1.1
+			current_date < 215.1.1
+			exists = global_var:hd_hanfl_zhang_ji
+			global_var:hd_hanfl_zhang_ji = { is_alive = yes }
+		}
+		global_var:hd_hanfl_zhang_ji = { trigger_event = hd_hanfl.4205 }
+	}
+}
+
+# 218：4301 肉刑之议、4302 终制
+hd_hanfl_tl_218_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_hev_218_hanfl_rouxing }
+			current_date >= 218.6.1
+			current_date < 219.12.31
+			character:cao_cao ?= { is_alive = yes }
+		}
+		character:cao_cao = { trigger_event = hd_hanfl.4301 }
+	}
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_hanfl_tl_4302_scheduled }
+			exists = global_var:hd_sg218_shouchan_done
+			current_date < 228.1.1
+			character:cao_pi ?= { is_alive = yes }
+		}
+		set_global_variable = hd_hanfl_tl_4302_scheduled
+		character:cao_pi = { trigger_event = { id = hd_hanfl.4302 years = 2 } }
+		debug_log = "HD_HANFL TL ZHONGZHI SCHEDULED"
+	}
+}

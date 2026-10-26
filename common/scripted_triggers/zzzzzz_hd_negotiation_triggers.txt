@@ -1,0 +1,130 @@
+﻿# 归附谈判（2026-10-25 boki 拍板，设计见 docs/归附谈判_设计记录.md）
+# 参数一律：$L$ = 受附者（将为主君），$V$ = 归附者（将为封臣），须为已存 scope。
+
+# 让影响力：双方政体都有影响力
+hd_neg_influence_applicable_trigger = {
+	$L$ = { government_has_flag = government_has_influence }
+	$V$ = { government_has_flag = government_has_influence }
+}
+
+# 许为军阀的资格（自拟：照「拥兵自重」的主头衔要求，且不在被收回权力的 5 年冷却中）
+hd_neg_warlord_eligible_trigger = {
+	$L$ = { government_has_flag = government_is_celestial }
+	$V$ = {
+		government_has_flag = government_is_celestial
+		is_landed = yes
+		primary_title ?= {
+			tier >= tier_county
+			is_noble_family_title = no
+		}
+		NOT = { has_character_flag = hd_warlord_revoked_cooldown }
+	}
+}
+
+# AI 受附者肯不肯许为军阀（boki 拍板）：自身兵力 ≥ 对方 3 倍；多疑或对其好感 ≤ -30 不许
+hd_neg_ai_liege_grants_warlord_trigger = {
+	$L$ = {
+		NOT = { has_trait = paranoid }
+		opinion = {
+			target = $V$
+			value > -30
+		}
+		current_military_strength >= {
+			value = $V$.max_military_strength
+			multiply = 3
+		}
+	}
+}
+
+# $V$ 身上挂着与 $L$ 的谈判条件
+hd_neg_has_terms_trigger = {
+	$V$ = {
+		var:hd_neg_liege ?= $L$
+		OR = {
+			has_variable = hd_neg_gold_tier
+			has_variable = hd_neg_prestige_tier
+			has_variable = hd_neg_influence_tier
+			has_variable = hd_neg_warlord
+		}
+	}
+}
+
+# 受附者付得起 $V$ 身上的全部条件（没有条件时恒真）
+hd_neg_liege_can_pay_trigger = {
+	trigger_if = {
+		limit = { hd_neg_has_terms_trigger = { L = $L$ V = $V$ } }
+		trigger_if = {
+			limit = { $V$ = { has_variable = hd_neg_gold } }
+			$L$ = { gold >= $V$.var:hd_neg_gold }
+		}
+		trigger_if = {
+			limit = { $V$ = { has_variable = hd_neg_prestige } }
+			$L$ = { prestige >= $V$.var:hd_neg_prestige }
+		}
+		trigger_if = {
+			limit = { $V$ = { has_variable = hd_neg_influence } }
+			hd_neg_influence_applicable_trigger = { L = $L$ V = $V$ }
+			$L$ = { influence >= $V$.var:hd_neg_influence }
+		}
+		trigger_if = {
+			limit = { $V$ = { has_variable = hd_neg_warlord } }
+			hd_neg_warlord_eligible_trigger = { L = $L$ V = $V$ }
+		}
+	}
+}
+
+# 本来肯降也趁机开价的性格（boki 拍板：贪婪/野心/傲慢）。root = 归附者
+hd_neg_opportunist_trigger = {
+	is_ai = yes
+	OR = {
+		has_trait = greedy
+		has_trait = ambitious
+		has_trait = arrogant
+	}
+}
+
+# 请求归附时开价（boki 拍板：贪婪/野心/傲慢/多疑，或兵力 ≥ 对方 1/4）。root = 投靠者
+hd_neg_petition_demands_trigger = {
+	OR = {
+		has_trait = greedy
+		has_trait = ambitious
+		has_trait = arrogant
+		has_trait = paranoid
+		max_military_strength >= {
+			value = $L$.current_military_strength
+			multiply = 0.25
+		}
+	}
+}
+
+# 必须开价才肯投靠（boki 拍板：野心要军阀/影响力，傲慢要威望）。root = 投靠者
+hd_neg_must_demand_trigger = {
+	OR = {
+		has_trait = ambitious
+		has_trait = arrogant
+	}
+}
+
+# 劝其归附：双方仍是这一对待答复的请求，且归附仍合法（照 hd_submission_request_accepted_effect 的检查）。
+# interaction scope 或已存 scope:actor = 受附者、scope:recipient = 归附者
+hd_neg_pending_pair_legal_trigger = {
+	exists = scope:actor
+	exists = scope:recipient
+	scope:recipient = {
+		hd_submission_recipient_legal_trigger = { LIEGE = scope:actor }
+		NOT = { hd_submission_ai_refuses_trigger = { LIEGE = scope:actor } }
+		var:hd_submission_incoming_actor ?= scope:actor
+	}
+	scope:actor = { var:hd_submission_outgoing_target ?= scope:recipient }
+}
+
+# 请求归附：双方仍是这一对待答复的请求，且投靠仍合法（照 hd_petition_request_accepted_effect 的检查）。
+# scope:actor = 投靠者、scope:recipient = 受附者
+hd_neg_petition_pair_legal_trigger = {
+	exists = scope:actor
+	exists = scope:recipient
+	scope:actor = {
+		hd_submission_recipient_legal_trigger = { LIEGE = scope:recipient }
+		var:hd_petition_outgoing_target ?= scope:recipient
+	}
+}

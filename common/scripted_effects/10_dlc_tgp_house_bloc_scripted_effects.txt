@@ -795,7 +795,8 @@ tgp_on_member_house_left_shared_effect = {
             scope:bloc = {
                 every_confederation_member_house = {
                     limit = {
-                        house_head = {
+                        # 2026-10-25 日志：集团内绝嗣无家主的家族 house_head 切换失败（Failed context switch），改 ?=
+                        house_head ?= {
                             is_independent_ruler = no
                             liege.house ?= scope:house
                         }
@@ -826,33 +827,42 @@ tgp_on_member_house_left_shared_effect = {
 		}
     }
     # Remove Vassal houses of leaving Houses from above
-    every_in_list = {
-        list = leaving_vassal_houses
-        save_temporary_scope_as = vassal_house_temp
-		set_variable = {
-			name = bloc_leaving_reason
-			value = flag:reason_followed_liege
-			days = 4
-		}
-		tgp_leave_house_bloc_effect = {
-			OPINION = flag:no
-			TRUCE = flag:yes
-		}
-    }
-    if = { # 调试日志放在解散之前，解散后集团作用域已失效
-        limit = { debug_only = yes }
-        debug_log = "house left bloc"
-        debug_log_scopes = yes
-    }
-    # Disband if necessary
-    if = {
-        limit = {
-            OR = {
-                NOT = { exists = leading_house }
-                any_confederation_member_house = { count = 1 }
+    # 2026-10-25 日志：附庸家族连带退出时，嵌套的退出回调可能已解散本集团，之后在根作用域执行效果会报 Scoped object is not valid；先存集团，再经 scope:house 执行并在 limit 里 exists 判存在（同原版 00_war_effects "Can get destroyed as we loop through"）
+    save_scope_as = hd_house_left_bloc
+    scope:house = {
+        every_in_list = {
+            list = leaving_vassal_houses
+            save_temporary_scope_as = vassal_house_temp
+			set_variable = {
+				name = bloc_leaving_reason
+				value = flag:reason_followed_liege
+				days = 4
+			}
+			tgp_leave_house_bloc_effect = {
+				OPINION = flag:no
+				TRUCE = flag:yes
+			}
+        }
+        if = {
+            limit = { exists = scope:hd_house_left_bloc }
+            scope:hd_house_left_bloc = {
+                if = { # 调试日志放在解散之前，解散后集团作用域已失效
+                    limit = { debug_only = yes }
+                    debug_log = "house left bloc"
+                    debug_log_scopes = yes
+                }
+                # Disband if necessary
+                if = {
+                    limit = {
+                        OR = {
+                            NOT = { exists = leading_house }
+                            any_confederation_member_house = { count = 1 }
+                        }
+                    }
+                    hidden_effect = { disband_confederation = yes }
+                }
             }
         }
-        hidden_effect = { disband_confederation = yes }
     }
 }
 

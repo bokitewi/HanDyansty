@@ -33,7 +33,8 @@ hds_sun_record_camp_effect = {
 	}
 }
 
-# 营地身份的人拿到了封地（立足县或丹阳之战胜利）：改天朝政体、销毁营地头衔。
+# 营地身份的人拿到了封地（丹阳之战胜利）：改天朝政体、销毁营地头衔。
+# 2026-10-25 起丹阳战胜利结算当天即调用（hd_dc_tunbing_cb 的 wu 分支）；孙家线 60 天心跳里的调用留作兜底。
 hds_sun_landed_from_camp_effect = {
 	if = {
 		limit = {
@@ -63,94 +64,8 @@ hds_sun_landed_from_camp_effect = {
 	}
 }
 
-# 渡江立足。ROOT = 孙策或孙权（尚无封地）。
-# 只拿袁术势力的地：历阳县 c_uuii_p_1984 属袁术（或其封臣）时给历阳；
-# 否则给袁术境内离丹阳郡治最近的县（不拿袁术的首府）；袁术已死或无地则不给，调用方改走营地+强制开战。
-# 成功后：脱离原主、首府设在立足县、销毁家族庄园/营地（有地后不会再生成营地）。
-# DONE_FLAG：立足成功的标记；ESTATE_FLAG：庄园销毁完成的标记（hds_ensure_estate_effect 认这两个旧标记）。
-hds_sun_foothold_effect = {
-	if = {
-		limit = {
-			is_alive = yes
-			NOT = { has_character_flag = $DONE_FLAG$ }
-		}
-		save_scope_as = hds_foothold_actor
-		clear_saved_scope = hds_foothold_county
-		clear_saved_scope = hds_foothold_patron
-		if = {
-			limit = { is_landed = yes }
-			# 已经有封地：不需要立足县。
-			add_character_flag = $DONE_FLAG$
-		}
-		else = {
-			hds_sun_record_camp_effect = yes
-			character:yuan_shu ?= {
-				if = {
-					limit = {
-						is_alive = yes
-						is_landed = yes
-						NOT = { this = scope:hds_foothold_actor }
-					}
-					save_scope_as = hds_foothold_patron
-				}
-			}
-			if = {
-				limit = { exists = scope:hds_foothold_patron }
-				if = {
-					limit = {
-						title:c_uuii_p_1984 = {
-							exists = holder
-							holder = {
-								OR = {
-									this = scope:hds_foothold_patron
-									is_vassal_or_below_of = scope:hds_foothold_patron
-								}
-							}
-						}
-					}
-					title:c_uuii_p_1984 = { save_scope_as = hds_foothold_county }
-				}
-				else = {
-					title:d_danyang.title_capital_county.title_province = { save_scope_as = hds_foothold_target_prov }
-					scope:hds_foothold_patron = {
-						ordered_realm_county = {
-							limit = {
-								NOT = { this = scope:hds_foothold_patron.capital_county }
-							}
-							order_by = {
-								value = 0
-								subtract = "title_province.squared_distance(scope:hds_foothold_target_prov)"
-							}
-							save_scope_as = hds_foothold_county
-						}
-					}
-				}
-			}
-			if = {
-				limit = { exists = scope:hds_foothold_county }
-				create_title_and_vassal_change = { type = granted save_scope_as = hds_foothold_change add_claim_on_loss = no }
-				scope:hds_foothold_county = {
-					change_title_holder = { holder = scope:hds_foothold_actor change = scope:hds_foothold_change take_baronies = yes }
-				}
-				resolve_title_and_vassal_change = scope:hds_foothold_change
-				if = {
-					limit = { has_title = scope:hds_foothold_county }
-					add_character_flag = $DONE_FLAG$
-					hds_release_effect = yes
-					set_realm_capital = scope:hds_foothold_county
-					# 有地以后销毁家族庄园（hds_estate_to_camp_effect 对有地者不建营地）。
-					hds_estate_to_camp_effect = { DONE_FLAG = $ESTATE_FLAG$ }
-					hds_sun_landed_from_camp_effect = yes
-					# 孙坚庄园缓存不再需要；防止旧的恢复逻辑重建庄园。
-					title:h_china = {
-						remove_variable = hds_sun_family_title
-						remove_variable = hds_sun_original_estate
-					}
-				}
-			}
-		}
-	}
-}
+# （2026-10-25 删 hds_sun_foothold_effect「渡江立足：从袁术势力拿一县」：孙策、孙权改为交还封地后到历阳立营，
+#  见 zzzzzzzzzz_hds_20260919_sun_ce.txt 的 hds_sun_camp_departure_effect。）
 
 # 丹阳之战发起器（孙策、孙权、孙坚共用）。ROOT = 发起人；调用方已检查剧情阶段。
 # 有地：先走合法宣战（can_declare_war）；连续失败 3 次后强制开战。
@@ -493,7 +408,7 @@ hds_sq_tick_effect = {
 			limit = { has_global_variable = hds_sq_troops_due }
 			hds_sq_reward_effect = yes
 		}
-		# 孙策生前未出走：孙权成年后脱离原主、渡江立足（拿不到地则改营地）。
+		# 孙策生前未出走：孙权成年后脱离原主。2026-10-25 boki：同孙策，不拿县，交还封地后到历阳立营。
 		if = {
 			limit = {
 				NOT = { has_character_flag = hds_sq_departed }
@@ -501,15 +416,14 @@ hds_sq_tick_effect = {
 				is_imprisoned = no
 				is_ruler = yes
 			}
-			hds_release_effect = yes
-			hds_sun_foothold_effect = { DONE_FLAG = hds_sq_foothold_done ESTATE_FLAG = hds_sq_camp_converted }
 			if = {
-				limit = {
-					NOT = { has_character_flag = hds_sq_foothold_done }
-					is_independent_ruler = yes
-				}
-				hds_estate_to_camp_effect = { DONE_FLAG = hds_sq_camp_converted }
+				# 孙坚已自立（营地或地盘）：原样继承，不交不分、不挪营（同孙策）。
+				limit = { hds_sj_departed_line_trigger = yes }
+				hds_release_effect = yes
 				hds_sun_record_camp_effect = yes
+			}
+			else = {
+				hds_sun_camp_departure_effect = { DONE_FLAG = hds_sq_camped ESTATE_FLAG = hds_sq_camp_converted }
 			}
 			if = {
 				limit = { is_independent_ruler = yes }

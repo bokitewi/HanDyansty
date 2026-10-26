@@ -17,7 +17,8 @@ hds_sc_tick_effect = {
             limit = { hds_sc_depart_ready_trigger = yes }
             if = {
                 # Sun Jian already left Yuan Shu himself (hds.5000): skip the Yuan Shu departure story.
-                limit = { character:sun_jian ?= { has_character_flag = hds_sj_departed } }
+                # 2026-10-25：孙坚死后人物标记即失效，改认全局变量。
+                limit = { hds_sj_departed_line_trigger = yes }
                 hds_sc_depart_effect = yes
             }
             else = { hds_queue_event_effect = { EVENT = hds.4001 LEASE = hds_lease_4001 } }
@@ -81,93 +82,138 @@ hds_sc_tick_effect = {
         }
     }
 }
-# 孙策出走前重置领地：先取得于湖，其余交原上级；无上级则分立。
-# 只由一次性的出走流程调用，丹阳宣战重试不会再次剥夺战果。
-hds_sc_yuhu_settlement_effect = {
+# 2026-10-25 boki：辞袁不再取于湖。先把手里的地交还原上级（无上级则分立），弃庄园、到历阳立营当冒险者，
+# 再对丹阳宣战（营地身份由 hds_sun_danyang_war_effect 直接强制开战）。
+# 只由一次性的出走流程调用：孙策 hds_sc_depart_effect、接续的孙权 hds_sq_tick_effect；丹阳宣战重试不会再次剥夺战果。
+# 已是冒险者（继承了孙坚的营地）时不交地、不挪营。
+# ROOT = 出走者。DONE_FLAG：立营完成；ESTATE_FLAG：庄园已销毁（hds_ensure_estate_effect 认 hds_sc_camp_converted）。
+hds_sun_camp_departure_effect = {
 	save_scope_as = hds_sc_settlement_actor
 	clear_saved_scope = hds_sc_settlement_liege
-	liege ?= { save_scope_as = hds_sc_settlement_liege }
-	hds_sun_record_camp_effect = yes
-	create_title_and_vassal_change = { type = usurped save_scope_as = hds_sc_yuhu_change add_claim_on_loss = no }
-	title:c_uuii_p_2098 = {
-		change_title_holder = { holder = scope:hds_sc_settlement_actor change = scope:hds_sc_yuhu_change take_baronies = yes }
-	}
-	resolve_title_and_vassal_change = scope:hds_sc_yuhu_change
-	if = {
-		limit = { has_title = title:c_uuii_p_2098 }
-		set_realm_capital = title:c_uuii_p_2098
-		hds_sun_landed_from_camp_effect = yes
-		# 已有于湖，不再转成冒险者；仅清除原家族庄园。
-		hds_estate_to_camp_effect = { DONE_FLAG = hds_sc_camp_converted }
+	liege ?= {
 		if = {
-			limit = { exists = scope:hds_sc_settlement_liege }
-			create_title_and_vassal_change = { type = granted save_scope_as = hds_sc_return_change add_claim_on_loss = no }
-			every_vassal = {
-				limit = { NOT = { highest_held_title_tier = tier_barony capital_county = title:c_uuii_p_2098 } }
-				change_liege = { liege = scope:hds_sc_settlement_liege change = scope:hds_sc_return_change }
-			}
-			every_held_title = {
-				limit = {
-					NOT = { this = title:c_uuii_p_2098 }
-					NOT = { tier = tier_barony county = title:c_uuii_p_2098 }
-				}
-				change_title_holder = { holder = scope:hds_sc_settlement_liege change = scope:hds_sc_return_change }
-			}
-			resolve_title_and_vassal_change = scope:hds_sc_return_change
+			limit = { NOT = { this = scope:hds_sc_settlement_actor } }
+			save_scope_as = hds_sc_settlement_liege
 		}
-		else = {
-			# 直辖县按原版迁徙分立流程生成当地领主，并立即独立。
-			every_held_title = {
-				limit = { tier = tier_county is_noble_family_title = no NOT = { this = title:c_uuii_p_2098 } }
-				save_temporary_scope_as = seceding_county
-				create_character = {
-					location = scope:seceding_county.title_province
-					template = post_migration_minor_warlord_template
-					save_scope_as = hds_sc_local_ruler
-				}
-				create_title_and_vassal_change = { type = granted save_scope_as = hds_sc_county_change add_claim_on_loss = no }
-				change_title_holder = { holder = scope:hds_sc_local_ruler change = scope:hds_sc_county_change take_baronies = yes }
-				resolve_title_and_vassal_change = scope:hds_sc_county_change
-				scope:hds_sc_local_ruler = { hds_release_effect = yes }
-			}
-			# 不属于直辖县的零散男爵领归还所在县的领主。
-			create_title_and_vassal_change = { type = granted save_scope_as = hds_sc_barony_change add_claim_on_loss = no }
-			every_held_title = {
-				limit = { tier = tier_barony NOT = { county = title:c_uuii_p_2098 } exists = county.holder }
-				change_title_holder = { holder = this.county.holder change = scope:hds_sc_barony_change }
-			}
-			resolve_title_and_vassal_change = scope:hds_sc_barony_change
-			every_vassal = {
-				limit = { NOT = { highest_held_title_tier = tier_barony capital_county = title:c_uuii_p_2098 } }
-				if = {
-					limit = { highest_held_title_tier = tier_barony exists = capital_county.holder }
-					create_title_and_vassal_change = { type = granted save_scope_as = hds_sc_barony_liege_change add_claim_on_loss = no }
-					change_liege = { liege = this.capital_county.holder change = scope:hds_sc_barony_liege_change }
-					resolve_title_and_vassal_change = scope:hds_sc_barony_liege_change
-				}
-				else = { hds_release_effect = yes }
-			}
-			every_held_title = {
-				limit = { tier > tier_county }
-				scope:hds_sc_settlement_actor = { destroy_title = prev }
-			}
+	}
+	hds_sun_record_camp_effect = yes
+	if = {
+		limit = { is_landed = yes }
+		hds_sun_return_land_effect = yes
+	}
+	if = {
+		limit = { is_alive = yes is_landed = no NOT = { government_has_flag = government_is_landless_adventurer } }
+		# 人先到历阳，营地就建在那里
+		if = {
+			limit = { exists = title:c_uuii_p_1984 }
+			set_location = { location = title:c_uuii_p_1984.title_province stick_to_location = no }
 		}
-		hds_release_effect = yes
-		set_primary_title_to = title:c_uuii_p_2098
-		add_character_flag = hds_sc_foothold_done
-		add_character_flag = hds_sc_camp_converted
+		hds_estate_to_camp_effect = { DONE_FLAG = $ESTATE_FLAG$ }
+		# 庄园早已不在、无业可弃：直接建营
+		if = {
+			limit = { is_alive = yes is_landed = no is_ruler = no }
+			create_landless_adventurer_title_effect = {
+				REASON = flag:voluntary
+				FLAVOR_CHAR = this
+			}
+			add_character_flag = $ESTATE_FLAG$
+		}
+		# 营地没落在历阳时挪过去
+		if = {
+			limit = {
+				government_has_flag = government_is_landless_adventurer
+				exists = domicile
+				exists = title:c_uuii_p_1984
+				NOT = { domicile.domicile_location ?= title:c_uuii_p_1984.title_province }
+			}
+			domicile = { move_domicile = title:c_uuii_p_1984.title_province }
+		}
+	}
+	hds_release_effect = yes
+	hds_sun_record_camp_effect = yes
+	if = {
+		limit = {
+			is_alive = yes
+			is_landed = no
+			is_independent_ruler = yes
+			government_has_flag = government_is_landless_adventurer
+		}
+		add_character_flag = $DONE_FLAG$
+		add_character_flag = $ESTATE_FLAG$
+		# 孙坚庄园缓存不再需要；防止旧的恢复逻辑重建庄园。
 		title:h_china = {
 			remove_variable = hds_sun_family_title
 			remove_variable = hds_sun_original_estate
 		}
 	}
 }
+# 交还封地（原 10-17 于湖版的交还规则，去掉于湖）。ROOT = 出走者；scope:hds_sc_settlement_actor / hds_sc_settlement_liege 由调用方存好。
+# 有上级：县、郡以上头衔与封臣交还上级。无上级：直辖县按原版迁徙分立流程另立当地领主并独立，
+# 零散男爵领归所在县领主，封臣改投或独立，郡以上头衔销毁。家族庄园、营地这类无地头衔不动。
+hds_sun_return_land_effect = {
+	if = {
+		limit = { exists = scope:hds_sc_settlement_liege }
+		create_title_and_vassal_change = { type = granted save_scope_as = hds_sc_return_change add_claim_on_loss = no }
+		every_vassal = {
+			change_liege = { liege = scope:hds_sc_settlement_liege change = scope:hds_sc_return_change }
+		}
+		every_held_title = {
+			limit = { is_landless_type_title = no is_noble_family_title = no }
+			change_title_holder = { holder = scope:hds_sc_settlement_liege change = scope:hds_sc_return_change }
+		}
+		resolve_title_and_vassal_change = scope:hds_sc_return_change
+	}
+	else = {
+		# 直辖县按原版迁徙分立流程生成当地领主，并立即独立。
+		every_held_title = {
+			limit = { tier = tier_county is_noble_family_title = no is_landless_type_title = no }
+			save_temporary_scope_as = seceding_county
+			create_character = {
+				location = scope:seceding_county.title_province
+				template = post_migration_minor_warlord_template
+				save_scope_as = hds_sc_local_ruler
+			}
+			create_title_and_vassal_change = { type = granted save_scope_as = hds_sc_county_change add_claim_on_loss = no }
+			change_title_holder = { holder = scope:hds_sc_local_ruler change = scope:hds_sc_county_change take_baronies = yes }
+			resolve_title_and_vassal_change = scope:hds_sc_county_change
+			scope:hds_sc_local_ruler = { hds_release_effect = yes }
+		}
+		# 不属于直辖县的零散男爵领归还所在县的领主。
+		create_title_and_vassal_change = { type = granted save_scope_as = hds_sc_barony_change add_claim_on_loss = no }
+		every_held_title = {
+			limit = { tier = tier_barony exists = county.holder NOT = { county.holder = scope:hds_sc_settlement_actor } }
+			change_title_holder = { holder = this.county.holder change = scope:hds_sc_barony_change }
+		}
+		resolve_title_and_vassal_change = scope:hds_sc_barony_change
+		every_vassal = {
+			if = {
+				limit = { highest_held_title_tier = tier_barony exists = capital_county.holder NOT = { capital_county.holder = scope:hds_sc_settlement_actor } }
+				create_title_and_vassal_change = { type = granted save_scope_as = hds_sc_barony_liege_change add_claim_on_loss = no }
+				change_liege = { liege = this.capital_county.holder change = scope:hds_sc_barony_liege_change }
+				resolve_title_and_vassal_change = scope:hds_sc_barony_liege_change
+			}
+			else = { hds_release_effect = yes }
+		}
+		every_held_title = {
+			limit = { tier > tier_county is_landless_type_title = no is_noble_family_title = no }
+			scope:hds_sc_settlement_actor = { destroy_title = prev }
+		}
+	}
+}
 hds_sc_depart_effect = {
     if = {
         limit = { hds_sc_depart_ready_trigger = yes }
-        hds_sc_yuhu_settlement_effect = yes
         if = {
-            limit = { is_alive = yes is_independent_ruler = yes hds_sun_estate_inherited_trigger = yes has_title = title:c_uuii_p_2098 }
+            # 孙坚已自立（营地或地盘）：原样继承，不交不分、不挪营。
+            limit = { hds_sj_departed_line_trigger = yes }
+            hds_release_effect = yes
+            hds_sun_record_camp_effect = yes
+        }
+        else = {
+            hds_sun_camp_departure_effect = { DONE_FLAG = hds_sc_camped ESTATE_FLAG = hds_sc_camp_converted }
+        }
+        if = {
+            limit = { is_alive = yes is_independent_ruler = yes hds_sun_estate_inherited_trigger = yes }
             if = { limit = { NOT = { has_title = title:k_uuii_yangzhou } } add_pressed_claim = title:k_uuii_yangzhou }
             add_character_flag = hds_sc_departed
             add_character_flag = hds_sc_danyang_target_version

@@ -174,6 +174,22 @@ hd_strat_find_target_effect = {
 # 先招降：1) 仁义性格或挚友目标 -> 无论胜算都先招降 2) 其余目标只要对方按现有条件“可能接受”也先招降
 # 被拒/无效后下次脉冲（offer_from 标记 120 天内）直接宣战。
 hd_strat_engage_target_effect = {
+	# 2026-10-25 归附谈判（boki 拍板）：AI 对象差 60 以内且付得起，就带着预开价先招降
+	scope:hd_strat_actor = { save_scope_as = actor }
+	scope:hd_strat_target = { save_scope_as = recipient }
+	if = {
+		limit = {
+			scope:hd_strat_target = {
+				is_ai = yes
+				NOT = { var:hd_strat_offer_from ?= scope:hd_strat_actor }
+				highest_held_title_tier < scope:hd_strat_actor.highest_held_title_tier
+				hd_submission_recipient_legal_trigger = { LIEGE = scope:hd_strat_actor }
+				NOT = { hd_submission_ai_refuses_trigger = { LIEGE = scope:hd_strat_actor } }
+			}
+			hd_submission_liege_trigger = yes
+		}
+		hd_neg_ai_prepare_offer_effect = yes
+	}
 	if = {
 		limit = {
 			scope:hd_strat_target = {
@@ -186,9 +202,14 @@ hd_strat_engage_target_effect = {
 			OR = {
 				hd_strat_offers_first_trigger = yes
 				scope:hd_strat_target = { hd_strat_friendly_target_trigger = yes }
-				is_character_interaction_potentially_accepted = {
-					recipient = scope:hd_strat_target
-					interaction = hd_warlord_offer_vassalization_interaction
+				scope:hd_strat_target = { var:hd_neg_viable ?= 1 }
+				# 玩家目标：AI 无从预开价（由玩家在事件里开价），同样差 60 以内就先招降
+				AND = {
+					scope:hd_strat_target = { is_ai = no }
+					hd_neg_base_accept_value >= {
+						value = hd_neg_max_gap
+						multiply = -1
+					}
 				}
 			}
 		}
@@ -207,36 +228,67 @@ hd_strat_engage_target_effect = {
 			scope:hd_strat_target = {
 				set_variable = { name = hd_strat_offer_from value = scope:hd_strat_actor days = 730 }
 			}
-			run_interaction = {
-				interaction = hd_warlord_offer_vassalization_interaction
-				actor = scope:hd_strat_actor
-				recipient = scope:hd_strat_target
-				send_threshold = decline
+			if = {
+				# 2026-10-25 归附谈判：劝玩家归附改走事件，玩家可开价
+				limit = { scope:hd_strat_target = { is_ai = no } }
+				hd_neg_offer_to_player_effect = yes
+			}
+			else = {
+				run_interaction = {
+					interaction = hd_warlord_offer_vassalization_interaction
+					actor = scope:hd_strat_actor
+					recipient = scope:hd_strat_target
+					send_threshold = decline
+				}
 			}
 		}
 	}
 	else = {
+		# 宣战前撤掉预开价并清掉借用的作用域，不带进宣战回调
+		hd_neg_ai_offer_cleanup_effect = yes
+		clear_saved_scope = actor
+		clear_saved_scope = recipient
 		hd_strat_declare_war_effect = yes
+	}
+	# 没发出去就撤掉预开价
+	if = {
+		limit = { exists = scope:recipient }
+		hd_neg_ai_offer_cleanup_effect = yes
+		clear_saved_scope = actor
+		clear_saved_scope = recipient
 	}
 }
 
 # 按阶段选 CB：斗争=吞并（hd_dc_tunbing_cb）；否则逐鹿中原（区内、与本国相邻的公国）。统一战争 CB 已删（boki 10-12 20:28）
 hd_strat_declare_war_effect = {
 	clear_saved_scope = hd_strat_war_title
+	# 2026-10-25：吞并占位目标与 CB 的 valid_to_start 一致——主头衔无法理县（僭号动态帝国）时用首府县
+	clear_saved_scope = hd_strat_tb_title
+	scope:hd_strat_target = {
+		if = {
+			limit = { primary_title = { hd_tb_primary_title_target_trigger = { DEF = scope:hd_strat_target } } }
+			primary_title = { save_scope_as = hd_strat_tb_title }
+		}
+		else_if = {	# 霸权/无地主头衔照旧不走吞并（落到下面逐鹿分支），只给无法理县的普通主头衔改用首府县
+			limit = { primary_title = { tier < tier_hegemony is_landless_type_title = no } }
+			capital_county ?= { save_scope_as = hd_strat_tb_title }
+		}
+	}
 	# 挟天子 CB 已删（boki 10-13）
 	if = {
 		limit = {
 			hd_cycle_phase_is_struggle_trigger = yes
+			exists = scope:hd_strat_tb_title
 			can_declare_war = {
 				defender = scope:hd_strat_target
 				casus_belli = hd_dc_tunbing_cb	# 2026-10-08：战略 AI 改用吞并 CB
-				target_titles = { scope:hd_strat_target.primary_title }	# 2026-10-21：吞并现带占位目标头衔
+				target_titles = { scope:hd_strat_tb_title }	# 2026-10-21：吞并现带占位目标头衔
 			}
 		}
 		start_war = {
 			cb = hd_dc_tunbing_cb
 			target = scope:hd_strat_target
-			target_title = scope:hd_strat_target.primary_title
+			target_title = scope:hd_strat_tb_title
 		}
 	}
 	else = {

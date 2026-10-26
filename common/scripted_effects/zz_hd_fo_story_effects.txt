@@ -1,0 +1,1214 @@
+﻿# 佛教东传（hd_fo，2026-10-25）：史实事件 E01–E58 的效果与年度调度。设计见 docs/佛教东传_设计草案.md §5、§10。
+# 每个事件到年份、开局早于该年、还没做过才触发（hd_fo_due_trigger）；条件不满足时每年重试，满 10 年作废（§10.1 R2）。
+# 状态改动都在效果里做完，弹出的事件只负责叙事；有选项的（E19、E32、E35、E42）在选项里改。
+
+########## 共用 ##########
+
+hd_fo_done_effect = {
+	set_global_variable = { name = hd_fo_done_$E$ value = yes }
+	debug_log = "hd_fo: 事件 $E$"
+}
+
+hd_fo_expire_effect = {
+	if = {
+		limit = { current_year >= $EXP$ }
+		set_global_variable = { name = hd_fo_done_$E$ value = yes }
+		debug_log = "hd_fo: 事件 $E$ 到期作废"
+	}
+}
+
+# 主角：县持有者的最高领主
+hd_fo_actor_place_effect = {
+	if = {
+		limit = { NOT = { exists = scope:hd_fo_actor } }
+		title:$PLACE$.holder.top_liege ?= {
+			if = {
+				limit = { is_alive = yes }
+				save_scope_as = hd_fo_actor
+			}
+		}
+	}
+}
+
+# 主角：指定的史实人物（在世即可）
+hd_fo_actor_char_effect = {
+	if = {
+		limit = { NOT = { exists = scope:hd_fo_actor } }
+		character:$ID$ ?= {
+			if = {
+				limit = { is_alive = yes }
+				save_scope_as = hd_fo_actor
+			}
+		}
+	}
+}
+
+# 主角：汉天子，不在则洛阳持有者的最高领主
+hd_fo_actor_tianzi_effect = {
+	title:e_han.holder ?= {
+		if = {
+			limit = { is_alive = yes }
+			save_scope_as = hd_fo_actor
+		}
+	}
+	hd_fo_actor_place_effect = { PLACE = c_luoyang }
+}
+
+# 主角：某位高僧所在宫廷的最高领主
+hd_fo_actor_monk_liege_effect = {
+	global_var:hd_fo_p_$ID$ ?= {
+		if = {
+			limit = { is_alive = yes exists = court_owner }
+			court_owner.top_liege = { save_scope_as = hd_fo_actor }
+		}
+	}
+}
+
+# 建寺类数值（§10.2）
+hd_fo_temple_reward_effect = {
+	add_piety = 100
+	add_prestige = 75
+}
+
+# 改县（第 10、25、26 项）：石虎诏解禁之后才改
+hd_fo_convert_county_effect = {
+	if = {
+		limit = { has_global_variable = hd_fo_unban }
+		title:$COUNTY$ = { set_county_rite = rite:mahayana }
+		debug_log = "hd_fo: 改县 $COUNTY$"
+	}
+}
+
+# 开宗（第 8 项）
+hd_fo_open_sect_effect = {
+	rite:$RITE$ = { set_can_convert_to_rite = yes }
+	set_global_variable = { name = hd_fo_open_$RITE$ value = yes }
+	debug_log = "hd_fo: 开放宗派 $RITE$"
+}
+
+# 宗师改本宗、开宗类数值（§10.2）；宗师所在宫廷的君主存为 hd_fo_actor
+hd_fo_founder_effect = {
+	global_var:hd_fo_p_$ID$ = {
+		set_character_rite = rite:$RITE$
+		add_piety = 250
+		add_prestige = 150
+	}
+	hd_fo_actor_monk_liege_effect = { ID = $ID$ }
+	scope:hd_fo_actor ?= { add_piety = 100 }
+}
+
+# 直接把高僧送进某人宫廷（史实接纳者，不论是否独立）
+hd_fo_give_monk_to_effect = {
+	global_var:hd_fo_p_$ID$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				NOT = { is_courtier_of = $WHO$ }
+			}
+			save_temporary_scope_as = hd_fo_tmp_monk
+			$WHO$ = { add_courtier = scope:hd_fo_tmp_monk }
+		}
+	}
+}
+
+# 灭佛（主角作用域，§10.2）：灭佛标记、毁寺降窟、高僧出逃、佛教人物好感 −30
+hd_fo_persecute_effect = {
+	save_scope_as = hd_fo_persecutor
+	add_character_flag = hd_fo_miefo
+	hd_fo_persecute_buildings_effect = yes
+	every_vassal_or_below = {
+		limit = { faith.religion = religion:buddhism_religion }
+		add_opinion = { target = scope:hd_fo_persecutor modifier = hd_fo_persecutor_opinion }
+	}
+	every_courtier = {
+		limit = {
+			faith.religion = religion:buddhism_religion
+			NOT = { has_character_flag = hd_fo_monk }
+		}
+		add_opinion = { target = scope:hd_fo_persecutor modifier = hd_fo_persecutor_opinion }
+	}
+	every_living_character = {
+		limit = { has_character_flag = hd_fo_monk }
+		add_opinion = { target = scope:hd_fo_persecutor modifier = hd_fo_persecutor_opinion }
+		if = {
+			limit = {
+				exists = court_owner
+				court_owner.top_liege ?= scope:hd_fo_persecutor
+			}
+			hd_fo_monk_flee_effect = yes
+		}
+	}
+	debug_log = "hd_fo: 灭佛"
+}
+
+# 高僧出逃（高僧作用域）：按第 13 项退路去最近不敌视佛教的君主
+hd_fo_monk_flee_effect = {
+	save_scope_as = hd_fo_monk
+	location = { save_scope_as = hd_fo_place }
+	clear_saved_scope = hd_fo_receiver
+	hd_fo_find_receiver_effect = yes
+	scope:hd_fo_receiver ?= { add_courtier = scope:hd_fo_monk }
+	clear_saved_scope = hd_fo_monk
+	clear_saved_scope = hd_fo_place
+	clear_saved_scope = hd_fo_receiver
+	clear_saved_scope = hd_fo_kingdom
+}
+
+# 复法（主角作用域）：主头衔记入复法国名单，开放重建决策
+hd_fo_restore_dharma_effect = {
+	add_to_global_variable_list = { name = hd_fo_fufa_titles target = primary_title }
+	add_piety = 100
+	debug_log = "hd_fo: 复法"
+}
+
+# 梁武帝舍身一次（主角作用域）
+hd_fo_sheshen_effect = {
+	save_scope_as = hd_fo_sheshen_ruler
+	remove_short_term_gold = medium_gold_value
+	add_piety = 250
+	every_vassal_or_below = {
+		limit = { rite = rite:jingxue }
+		add_opinion = { target = scope:hd_fo_sheshen_ruler modifier = hd_fo_sheshen_jingxue_opinion }
+	}
+}
+
+########## 年度调度 ##########
+
+hd_fo_dispatch_events_effect = {
+	if = { limit = { hd_fo_due_trigger = { E = e49 YEAR = 170 } } hd_fo_e49_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e01 YEAR = 65 } } hd_fo_e01_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e02 YEAR = 68 } } hd_fo_e02_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e04 YEAR = 166 } } hd_fo_e04_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e05 YEAR = 179 } } hd_fo_e05_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e07 YEAR = 180 } } hd_fo_e07_effect = yes }
+	# E08 董卓焚洛阳：190 开局由 hd_palace_crisis.0023 当场调用；这里兜底（190 开局晚一年）
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_fo_done_e08 }
+			OR = {
+				AND = { game_start_date < 190.1.1 current_year >= 190 }
+				AND = { game_start_date = 190.1.1 current_year >= 191 }
+			}
+		}
+		hd_fo_e08_effect = yes
+	}
+	if = { limit = { hd_fo_due_trigger = { E = e09 YEAR = 193 } } hd_fo_e09_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e12 YEAR = 195 } } hd_fo_e12_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e47 YEAR = 221 } } hd_fo_e47_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e13 YEAR = 221 } } hd_fo_e13_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e15 YEAR = 229 } } hd_fo_e15_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e16 YEAR = 247 } } hd_fo_e16_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e18a YEAR = 260 } } hd_fo_e18a_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e19 YEAR = 265 } } hd_fo_e19_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e18b YEAR = 282 } } hd_fo_e18b_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e20 YEAR = 286 } } hd_fo_e20_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e54 YEAR = 305 } } hd_fo_e54_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e21 YEAR = 312 } } hd_fo_e21_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e22 YEAR = 335 } } hd_fo_e22_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e24 YEAR = 345 } } hd_fo_e24_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e25 YEAR = 365 } } hd_fo_e25_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e50 YEAR = 366 } } hd_fo_e50_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e26 YEAR = 379 } } hd_fo_e26_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e27 YEAR = 384 } } hd_fo_e27_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e28 YEAR = 386 } } hd_fo_e28_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e29a YEAR = 399 } } hd_fo_e29a_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e30 YEAR = 401 } } hd_fo_e30_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e31 YEAR = 402 } } hd_fo_e31_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e32 YEAR = 402 } } hd_fo_e32_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e51 YEAR = 405 } } hd_fo_e51_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e29b YEAR = 412 } } hd_fo_e29b_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e29c YEAR = 413 } } hd_fo_e29c_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e33 YEAR = 421 } } hd_fo_e33_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e34a YEAR = 428 } } hd_fo_e34a_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e34b YEAR = 430 } } hd_fo_e34b_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e55 YEAR = 433 } } hd_fo_e55_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e35 YEAR = 446 } } hd_fo_e35_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e36a YEAR = 452 } } hd_fo_e36a_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e36b YEAR = 460 } } hd_fo_e36b_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e52 YEAR = 491 } } hd_fo_e52_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e37 YEAR = 495 } } hd_fo_e37_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e38 YEAR = 516 } } hd_fo_e38_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e39 YEAR = 527 } } hd_fo_e39_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e40a YEAR = 527 } } hd_fo_e40a_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e40b YEAR = 529 } } hd_fo_e40_sheshen_effect = { E = e40b EXP = 539 } }
+	if = { limit = { hd_fo_due_trigger = { E = e40c YEAR = 546 } } hd_fo_e40_sheshen_effect = { E = e40c EXP = 556 } }
+	if = { limit = { hd_fo_due_trigger = { E = e40d YEAR = 547 } } hd_fo_e40_sheshen_effect = { E = e40d EXP = 557 } }
+	if = { limit = { hd_fo_due_trigger = { E = e53 YEAR = 558 } } hd_fo_e53_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e42a YEAR = 574 } } hd_fo_e42a_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e43a YEAR = 575 } } hd_fo_e43a_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e42b YEAR = 577 } } hd_fo_e42b_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e48 YEAR = 581 } } hd_fo_e48_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e44 YEAR = 591 } } hd_fo_e44_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e43b YEAR = 598 } } hd_fo_e43b_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e46 YEAR = 600 } } hd_fo_e46_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e45 YEAR = 601 } } hd_fo_e45_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e56 YEAR = 626 } } hd_fo_e56_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e57 YEAR = 630 } } hd_fo_e57_effect = yes }
+	if = { limit = { hd_fo_due_trigger = { E = e58 YEAR = 645 } } hd_fo_e58_effect = yes }
+	clear_saved_scope = hd_fo_actor
+}
+
+########## 东汉 ##########
+
+# E49 法门寺（阿育王寺）立（拟 170）
+hd_fo_e49_effect = {
+	hd_fo_actor_place_effect = { PLACE = c_uuii_p_895 }
+	if = {
+		limit = { exists = scope:hd_fo_actor }
+		hd_fo_done_effect = { E = e49 }
+		hd_fo_build_famensi_effect = yes
+		scope:hd_fo_actor = { hd_fo_temple_reward_effect = yes trigger_event = hd_fo.1049 }
+	}
+	else = { hd_fo_expire_effect = { E = e49 EXP = 180 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E01 楚王英尚浮屠之仁祠（65）
+hd_fo_e01_effect = {
+	hd_fo_actor_char_effect = { ID = liu_ying }
+	if = {
+		limit = { exists = scope:hd_fo_actor }
+		hd_fo_done_effect = { E = e01 }
+		scope:hd_fo_actor = {
+			set_character_rite = rite:mahayana
+			add_piety = 50
+			trigger_event = hd_fo.1001
+		}
+	}
+	else = { hd_fo_expire_effect = { E = e01 EXP = 75 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E02 永平求法·白马寺（68）
+hd_fo_e02_effect = {
+	hd_fo_actor_tianzi_effect = yes
+	if = {
+		limit = { exists = scope:hd_fo_actor }
+		hd_fo_done_effect = { E = e02 }
+		hd_fo_build_baimasi_effect = yes
+		scope:hd_fo_actor = { hd_fo_temple_reward_effect = yes trigger_event = hd_fo.1002 }
+	}
+	else = { hd_fo_expire_effect = { E = e02 EXP = 78 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E04 桓帝宫中立黄老浮屠之祠（166）
+hd_fo_e04_effect = {
+	hd_fo_actor_tianzi_effect = yes
+	if = {
+		limit = { exists = scope:hd_fo_actor }
+		hd_fo_done_effect = { E = e04 }
+		scope:hd_fo_actor = { add_piety = 50 trigger_event = hd_fo.1004 }
+	}
+	else = { hd_fo_expire_effect = { E = e04 EXP = 176 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E05 支谶译《道行般若》（179）
+hd_fo_e05_effect = {
+	if = {
+		limit = { hd_fo_monk_alive_trigger = { ID = zhi_lou_jia_chen } }
+		hd_fo_done_effect = { E = e05 }
+		global_var:hd_fo_p_zhi_lou_jia_chen = { add_learning_lifestyle_xp = minor_lifestyle_xp }
+		hd_fo_actor_tianzi_effect = yes
+		scope:hd_fo_actor ?= { add_piety = 50 trigger_event = hd_fo.1005 }
+	}
+	else = { hd_fo_expire_effect = { E = e05 EXP = 189 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E07 安世高避乱江南（约 180）：移往会稽
+hd_fo_e07_effect = {
+	if = {
+		limit = { hd_fo_monk_alive_trigger = { ID = an_shi_gao } }
+		hd_fo_done_effect = { E = e07 }
+		hd_fo_move_monk_effect = { ID = an_shi_gao PLACE = c_uuii_p_6471 }
+	}
+	else = { hd_fo_expire_effect = { E = e07 EXP = 190 } }
+}
+
+# E08 董卓焚洛阳：白马寺整座移除（第 34 项），锁住到 E47 曹魏重修
+hd_fo_e08_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_fo_done_e08 } }
+		hd_fo_done_effect = { E = e08 }
+		province:783 = {
+			if = { limit = { has_building = TK_20_20_BaiMaSi_lv3 } remove_building = TK_20_20_BaiMaSi_lv3 }
+			else_if = { limit = { has_building = TK_20_20_BaiMaSi } remove_building = TK_20_20_BaiMaSi }
+			else_if = { limit = { has_building = TK_20_20_BaiMaSi_lv1 } remove_building = TK_20_20_BaiMaSi_lv1 }
+		}
+		set_global_variable = { name = hd_fo_lock_baimasi value = yes }
+	}
+}
+
+# E09 笮融大起浮屠祠（193）：笮融须持有下邳
+hd_fo_e09_effect = {
+	character:ze_rong ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				title:c_uuii_p_284.holder ?= this
+			}
+			save_scope_as = hd_fo_actor
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_fo_actor }
+		hd_fo_done_effect = { E = e09 }
+		hd_fo_build_futuci_effect = yes
+		title:c_uuii_p_284 = { change_development_level = 5 }
+		scope:hd_fo_actor = {
+			hd_fo_temple_reward_effect = yes
+			remove_short_term_gold = medium_gold_value
+			trigger_event = hd_fo.1009
+		}
+	}
+	else = { hd_fo_expire_effect = { E = e09 EXP = 196 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E12 牟子作《理惑论》（约 195）
+hd_fo_e12_effect = {
+	if = {
+		limit = { hd_fo_monk_alive_trigger = { ID = mou_zi } }
+		hd_fo_done_effect = { E = e12 }
+		global_var:hd_fo_p_mou_zi = { add_prestige = 75 }
+		character:shi_xie ?= {
+			if = { limit = { is_alive = yes } add_piety = 50 }
+		}
+	}
+	else = { hd_fo_expire_effect = { E = e12 EXP = 205 } }
+}
+
+########## 三国、西晋 ##########
+
+# E47 曹魏重修白马寺（221，第 42 项）
+hd_fo_e47_effect = {
+	hd_fo_actor_place_effect = { PLACE = c_luoyang }
+	if = {
+		limit = { exists = scope:hd_fo_actor }
+		hd_fo_done_effect = { E = e47 }
+		if = {
+			limit = { NOT = { province:783 = { has_building_or_higher = TK_20_20_BaiMaSi_lv1 } } }
+			hd_fo_build_baimasi_effect = yes
+			scope:hd_fo_actor = { hd_fo_temple_reward_effect = yes trigger_event = hd_fo.1047 }
+		}
+	}
+	else = { hd_fo_expire_effect = { E = e47 EXP = 231 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E13 支谦入吴，辅导东宫（约 221）
+hd_fo_e13_effect = {
+	if = {
+		limit = { hd_fo_monk_alive_trigger = { ID = zhi_qian } }
+		hd_fo_done_effect = { E = e13 }
+		character:sun_deng ?= {
+			if = {
+				limit = { is_alive = yes is_adult = no }
+				set_relation_guardian = global_var:hd_fo_p_zhi_qian
+			}
+		}
+	}
+	else = { hd_fo_expire_effect = { E = e13 EXP = 231 } }
+}
+
+# E15 曹植鱼山制梵呗（约 229）
+hd_fo_e15_effect = {
+	hd_fo_actor_char_effect = { ID = cao_zhi }
+	if = {
+		limit = { exists = scope:hd_fo_actor }
+		hd_fo_done_effect = { E = e15 }
+		scope:hd_fo_actor = {
+			add_learning_lifestyle_xp = minor_lifestyle_xp
+			add_piety = 50
+			trigger_event = hd_fo.1015
+		}
+	}
+	else = { hd_fo_expire_effect = { E = e15 EXP = 233 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E16 康僧会得舍利，建初寺（247）
+hd_fo_e16_effect = {
+	if = {
+		limit = { hd_fo_monk_alive_trigger = { ID = kang_seng_hui } }
+		hd_fo_actor_place_effect = { PLACE = c_uuii_p_4389 }
+	}
+	if = {
+		limit = { exists = scope:hd_fo_actor }
+		hd_fo_done_effect = { E = e16 }
+		hd_fo_build_jianchusi_effect = yes
+		scope:hd_fo_actor = { hd_fo_temple_reward_effect = yes trigger_event = hd_fo.1016 }
+	}
+	else = { hd_fo_expire_effect = { E = e16 EXP = 257 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E18a 朱士行西行于阗（260）
+hd_fo_e18a_effect = {
+	if = {
+		limit = { hd_fo_monk_alive_trigger = { ID = zhu_shi_xing } }
+		hd_fo_done_effect = { E = e18a }
+		hd_fo_move_monk_effect = { ID = zhu_shi_xing PLACE = c_uuii_p_6152 }
+	}
+	else = { hd_fo_expire_effect = { E = e18a EXP = 270 } }
+}
+
+# E19 孙皓欲毁寺（约 265，第 24 项）：二选一，AI 罢议
+hd_fo_e19_effect = {
+	if = {
+		limit = { province:2088 = { has_building_or_higher = hd_fo_jianchusi_lv1 } }
+		hd_fo_actor_place_effect = { PLACE = c_uuii_p_4389 }
+	}
+	if = {
+		limit = { exists = scope:hd_fo_actor }
+		hd_fo_done_effect = { E = e19 }
+		scope:hd_fo_actor = { trigger_event = hd_fo.1019 }
+	}
+	else = { hd_fo_expire_effect = { E = e19 EXP = 275 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E18b 朱士行遣弟子送经回洛阳（282）
+hd_fo_e18b_effect = {
+	if = {
+		limit = { has_global_variable = hd_fo_s_zhu_shi_xing }
+		hd_fo_actor_place_effect = { PLACE = c_luoyang }
+	}
+	if = {
+		limit = { exists = scope:hd_fo_actor }
+		hd_fo_done_effect = { E = e18b }
+		scope:hd_fo_actor = { add_piety = 50 }
+	}
+	else = { hd_fo_expire_effect = { E = e18b EXP = 292 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E20 竺法护译《正法华》（286）
+hd_fo_e20_effect = {
+	if = {
+		limit = { hd_fo_monk_alive_trigger = { ID = zhu_fa_hu } }
+		hd_fo_done_effect = { E = e20 }
+		global_var:hd_fo_p_zhu_fa_hu = {
+			add_prestige = 150
+			add_learning_lifestyle_xp = minor_lifestyle_xp
+		}
+	}
+	else = { hd_fo_expire_effect = { E = e20 EXP = 296 } }
+}
+
+# E54 帛远被秦州刺史张辅所杀（拟 305，第 44 项）
+hd_fo_e54_effect = {
+	hd_fo_done_effect = { E = e54 }
+	global_var:hd_fo_p_bo_yuan ?= {
+		if = {
+			limit = { is_alive = yes }
+			if = {
+				limit = { character:hd_304_zhang_fu ?= { is_alive = yes } }
+				death = { death_reason = death_hd_fo_bo_yuan killer = character:hd_304_zhang_fu }
+			}
+			else = {
+				death = { death_reason = death_hd_fo_bo_yuan }
+			}
+		}
+	}
+}
+
+########## 十六国、东晋 ##########
+
+# E21 佛图澄化石勒（312）：直接入石勒宫廷
+hd_fo_e21_effect = {
+	if = {
+		limit = { hd_fo_monk_alive_trigger = { ID = fo_tu_cheng } }
+		character:shangdang_shi_003 ?= {
+			if = {
+				limit = { is_alive = yes is_ruler = yes }
+				save_scope_as = hd_fo_actor
+			}
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_fo_actor }
+		hd_fo_done_effect = { E = e21 }
+		hd_fo_give_monk_to_effect = { ID = fo_tu_cheng WHO = scope:hd_fo_actor }
+		scope:hd_fo_actor = {
+			add_piety = 100
+			add_opinion = { target = global_var:hd_fo_p_fo_tu_cheng modifier = hd_fo_revered_monk_opinion }
+			trigger_event = hd_fo.1021
+		}
+	}
+	else = { hd_fo_expire_effect = { E = e21 EXP = 322 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E22 石虎诏「佛是戎神，正所应奉」（335）：解禁；邺城改县
+hd_fo_e22_effect = {
+	character:shangdang_shi_010 ?= {
+		if = {
+			limit = { is_alive = yes is_ruler = yes }
+			save_scope_as = hd_fo_actor
+		}
+	}
+	hd_fo_actor_place_effect = { PLACE = c_uuii_p_1172 }
+	if = {
+		limit = { exists = scope:hd_fo_actor }
+		hd_fo_done_effect = { E = e22 }
+		set_global_variable = { name = hd_fo_unban value = yes }
+		hd_fo_convert_county_effect = { COUNTY = c_uuii_p_1172 }
+		scope:hd_fo_actor = { add_piety = 100 trigger_event = hd_fo.1022 }
+	}
+	else = {
+		hd_fo_expire_effect = { E = e22 EXP = 345 }
+		# 到期也解禁，免得之后的改县事件永远不生效（自拟）
+		if = {
+			limit = { has_global_variable = hd_fo_done_e22 }
+			set_global_variable = { name = hd_fo_unban value = yes }
+		}
+	}
+	clear_saved_scope = hd_fo_actor
+}
+
+# E24 支遁与王羲之、谢安交游（约 345）
+hd_fo_e24_effect = {
+	if = {
+		limit = { hd_fo_monk_alive_trigger = { ID = zhi_dun } }
+		hd_fo_done_effect = { E = e24 }
+		global_var:hd_fo_p_zhi_dun = { save_scope_as = hd_fo_monk }
+		character:langya_wang_063 ?= {
+			if = {
+				limit = { is_alive = yes }
+				add_opinion = { target = scope:hd_fo_monk modifier = hd_fo_dharma_friend_opinion }
+				scope:hd_fo_monk = { add_opinion = { target = prev modifier = hd_fo_dharma_friend_opinion } }
+			}
+		}
+		character:chenjun_xie_030 ?= {
+			if = {
+				limit = { is_alive = yes }
+				add_opinion = { target = scope:hd_fo_monk modifier = hd_fo_dharma_friend_opinion }
+				scope:hd_fo_monk = { add_opinion = { target = prev modifier = hd_fo_dharma_friend_opinion } }
+			}
+		}
+		clear_saved_scope = hd_fo_monk
+	}
+	else = { hd_fo_expire_effect = { E = e24 EXP = 362 } }
+}
+
+# E25 道安居襄阳（365）：道安、慧远移往襄阳（习凿齿人物库无此人，不做）
+hd_fo_e25_effect = {
+	if = {
+		limit = { hd_fo_monk_alive_trigger = { ID = dao_an } }
+		hd_fo_done_effect = { E = e25 }
+		hd_fo_move_monk_effect = { ID = dao_an PLACE = c_uuii_p_1788 }
+		hd_fo_move_monk_effect = { ID = hui_yuan PLACE = c_uuii_p_1788 }
+	}
+	else = { hd_fo_expire_effect = { E = e25 EXP = 375 } }
+}
+
+# E50 乐僔开莫高窟（366）
+hd_fo_e50_effect = {
+	hd_fo_actor_place_effect = { PLACE = c_uuii_p_5007 }
+	if = {
+		limit = { exists = scope:hd_fo_actor }
+		hd_fo_done_effect = { E = e50 }
+		hd_fo_build_mogaoku_effect = yes
+		scope:hd_fo_actor = { hd_fo_temple_reward_effect = yes trigger_event = hd_fo.1050 }
+	}
+	else = { hd_fo_expire_effect = { E = e50 EXP = 376 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E26 苻坚取襄阳得「一人半」（379）
+hd_fo_e26_effect = {
+	if = {
+		limit = { hd_fo_monk_alive_trigger = { ID = dao_an } }
+		hd_fo_actor_char_effect = { ID = lueyang_fu_020 }
+		hd_fo_actor_place_effect = { PLACE = c_uuii_p_867 }
+	}
+	if = {
+		limit = { exists = scope:hd_fo_actor }
+		hd_fo_done_effect = { E = e26 }
+		hd_fo_give_monk_to_effect = { ID = dao_an WHO = scope:hd_fo_actor }
+		hd_fo_move_monk_effect = { ID = hui_yuan PLACE = c_uuii_p_6364 }
+		scope:hd_fo_actor = { add_piety = 100 add_prestige = 75 trigger_event = hd_fo.1026 }
+	}
+	else = { hd_fo_expire_effect = { E = e26 EXP = 385 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E27 吕光破龟兹得罗什（384）
+hd_fo_e27_effect = {
+	if = {
+		limit = { hd_fo_monk_alive_trigger = { ID = jiu_mo_luo_shi } }
+		hd_fo_done_effect = { E = e27 }
+		if = {
+			limit = { character:lueyang_lv_002 ?= { is_alive = yes is_ruler = yes } }
+			hd_fo_give_monk_to_effect = { ID = jiu_mo_luo_shi WHO = character:lueyang_lv_002 }
+		}
+		else = {
+			hd_fo_move_monk_effect = { ID = jiu_mo_luo_shi PLACE = c_uuii_p_1564 }
+		}
+	}
+	else = { hd_fo_expire_effect = { E = e27 EXP = 394 } }
+}
+
+# E28 慧远入庐山，桓伊立东林寺（386）
+hd_fo_e28_effect = {
+	if = {
+		limit = { hd_fo_monk_alive_trigger = { ID = hui_yuan } }
+		hd_fo_move_monk_effect = { ID = hui_yuan PLACE = c_uuii_p_6364 }
+		hd_fo_actor_place_effect = { PLACE = c_uuii_p_6364 }
+	}
+	if = {
+		limit = { exists = scope:hd_fo_actor }
+		hd_fo_done_effect = { E = e28 }
+		hd_fo_build_donglinsi_effect = yes
+		hd_fo_convert_county_effect = { COUNTY = c_uuii_p_6364 }
+		scope:hd_fo_actor = { hd_fo_temple_reward_effect = yes trigger_event = hd_fo.1028 }
+	}
+	else = { hd_fo_expire_effect = { E = e28 EXP = 396 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E29a 法显西行（399）：离开地图（移入远方游方者池，打西行中标记；引擎上是否可行未验证）
+hd_fo_e29a_effect = {
+	hd_fo_done_effect = { E = e29a }
+	global_var:hd_fo_p_fa_xian ?= {
+		if = {
+			limit = { is_alive = yes }
+			add_character_flag = hd_fo_xixing
+			title:c_uuii_p_6152.title_province ?= { save_scope_as = hd_fo_far }
+			move_to_pool_at = scope:hd_fo_far
+			clear_saved_scope = hd_fo_far
+		}
+	}
+}
+
+# E29b 法显归国，青州长广登岸（412）：404 开局时他在天竺，此时才出场
+hd_fo_e29b_effect = {
+	hd_fo_done_effect = { E = e29b }
+	if = {
+		limit = { NOT = { has_global_variable = hd_fo_s_fa_xian } }
+		hd_fo_place_monk_effect = { ID = fa_xian PLACE = c_uuii_p_187 AGE = 75 }
+	}
+	else = {
+		hd_fo_move_monk_effect = { ID = fa_xian PLACE = c_uuii_p_187 }
+	}
+	global_var:hd_fo_p_fa_xian ?= {
+		if = {
+			limit = { is_alive = yes }
+			remove_character_flag = hd_fo_xixing
+			add_trait = pilgrim
+			add_prestige = 350
+		}
+	}
+}
+
+# E29c 法显至建康（413）
+hd_fo_e29c_effect = {
+	hd_fo_done_effect = { E = e29c }
+	if = {
+		limit = { hd_fo_monk_alive_trigger = { ID = fa_xian } }
+		hd_fo_move_monk_effect = { ID = fa_xian PLACE = c_uuii_p_4389 }
+	}
+}
+
+# E30 姚兴迎罗什入长安，逍遥园译经（401）
+hd_fo_e30_effect = {
+	if = {
+		limit = { hd_fo_monk_alive_trigger = { ID = jiu_mo_luo_shi } }
+		hd_fo_actor_char_effect = { ID = shaodang_yao_013 }
+		hd_fo_actor_place_effect = { PLACE = c_uuii_p_867 }
+	}
+	if = {
+		limit = { exists = scope:hd_fo_actor }
+		hd_fo_done_effect = { E = e30 }
+		hd_fo_give_monk_to_effect = { ID = jiu_mo_luo_shi WHO = scope:hd_fo_actor }
+		hd_fo_give_monk_to_effect = { ID = seng_zhao WHO = scope:hd_fo_actor }
+		hd_fo_build_xiaoyaoyuan_effect = yes
+		hd_fo_convert_county_effect = { COUNTY = c_uuii_p_867 }
+		scope:hd_fo_actor = { hd_fo_temple_reward_effect = yes trigger_event = hd_fo.1030 }
+	}
+	else = { hd_fo_expire_effect = { E = e30 EXP = 411 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E31 慧远结白莲社 → 开放净土（402）
+hd_fo_e31_effect = {
+	if = {
+		limit = { hd_fo_monk_alive_trigger = { ID = hui_yuan } }
+		hd_fo_done_effect = { E = e31 }
+		hd_fo_open_sect_effect = { RITE = sukhavati }
+		hd_fo_founder_effect = { ID = hui_yuan RITE = sukhavati }
+		scope:hd_fo_actor ?= { trigger_event = hd_fo.1031 }
+	}
+	else = {
+		hd_fo_expire_effect = { E = e31 EXP = 412 }
+		if = { limit = { has_global_variable = hd_fo_done_e31 } hd_fo_open_sect_effect = { RITE = sukhavati } } # 宗师不在也到期开放（自拟）
+	}
+	clear_saved_scope = hd_fo_actor
+}
+
+# E32 桓玄议沙汰沙门、沙门敬王者（402）：二选一，AI 罢议
+hd_fo_e32_effect = {
+	hd_fo_actor_char_effect = { ID = longkang_huan_027 }
+	hd_fo_actor_place_effect = { PLACE = c_uuii_p_4389 }
+	if = {
+		limit = { exists = scope:hd_fo_actor }
+		hd_fo_done_effect = { E = e32 }
+		scope:hd_fo_actor = { trigger_event = hd_fo.1032 }
+	}
+	else = { hd_fo_expire_effect = { E = e32 EXP = 405 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E51 姚兴开麦积山（拟 405）
+hd_fo_e51_effect = {
+	hd_fo_actor_place_effect = { PLACE = c_uuii_p_1515 }
+	if = {
+		limit = {
+			exists = scope:hd_fo_actor
+			scope:hd_fo_actor = { NOT = { has_character_flag = hd_fo_miefo } }
+		}
+		hd_fo_done_effect = { E = e51 }
+		hd_fo_build_maijishan_effect = yes
+		scope:hd_fo_actor = { hd_fo_temple_reward_effect = yes trigger_event = hd_fo.1051 }
+	}
+	else = { hd_fo_expire_effect = { E = e51 EXP = 415 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E33 昙无谶译大本《涅槃》（421）
+hd_fo_e33_effect = {
+	if = {
+		limit = { hd_fo_monk_alive_trigger = { ID = tan_wu_chen } }
+		hd_fo_done_effect = { E = e33 }
+		global_var:hd_fo_p_tan_wu_chen = { add_prestige = 150 }
+		hd_fo_actor_monk_liege_effect = { ID = tan_wu_chen }
+		scope:hd_fo_actor ?= { add_piety = 50 trigger_event = hd_fo.1033 }
+	}
+	else = { hd_fo_expire_effect = { E = e33 EXP = 431 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E34a 道生倡阐提成佛被摈（428）
+hd_fo_e34a_effect = {
+	if = {
+		limit = { hd_fo_monk_alive_trigger = { ID = dao_sheng } }
+		hd_fo_done_effect = { E = e34a }
+		hd_fo_move_monk_effect = { ID = dao_sheng PLACE = c_uuii_p_6364 }
+	}
+	else = { hd_fo_expire_effect = { E = e34a EXP = 434 } }
+}
+
+# E34b 大本《涅槃》至，道生之说得证（430）
+hd_fo_e34b_effect = {
+	if = {
+		limit = { hd_fo_monk_alive_trigger = { ID = dao_sheng } }
+		hd_fo_done_effect = { E = e34b }
+		global_var:hd_fo_p_dao_sheng = { add_prestige = 150 }
+	}
+	else = { hd_fo_expire_effect = { E = e34b EXP = 434 } }
+}
+
+# E55 昙无谶欲西行，为沮渠蒙逊遣人所杀（433，第 44 项）
+hd_fo_e55_effect = {
+	hd_fo_done_effect = { E = e55 }
+	global_var:hd_fo_p_tan_wu_chen ?= {
+		if = {
+			limit = { is_alive = yes }
+			if = {
+				limit = { character:juqu_008 ?= { is_alive = yes } }
+				death = { death_reason = death_hd_fo_tan_wu_chen killer = character:juqu_008 }
+			}
+			else = {
+				death = { death_reason = death_hd_fo_tan_wu_chen }
+			}
+		}
+	}
+}
+
+########## 南北朝、隋 ##########
+
+# E35 太武帝灭佛（446）：主角为持有平城、不信佛的帝国级君主；二选一，AI 灭佛
+hd_fo_e35_effect = {
+	title:c_uuii_p_1265.holder.top_liege ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				highest_held_title_tier >= tier_empire
+				NOT = { faith.religion = religion:buddhism_religion }
+			}
+			save_scope_as = hd_fo_actor
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_fo_actor }
+		hd_fo_done_effect = { E = e35 }
+		scope:hd_fo_actor = { trigger_event = hd_fo.1035 }
+	}
+	else = { hd_fo_expire_effect = { E = e35 EXP = 456 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E36a 文成帝复法（452）：只在太武帝灭佛真的发生过时
+hd_fo_e36a_effect = {
+	if = {
+		limit = { has_global_variable = hd_fo_persecuted_e35 }
+		hd_fo_actor_place_effect = { PLACE = c_uuii_p_1265 }
+	}
+	else = {
+		hd_fo_done_effect = { E = e36a }
+	}
+	if = {
+		limit = {
+			exists = scope:hd_fo_actor
+			scope:hd_fo_actor = { NOT = { has_character_flag = hd_fo_miefo } }
+		}
+		hd_fo_done_effect = { E = e36a }
+		scope:hd_fo_actor = { hd_fo_restore_dharma_effect = yes trigger_event = hd_fo.1036 }
+	}
+	else = { hd_fo_expire_effect = { E = e36a EXP = 466 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E36b 昙曜开云冈（460）：大同县（第 36 项）
+hd_fo_e36b_effect = {
+	hd_fo_actor_place_effect = { PLACE = c_uuii_p_1317 }
+	if = {
+		limit = {
+			exists = scope:hd_fo_actor
+			scope:hd_fo_actor = { NOT = { has_character_flag = hd_fo_miefo } }
+		}
+		hd_fo_done_effect = { E = e36b }
+		hd_fo_build_yungang_effect = yes
+		hd_fo_convert_county_effect = { COUNTY = c_uuii_p_1317 }
+		scope:hd_fo_actor = { hd_fo_temple_reward_effect = yes trigger_event = hd_fo.1136 }
+	}
+	else = { hd_fo_expire_effect = { E = e36b EXP = 470 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E52 北魏建悬空寺（491）
+hd_fo_e52_effect = {
+	hd_fo_actor_place_effect = { PLACE = c_uuii_p_1309 }
+	if = {
+		limit = {
+			exists = scope:hd_fo_actor
+			scope:hd_fo_actor = { NOT = { has_character_flag = hd_fo_miefo } }
+		}
+		hd_fo_done_effect = { E = e52 }
+		hd_fo_build_xuankongsi_effect = yes
+		scope:hd_fo_actor = { hd_fo_temple_reward_effect = yes trigger_event = hd_fo.1052 }
+	}
+	else = { hd_fo_expire_effect = { E = e52 EXP = 501 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E37 跋陀入嵩山，孝文帝立少林寺（495）：巩县（第 36 项）
+hd_fo_e37_effect = {
+	hd_fo_actor_place_effect = { PLACE = c_uuii_p_776 }
+	if = {
+		limit = {
+			exists = scope:hd_fo_actor
+			scope:hd_fo_actor = { NOT = { has_character_flag = hd_fo_miefo } }
+		}
+		hd_fo_done_effect = { E = e37 }
+		hd_fo_move_monk_effect = { ID = ba_tuo PLACE = c_uuii_p_776 }
+		hd_fo_build_shaolin_effect = yes
+		hd_fo_convert_county_effect = { COUNTY = c_uuii_p_776 }
+		scope:hd_fo_actor = { hd_fo_temple_reward_effect = yes trigger_event = hd_fo.1037 }
+	}
+	else = { hd_fo_expire_effect = { E = e37 EXP = 505 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E38 胡太后立永宁寺（516）：金墉县（第 38 项）
+hd_fo_e38_effect = {
+	hd_fo_actor_char_effect = { ID = anding_hu_011 }
+	hd_fo_actor_place_effect = { PLACE = c_luoyang }
+	if = {
+		limit = {
+			exists = scope:hd_fo_actor
+			scope:hd_fo_actor = { NOT = { has_character_flag = hd_fo_miefo } }
+		}
+		hd_fo_done_effect = { E = e38 }
+		hd_fo_build_yongningsi_effect = yes
+		hd_fo_convert_county_effect = { COUNTY = c_uuii_p_786 }
+		scope:hd_fo_actor = { hd_fo_temple_reward_effect = yes trigger_event = hd_fo.1038 }
+	}
+	else = { hd_fo_expire_effect = { E = e38 EXP = 526 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E39 达摩见梁武帝、北上嵩山，慧可断臂 → 开放禅（约 527）
+hd_fo_e39_effect = {
+	if = {
+		limit = { hd_fo_monk_alive_trigger = { ID = pu_ti_da_mo } }
+		hd_fo_done_effect = { E = e39 }
+		hd_fo_open_sect_effect = { RITE = dhyana }
+		hd_fo_move_monk_effect = { ID = pu_ti_da_mo PLACE = c_uuii_p_776 }
+		hd_fo_founder_effect = { ID = pu_ti_da_mo RITE = dhyana }
+		global_var:hd_fo_p_hui_ke ?= {
+			if = { limit = { is_alive = yes NOT = { has_trait = maimed } } add_trait = maimed }
+		}
+		scope:hd_fo_actor ?= { trigger_event = hd_fo.1039 }
+	}
+	else = {
+		hd_fo_expire_effect = { E = e39 EXP = 537 }
+		if = { limit = { has_global_variable = hd_fo_done_e39 } hd_fo_open_sect_effect = { RITE = dhyana } } # 宗师不在也到期开放（自拟）
+	}
+	clear_saved_scope = hd_fo_actor
+}
+
+# E40a 梁武帝首次舍身同泰寺（527）：同泰寺建成、建业改县
+hd_fo_e40a_effect = {
+	hd_fo_actor_char_effect = { ID = hd_531_xiao_yan }
+	hd_fo_actor_place_effect = { PLACE = c_uuii_p_4389 }
+	if = {
+		limit = {
+			exists = scope:hd_fo_actor
+			scope:hd_fo_actor = { NOT = { has_character_flag = hd_fo_miefo } }
+		}
+		hd_fo_done_effect = { E = e40a }
+		set_global_variable = { name = hd_fo_liangwu value = scope:hd_fo_actor }
+		hd_fo_build_tongtaisi_effect = yes
+		hd_fo_convert_county_effect = { COUNTY = c_uuii_p_4389 }
+		scope:hd_fo_actor = {
+			hd_fo_temple_reward_effect = yes
+			hd_fo_sheshen_effect = yes
+			trigger_event = hd_fo.1040
+		}
+	}
+	else = { hd_fo_expire_effect = { E = e40a EXP = 537 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E40b–d 梁武帝再舍身（529、546、547）：梁武帝（或首次舍身的君主）不在了就不再触发
+hd_fo_e40_sheshen_effect = {
+	hd_fo_actor_char_effect = { ID = hd_531_xiao_yan }
+	if = {
+		limit = { NOT = { exists = scope:hd_fo_actor } }
+		global_var:hd_fo_liangwu ?= {
+			if = { limit = { is_alive = yes } save_scope_as = hd_fo_actor }
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_fo_actor }
+		hd_fo_done_effect = { E = $E$ }
+		scope:hd_fo_actor = { hd_fo_sheshen_effect = yes trigger_event = hd_fo.1140 }
+	}
+	else = { hd_fo_expire_effect = { E = $E$ EXP = $EXP$ } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E53 拓跋育开法门寺塔（558）：升一级
+hd_fo_e53_effect = {
+	hd_fo_done_effect = { E = e53 }
+	if = {
+		limit = { province:895 = { has_building_or_higher = TK_20_20_FaMenSi_lv1 } }
+		hd_fo_upgrade_famensi_effect = yes
+		hd_fo_actor_place_effect = { PLACE = c_uuii_p_895 }
+		scope:hd_fo_actor ?= { add_piety = 50 trigger_event = hd_fo.1053 }
+	}
+	clear_saved_scope = hd_fo_actor
+}
+
+# E42a 北周武帝灭佛灭道（574）：主角为持有长安、不信佛的君主；二选一，AI 灭佛
+hd_fo_e42a_effect = {
+	title:c_uuii_p_867.holder.top_liege ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				NOT = { faith.religion = religion:buddhism_religion }
+			}
+			save_scope_as = hd_fo_actor
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_fo_actor }
+		hd_fo_done_effect = { E = e42a }
+		scope:hd_fo_actor = { trigger_event = hd_fo.1042 }
+	}
+	else = { hd_fo_expire_effect = { E = e42a EXP = 584 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E43a 智顗入天台 → 开放天台（575）
+hd_fo_e43a_effect = {
+	if = {
+		limit = { hd_fo_monk_alive_trigger = { ID = zhi_yi } }
+		hd_fo_done_effect = { E = e43a }
+		hd_fo_open_sect_effect = { RITE = pundarika }
+		hd_fo_move_monk_effect = { ID = zhi_yi PLACE = c_uuii_p_5908 }
+		hd_fo_founder_effect = { ID = zhi_yi RITE = pundarika }
+		scope:hd_fo_actor ?= { trigger_event = hd_fo.1043 }
+	}
+	else = {
+		hd_fo_expire_effect = { E = e43a EXP = 585 }
+		if = { limit = { has_global_variable = hd_fo_done_e43a } hd_fo_open_sect_effect = { RITE = pundarika } } # 宗师不在也到期开放（自拟）
+	}
+	clear_saved_scope = hd_fo_actor
+}
+
+# E42b 北周灭北齐，灭佛推及齐地（577）
+hd_fo_e42b_effect = {
+	if = {
+		limit = { has_global_variable = hd_fo_persecuted_e42 }
+		global_var:hd_fo_zhouwu ?= {
+			if = {
+				limit = {
+					is_alive = yes
+					title:c_uuii_p_1172.holder.top_liege ?= this
+				}
+				save_scope_as = hd_fo_actor
+			}
+		}
+	}
+	else = {
+		hd_fo_done_effect = { E = e42b }
+	}
+	if = {
+		limit = { exists = scope:hd_fo_actor }
+		hd_fo_done_effect = { E = e42b }
+		scope:hd_fo_actor = { hd_fo_persecute_effect = yes }
+	}
+	else = { hd_fo_expire_effect = { E = e42b EXP = 580 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E48 隋文帝复法（581）：只在北周灭佛真的发生过时
+hd_fo_e48_effect = {
+	if = {
+		limit = { has_global_variable = hd_fo_persecuted_e42 }
+		hd_fo_actor_place_effect = { PLACE = c_uuii_p_867 }
+	}
+	else = {
+		hd_fo_done_effect = { E = e48 }
+	}
+	if = {
+		limit = {
+			exists = scope:hd_fo_actor
+			scope:hd_fo_actor = { NOT = { has_character_flag = hd_fo_miefo } }
+		}
+		hd_fo_done_effect = { E = e48 }
+		scope:hd_fo_actor = { hd_fo_restore_dharma_effect = yes trigger_event = hd_fo.1048 }
+	}
+	else = { hd_fo_expire_effect = { E = e48 EXP = 591 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E44 杨广授智顗菩萨戒，号智者（591）
+hd_fo_e44_effect = {
+	if = {
+		limit = { hd_fo_monk_alive_trigger = { ID = zhi_yi } }
+		hd_fo_done_effect = { E = e44 }
+		global_var:hd_fo_p_zhi_yi = { add_prestige = 150 }
+		hd_fo_actor_char_effect = { ID = 247726 }
+		hd_fo_actor_monk_liege_effect = { ID = zhi_yi }
+		scope:hd_fo_actor ?= { add_piety = 100 trigger_event = hd_fo.1044 }
+	}
+	else = { hd_fo_expire_effect = { E = e44 EXP = 597 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E43b 杨广依智顗遗图立国清寺（598）：章安县
+hd_fo_e43b_effect = {
+	hd_fo_actor_char_effect = { ID = 247726 }
+	hd_fo_actor_place_effect = { PLACE = c_uuii_p_5908 }
+	if = {
+		limit = {
+			exists = scope:hd_fo_actor
+			scope:hd_fo_actor = { NOT = { has_character_flag = hd_fo_miefo } }
+		}
+		hd_fo_done_effect = { E = e43b }
+		hd_fo_build_guoqingsi_effect = yes
+		hd_fo_convert_county_effect = { COUNTY = c_uuii_p_5908 }
+		scope:hd_fo_actor = { hd_fo_temple_reward_effect = yes trigger_event = hd_fo.1143 }
+	}
+	else = { hd_fo_expire_effect = { E = e43b EXP = 608 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E46 三阶教被禁（600）：纯叙事
+hd_fo_e46_effect = {
+	hd_fo_actor_place_effect = { PLACE = c_uuii_p_867 }
+	hd_fo_done_effect = { E = e46 }
+	scope:hd_fo_actor ?= { trigger_event = hd_fo.1046 }
+	clear_saved_scope = hd_fo_actor
+}
+
+# E45 隋文帝仁寿舍利塔（601）
+hd_fo_e45_effect = {
+	hd_fo_actor_place_effect = { PLACE = c_uuii_p_867 }
+	if = {
+		limit = {
+			exists = scope:hd_fo_actor
+			scope:hd_fo_actor = { NOT = { has_character_flag = hd_fo_miefo } }
+		}
+		hd_fo_done_effect = { E = e45 }
+		scope:hd_fo_actor = { add_piety = 250 add_prestige = 150 trigger_event = hd_fo.1045 }
+	}
+	else = { hd_fo_expire_effect = { E = e45 EXP = 611 } }
+	clear_saved_scope = hd_fo_actor
+}
+
+########## 617 以后开宗（第 9 项） ##########
+
+# E56 道宣撰《四分律行事钞》→ 开放律宗（约 626）
+hd_fo_e56_effect = {
+	if = {
+		limit = { hd_fo_monk_alive_trigger = { ID = dao_xuan } }
+		hd_fo_done_effect = { E = e56 }
+		hd_fo_open_sect_effect = { RITE = vinaya }
+		hd_fo_founder_effect = { ID = dao_xuan RITE = vinaya }
+		scope:hd_fo_actor ?= { trigger_event = hd_fo.1056 }
+	}
+	else = {
+		hd_fo_expire_effect = { E = e56 EXP = 636 }
+		if = { limit = { has_global_variable = hd_fo_done_e56 } hd_fo_open_sect_effect = { RITE = vinaya } } # 宗师不在也到期开放（自拟）
+	}
+	clear_saved_scope = hd_fo_actor
+}
+
+# E57 杜顺立华严 → 开放华严宗（约 630）
+hd_fo_e57_effect = {
+	if = {
+		limit = { hd_fo_monk_alive_trigger = { ID = du_shun } }
+		hd_fo_done_effect = { E = e57 }
+		hd_fo_open_sect_effect = { RITE = avatamsaka }
+		hd_fo_founder_effect = { ID = du_shun RITE = avatamsaka }
+		scope:hd_fo_actor ?= { trigger_event = hd_fo.1057 }
+	}
+	else = {
+		hd_fo_expire_effect = { E = e57 EXP = 640 }
+		if = { limit = { has_global_variable = hd_fo_done_e57 } hd_fo_open_sect_effect = { RITE = avatamsaka } } # 宗师不在也到期开放（自拟）
+	}
+	clear_saved_scope = hd_fo_actor
+}
+
+# E58 玄奘归国 → 开放唯识宗（645）：只改玄奘的礼仪，不动 OE 原有设定
+hd_fo_e58_effect = {
+	character:luozhou_chen_002 ?= {
+		if = {
+			limit = { is_alive = yes }
+			save_scope_as = hd_fo_xuanzang
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_fo_xuanzang }
+		hd_fo_done_effect = { E = e58 }
+		hd_fo_open_sect_effect = { RITE = yogacara }
+		scope:hd_fo_xuanzang = {
+			set_character_rite = rite:yogacara
+			court_owner.top_liege ?= { save_scope_as = hd_fo_actor }
+		}
+		scope:hd_fo_actor ?= { trigger_event = hd_fo.1058 }
+	}
+	else = {
+		hd_fo_expire_effect = { E = e58 EXP = 655 }
+		if = { limit = { has_global_variable = hd_fo_done_e58 } hd_fo_open_sect_effect = { RITE = yogacara } } # 玄奘不在也到期开放（自拟）
+	}
+	clear_saved_scope = hd_fo_xuanzang
+	clear_saved_scope = hd_fo_actor
+}

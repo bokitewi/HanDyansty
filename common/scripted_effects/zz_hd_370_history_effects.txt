@@ -403,12 +403,54 @@ hd_370_check_dongzheng_effect = {
 		}
 		else = {
 			set_global_variable = hd_370_dongzheng_qin_lost
+			# 秦败后可再伐一次（boki 10-26）：休整 180 天，一年内有效
+			if = {
+				limit = { NOT = { exists = global_var:hd_370_dongzheng_retry_started } }
+				set_global_variable = { name = hd_370_dongzheng_retry_cooldown value = yes days = 180 }
+				set_global_variable = { name = hd_370_dongzheng_retry_window value = yes days = 365 }
+			}
 			debug_log = "HD_370 S2 DONGZHENG QIN_LOST"
+		}
+	}
+	# 再伐（boki 10-26，只一次）：秦败后 180 天起、一年内，双方仍在、邺仍属燕。
+	# 清掉 decided/done 后照 S2 出兵，战后仍由上面的「战后」分支判胜负；开战失败会清 started，交回 S2 主分支重试或按截止日收尾
+	if = {
+		limit = {
+			exists = global_var:hd_370_dongzheng_qin_lost
+			NOT = { exists = global_var:hd_370_dongzheng_retry_started }
+			NOT = { exists = global_var:hd_370_dongzheng_retry_cooldown }
+			exists = global_var:hd_370_dongzheng_retry_window
+			NOT = { exists = global_var:hd_370_yanfall_done }
+			character:lueyang_fu_020 ?= { is_alive = yes is_independent_ruler = yes is_imprisoned = no }
+			character:changli_murong_077 ?= { is_alive = yes is_independent_ruler = yes }
+			title:c_uuii_p_1172.holder ?= {
+				OR = {
+					this = character:changli_murong_077
+					top_liege = character:changli_murong_077
+				}
+			}
+		}
+		set_global_variable = hd_370_dongzheng_retry_started
+		remove_global_variable = hd_370_dongzheng_qin_lost
+		remove_global_variable = hd_370_dongzheng_done
+		if = {
+			limit = { exists = global_var:hd_370_dongzheng_decided }
+			remove_global_variable = hd_370_dongzheng_decided
+		}
+		debug_log = "HD_370 S2 DONGZHENG RETRY"
+		character:lueyang_fu_020 = {
+			if = {
+				limit = { is_ai = yes }
+				hd_370_dongzheng_war_effect = yes
+			}
+			else = { trigger_event = hd_370.0120 }
 		}
 	}
 }
 
-# 苻坚出兵：洛阳之战还没打完就先白和（计划复核必改 1 乙作兜底）；目标魏郡（邺）。
+# 苻坚出兵：洛阳之战还没打完就先白和（计划复核必改 1 乙作兜底）；目标魏郡（邺），并带上党、阳阿。
+# 魏郡四周全是燕地，单报魏郡会被连通筛选（规则 4）换成别的边境郡、邺城不在目标里；
+# 加上党、阳阿后沿阳阿→上党→魏郡连通（王猛出壶关、战潞川的路线），三郡 22 县含邺城（boki 10-26，D 盘 p02_check.py 模拟）。
 # 开战成功才给事件兵：王猛所部 25,000 在蒲阪（"步骑六万"），慕容评 15,000 在潞城（"中外精兵三十万"按比例折算）。
 # 失败就清掉 started，下次心跳重试，截止日兜底
 hd_370_dongzheng_war_effect = {
@@ -422,6 +464,8 @@ hd_370_dongzheng_war_effect = {
 	}
 	# 洛阳之战白和后 hd_nbc_war_cb 给苻坚加了对燕的停战；史实是燕先背约，不应扣威望（执行后复核必改 2）
 	character:lueyang_fu_020 = { add_character_flag = { flag = allowed_war_declaration_sans_truce_penalties days = 1 } }
+	hd_wct_add_input_effect = { TARGET = title:d_shangdang_sili }
+	hd_wct_add_input_effect = { TARGET = title:d_shangdang }
 	hd_nbc_start_war_effect = { ATTACKER = character:lueyang_fu_020 DEFENDER = character:changli_murong_077 TARGET = title:d_weijun KIND = dongzheng }
 	if = {
 		limit = { exists = scope:hd_nbc_war_dongzheng }
@@ -450,8 +494,21 @@ hd_370_dongzheng_war_effect = {
 hd_370_check_yanfall_effect = {
 	if = {
 		limit = {
-			exists = global_var:hd_370_dongzheng_qin_won
 			NOT = { exists = global_var:hd_370_yanfall_done }
+			OR = {
+				exists = global_var:hd_370_dongzheng_qin_won
+				# 放宽（boki 10-26）：邺城已归苻坚一系（例如天意青睐的其他战争拿到），且东征没在打，也算燕亡
+				AND = {
+					current_date < 371.6.1	# 与 S2 截止日相同
+					NOT = { character:lueyang_fu_020 ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:dongzheng } } }
+					title:c_uuii_p_1172.holder ?= {
+						OR = {
+							this = character:lueyang_fu_020
+							top_liege = character:lueyang_fu_020
+						}
+					}
+				}
+			}
 		}
 		# 燕主：慕容暐在世且有地就是他（被俘也算，效果开头先放人）；他已死或失地，改认燕蓟帝国的持有者（执行后复核必改 1）
 		if = {

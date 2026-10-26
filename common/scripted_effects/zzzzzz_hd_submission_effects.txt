@@ -69,29 +69,7 @@ hd_submission_request_accepted_effect = {
         offer_vassalization_interaction_effect = yes
         if = {
             limit = { scope:recipient = { exists = liege liege = scope:actor } }
-            scope:recipient = {
-                add_character_modifier = { modifier = hd_submission_recently_submitted years = 5 }
-                if = { limit = { is_ai = yes } add_faction_cooldown_effect = { YEARS = 5 } }
-            }
-            scope:actor = {
-                add_prestige = 50
-                # A submission maintains existing momentum, but NEVER adds a level.
-                if = {
-                    limit = { has_variable = hd_submission_momentum var:hd_submission_momentum > 0 }
-                    add_character_flag = { flag = hd_submission_recent_success years = 3 }
-                }
-                remove_character_flag = hd_submission_action_cooldown
-                hd_submission_queue_followup_effect = { DELAY_MIN = 90 DELAY_MAX = 150 }
-                if = {
-                    limit = { is_ai = no }
-                    send_interface_toast = {
-                        type = event_toast_effect_good
-                        title = hd_sub_success_title
-                        left_icon = scope:recipient
-                        right_icon = scope:actor
-                    }
-                }
-            }
+            hd_submission_post_accept_effect = yes
         }
     }
     else = {
@@ -114,11 +92,41 @@ hd_submission_request_accepted_effect = {
     hd_submission_clear_request_effect = yes
 }
 
+# 2026-10-25 归附谈判：归附成功后的善后（原在上面的成交效果里，事件路径成交也要用）。
+# scope:actor = 主君，scope:recipient = 新封臣
+hd_submission_post_accept_effect = {
+    scope:recipient = {
+        add_character_modifier = { modifier = hd_submission_recently_submitted years = 5 }
+        if = { limit = { is_ai = yes } add_faction_cooldown_effect = { YEARS = 5 } }
+    }
+    scope:actor = {
+        add_prestige = 50
+        # A submission maintains existing momentum, but NEVER adds a level.
+        if = {
+            limit = { has_variable = hd_submission_momentum var:hd_submission_momentum > 0 }
+            add_character_flag = { flag = hd_submission_recent_success years = 3 }
+        }
+        remove_character_flag = hd_submission_action_cooldown
+        hd_submission_queue_followup_effect = { DELAY_MIN = 90 DELAY_MAX = 150 }
+        if = {
+            limit = { is_ai = no }
+            send_interface_toast = {
+                type = event_toast_effect_good
+                title = hd_sub_success_title
+                left_icon = scope:recipient
+                right_icon = scope:actor
+            }
+        }
+    }
+}
+
 hd_submission_request_declined_effect = {
     if = {
         limit = { exists = scope:recipient exists = scope:actor }
         scope:recipient = {
             set_variable = { name = hd_submission_declined_liege value = scope:actor years = 2 }
+            # 2026-10-25 归附谈判：谈崩即撤掉这一对的条件
+            hd_neg_clear_pair_effect = { L = scope:actor }
         }
         scope:actor = {
             hd_submission_queue_followup_effect = { DELAY_MIN = 90 DELAY_MAX = 180 }
@@ -162,6 +170,8 @@ hd_submission_try_offer_effect = {
             hd_submission_liege_trigger = yes
         }
         save_scope_as = hd_submission_actor
+        # 2026-10-25 归附谈判：预开价与复算接受度要用 scope:actor / scope:recipient
+        save_scope_as = actor
         # A local neighbor snapshot: no every_ruler / province / army scan here.
         every_neighboring_top_liege_realm_owner = {
             limit = {
@@ -171,27 +181,29 @@ hd_submission_try_offer_effect = {
                 hd_submission_inbox_free_trigger = { LIEGE = scope:hd_submission_actor }
                 hd_submission_recipient_legal_trigger = { LIEGE = scope:hd_submission_actor }
                 NOT = { hd_submission_ai_refuses_trigger = { LIEGE = scope:hd_submission_actor } }
+                # 正在请求归附别人：等那边谈完
+                NOT = { has_character_flag = hd_petition_outgoing_pending }
                 # 历史剧本保护：曹操与袁绍互不招降；陶谦激活后不被招降。
                 NOT = { AND = { this = character:cao_cao scope:hd_submission_actor = character:yuan_shao } }
                 NOT = { AND = { this = character:yuan_shao scope:hd_submission_actor = character:cao_cao } }
                 NOT = { AND = { this = character:tao_qian has_character_flag = hd4_tao_activated } }
                 OR = {
-                    AND = {
-                        is_ai = yes
-                        scope:hd_submission_actor = {
-                            is_character_interaction_potentially_accepted = {
-                                recipient = prev
-                                interaction = hd_warlord_offer_vassalization_interaction
-                            }
-                        }
-                    }
-                    AND = {
-                        is_ai = no
-                        sub_realm_size <= 5
-                    }
+                    is_ai = yes
+                    sub_realm_size <= 5
                 }
             }
-            add_to_list = hd_submission_candidates
+            # 2026-10-25 归附谈判（boki 拍板）：AI 对象本来肯降，或差 60 以内且付得起预开价，才先招降
+            if = {
+                limit = { is_ai = yes }
+                save_scope_as = recipient
+                hd_neg_ai_prepare_offer_effect = yes
+                if = {
+                    limit = { var:hd_neg_viable ?= 1 }
+                    add_to_list = hd_submission_candidates
+                }
+                else = { hd_neg_ai_offer_cleanup_effect = yes }
+            }
+            else = { add_to_list = hd_submission_candidates }
         }
         if = {
             limit = { any_in_list = { list = hd_submission_candidates always = yes } }
@@ -204,25 +216,46 @@ hd_submission_try_offer_effect = {
                 # valid candidates are attempted, with at most ONE actual request.
                 if = {
                     limit = { scope:hd_submission_actor = { NOT = { has_character_flag = hd_submission_request_issued } } }
+                    save_scope_as = recipient
                     if = {
+                        # 2026-10-25 归附谈判：AI 劝玩家归附改走事件，玩家可开价
                         limit = { is_ai = no }
-                        run_interaction = {
-                            interaction = hd_warlord_offer_vassalization_interaction
-                            actor = scope:hd_submission_actor
-                            recipient = this
-                            send_threshold = decline
-                        }
+                        hd_neg_offer_to_player_effect = yes
                     }
                     else = {
-                        run_interaction = {
-                            interaction = hd_warlord_offer_vassalization_interaction
-                            actor = scope:hd_submission_actor
-                            recipient = this
-                            send_threshold = accept
+                        # 2026-10-25 日志：互动自带冷却（发起方 90 天、同一对象 2 年）未过时 run_interaction 报错；发送前先确认可发（同 hd_strategic_ai_effects 写法）
+                        if = {
+                            limit = {
+                                scope:hd_submission_actor = {
+                                    is_character_interaction_valid = {
+                                        recipient = scope:recipient
+                                        interaction = hd_warlord_offer_vassalization_interaction
+                                    }
+                                }
+                            }
+                            run_interaction = {
+                                interaction = hd_warlord_offer_vassalization_interaction
+                                actor = scope:hd_submission_actor
+                                recipient = this
+                                send_threshold = accept
+                            }
                         }
                     }
                 }
             }
+            # 没发出去的候选撤掉预开价
+            every_in_list = {
+                list = hd_submission_candidates
+                limit = { is_ai = yes }
+                save_scope_as = recipient
+                hd_neg_ai_offer_cleanup_effect = yes
+            }
+        }
+        # 借用的作用域用完即清，不带进调用方随后的宣战
+        clear_saved_scope = actor
+        if = {
+            limit = { exists = scope:recipient }
+            clear_saved_scope = recipient
         }
     }
 }
