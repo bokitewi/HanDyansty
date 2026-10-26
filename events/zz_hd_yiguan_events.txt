@@ -1,11 +1,13 @@
 ﻿namespace = hd_yiguan
 
-# 衣冠南渡·通告与制度事件（见 docs/衣冠南渡_设计草案.md）
-# 0001 开始  0002 入南渡  0003 入对峙  0009 通告分发（隐藏）  0011 光复  0012 汉化  0013 沦丧  0014 南北分治
-# 3001–3004 北方版汉化改制四步  3101 举州归南（通知南方宗主）
+# 衣冠南渡·通告事件（核心逻辑，模块 A2；见 docs/衣冠南渡_重做设计.md §5.10）
+# 0001 开局（逃亡期）  0002 重入逃亡  0003 进入冲突  0004 进入停滞  0009 通告分发（隐藏）
+# 0011 光复中原  0012 胡汉合流  0013 衣冠沦丧  0014 二百年定局（兜底，按 global_var:hd_yiguan_outcome 分写）
+# 3001–3004 已移至胡人侧 zz_hd_yiguan_hu_events.txt；3101（举州归南通知）已删除
 
 ############################
-# 通告分发：参与者玩家收事件，其余天下玩家收弹窗
+# 通告分发：参与者玩家（及结局时已标记者）收事件，其余天下玩家收弹窗
+# 角色变量 hd_yiguan_notice 由 hd_yiguan_notify_effect 写入
 ############################
 hd_yiguan.0009 = {
 	type = character_event
@@ -14,6 +16,47 @@ hd_yiguan.0009 = {
 		has_variable = hd_yiguan_notice
 	}
 	immediate = {
+		if = {
+			limit = { exists = global_var:hd_yiguan_ender }
+			global_var:hd_yiguan_ender = { save_scope_as = hd_yiguan_ender }
+		}
+		# 通告视角（按族属与宗主判断，不按组：结局后已查不到组），随 trigger_event 传给 0001–0014
+		#   flag:hu     胡人（非汉化），独立宗主为都城在北方的胡人政权
+		#   flag:north  其余非汉人（汉化王朝成员等），独立宗主为都城在北方的胡人政权或汉化政权
+		#   不存        汉人视角（各事件原文）
+		if = {
+			limit = {
+				hd_yiguan_is_hu_trigger = yes
+				NOT = { hd_yiguan_is_sinicized_trigger = yes }
+				top_liege = {
+					hd_yiguan_is_hu_regime_trigger = yes
+					hd_yiguan_capital_in_north_trigger = yes
+				}
+			}
+			save_scope_value_as = { name = hd_yiguan_view value = flag:hu }
+		}
+		else_if = {
+			limit = {
+				NOT = { hd_yiguan_is_han_trigger = yes }
+				top_liege = {
+					OR = {
+						hd_yiguan_is_hu_regime_trigger = yes
+						hd_yiguan_is_sinicized_regime_trigger = yes
+					}
+					hd_yiguan_capital_in_north_trigger = yes
+				}
+			}
+			save_scope_value_as = { name = hd_yiguan_view value = flag:north }
+		}
+		# 衣冠沦丧的宣布者本人一律按胜者（胡人）视角，不论都城在何处
+		if = {
+			limit = {
+				var:hd_yiguan_notice = 13
+				exists = scope:hd_yiguan_ender
+				scope:hd_yiguan_ender = root
+			}
+			save_scope_value_as = { name = hd_yiguan_view value = flag:hu }
+		}
 		if = {
 			limit = {
 				OR = {
@@ -32,6 +75,10 @@ hd_yiguan.0009 = {
 			else_if = {
 				limit = { var:hd_yiguan_notice = 3 }
 				trigger_event = hd_yiguan.0003
+			}
+			else_if = {
+				limit = { var:hd_yiguan_notice = 4 }
+				trigger_event = hd_yiguan.0004
 			}
 			else_if = {
 				limit = { var:hd_yiguan_notice = 11 }
@@ -64,7 +111,7 @@ hd_yiguan.0009 = {
 				send_interface_toast = {
 					type = event_toast_effect_neutral
 					title = hd_yiguan.0002.t
-					custom_tooltip = hd_yiguan_toast_phase2
+					custom_tooltip = hd_yiguan_toast_taowang
 				}
 			}
 			else_if = {
@@ -72,7 +119,15 @@ hd_yiguan.0009 = {
 				send_interface_toast = {
 					type = event_toast_effect_neutral
 					title = hd_yiguan.0003.t
-					custom_tooltip = hd_yiguan_toast_phase3
+					custom_tooltip = hd_yiguan_toast_chongtu
+				}
+			}
+			else_if = {
+				limit = { var:hd_yiguan_notice = 4 }
+				send_interface_toast = {
+					type = event_toast_effect_neutral
+					title = hd_yiguan.0004.t
+					custom_tooltip = hd_yiguan_toast_tingzhi
 				}
 			}
 			else_if = {
@@ -101,52 +156,130 @@ hd_yiguan.0009 = {
 			}
 			else_if = {
 				limit = { var:hd_yiguan_notice = 14 }
-				send_interface_toast = {
-					type = event_toast_effect_neutral
-					title = hd_yiguan.0014.t
-					custom_tooltip = hd_yiguan_toast_partition
+				if = {
+					limit = {
+						exists = global_var:hd_yiguan_outcome
+						global_var:hd_yiguan_outcome = flag:guangfu
+					}
+					send_interface_toast = {
+						type = event_toast_effect_neutral
+						title = hd_yiguan.0014.t
+						custom_tooltip = hd_yiguan_toast_fallback_guangfu
+					}
+				}
+				else_if = {
+					limit = {
+						exists = global_var:hd_yiguan_outcome
+						global_var:hd_yiguan_outcome = flag:heliu
+					}
+					send_interface_toast = {
+						type = event_toast_effect_neutral
+						title = hd_yiguan.0014.t
+						custom_tooltip = hd_yiguan_toast_fallback_heliu
+					}
+				}
+				else = {
+					send_interface_toast = {
+						type = event_toast_effect_neutral
+						title = hd_yiguan.0014.t
+						custom_tooltip = hd_yiguan_toast_fallback_lunsang
+					}
 				}
 			}
 		}
 		remove_variable = hd_yiguan_notice
-		remove_variable = hd_yiguan_notice_full
+		if = {
+			limit = { has_variable = hd_yiguan_notice_full }
+			remove_variable = hd_yiguan_notice_full
+		}
 	}
 }
 
-hd_yiguan.0001 = {	# 衣冠南渡
+############################
+# 开局与阶段更替
+############################
+
+# 视角：scope:hd_yiguan_view 存在 = 北方胡人或汉化之朝（见 0009），否则汉人原文
+hd_yiguan.0001 = {	# 衣冠南渡（逃亡期开局）
 	type = character_event
 	title = hd_yiguan.0001.t
-	desc = hd_yiguan.0001.desc
+	desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { exists = scope:hd_yiguan_view }
+				desc = hd_yiguan.0001.desc_north
+			}
+			desc = hd_yiguan.0001.desc
+		}
+	}
 	theme = war
 	override_background = { reference = mpo_raid_burning_asian }
 	left_portrait = {
 		character = root
+		triggered_animation = {
+			trigger = { exists = scope:hd_yiguan_view }
+			animation = personality_bold
+		}
 		animation = shock
 	}
 	option = {
 		name = hd_yiguan.0001.a
+		trigger = { NOT = { exists = scope:hd_yiguan_view } }
+		custom_tooltip = hd_yiguan_notice_phase_tt
+	}
+	option = {
+		name = hd_yiguan.0001.b
+		trigger = { exists = scope:hd_yiguan_view }
+		custom_tooltip = hd_yiguan_notice_phase_tt
 	}
 }
 
-hd_yiguan.0002 = {	# 入南渡
+hd_yiguan.0002 = {	# 重入逃亡
 	type = character_event
 	title = hd_yiguan.0002.t
-	desc = hd_yiguan.0002.desc
-	theme = realm
+	desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { exists = scope:hd_yiguan_view }
+				desc = hd_yiguan.0002.desc_north
+			}
+			desc = hd_yiguan.0002.desc
+		}
+	}
+	theme = war
 	override_background = { reference = tgp_docks_asia }
 	left_portrait = {
 		character = root
-		animation = thinking
+		triggered_animation = {
+			trigger = { exists = scope:hd_yiguan_view }
+			animation = personality_bold
+		}
+		animation = worry
 	}
 	option = {
 		name = hd_yiguan.0002.a
+		trigger = { NOT = { exists = scope:hd_yiguan_view } }
+		custom_tooltip = hd_yiguan_notice_phase_tt
+	}
+	option = {
+		name = hd_yiguan.0002.b
+		trigger = { exists = scope:hd_yiguan_view }
+		custom_tooltip = hd_yiguan_notice_phase_tt
 	}
 }
 
-hd_yiguan.0003 = {	# 入对峙
+hd_yiguan.0003 = {	# 进入冲突
 	type = character_event
 	title = hd_yiguan.0003.t
-	desc = hd_yiguan.0003.desc
+	desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { exists = scope:hd_yiguan_view }
+				desc = hd_yiguan.0003.desc_north
+			}
+			desc = hd_yiguan.0003.desc
+		}
+	}
 	theme = martial
 	override_background = { reference = tgp_camp_asia }
 	left_portrait = {
@@ -155,58 +288,195 @@ hd_yiguan.0003 = {	# 入对峙
 	}
 	option = {
 		name = hd_yiguan.0003.a
+		custom_tooltip = hd_yiguan_notice_phase_tt
 	}
 }
 
-hd_yiguan.0011 = {	# 中原光复
+hd_yiguan.0004 = {	# 进入停滞
 	type = character_event
-	title = hd_yiguan.0011.t
-	desc = hd_yiguan.0011.desc
+	title = hd_yiguan.0004.t
+	desc = hd_yiguan.0004.desc
 	theme = realm
-	override_background = { reference = tgp_chinese_city }
-	left_portrait = {
-		character = root
-		animation = happiness
-	}
-	option = {
-		name = hd_yiguan.0011.a
-	}
-}
-
-hd_yiguan.0012 = {	# 胡汉合流
-	type = character_event
-	title = hd_yiguan.0012.t
-	desc = hd_yiguan.0012.desc
-	theme = learning
 	override_background = { reference = tgp_asia_throne_room }
 	left_portrait = {
 		character = root
 		animation = thinking
 	}
 	option = {
+		name = hd_yiguan.0004.a
+		custom_tooltip = hd_yiguan_notice_phase_tt
+	}
+}
+
+############################
+# 结局（宣布者经 hd_yiguan.0009 存为 scope:hd_yiguan_ender）
+############################
+
+hd_yiguan.0011 = {	# 光复中原
+	type = character_event
+	title = hd_yiguan.0011.t
+	desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { exists = scope:hd_yiguan_ender }
+				desc = hd_yiguan.0011.desc_ender
+			}
+		}
+		first_valid = {
+			triggered_desc = {	# 北方胡人、汉化之朝：失地一方
+				trigger = { exists = scope:hd_yiguan_view }
+				desc = hd_yiguan.0011.desc_north
+			}
+			desc = hd_yiguan.0011.desc
+		}
+	}
+	theme = realm
+	override_background = { reference = tgp_chinese_city }
+	left_portrait = {
+		character = root
+		triggered_animation = {
+			trigger = { exists = scope:hd_yiguan_view }
+			animation = worry
+		}
+		animation = happiness
+	}
+	right_portrait = {
+		trigger = {
+			exists = scope:hd_yiguan_ender
+			NOT = { scope:hd_yiguan_ender = root }
+		}
+		character = scope:hd_yiguan_ender
+		animation = personality_bold
+	}
+	option = {
+		name = hd_yiguan.0011.a
+		trigger = { NOT = { exists = scope:hd_yiguan_view } }
+	}
+	option = {
+		name = hd_yiguan.0011.b
+		trigger = { exists = scope:hd_yiguan_view }
+	}
+}
+
+hd_yiguan.0012 = {	# 胡汉合流
+	type = character_event
+	title = hd_yiguan.0012.t
+	desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { exists = scope:hd_yiguan_ender }
+				desc = hd_yiguan.0012.desc_ender
+			}
+		}
+		desc = hd_yiguan.0012.desc
+	}
+	theme = learning
+	override_background = { reference = tgp_asia_throne_room }
+	left_portrait = {
+		character = root
+		animation = thinking
+	}
+	right_portrait = {
+		trigger = {
+			exists = scope:hd_yiguan_ender
+			NOT = { scope:hd_yiguan_ender = root }
+		}
+		character = scope:hd_yiguan_ender
+		animation = personality_rational
+	}
+	option = {
 		name = hd_yiguan.0012.a
 	}
 }
 
-hd_yiguan.0013 = {	# 中原沦丧
+hd_yiguan.0013 = {	# 衣冠沦丧
 	type = character_event
 	title = hd_yiguan.0013.t
-	desc = hd_yiguan.0013.desc
+	desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { exists = scope:hd_yiguan_ender }
+				desc = hd_yiguan.0013.desc_ender
+			}
+		}
+		first_valid = {
+			triggered_desc = {	# 宣布者本人、北方胡人：胜者
+				trigger = { scope:hd_yiguan_view ?= flag:hu }
+				desc = hd_yiguan.0013.desc_victor
+			}
+			desc = hd_yiguan.0013.desc
+		}
+	}
 	theme = war
 	override_background = { reference = tgp_ruined_holding }
 	left_portrait = {
 		character = root
+		triggered_animation = {
+			trigger = { scope:hd_yiguan_view ?= flag:hu }
+			animation = personality_bold
+		}
 		animation = sadness
+	}
+	right_portrait = {
+		trigger = {
+			exists = scope:hd_yiguan_ender
+			NOT = { scope:hd_yiguan_ender = root }
+		}
+		character = scope:hd_yiguan_ender
+		animation = personality_bold
 	}
 	option = {
 		name = hd_yiguan.0013.a
+		trigger = { NOT = { scope:hd_yiguan_view ?= flag:hu } }
+	}
+	option = {
+		name = hd_yiguan.0013.b
+		trigger = { scope:hd_yiguan_view ?= flag:hu }
 	}
 }
 
-hd_yiguan.0014 = {	# 南北分治
+hd_yiguan.0014 = {	# 二百年定局（兜底）
 	type = character_event
 	title = hd_yiguan.0014.t
-	desc = hd_yiguan.0014.desc
+	desc = {
+		first_valid = {
+			triggered_desc = {	# 光复·北方胡人与汉化之朝（失地一方）
+				trigger = {
+					exists = global_var:hd_yiguan_outcome
+					global_var:hd_yiguan_outcome = flag:guangfu
+					exists = scope:hd_yiguan_view
+				}
+				desc = hd_yiguan.0014.desc_guangfu_north
+			}
+			triggered_desc = {
+				trigger = {
+					exists = global_var:hd_yiguan_outcome
+					global_var:hd_yiguan_outcome = flag:guangfu
+				}
+				desc = hd_yiguan.0014.desc_guangfu
+			}
+			triggered_desc = {	# 合流·北方胡人与汉化之朝
+				trigger = {
+					exists = global_var:hd_yiguan_outcome
+					global_var:hd_yiguan_outcome = flag:heliu
+					exists = scope:hd_yiguan_view
+				}
+				desc = hd_yiguan.0014.desc_heliu_north
+			}
+			triggered_desc = {
+				trigger = {
+					exists = global_var:hd_yiguan_outcome
+					global_var:hd_yiguan_outcome = flag:heliu
+				}
+				desc = hd_yiguan.0014.desc_heliu
+			}
+			triggered_desc = {	# 沦丧·北方胡人与汉化之朝（得地一方）
+				trigger = { exists = scope:hd_yiguan_view }
+				desc = hd_yiguan.0014.desc_lunsang_north
+			}
+			desc = hd_yiguan.0014.desc_lunsang
+		}
+	}
 	theme = diplomacy
 	override_background = { reference = tgp_docks_asia }
 	left_portrait = {
@@ -215,174 +485,5 @@ hd_yiguan.0014 = {	# 南北分治
 	}
 	option = {
 		name = hd_yiguan.0014.a
-	}
-}
-
-############################
-# 北方版汉化改制（复用天子版文本与效果，不向天朝循环投"汉化推进"催化剂）
-############################
-
-hd_yiguan.3001 = {	# 迁都
-	type = character_event
-	title = hd_dc_con.0201.t
-	desc = hd_dc_con.0201.desc
-	theme = realm
-	override_background = { reference = tgp_chinese_city }
-	left_portrait = {
-		character = root
-		animation = personality_rational
-	}
-	trigger = {
-		hd_yiguan_north_reform_stage_trigger = { STAGE = 0 }
-	}
-	option = {	# 推行
-		name = hd_dc_con.0201.a
-		hd_dc_con_relocate_capital_effect = yes
-		hd_yiguan_sinicization_step_effect = { STAGE = 1 }
-		ai_chance = {
-			base = 80
-			modifier = {
-				add = -40
-				OR = {
-					has_trait = stubborn
-					has_trait = paranoid
-				}
-			}
-		}
-	}
-	option = {	# 放弃
-		name = hd_dc_con.0201.b
-		hd_yiguan_abandon_sinicization_effect = yes
-		ai_chance = { base = 20 }
-	}
-}
-
-hd_yiguan.3002 = {	# 易服
-	type = character_event
-	title = hd_dc_con.0202.t
-	desc = hd_dc_con.0202.desc
-	theme = realm
-	override_background = { reference = tgp_asia_throne_room }
-	left_portrait = {
-		character = root
-		animation = personality_honorable
-	}
-	trigger = {
-		hd_yiguan_north_reform_stage_trigger = { STAGE = 1 }
-	}
-	option = {	# 推行
-		name = hd_dc_con.0202.a
-		add_character_modifier = {
-			modifier = hd_dc_con_yifu_modifier
-			years = 20
-		}
-		hd_yiguan_sinicization_step_effect = { STAGE = 2 }
-		ai_chance = {
-			base = 80
-			modifier = {
-				add = -40
-				OR = {
-					has_trait = stubborn
-					has_trait = paranoid
-				}
-			}
-		}
-	}
-	option = {	# 放弃
-		name = hd_dc_con.0202.b
-		hd_yiguan_abandon_sinicization_effect = yes
-		ai_chance = { base = 20 }
-	}
-}
-
-hd_yiguan.3003 = {	# 改姓
-	type = character_event
-	title = hd_dc_con.0203.t
-	desc = hd_dc_con.0203.desc
-	theme = realm
-	override_background = { reference = tgp_asia_throne_room }
-	left_portrait = {
-		character = root
-		animation = personality_rational
-	}
-	trigger = {
-		hd_yiguan_north_reform_stage_trigger = { STAGE = 2 }
-	}
-	option = {	# 推行
-		name = hd_dc_con.0203.a
-		dynasty ?= { add_dynasty_prestige = 200 }
-		hd_yiguan_sinicization_step_effect = { STAGE = 3 }
-		ai_chance = {
-			base = 80
-			modifier = {
-				add = -40
-				OR = {
-					has_trait = stubborn
-					has_trait = paranoid
-				}
-			}
-		}
-	}
-	option = {	# 放弃
-		name = hd_dc_con.0203.b
-		hd_yiguan_abandon_sinicization_effect = yes
-		ai_chance = { base = 20 }
-	}
-}
-
-hd_yiguan.3004 = {	# 禁胡语
-	type = character_event
-	title = hd_dc_con.0204.t
-	desc = hd_dc_con.0204.desc
-	theme = learning
-	override_background = { reference = tgp_study_asia }
-	left_portrait = {
-		character = root
-		animation = personality_rational
-	}
-	trigger = {
-		hd_yiguan_north_reform_stage_trigger = { STAGE = 3 }
-	}
-	option = {	# 推行
-		name = hd_dc_con.0204.a
-		hd_dc_con_learn_han_language_effect = yes
-		hd_yiguan_sinicization_step_effect = { STAGE = 4 }
-		ai_chance = {
-			base = 80
-			modifier = {
-				add = -40
-				OR = {
-					has_trait = stubborn
-					has_trait = paranoid
-				}
-			}
-		}
-	}
-	option = {	# 放弃
-		name = hd_dc_con.0204.b
-		hd_yiguan_abandon_sinicization_effect = yes
-		ai_chance = { base = 20 }
-	}
-}
-
-############################
-# 举州归南：通知接壤的南方宗主（已自动出兵相援）
-############################
-hd_yiguan.3101 = {
-	type = character_event
-	title = hd_yiguan.3101.t
-	desc = hd_yiguan.3101.desc
-	theme = diplomacy
-	override_background = { reference = tgp_asia_throne_room }
-	left_portrait = {
-		character = root
-		animation = personality_bold
-	}
-	right_portrait = {
-		character = scope:hd_yiguan_gn_vassal
-		animation = personality_honorable
-	}
-	option = {
-		name = hd_yiguan.3101.a
 	}
 }

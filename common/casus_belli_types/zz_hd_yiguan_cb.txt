@@ -1,7 +1,21 @@
-﻿# 衣冠南渡：义军起义 / 举州归南 宣战理由（只由脚本发动，玩家与 AI 都不能手动选用）
+﻿# 衣冠南渡·宣战理由（docs/衣冠南渡_重做设计.md §5.7、§6 #10–12；战争侧模块维护）
+# hd_yiguan_uprising_cb  义军起义（县，只由脚本）
+# hd_yiguan_beifa_cb     北伐（州＝王国级，南方政权×冲突期可在宣战界面用；AI 由年度脉冲宣战）
+# hd_yiguan_taohu_cb     讨胡收复（郡＝公国级，北方汉人×冲突期可在宣战界面用；AI 由年度脉冲宣战）
+# hd_yiguan_beihuan_cb   起兵北还（州，攻方为无地冒险者，只由脚本）
+# hd_yiguan_qiyi_cb      举兵起义（独立战争式，只由脚本：决议）
+# 已删：hd_yiguan_guinan_cb（举州归南）
+#
+# 写法依据（spike_cb_kingdom.md）：
+# - 脚本 start_war 绕过 valid_to_start / allowed_for_character（原版 00_event_war.txt fp1_scandi_adventurer_conquest、
+#   05_fp3_wars.txt fp3_turkic_invasion_cb），调用方须先校验
+# - 打可能无人持有的法理州/郡：target_titles = all + target_de_jure_regions_above = yes（原版 10_tgp_china_wars.txt:2872、mod zz_hd_liao_cb.txt）
+# - 界面可用的两个用 group = celestial（同 zz_hd_253_beifa_cb.txt），避开征服/入侵组的天命循环禁战
+# - 组参数读法：top_participant_group:hd_yiguan_nandu ?= { has_participant_group_parameter = X }（原版 10_tgp_china_wars.txt:15）
 
 ############################
-# 义军起义：无地的义军首领对胡人宗主（或作乱的流民帅对南方宗主）起兵，胜则据目标县自立
+# 义军起义：无地的义军首领对胡人宗主（或作乱的流民帅、北府将领对南方宗主）起兵，胜则据目标县自立
+# 守方为胡人时计入催化剂"沦陷区汉人起义"，失败计入"起义或北还失败"
 ############################
 hd_yiguan_uprising_cb = {
 	icon = peasant_war
@@ -39,8 +53,9 @@ hd_yiguan_uprising_cb = {
 		}
 	}
 
-	on_invalidated_desc = msg_religious_war_invalidation_region_message
+	on_invalidated_desc = hd_yiguan_uprising_invalidated_desc
 
+	# 催化剂"沦陷区汉人起义"由 hd_yiguan_spawn_uprising_effect 在战争确实开始后投（只对胡人宗主），此处不重复投
 	on_declaration = {
 		on_declared_war = yes
 	}
@@ -61,6 +76,15 @@ hd_yiguan_uprising_cb = {
 	on_white_peace = {
 		scope:attacker = { show_pow_release_message_effect = yes }
 		hd_yiguan_uprising_failed_allies_effect = yes
+		if = {
+			limit = {
+				scope:defender = {
+					hd_yiguan_is_hu_trigger = yes
+					NOT = { hd_yiguan_is_sinicized_trigger = yes }
+				}
+			}
+			hd_yiguan_rising_failed_effect = yes
+		}
 	}
 
 	on_defeat_desc = {
@@ -70,6 +94,15 @@ hd_yiguan_uprising_cb = {
 	on_defeat = {
 		scope:attacker = { show_pow_release_message_effect = yes }
 		hd_yiguan_uprising_failed_allies_effect = yes
+		if = {
+			limit = {
+				scope:defender = {
+					hd_yiguan_is_hu_trigger = yes
+					NOT = { hd_yiguan_is_sinicized_trigger = yes }
+				}
+			}
+			hd_yiguan_rising_failed_effect = yes
+		}
 	}
 
 	on_primary_attacker_death = inherit
@@ -96,76 +129,738 @@ hd_yiguan_uprising_cb = {
 }
 
 ############################
-# 举州归南：沦陷区的汉人封臣对直属宗主起兵，胜后改投接壤的南方宗主
+# 北伐（§1 第 5 轮、§6 #10）：南方政权专用，冲突期开放（组参数 hd_yiguan_can_beifa）
+# 目标：北方一州（王国级法理州，可无人持有），须有县与攻方领地相邻；守方为胡人政权或汉化政权且在该州的北方县中持县
+# "北方"按区域 hd_yiguan_north_region 判定，不比对 k_uuii_* 头衔：南北朝剧本 280.1.1 起（zz_hd_nbc_dejure.txt）及建国决议会把
+# 河南、洛阳、河内等郡改挂洛州、司州等新州，而地理区域按原始法理划定、不随运行时改挂变化（原版 _geographical_regions.info）
+# 花威望 150（只对玩家计；AI 由年度脉冲扣）。胜利夺取守方体系在该州的全部县、王师北定、威望 +中；白和与战败都算北伐失败
 ############################
-hd_yiguan_guinan_cb = {
-	icon = independence_faction_war
-	group = independence
-	combine_into_one = no
+hd_yiguan_beifa_cb = {
+	icon = celestial
+	group = celestial
+
+	combine_into_one = yes
+	should_show_war_goal_subview = yes
+	mutually_exclusive_titles = { always = yes }
+
+	ai = no
+
+	allowed_for_character = {
+		top_participant_group:hd_yiguan_nandu ?= { has_participant_group_parameter = hd_yiguan_can_beifa }
+	}
+
+	allowed_against_character = {
+		scope:defender = {
+			OR = {
+				hd_yiguan_is_hu_regime_trigger = yes
+				hd_yiguan_is_sinicized_regime_trigger = yes
+			}
+		}
+	}
+
+	target_titles = all
+	target_title_tier = kingdom
+	target_de_jure_regions_above = yes
+	target_top_liege_if_outside_realm = no
+	ignore_effect = change_title_holder
+
+	attacker_score_from_occupation_scale = 150
+	attacker_score_from_battles_scale = 150
+	defender_score_from_battles_scale = 150
+
+	valid_to_start = {
+		scope:target = {
+			# 北方之州：守方体系在州内持有位于北方八州区域的县（按区域判定，见上方说明）
+			any_de_jure_county = {
+				hd_yiguan_county_in_north_trigger = yes
+				holder ?= { target_is_same_character_or_above = scope:defender }
+			}
+			# 州内有县与攻方领地相邻（或攻方已在州内持县）
+			any_de_jure_county = {
+				OR = {
+					holder ?= { target_is_same_character_or_above = scope:attacker }
+					any_neighboring_county = {
+						holder ?= { target_is_same_character_or_above = scope:attacker }
+					}
+				}
+			}
+		}
+	}
+
+	should_invalidate = {
+		NOT = {
+			any_in_list = {
+				list = target_titles
+				any_in_de_jure_hierarchy = {
+					continue = { tier > tier_county }	# 不下钻男爵领（原版 00_conquest.txt:495）
+					tier = tier_county
+					holder ?= { target_is_same_character_or_above = scope:defender }
+				}
+			}
+		}
+	}
+
+	on_invalidated_desc = msg_duchy_conquest_war_invalidated_message
+	on_invalidated = {}
+
+	# 按设计 §6 #10 固定 150，不乘原版花费系数（与 AI 脉冲所扣一致）
+	cost = {
+		prestige = {
+			value = 0
+			if = {
+				limit = { scope:attacker = { is_ai = no } }
+				add = {
+					value = 150
+					desc = CB_BASE_COST
+				}
+			}
+		}
+	}
+
+	on_declaration = {
+		on_declared_war = yes
+		hd_yiguan_fire_catalyst_effect = {
+			CATALYST = catalyst_hd_yiguan_beifa_declared
+			CHAR = scope:attacker
+		}
+		# 冲突期拖延（负值，点数不足不扣）
+		hd_yiguan_fire_delay_catalyst_effect = {
+			CATALYST = catalyst_hd_yiguan_beifa_declared_delay
+			TOWARD = hd_yiguan_phase_tingzhi
+			VALUE = 50
+			CHAR = scope:attacker
+		}
+	}
+
+	on_victory_desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { scope:attacker = { is_local_player = yes } }
+				desc = hd_yiguan_beifa_cb_victory_desc_attacker
+			}
+			desc = hd_yiguan_beifa_cb_victory_desc
+		}
+	}
+
+	on_victory = {
+		scope:attacker = { show_pow_release_message_effect = yes }
+		add_legitimacy_attacker_victory_effect = yes
+		scope:attacker = { accolade_attacker_war_end_glory_gain_med_effect = yes }
+		hd_yiguan_beifa_victory_effect = yes
+		modify_allies_of_participants_fame_values = {
+			WINNER = scope:attacker
+			FAME_BASE = medium_prestige_value
+			IS_RELIGIOUS_WAR = no
+			WINNER_ALLY_FAME_SCALE = 1
+			LOSER_ALLY_FAME_SCALE = 1
+		}
+		add_truce_attacker_victory_effect = yes
+		laamp_as_mercenary_payout_tooltip_effect = yes
+	}
+
+	on_white_peace_desc = {
+		desc = hd_yiguan_beifa_cb_white_peace_desc
+	}
+
+	on_white_peace = {
+		scope:attacker = { show_pow_release_message_effect = yes }
+		scope:defender = { accolade_defender_war_end_glory_gain_low_effect = yes }
+		scope:attacker = {
+			add_prestige = {
+				value = minor_prestige_value
+				multiply = -1.0
+			}
+		}
+		modify_allies_of_participants_fame_values = {
+			WINNER = scope:attacker
+			FAME_BASE = medium_prestige_value
+			IS_RELIGIOUS_WAR = no
+			WINNER_ALLY_FAME_SCALE = 1
+			LOSER_ALLY_FAME_SCALE = 1
+		}
+		add_truce_white_peace_effect = yes
+		hd_yiguan_beifa_failed_effect = yes
+		laamp_as_mercenary_payout_tooltip_effect = yes
+	}
+
+	on_defeat_desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { scope:defender = { is_local_player = yes } }
+				desc = hd_yiguan_beifa_cb_defeat_desc_defender
+			}
+			desc = hd_yiguan_beifa_cb_defeat_desc
+		}
+	}
+
+	on_defeat = {
+		scope:attacker = { show_pow_release_message_effect = yes }
+		add_legitimacy_attacker_defeat_effect = yes
+		scope:defender = {
+			accolade_defender_war_end_glory_gain_med_effect = yes
+			add_prestige_war_defender_effect = {
+				PRESTIGE_VALUE = major_prestige_value
+			}
+		}
+		scope:attacker = {
+			pay_short_term_gold_reparations_effect = {
+				GOLD_VALUE = 3
+			}
+			add_prestige = {
+				value = major_prestige_value
+				multiply = -1.0
+			}
+		}
+		modify_allies_of_participants_fame_values = {
+			WINNER = scope:defender
+			FAME_BASE = medium_prestige_value
+			IS_RELIGIOUS_WAR = no
+			WINNER_ALLY_FAME_SCALE = 1
+			LOSER_ALLY_FAME_SCALE = 1
+		}
+		add_truce_attacker_defeat_effect = yes
+		scope:attacker = { save_temporary_scope_as = loser }
+		on_lost_aggression_war_discontent_loss = yes
+		hd_yiguan_beifa_failed_effect = yes
+		laamp_as_mercenary_payout_tooltip_effect = yes
+	}
+
+	transfer_behavior = transfer
+
+	on_primary_attacker_death = inherit
+	on_primary_defender_death = inherit
+
+	attacker_allies_inherit = yes
+	defender_allies_inherit = yes
+
+	war_name = "HD_YIGUAN_BEIFA_WAR_NAME"
+	war_name_base = "HD_YIGUAN_BEIFA_WAR_NAME_BASE"
+	cb_name = "HD_YIGUAN_BEIFA_CB_NAME"
+
+	interface_priority = 85
+
+	use_de_jure_wargoal_only = yes
+	attacker_wargoal_percentage = 0.5
+
+	max_defender_score_from_occupation = 150
+	max_attacker_score_from_occupation = 150
+}
+
+############################
+# 讨胡收复（§1 第 5 轮、§6 #11）：北方汉人专用，冲突期开放（组参数 hd_yiguan_can_taohu）
+# 目标：北方八州区域内一个郡（公国级法理郡，可无人持有；按区域判定，理由同北伐），须与攻方接壤；守方为胡人政权（不含汉化）且在郡内持县
+# 花威望 75（只对玩家计）。胜利夺取守方体系在该郡的全部县，威望 +中、王朝威望 +中，王师北定，免费补一次招集流民
+############################
+hd_yiguan_taohu_cb = {
+	icon = duchy_conquest_cb
+	group = celestial
+
+	combine_into_one = yes
+	should_show_war_goal_subview = yes
+	mutually_exclusive_titles = { always = yes }
+
+	ai = no
+
+	allowed_for_character = {
+		top_participant_group:hd_yiguan_nandu ?= { has_participant_group_parameter = hd_yiguan_can_taohu }
+	}
+
+	allowed_against_character = {
+		scope:defender = { hd_yiguan_is_hu_regime_trigger = yes }
+	}
+
+	target_titles = all
+	target_title_tier = duchy
+	target_de_jure_regions_above = yes
+	target_top_liege_if_outside_realm = no
+	ignore_effect = change_title_holder
+
+	attacker_score_from_occupation_scale = 150
+	attacker_score_from_battles_scale = 150
+	defender_score_from_battles_scale = 150
+
+	valid_to_start = {
+		scope:target = {
+			is_landless_type_title = no
+			# 郡在北方八州区域内（郡下的县从不改挂，看郡治即可；不比对郡的法理州，见北伐说明）
+			title_capital_county ?= { hd_yiguan_county_in_north_trigger = yes }
+			# 守方体系在郡内持县
+			any_de_jure_county = {
+				holder ?= { target_is_same_character_or_above = scope:defender }
+			}
+			# 郡与攻方接壤
+			any_de_jure_county = {
+				OR = {
+					holder ?= { target_is_same_character_or_above = scope:attacker }
+					any_neighboring_county = {
+						holder ?= { target_is_same_character_or_above = scope:attacker }
+					}
+				}
+			}
+		}
+	}
+
+	should_invalidate = {
+		NOT = {
+			any_in_list = {
+				list = target_titles
+				any_in_de_jure_hierarchy = {
+					continue = { tier > tier_county }	# 不下钻男爵领（原版 00_conquest.txt:495）
+					tier = tier_county
+					holder ?= { target_is_same_character_or_above = scope:defender }
+				}
+			}
+		}
+	}
+
+	on_invalidated_desc = msg_duchy_conquest_war_invalidated_message
+	on_invalidated = {}
+
+	# 按设计 §6 #11 固定 75，不乘原版花费系数（与 AI 脉冲所扣一致）
+	cost = {
+		prestige = {
+			value = 0
+			if = {
+				limit = { scope:attacker = { is_ai = no } }
+				add = {
+					value = 75
+					desc = CB_BASE_COST
+				}
+			}
+		}
+	}
+
+	on_declaration = {
+		on_declared_war = yes
+		hd_yiguan_fire_catalyst_effect = {
+			CATALYST = catalyst_hd_yiguan_taohu_declared
+			CHAR = scope:attacker
+		}
+		# 冲突期拖延（负值，点数不足不扣）
+		hd_yiguan_fire_delay_catalyst_effect = {
+			CATALYST = catalyst_hd_yiguan_taohu_declared_delay
+			TOWARD = hd_yiguan_phase_tingzhi
+			VALUE = 25
+			CHAR = scope:attacker
+		}
+	}
+
+	on_victory_desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { scope:attacker = { is_local_player = yes } }
+				desc = hd_yiguan_taohu_cb_victory_desc_attacker
+			}
+			desc = hd_yiguan_taohu_cb_victory_desc
+		}
+	}
+
+	on_victory = {
+		scope:attacker = { show_pow_release_message_effect = yes }
+		add_legitimacy_attacker_victory_effect = yes
+		scope:attacker = { accolade_attacker_war_end_glory_gain_med_effect = yes }
+		hd_yiguan_taohu_victory_effect = yes
+		modify_allies_of_participants_fame_values = {
+			WINNER = scope:attacker
+			FAME_BASE = minor_prestige_value
+			IS_RELIGIOUS_WAR = no
+			WINNER_ALLY_FAME_SCALE = 1
+			LOSER_ALLY_FAME_SCALE = 1
+		}
+		add_truce_attacker_victory_effect = yes
+		laamp_as_mercenary_payout_tooltip_effect = yes
+	}
+
+	on_white_peace_desc = {
+		desc = hd_yiguan_taohu_cb_white_peace_desc
+	}
+
+	on_white_peace = {
+		scope:attacker = { show_pow_release_message_effect = yes }
+		scope:defender = { accolade_defender_war_end_glory_gain_low_effect = yes }
+		scope:attacker = {
+			add_prestige = {
+				value = minor_prestige_value
+				multiply = -1.0
+			}
+		}
+		modify_allies_of_participants_fame_values = {
+			WINNER = scope:attacker
+			FAME_BASE = minor_prestige_value
+			IS_RELIGIOUS_WAR = no
+			WINNER_ALLY_FAME_SCALE = 1
+			LOSER_ALLY_FAME_SCALE = 1
+		}
+		add_truce_white_peace_effect = yes
+		laamp_as_mercenary_payout_tooltip_effect = yes
+	}
+
+	on_defeat_desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { scope:defender = { is_local_player = yes } }
+				desc = hd_yiguan_taohu_cb_defeat_desc_defender
+			}
+			desc = hd_yiguan_taohu_cb_defeat_desc
+		}
+	}
+
+	on_defeat = {
+		scope:attacker = { show_pow_release_message_effect = yes }
+		add_legitimacy_attacker_defeat_effect = yes
+		scope:defender = {
+			accolade_defender_war_end_glory_gain_med_effect = yes
+			add_prestige_war_defender_effect = {
+				PRESTIGE_VALUE = medium_prestige_value
+			}
+		}
+		scope:attacker = {
+			pay_short_term_gold_reparations_effect = {
+				GOLD_VALUE = 2
+			}
+			add_prestige = medium_prestige_loss
+		}
+		modify_allies_of_participants_fame_values = {
+			WINNER = scope:defender
+			FAME_BASE = minor_prestige_value
+			IS_RELIGIOUS_WAR = no
+			WINNER_ALLY_FAME_SCALE = 1
+			LOSER_ALLY_FAME_SCALE = 1
+		}
+		add_truce_attacker_defeat_effect = yes
+		scope:attacker = { save_temporary_scope_as = loser }
+		on_lost_aggression_war_discontent_loss = yes
+		laamp_as_mercenary_payout_tooltip_effect = yes
+	}
+
+	transfer_behavior = transfer
+
+	on_primary_attacker_death = inherit
+	on_primary_defender_death = inherit
+
+	attacker_allies_inherit = yes
+	defender_allies_inherit = yes
+
+	war_name = "HD_YIGUAN_TAOHU_WAR_NAME"
+	war_name_base = "HD_YIGUAN_TAOHU_WAR_NAME_BASE"
+	cb_name = "HD_YIGUAN_TAOHU_CB_NAME"
+
+	interface_priority = 84
+
+	use_de_jure_wargoal_only = yes
+	attacker_wargoal_percentage = 0.8
+
+	max_defender_score_from_occupation = 150
+	max_attacker_score_from_occupation = 150
+}
+
+############################
+# 起兵北还（§1 第 1、6 轮，§6 #20–21）：只由脚本（士族侧"起兵北还"决议）发动
+# 攻方：侨姓流亡者，已变为无地冒险者；目标：所选北方一州（王国级法理州）；守方：该州持县最多的胡人政权（调用方选定并校验）
+# 注意：州按运行时法理结算（失效判定、夺地都看 every_de_jure_county）。南北朝剧本 280.1.1 起河南、洛阳、河内等郡改挂洛州、司州，
+# 传 k_uuii_sili 等原州时这些郡不在目标内；调用方宜传"守方所持北方县的运行时 kingdom"
+# 胜利：夺取守方体系在州内的全部县（州号不交出，理由见胜利效果）→ 独立、改天朝制、销毁营地、定都、补立郡号 → 3 天后 hd_yiguan.4021（士族侧：是否归附资助者）
+# 白和与战败：催化剂"起义或北还失败"。宣战时的催化剂"起兵北还"由士族侧决议发，此处不发
+# 攻方无军即判负（landless_attacker_needs_armies = yes）：调用方须在 start_war 后同一效果内立即生成部队
+############################
+hd_yiguan_beihuan_cb = {
+	icon = laamp_invasion
+	group = event
+
+	combine_into_one = yes
+	should_show_war_goal_subview = yes
+	mutually_exclusive_titles = { always = yes }
 	allow_hostages = no
 
+	ai = no
 	allowed_for_character = {}
 	allowed_against_character = {}
-	target_titles = none
-	target_top_liege_if_outside_realm = no
 	should_check_for_interface_availability = no
+
+	target_titles = all
+	target_title_tier = kingdom
+	target_de_jure_regions_above = yes
+	target_top_liege_if_outside_realm = no
+	ignore_effect = change_title_holder
+
+	attacker_score_from_occupation_scale = 150
+	attacker_score_from_battles_scale = 150
+	defender_score_from_battles_scale = 150
 
 	valid_to_start = {
 		always = no
 	}
 	cost = {}
 
+	# 不加"攻方须无地"的失效条件：中途得地不应作废（spike_cb_kingdom.md）
+	should_invalidate = {
+		NOT = {
+			any_in_list = {
+				list = target_titles
+				any_in_de_jure_hierarchy = {
+					continue = { tier > tier_county }	# 不下钻男爵领（原版 00_conquest.txt:495）
+					tier = tier_county
+					is_landless_type_title = no
+					holder ?= { target_is_same_character_or_above = scope:defender }
+				}
+			}
+		}
+	}
+
+	on_invalidated_desc = msg_duchy_conquest_war_invalidated_message
+	on_invalidated = {}
+
 	on_declaration = {
 		on_declared_war = yes
 	}
 
 	on_victory_desc = {
-		desc = hd_yiguan_guinan_victory_desc
+		first_valid = {
+			triggered_desc = {
+				trigger = { scope:attacker = { is_local_player = yes } }
+				desc = hd_yiguan_beihuan_cb_victory_desc_attacker
+			}
+			desc = hd_yiguan_beihuan_cb_victory_desc
+		}
 	}
 
 	on_victory = {
 		scope:attacker = { show_pow_release_message_effect = yes }
-		hd_yiguan_guinan_victory_effect = yes
+		scope:attacker = { accolade_attacker_war_end_glory_gain_high_effect = yes }
+		hd_yiguan_beihuan_victory_effect = yes
+		modify_allies_of_participants_fame_values = {
+			WINNER = scope:attacker
+			FAME_BASE = medium_prestige_value
+			IS_RELIGIOUS_WAR = no
+			WINNER_ALLY_FAME_SCALE = 1
+			LOSER_ALLY_FAME_SCALE = 1
+		}
+		add_truce_attacker_victory_effect = yes
+		laamp_as_mercenary_payout_tooltip_effect = yes
 	}
 
 	on_white_peace_desc = {
-		desc = hd_yiguan_guinan_white_peace_desc
+		desc = hd_yiguan_beihuan_cb_white_peace_desc
 	}
 
 	on_white_peace = {
 		scope:attacker = { show_pow_release_message_effect = yes }
+		scope:defender = { accolade_defender_war_end_glory_gain_low_effect = yes }
+		scope:attacker = {
+			add_prestige = {
+				value = medium_prestige_value
+				multiply = -1.0
+			}
+		}
+		modify_allies_of_participants_fame_values = {
+			WINNER = scope:attacker
+			FAME_BASE = medium_prestige_value
+			IS_RELIGIOUS_WAR = no
+			WINNER_ALLY_FAME_SCALE = 1
+			LOSER_ALLY_FAME_SCALE = 1
+		}
+		add_truce_white_peace_effect = yes
+		hd_yiguan_rising_failed_effect = yes
+		laamp_as_mercenary_payout_tooltip_effect = yes
 	}
 
 	on_defeat_desc = {
-		desc = hd_yiguan_guinan_defeat_desc
+		first_valid = {
+			triggered_desc = {
+				trigger = { scope:defender = { is_local_player = yes } }
+				desc = hd_yiguan_beihuan_cb_defeat_desc_defender
+			}
+			desc = hd_yiguan_beihuan_cb_defeat_desc
+		}
 	}
 
 	on_defeat = {
-		scope:attacker = {
-			show_pow_release_message_effect = yes
-			add_prestige = medium_prestige_loss
-		}
+		scope:attacker = { show_pow_release_message_effect = yes }
 		scope:defender = {
-			add_opinion = {
-				target = scope:attacker
-				modifier = hd_yiguan_rebel_ally_opinion
+			accolade_defender_war_end_glory_gain_med_effect = yes
+			add_prestige_war_defender_effect = {
+				PRESTIGE_VALUE = medium_prestige_value
+			}
+		}
+		scope:attacker = {
+			pay_short_term_gold_reparations_effect = {
+				GOLD_VALUE = 3
+			}
+			add_prestige = {
+				value = major_prestige_value
+				multiply = -1.0
+			}
+		}
+		modify_allies_of_participants_fame_values = {
+			WINNER = scope:defender
+			FAME_BASE = medium_prestige_value
+			IS_RELIGIOUS_WAR = no
+			WINNER_ALLY_FAME_SCALE = 1
+			LOSER_ALLY_FAME_SCALE = 1
+		}
+		add_truce_attacker_defeat_effect = yes
+		hd_yiguan_rising_failed_effect = yes
+		laamp_as_mercenary_payout_tooltip_effect = yes
+	}
+
+	transfer_behavior = transfer
+
+	on_primary_attacker_death = inherit
+	on_primary_defender_death = inherit
+
+	attacker_allies_inherit = yes
+	defender_allies_inherit = yes
+
+	war_name = "HD_YIGUAN_BEIHUAN_WAR_NAME"
+	war_name_base = "HD_YIGUAN_BEIHUAN_WAR_NAME_BASE"
+	cb_name = "HD_YIGUAN_BEIHUAN_CB_NAME"
+
+	interface_priority = 80
+
+	use_de_jure_wargoal_only = yes
+	attacker_wargoal_percentage = 0.5
+
+	landless_attacker_needs_armies = yes
+
+	max_attacker_score_from_battles = 75
+	max_defender_score_from_occupation = 150
+	max_attacker_score_from_occupation = 150
+}
+
+############################
+# 举兵起义（§1 第 7 轮、§6 #12）：只由脚本（决议 hd_yiguan_jubing_qiyi_decision）发动
+# 有地沦陷区汉人对胡人宗主打独立战争（决议要求直属领主即胡人最高宗主）；
+# 胜则完全独立（写法同 mod hd_dc_kit_independence_cb.txt），补立郡号、进北方汉人组
+# 宣战发催化剂"沦陷区汉人起义"；白和与战败发"起义或北还失败"；战败被囚
+# 界面不显示：allowed_for_character = { always = no }（脚本宣战不查，先例原版 05_fp3_wars.txt:419）
+############################
+hd_yiguan_qiyi_cb = {
+	icon = independence_faction_war
+	group = independence
+	ai = no
+	target_top_liege_if_outside_realm = no
+	allow_hostages = no
+	should_check_for_interface_availability = no
+
+	allowed_for_character = {
+		always = no
+	}
+	allowed_against_character = {
+		scope:attacker = { liege = scope:defender }
+	}
+	cost = {}
+
+	on_declaration = {
+		on_declared_war = yes
+		if = {
+			limit = {
+				scope:defender = {
+					hd_yiguan_is_hu_trigger = yes
+					NOT = { hd_yiguan_is_sinicized_trigger = yes }
+				}
+			}
+			hd_yiguan_fire_catalyst_effect = {
+				CATALYST = catalyst_hd_yiguan_uprising
+				CHAR = scope:attacker
 			}
 		}
 	}
 
-	on_primary_attacker_death = invalidate
+	on_victory_desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { scope:attacker = { is_local_player = yes } }
+				desc = hd_yiguan_qiyi_cb_victory_desc_attacker
+			}
+			desc = hd_yiguan_qiyi_cb_victory_desc
+		}
+	}
+
+	on_victory = {
+		scope:attacker = { show_pow_release_message_effect = yes }
+		scope:attacker = { accolade_attacker_war_end_glory_gain_high_effect = yes }
+		hd_yiguan_qiyi_victory_effect = yes
+		faction_war_end_defeat_legitimacy_effect = yes
+	}
+
+	on_white_peace_desc = {
+		desc = hd_yiguan_qiyi_cb_white_peace_desc
+	}
+
+	on_white_peace = {
+		scope:attacker = {
+			show_pow_release_message_effect = yes
+			add_truce_both_ways = {
+				character = scope:defender
+				days = 1825
+				war = root.war
+				result = white_peace
+			}
+		}
+		scope:defender = { add_prestige = minor_prestige_value }
+		hd_yiguan_rising_failed_effect = yes
+	}
+
+	on_defeat_desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { scope:defender = { is_local_player = yes } }
+				desc = hd_yiguan_qiyi_cb_defeat_desc_defender
+			}
+			desc = hd_yiguan_qiyi_cb_defeat_desc
+		}
+	}
+
+	on_defeat = {
+		scope:attacker = { show_pow_release_message_effect = yes }
+		scope:defender = {
+			add_dread = medium_dread_gain
+			add_prestige_war_defender_effect = {
+				PRESTIGE_VALUE = medium_prestige_value
+			}
+			faction_war_end_victory_legitimacy_effect = yes
+		}
+		scope:attacker = {
+			hard_imprison_character_effect = {
+				TARGET = this
+				IMPRISONER = scope:defender
+			}
+			scope:defender = {
+				add_opinion = {
+					target = prev
+					modifier = vassal_lost_faction_revolt_war
+				}
+			}
+		}
+		hd_yiguan_rising_failed_effect = yes
+	}
+
+	should_invalidate = {
+		scope:attacker.liege != scope:defender
+	}
+	on_invalidated_desc = msg_invalidate_war_title
+
+	check_defender_inheritance_validity = no
+
+	on_primary_attacker_death = inherit
 	on_primary_defender_death = inherit
 
-	transfer_behavior = transfer
-	attacker_allies_inherit = no
+	attacker_allies_inherit = yes
 	defender_allies_inherit = yes
 
-	war_name = "HD_YIGUAN_GUINAN_WAR_NAME"
-	interface_priority = 80
+	transfer_behavior = transfer
+
+	war_name = "HD_YIGUAN_QIYI_WAR_NAME"
+
+	interface_priority = 120
+
+	attacker_wargoal_percentage = 0.8
 
 	max_attacker_score_from_battles = 100
-	max_defender_score_from_battles = 100
+	max_defender_score_from_battles = 50
+
 	max_defender_score_from_occupation = 150
 	max_attacker_score_from_occupation = 150
+
 	max_ai_diplo_distance_to_title = 500
 }

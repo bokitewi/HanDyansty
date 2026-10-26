@@ -1,43 +1,55 @@
-﻿# 衣冠南渡（见 docs/衣冠南渡_设计草案.md）
-# 分区：沦陷区（动态）/ 江左（荆扬，固定）/ 前线（动态）。三分区互不重叠，每年由 hd_yiguan_resync_effect 重算。
-# 阶段：丧乱 3 年 → 南渡 20 年 → 对峙（不限）。各分区阶段同步推进。
+﻿@hd_yiguan_threshold = 1000	# 各去向切换门槛（§3.2）；takeover_points 只收整数，故用文件常量（先例：z_kuzhu_modified_dynastic_cycle.txt 首行）
+
+# 衣冠南渡（重做版，见 docs/衣冠南渡_重做设计.md §5.1）
+# 仿伊比利亚斗争：一个静态分区、五个参与者组、三阶段（逃亡/冲突/停滞）全部按催化剂积分互相切换。
+# 沦陷状态不再动态改分区，只用县变量 hd_yiguan_occ + 县修正表达（核心逻辑维护）。
+# 组参数：hd_yiguan_can_beifa / hd_yiguan_can_taohu / hd_yiguan_can_reform，
+#   读法 top_participant_group:hd_yiguan_nandu ?= { has_participant_group_parameter = X }
+# 阶段参数：hd_yiguan_beihuan_open，读法 situation:hd_yiguan_nandu ?= { has_situation_top_phase_parameter = X }
 
 hd_yiguan_nandu = {
+	window = situation
+	gui_window_name = window_hd_yiguan
+	gui_tooltip_group_focused = yes
 	situation_group_type = major
 	sort_order = 5
 	is_unique = yes
-	gui_window_name = window_situation
-	illustration = "gfx/interface/illustrations/event_scenes/tgp_docks_asia.dds"
-	icon = {
-		reference = "gfx/interface/icons/situation_types/natural_disaster_generic.dds"
-	}
 	map_mode = participant_groups
+	illustration = "gfx/interface/illustrations/struggle_backgrounds/struggle_iberia_phase_opportunity_bg.dds"
+
+	# 按阶段换图标（先例：原版 tgp_dynastic_cycle.txt:1935-1968）；末条无条件为兜底
+	icon = {
+		trigger = { situation_current_phase = hd_yiguan_phase_taowang }
+		reference = "gfx/interface/icons/struggle_types/struggle_iberia_phase_opportunity.dds"
+	}
+	icon = {
+		trigger = { situation_current_phase = hd_yiguan_phase_chongtu }
+		reference = "gfx/interface/icons/struggle_types/struggle_iberia_phase_hostility.dds"
+	}
+	icon = {
+		trigger = { situation_current_phase = hd_yiguan_phase_tingzhi }
+		reference = "gfx/interface/icons/struggle_types/struggle_iberia_phase_compromise.dds"
+	}
+	icon = {
+		reference = "gfx/interface/icons/struggle_types/struggle.dds"
+	}
 
 	##################################################
-	# Regions
+	# 分区：北方八州 + 荆扬，单一静态分区，阶段全局统一
 	##################################################
 	sub_regions = {
-		hd_yiguan_north = {	# 沦陷区
-			icon = "gfx/interface/icons/situation_types/natural_disaster_generic.dds"
-			map_color = { 0.75 0.25 0.2 }
-		}
-		hd_yiguan_south = {	# 江左
-			icon = "gfx/interface/icons/situation_types/dynastic_cycle.dds"
-			map_color = { 0.25 0.5 0.85 }
-			geographical_regions = { hd_yiguan_south_region }
-		}
-		hd_yiguan_front = {	# 前线
-			icon = "gfx/interface/icons/flat_icons/army.dds"
-			map_color = { 0.9 0.7 0.25 }
+		hd_yiguan_core = {
+			icon = "gfx/interface/icons/struggle_types/struggle.dds"
+			illustration = "gfx/interface/illustrations/struggle_backgrounds/struggle_iberia_phase_opportunity_bg.dds"
+			map_color = { 0.6 0.55 0.45 }
+			geographical_regions = { hd_yiguan_north_region hd_yiguan_south_region }
+			center_province = 787	# 洛阳
 		}
 	}
 
 	##################################################
-	# On Actions
+	# 钩子（效果均由核心逻辑 zz_hd_yiguan_effects.txt 定义）
 	##################################################
-	on_start = {
-	}
-
 	on_end = {
 		hd_yiguan_clear_county_marks_effect = yes
 	}
@@ -47,131 +59,151 @@ hd_yiguan_nandu = {
 	}
 
 	on_yearly = {
-		hd_yiguan_yearly_effect = yes
+		hd_yiguan_yearly_effect = yes	# 年数 +1、催化剂年计数清零、时间流逝催化剂都在其中
 	}
 
 	##################################################
-	# Groups（按顺序取首个满足者）
+	# 参与者组（按顺序取首个满足者；判定只做便宜判断）
 	##################################################
 	participant_groups = {
-		hd_yiguan_south_lord = {	# 南方宗主
-			icon = "gfx/interface/icons/flat_icons/prestige.dds"
+		hd_yiguan_grp_sinicized = {	# 1 汉化政权（必须在南方政权、沦陷区汉人之前：汉化混合文化也带华夏传承）
+			icon = "gfx/interface/icons/flat_icons/cultural_acceptance.dds"
+			map_color = { 0.6 0.4 0.8 }
 			auto_add_rulers = yes
 			auto_add_landless_rulers = no
-			require_realm_in_sub_region = yes
-			map_color = rgb{ 60 120 210 }
 			is_character_valid = {
-				hd_yiguan_south_lord_trigger = yes
-				scope:situation_sub_region = { situation_sub_region_has_geographical_region = hd_yiguan_south_region }
+				hd_yiguan_is_sinicized_regime_trigger = yes
 			}
 		}
-		hd_yiguan_front_duke = {	# 前线郡守
-			icon = "gfx/interface/icons/flat_icons/army.dds"
+		hd_yiguan_grp_hu = {	# 2 胡人政权
+			icon = "gfx/interface/icons/flat_icons/yurt.dds"
+			map_color = { 0.75 0.25 0.2 }
 			auto_add_rulers = yes
 			auto_add_landless_rulers = no
-			require_realm_in_sub_region = yes
-			map_color = rgb{ 230 180 60 }
 			is_character_valid = {
-				hd_yiguan_front_duke_trigger = yes
+				hd_yiguan_is_hu_regime_trigger = yes
 			}
 		}
-		hd_yiguan_south_vassal = {	# 南方封臣（公爵级以上）
-			icon = "gfx/interface/icons/flat_icons/vassal.dds"
+		hd_yiguan_grp_south = {	# 3 南方政权
+			icon = "gfx/interface/icons/flat_icons/royal_court.dds"
+			map_color = { 0.25 0.5 0.85 }
 			auto_add_rulers = yes
 			auto_add_landless_rulers = no
-			require_realm_in_sub_region = yes
-			map_color = rgb{ 140 180 230 }
 			is_character_valid = {
-				is_landed = yes
-				is_independent_ruler = no
-				highest_held_title_tier >= tier_duchy
-				top_liege = { hd_yiguan_south_lord_trigger = yes }
-				scope:situation_sub_region = { situation_sub_region_has_geographical_region = hd_yiguan_south_region }
+				hd_yiguan_is_south_regime_trigger = yes
 			}
 		}
-		hd_yiguan_hu_lord = {	# 胡人宗主
-			icon = "gfx/interface/icons/flat_icons/prestige.dds"
+		hd_yiguan_grp_north_han = {	# 4 北方汉人
+			icon = "gfx/interface/icons/flat_icons/tower_construction.dds"
+			map_color = { 0.9 0.7 0.25 }
 			auto_add_rulers = yes
 			auto_add_landless_rulers = no
-			require_realm_in_sub_region = yes
-			map_color = rgb{ 190 60 50 }
 			is_character_valid = {
-				is_landed = yes
-				is_independent_ruler = yes
-				hd_yiguan_is_hu_trigger = yes
-				scope:situation_sub_region = {
-					NOT = { situation_sub_region_has_geographical_region = hd_yiguan_south_region }
-				}
+				hd_yiguan_is_north_han_trigger = yes
 			}
 		}
-		hd_yiguan_han_vassal = {	# 汉人封臣（公爵级以上）
-			icon = "gfx/interface/icons/flat_icons/vassal.dds"
+		hd_yiguan_grp_occupied = {	# 5 沦陷区汉人：伯爵级起的有地封臣 + 无地士族
+			icon = "gfx/interface/icons/flat_icons/migrate.dds"
+			map_color = { 0.9 0.55 0.47 }
 			auto_add_rulers = yes
-			auto_add_landless_rulers = no
-			require_realm_in_sub_region = yes
-			map_color = rgb{ 230 140 120 }
+			auto_add_landless_rulers = yes
+			require_realm_in_sub_region = no	# 不写就收不进无地者（mod 实测，见 z_kuzhu_modified_dynastic_cycle.txt:162）
 			is_character_valid = {
-				is_landed = yes
-				is_independent_ruler = no
-				highest_held_title_tier >= tier_duchy
-				hd_yiguan_is_huaxia_trigger = yes
-				top_liege = { hd_yiguan_is_hu_trigger = yes }
-				scope:situation_sub_region = {
-					NOT = { situation_sub_region_has_geographical_region = hd_yiguan_south_region }
-				}
+				hd_yiguan_is_occupied_han_trigger = yes
 			}
 		}
 	}
 
 	##################################################
-	# Phases
+	# 阶段：逃亡（开局）/ 冲突 / 停滞，三者互通，各去向满 1000 点切换
 	##################################################
-	start_phase = hd_yiguan_phase_sangluan
+	start_phase = hd_yiguan_phase_taowang
+	use_situation_phase_flat_icons = no	# 阶段图标是 140px 插画式斗争图标，非 60px 扁平图标（先例：原版 tgp_silk_road.txt:203）
 
 	phases = {
-		hd_yiguan_phase_sangluan = {	# 丧乱（3 年）
-			max_duration = { years = 3 }
-			icon = "gfx/interface/icons/icon_event_effect.dds"
-			illustration = "gfx/interface/illustrations/event_scenes/mpo_raid_burning_asian.dds"
+		hd_yiguan_phase_taowang = {	# 逃亡
+			icon = "gfx/interface/icons/struggle_types/struggle_iberia_phase_opportunity.dds"
+			illustration = "gfx/interface/illustrations/struggle_backgrounds/struggle_iberia_phase_opportunity_bg.dds"
+			texture = "gfx/interface/illustrations/struggle_backgrounds/struggle_iberia_phase_opportunity_bg.dds"
 			on_start = {
-				hd_yiguan_phase_start_effect = { PHASE = 1 }
+				hd_yiguan_phase_started_effect = { PHASE = taowang }
 			}
 			future_phases = {
-				hd_yiguan_phase_nandu = {
-					takeover_type = duration
-					takeover_duration = { years = 3 }
+				hd_yiguan_phase_chongtu = {
+					takeover_type = points
+					takeover_points = @hd_yiguan_threshold
+					catalysts = {
+						catalyst_hd_yiguan_beifa_declared = hd_yiguan_cv_beifa_declared
+						catalyst_hd_yiguan_beifa_won = hd_yiguan_cv_beifa_won
+						catalyst_hd_yiguan_taohu_declared = hd_yiguan_cv_taohu_declared
+						catalyst_hd_yiguan_taohu_won = hd_yiguan_cv_taohu_won
+						catalyst_hd_yiguan_beihuan = hd_yiguan_cv_beihuan
+						catalyst_hd_yiguan_uprising = hd_yiguan_cv_uprising
+						catalyst_hd_yiguan_huhua_decreed = hd_yiguan_cv_huhua_decreed
+						catalyst_hd_yiguan_huhua_county = hd_yiguan_cv_huhua_county
+						catalyst_hd_yiguan_hu_attacks_han = hd_yiguan_cv_hu_attacks_han
+						catalyst_hd_yiguan_time_to_conflict = hd_yiguan_cv_time_to_conflict
+					}
+				}
+				hd_yiguan_phase_tingzhi = {
+					takeover_type = points
+					takeover_points = @hd_yiguan_threshold
+					catalysts = {
+						catalyst_hd_yiguan_peace = hd_yiguan_cv_peace
+						catalyst_hd_yiguan_reform_step = hd_yiguan_cv_reform_step
+						catalyst_hd_yiguan_reform_done = hd_yiguan_cv_reform_done
+						catalyst_hd_yiguan_qiaozhi = hd_yiguan_cv_qiaozhi
+						catalyst_hd_yiguan_tuduan = hd_yiguan_cv_tuduan
+						catalyst_hd_yiguan_intermarriage = hd_yiguan_cv_intermarriage
+						catalyst_hd_yiguan_beifa_failed = hd_yiguan_cv_beifa_failed
+						catalyst_hd_yiguan_rising_failed = hd_yiguan_cv_rising_failed
+					}
 				}
 			}
 			modifier_sets = {
-				hd_yiguan_sangluan_effects = {
-					icon = "gfx/interface/icons/modifiers/county_modifier_development_negative.dds"
-					hd_yiguan_south_lord = {
-						character_modifier = {
-							monthly_legitimacy_add = -0.3
-							levy_size = 0.1
-							vassal_opinion = -5
-						}
-					}
-					hd_yiguan_front_duke = {
-						character_modifier = {
-							garrison_size = 0.25
-							defender_holding_advantage = 2
-						}
-					}
-					hd_yiguan_south_vassal = {
-						character_modifier = {
-							development_growth_factor = 0.05
-						}
-					}
-					hd_yiguan_hu_lord = {
+				hd_yiguan_war_effects = {	# 军事
+					icon = "gfx/interface/icons/situations/situation_modifier_military.dds"
+					hd_yiguan_grp_hu = {
 						character_modifier = {
 							levy_size = 0.15
+						}
+					}
+					hd_yiguan_grp_south = {
+						character_modifier = {
+							levy_size = 0.1
+						}
+					}
+					hd_yiguan_grp_north_han = {
+						character_modifier = {
+							garrison_size = 0.25
+							levy_size = 0.15
+						}
+						county_modifier = {
+							defender_holding_advantage = 3	# 只见于县/省修正（原版 00_county_modifiers.txt:139）
+						}
+					}
+				}
+				hd_yiguan_realm_effects = {	# 民政
+					icon = "gfx/interface/icons/situations/situation_modifier_subject.dds"
+					hd_yiguan_grp_sinicized = {
+						character_modifier = {
+							different_culture_opinion = 5
+						}
+					}
+					hd_yiguan_grp_hu = {
+						character_modifier = {
+							monthly_county_control_growth_factor = -0.1
 							different_culture_opinion = -10
 						}
 					}
-					hd_yiguan_han_vassal = {
+					hd_yiguan_grp_south = {
+						county_modifier = {
+							development_growth_factor = 0.1
+						}
+					}
+					hd_yiguan_grp_occupied = {
 						character_modifier = {
-							stress_gain_mult = 0.2
+							stress_gain_mult = 0.15
 							domain_tax_mult = -0.15
 						}
 					}
@@ -179,89 +211,170 @@ hd_yiguan_nandu = {
 			}
 		}
 
-		hd_yiguan_phase_nandu = {	# 南渡（20 年）
-			max_duration = { years = 20 }
-			icon = "gfx/interface/icons/icon_great_project.dds"
-			illustration = "gfx/interface/illustrations/event_scenes/tgp_docks_asia.dds"
+		hd_yiguan_phase_chongtu = {	# 冲突
+			icon = "gfx/interface/icons/struggle_types/struggle_iberia_phase_hostility.dds"
+			illustration = "gfx/interface/illustrations/struggle_backgrounds/struggle_iberia_phase_hostility_bg.dds"
+			texture = "gfx/interface/illustrations/struggle_backgrounds/struggle_iberia_phase_hostility_bg.dds"
+			parameters = {
+				hd_yiguan_beihuan_open = yes	# 起兵北还开放
+			}
 			on_start = {
-				hd_yiguan_phase_start_effect = { PHASE = 2 }
+				hd_yiguan_phase_started_effect = { PHASE = chongtu }
 			}
 			future_phases = {
-				hd_yiguan_phase_duizhi = {
-					takeover_type = duration
-					takeover_duration = { years = 20 }
+				hd_yiguan_phase_taowang = {
+					takeover_type = points
+					takeover_points = @hd_yiguan_threshold
+					catalysts = {
+						catalyst_hd_yiguan_capital_lost = hd_yiguan_cv_capital_lost
+						catalyst_hd_yiguan_han_capital_taken = hd_yiguan_cv_han_capital_taken
+						catalyst_hd_yiguan_han_defeated = hd_yiguan_cv_han_defeated
+						catalyst_hd_yiguan_han_ruler_slain = hd_yiguan_cv_han_ruler_slain
+						catalyst_hd_yiguan_gentry_flee = hd_yiguan_cv_gentry_flee
+					}
+				}
+				hd_yiguan_phase_tingzhi = {
+					takeover_type = points
+					takeover_points = @hd_yiguan_threshold
+					catalysts = {
+						catalyst_hd_yiguan_peace = hd_yiguan_cv_peace
+						catalyst_hd_yiguan_reform_step = hd_yiguan_cv_reform_step
+						catalyst_hd_yiguan_reform_done = hd_yiguan_cv_reform_done
+						catalyst_hd_yiguan_qiaozhi = hd_yiguan_cv_qiaozhi
+						catalyst_hd_yiguan_tuduan = hd_yiguan_cv_tuduan
+						catalyst_hd_yiguan_intermarriage = hd_yiguan_cv_intermarriage
+						catalyst_hd_yiguan_beifa_failed = hd_yiguan_cv_beifa_failed
+						catalyst_hd_yiguan_rising_failed = hd_yiguan_cv_rising_failed
+						catalyst_hd_yiguan_time_to_stagnation = hd_yiguan_cv_time_to_stagnation
+						# 拖延（负值）：兵事未息
+						catalyst_hd_yiguan_beifa_declared_delay = hd_yiguan_cv_beifa_declared_delay
+						catalyst_hd_yiguan_beifa_won_delay = hd_yiguan_cv_beifa_won_delay
+						catalyst_hd_yiguan_taohu_declared_delay = hd_yiguan_cv_taohu_declared_delay
+						catalyst_hd_yiguan_taohu_won_delay = hd_yiguan_cv_taohu_won_delay
+						catalyst_hd_yiguan_beihuan_delay = hd_yiguan_cv_beihuan_delay
+					}
 				}
 			}
 			modifier_sets = {
-				hd_yiguan_nandu_effects = {
-					icon = "gfx/interface/icons/modifiers/county_modifier_development_mixed.dds"
-					hd_yiguan_south_lord = {
+				hd_yiguan_war_effects = {	# 军事
+					icon = "gfx/interface/icons/situations/situation_modifier_military.dds"
+					hd_yiguan_grp_sinicized = {
 						character_modifier = {
-							development_growth_factor = 0.1
-							levy_size = 0.1
-							monthly_legitimacy_add = -0.1
+							levy_size = 0.05
 						}
 					}
-					hd_yiguan_front_duke = {
+					hd_yiguan_grp_hu = {
+						character_modifier = {
+							levy_size = 0.1
+						}
+					}
+					hd_yiguan_grp_south = {
+						character_modifier = {
+							levy_reinforcement_rate = 0.2
+							men_at_arms_maintenance = -0.1
+						}
+						parameters = {
+							hd_yiguan_can_beifa = yes	# 北伐
+						}
+					}
+					hd_yiguan_grp_north_han = {
 						character_modifier = {
 							garrison_size = 0.15
 							levy_size = 0.15
 						}
-					}
-					hd_yiguan_south_vassal = {
-						character_modifier = {
-							development_growth_factor = 0.1
-							stress_gain_mult = 0.1
+						parameters = {
+							hd_yiguan_can_taohu = yes	# 讨胡收复
 						}
 					}
-					hd_yiguan_hu_lord = {
+				}
+				hd_yiguan_realm_effects = {	# 民政
+					icon = "gfx/interface/icons/situations/situation_modifier_subject.dds"
+					hd_yiguan_grp_hu = {
 						character_modifier = {
-							monthly_county_control_growth_factor = -0.1
 							different_culture_opinion = -5
 						}
 					}
-					hd_yiguan_han_vassal = {
+					hd_yiguan_grp_occupied = {
 						character_modifier = {
 							stress_gain_mult = 0.1
-							domain_tax_mult = -0.1
 						}
 					}
 				}
 			}
 		}
 
-		hd_yiguan_phase_duizhi = {	# 对峙（不限，直到结局）
-			icon = "gfx/interface/icons/flat_icons/army.dds"
-			illustration = "gfx/interface/illustrations/event_scenes/tgp_camp_asia.dds"
+		hd_yiguan_phase_tingzhi = {	# 停滞（两个去向都不随时间推进）
+			icon = "gfx/interface/icons/struggle_types/struggle_iberia_phase_compromise.dds"
+			illustration = "gfx/interface/illustrations/struggle_backgrounds/struggle_iberia_phase_compromise_bg.dds"
+			texture = "gfx/interface/illustrations/struggle_backgrounds/struggle_iberia_phase_compromise_bg.dds"
 			on_start = {
-				hd_yiguan_phase_start_effect = { PHASE = 3 }
+				hd_yiguan_phase_started_effect = { PHASE = tingzhi }
+			}
+			future_phases = {
+				hd_yiguan_phase_taowang = {
+					takeover_type = points
+					takeover_points = @hd_yiguan_threshold
+					catalysts = {
+						catalyst_hd_yiguan_capital_lost = hd_yiguan_cv_capital_lost
+						catalyst_hd_yiguan_han_capital_taken = hd_yiguan_cv_han_capital_taken
+						catalyst_hd_yiguan_han_defeated = hd_yiguan_cv_han_defeated
+						catalyst_hd_yiguan_han_ruler_slain = hd_yiguan_cv_han_ruler_slain
+						catalyst_hd_yiguan_gentry_flee = hd_yiguan_cv_gentry_flee
+						# 拖延（负值）：胡汉相安
+						catalyst_hd_yiguan_reform_step_delay_t = hd_yiguan_cv_reform_step_delay
+						catalyst_hd_yiguan_reform_done_delay_t = hd_yiguan_cv_reform_done_delay
+					}
+				}
+				hd_yiguan_phase_chongtu = {
+					takeover_type = points
+					takeover_points = @hd_yiguan_threshold
+					catalysts = {
+						catalyst_hd_yiguan_beifa_declared = hd_yiguan_cv_beifa_declared
+						catalyst_hd_yiguan_beifa_won = hd_yiguan_cv_beifa_won
+						catalyst_hd_yiguan_taohu_declared = hd_yiguan_cv_taohu_declared
+						catalyst_hd_yiguan_taohu_won = hd_yiguan_cv_taohu_won
+						catalyst_hd_yiguan_beihuan = hd_yiguan_cv_beihuan
+						catalyst_hd_yiguan_uprising = hd_yiguan_cv_uprising
+						catalyst_hd_yiguan_huhua_decreed = hd_yiguan_cv_huhua_decreed
+						catalyst_hd_yiguan_huhua_county = hd_yiguan_cv_huhua_county
+						catalyst_hd_yiguan_hu_attacks_han = hd_yiguan_cv_hu_attacks_han
+						# 拖延（负值）：胡汉相安
+						catalyst_hd_yiguan_reform_step_delay_c = hd_yiguan_cv_reform_step_delay
+						catalyst_hd_yiguan_reform_done_delay_c = hd_yiguan_cv_reform_done_delay
+					}
+				}
 			}
 			modifier_sets = {
-				hd_yiguan_duizhi_effects = {
-					icon = "gfx/interface/icons/modifiers/county_modifier_control_positive.dds"
-					hd_yiguan_south_lord = {
+				hd_yiguan_realm_effects = {	# 民政
+					icon = "gfx/interface/icons/situations/situation_modifier_subject.dds"
+					hd_yiguan_grp_sinicized = {
 						character_modifier = {
-							levy_size = 0.1
-							men_at_arms_maintenance = -0.1
+							different_culture_opinion = 10
+						}
+						county_modifier = {
+							development_growth_factor = 0.05
 						}
 					}
-					hd_yiguan_front_duke = {
+					hd_yiguan_grp_hu = {
 						character_modifier = {
-							levy_size = 0.15
-							levy_reinforcement_rate = 0.2
+							monthly_county_control_growth_factor = 0.1
+						}
+						parameters = {
+							hd_yiguan_can_reform = yes	# 发起汉化/胡化
 						}
 					}
-					hd_yiguan_south_vassal = {
-						character_modifier = {
-							levy_size = 0.05
+					hd_yiguan_grp_south = {
+						county_modifier = {
+							development_growth_factor = 0.1
+							build_gold_cost = -0.1	# 先例：原版 tgp_dynastic_cycle.txt:1136-1137
 						}
 					}
-					hd_yiguan_hu_lord = {
-						character_modifier = {
-							different_culture_opinion = -5
+					hd_yiguan_grp_north_han = {
+						county_modifier = {
+							development_growth_factor = 0.05
 						}
 					}
-					hd_yiguan_han_vassal = {
+					hd_yiguan_grp_occupied = {
 						character_modifier = {
 							domain_tax_mult = -0.05
 						}
@@ -269,5 +382,26 @@ hd_yiguan_nandu = {
 				}
 			}
 		}
+	}
+
+	##################################################
+	# 决议（窗口显示用；决议本体由各模块定义，见 §5.6）
+	##################################################
+	situation_decisions = {
+		hd_yiguan_sinicization_decision		# 推行汉化（胡人侧）
+		hd_yiguan_huhua_decision			# 推行胡化（胡人侧）
+		hd_yiguan_celestial_decision		# 建天朝制（胡人侧）
+		hd_yiguan_jubing_qiyi_decision		# 举兵起义（战争侧）
+		hd_yiguan_zhaoji_liumin_decision	# 招集流民（战争侧）
+		hd_yiguan_guifu_nanchao_decision	# 归附南朝（战争侧）
+		hd_yiguan_return_capital_decision	# 还都旧京（战争侧）
+		hd_yiguan_qizu_nanqian_decision		# 举族南迁（士族侧）
+		hd_yiguan_qibing_beihuan_decision	# 起兵北还（士族侧）
+	}
+
+	ending_decisions = {
+		hd_yiguan_ending_guangfu_decision	# 光复中原（冲突期）
+		hd_yiguan_ending_heliu_decision		# 胡汉合流（停滞期）
+		hd_yiguan_ending_lunsang_decision	# 衣冠沦丧（逃亡期）
 	}
 }

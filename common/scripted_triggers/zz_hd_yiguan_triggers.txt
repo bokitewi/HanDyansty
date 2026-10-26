@@ -1,4 +1,15 @@
-﻿# 衣冠南渡 触发器（见 docs/衣冠南渡_设计草案.md）
+﻿# 衣冠南渡 共享触发器（重做版，见 docs/衣冠南渡_重做设计.md §5.3）
+# 核心框架维护。跨模块一律调用本文件登记的键名；新增键先登记 §5.3。
+# 说明：
+#   "胡人"＝非华夏传承（hd_yiguan_is_hu_trigger）；"汉人"＝华夏传承且非汉化王朝（hd_yiguan_is_han_trigger）。
+#   汉化政权算华夏（§3 第 3 轮），所以凡"胡人宗主/胡人政权/落入胡人"的判断都另排除汉化王朝。
+#   本 mod 有无地的帝国级官职头衔（e_WJ_minister_*）与伯爵级世族头衔（c_WJ_nf_*），
+#   highest_held_title_tier 会被抬高，爵位判断一律再用 any_held_title + is_landless_type_title = no 复核
+#   （先例：原版 pam_scripted_triggers.txt:172、00_conquest.txt:81）。
+
+############################
+# 规则与局势
+############################
 
 # 规则开启
 hd_yiguan_enabled_trigger = {
@@ -10,7 +21,31 @@ hd_yiguan_active_trigger = {
 	exists = situation:hd_yiguan_nandu
 }
 
-# Scope：角色。华夏传承
+# 任意作用域：局势存在且当前阶段为逃亡
+hd_yiguan_phase_taowang_trigger = {
+	situation:hd_yiguan_nandu ?= { situation_current_phase = hd_yiguan_phase_taowang }
+}
+
+# 任意作用域：局势存在且当前阶段为冲突
+hd_yiguan_phase_chongtu_trigger = {
+	situation:hd_yiguan_nandu ?= { situation_current_phase = hd_yiguan_phase_chongtu }
+}
+
+# 任意作用域：局势存在且当前阶段为停滞
+hd_yiguan_phase_tingzhi_trigger = {
+	situation:hd_yiguan_nandu ?= { situation_current_phase = hd_yiguan_phase_tingzhi }
+}
+
+# Scope：角色。属于某参与者组（GROUP = 组键，见 §5.1）
+hd_yiguan_in_group_trigger = {
+	top_participant_group:hd_yiguan_nandu ?= { participant_group_type = $GROUP$ }
+}
+
+############################
+# 族属
+############################
+
+# Scope：角色。华夏传承（汉代风味内容 hanfl 也依赖此键，勿改）
 hd_yiguan_is_huaxia_trigger = {
 	exists = culture
 	culture = { has_cultural_pillar = heritage_chinese }
@@ -35,11 +70,42 @@ hd_yiguan_is_han_trigger = {
 	NOT = { hd_yiguan_is_sinicized_trigger = yes }
 }
 
-# Scope：县头衔。沦陷县：县文化为华夏，独立宗主非华夏
+# Scope：角色。侨姓：家族带变量 hd_yiguan_qiao_house（南迁时打上）
+hd_yiguan_is_qiaoxing_trigger = {
+	house ?= { has_variable = hd_yiguan_qiao_house }
+}
+
+# Scope：角色。吴姓（南方本地家族）：汉人、非侨姓、都城（无地者按所在地）在荆扬
+hd_yiguan_is_wuxing_trigger = {
+	hd_yiguan_is_han_trigger = yes
+	NOT = { hd_yiguan_is_qiaoxing_trigger = yes }
+	trigger_if = {
+		limit = { is_landed = yes }
+		capital_province ?= { geographical_region = hd_yiguan_south_region }
+	}
+	trigger_else = {
+		location ?= { geographical_region = hd_yiguan_south_region }	# 先例：原版 00_artifact_triggers.txt:205
+	}
+}
+
+# Scope：角色。士族（包装朋党身份判定）
+hd_yiguan_is_shizu_trigger = {
+	hd_party_is_shizu_trigger = yes
+}
+
+############################
+# 县
+############################
+
+# Scope：县头衔。沦陷县：县文化为华夏，独立宗主为胡人且非汉化王朝
+# （§1 第 1 轮：汉化政权治下的汉人不算沦陷；第 4 轮：胡人宗主汉化成功即去掉减益）
 hd_yiguan_occupied_county_trigger = {
 	culture ?= { has_cultural_pillar = heritage_chinese }
 	holder ?= {
-		top_liege = { hd_yiguan_is_hu_trigger = yes }
+		top_liege = {
+			hd_yiguan_is_hu_trigger = yes
+			NOT = { hd_yiguan_is_sinicized_trigger = yes }
+		}
 	}
 }
 
@@ -53,74 +119,196 @@ hd_yiguan_county_in_south_trigger = {
 	title_province = { geographical_region = hd_yiguan_south_region }
 }
 
-# Scope：角色。"北方势力"（触发用）：独立、王国级以上、非华夏、北方 ≥30 县
-hd_yiguan_north_power_trigger = {
-	is_independent_ruler = yes
-	highest_held_title_tier >= tier_kingdom
-	hd_yiguan_is_hu_trigger = yes
-	any_realm_county = {
-		count >= 30
-		hd_yiguan_county_in_north_trigger = yes
-	}
-}
+############################
+# 都城位置（Scope：角色；无地者无都城，一律为否）
+############################
 
-# Scope：角色。北方占 ≥30 县（汉化结局用，不限文化）
-hd_yiguan_holds_north_30_trigger = {
-	any_realm_county = {
-		count >= 30
-		hd_yiguan_county_in_north_trigger = yes
-	}
-}
-
-# Scope：角色。汉化天朝势力（汉化结局用）：独立、汉化王朝、天朝制、北方 ≥30 县
-hd_yiguan_sinicized_power_trigger = {
-	is_independent_ruler = yes
-	hd_yiguan_is_sinicized_trigger = yes
-	has_government = celestial_government
-	hd_yiguan_holds_north_30_trigger = yes
-}
-
-# Scope：角色。南方宗主资格（不含分区判定）
-hd_yiguan_south_lord_trigger = {
-	is_landed = yes
-	is_independent_ruler = yes
-	highest_held_title_tier >= tier_kingdom
-	hd_yiguan_is_han_trigger = yes
-}
-
-# Scope：角色。前线郡守资格（接壤标记由年度重算打上）
-hd_yiguan_front_duke_trigger = {
-	is_landed = yes
-	is_independent_ruler = yes
-	highest_held_title_tier = tier_duchy
-	hd_yiguan_is_han_trigger = yes
-	has_variable = hd_yiguan_frontline
-}
-
-# Scope：角色。属于某参与者群体
-hd_yiguan_in_group_trigger = {
-	top_participant_group:hd_yiguan_nandu ?= { participant_group_type = $GROUP$ }
-}
-
-# Scope：角色。南方一侧的独立参与者（南方宗主或前线郡守）
-hd_yiguan_south_side_trigger = {
-	top_participant_group:hd_yiguan_nandu ?= {
+# 都城在北方八州或荆扬
+hd_yiguan_capital_in_region_trigger = {
+	capital_province ?= {
 		OR = {
-			participant_group_type = hd_yiguan_south_lord
-			participant_group_type = hd_yiguan_front_duke
+			geographical_region = hd_yiguan_north_region
+			geographical_region = hd_yiguan_south_region
 		}
 	}
 }
 
-# Scope：角色。当前阶段（1 丧乱 / 2 南渡 / 3 对峙）
-hd_yiguan_phase_is_trigger = {
-	situation:hd_yiguan_nandu ?= {
-		has_variable = hd_yiguan_phase
-		var:hd_yiguan_phase = $PHASE$
+# 都城在北方八州
+hd_yiguan_capital_in_north_trigger = {
+	capital_province ?= { geographical_region = hd_yiguan_north_region }
+}
+
+# 都城在荆扬
+hd_yiguan_capital_in_south_trigger = {
+	capital_province ?= { geographical_region = hd_yiguan_south_region }
+}
+
+############################
+# 参与者组判定（Scope：角色；局势 is_character_valid 直接调用，务必便宜：不遍历县）
+# 每个候选人按组顺序逐个求值：便宜的排除条件（王朝变量、文化、都城区域）放前，头衔遍历放最后
+############################
+
+# 政权基础：有地、独立、主头衔公爵级以上（官职、世族等无地头衔不算）
+hd_yiguan_is_regime_base_trigger = {
+	is_landed = yes
+	is_independent_ruler = yes
+	highest_held_title_tier >= tier_duchy
+	any_held_title = {
+		tier >= tier_duchy
+		is_landless_type_title = no
 	}
 }
 
-# Scope：角色。可收常规事件（未在冷却、成年、未被囚）
+# 1 汉化政权：汉化王朝 + 都城在区域内 + 政权基础
+hd_yiguan_is_sinicized_regime_trigger = {
+	hd_yiguan_is_sinicized_trigger = yes
+	hd_yiguan_capital_in_region_trigger = yes
+	hd_yiguan_is_regime_base_trigger = yes
+}
+
+# 2 胡人政权：胡人（不含汉化王朝）+ 都城在区域内 + 政权基础
+hd_yiguan_is_hu_regime_trigger = {
+	hd_yiguan_is_hu_trigger = yes
+	NOT = { hd_yiguan_is_sinicized_trigger = yes }
+	hd_yiguan_capital_in_region_trigger = yes
+	hd_yiguan_is_regime_base_trigger = yes
+}
+
+# 3 南方政权：汉人 + 都城在荆扬 + 政权基础
+hd_yiguan_is_south_regime_trigger = {
+	hd_yiguan_is_han_trigger = yes
+	hd_yiguan_capital_in_south_trigger = yes
+	hd_yiguan_is_regime_base_trigger = yes
+}
+
+# 4 北方汉人：汉人 + 都城在北方八州 + 政权基础（独立即未沦陷）
+hd_yiguan_is_north_han_trigger = {
+	hd_yiguan_is_han_trigger = yes
+	hd_yiguan_capital_in_north_trigger = yes
+	hd_yiguan_is_regime_base_trigger = yes
+}
+
+# 南方政权或北方汉人
+hd_yiguan_is_han_regime_trigger = {
+	OR = {
+		hd_yiguan_is_south_regime_trigger = yes
+		hd_yiguan_is_north_han_trigger = yes
+	}
+}
+
+# 5 沦陷区汉人：汉人；且
+#   有地：非独立、伯爵级以上（无地头衔不算）、宗主为胡人（非汉化）、都城在北方；或
+#   无地：宅邸在北方、持世族头衔，且（宗主为胡人（非汉化），或宅邸所在县的独立宗主为胡人（非汉化））
+# 无地一支多看宅邸所在县：本 mod 的世族头衔多挂 h_china（晋帝），胡人攻占北方后宗主不会随之改变，
+#   只看宗主则北方无地世族几乎都进不了本组（§1 第 1 轮"同区域内的无地士族"）。写法先例：原版 title_on_actions.txt:4946
+# 局势里该组须写 require_realm_in_sub_region = no，否则收不进无地者
+hd_yiguan_is_occupied_han_trigger = {
+	hd_yiguan_is_han_trigger = yes
+	trigger_if = {
+		limit = { is_landed = yes }
+		is_independent_ruler = no	# 独立者不算（其 top_liege 是本人）
+		highest_held_title_tier >= tier_county
+		hd_yiguan_capital_in_north_trigger = yes
+		top_liege = {
+			hd_yiguan_is_hu_trigger = yes
+			NOT = { hd_yiguan_is_sinicized_trigger = yes }
+		}
+		any_held_title = {
+			tier >= tier_county
+			is_landless_type_title = no
+		}
+	}
+	trigger_else = {
+		domicile ?= {
+			domicile_location ?= { geographical_region = hd_yiguan_north_region }	# 先例：原版 pam_saint_triggers.txt:151
+		}
+		OR = {
+			top_liege = {
+				hd_yiguan_is_hu_trigger = yes
+				NOT = { hd_yiguan_is_sinicized_trigger = yes }
+			}
+			domicile ?= {
+				domicile_location ?= {
+					county ?= {
+						holder ?= {
+							top_liege = {
+								hd_yiguan_is_hu_trigger = yes
+								NOT = { hd_yiguan_is_sinicized_trigger = yes }
+							}
+						}
+					}
+				}
+			}
+		}
+		any_held_title = { is_noble_family_title = yes }	# 先例：mod WJ_han_jin_office_triggers.txt:121
+	}
+}
+
+############################
+# 开局、结局判定
+############################
+
+# Scope：角色。胡人强权（开局判定）：胡人（非汉化）、独立、王国级以上、领内北方 ≥150 县
+hd_yiguan_hu_power_trigger = {
+	is_independent_ruler = yes
+	highest_held_title_tier >= tier_kingdom
+	hd_yiguan_is_hu_trigger = yes
+	NOT = { hd_yiguan_is_sinicized_trigger = yes }
+	any_held_title = {
+		tier >= tier_kingdom
+		is_landless_type_title = no
+	}
+	any_realm_county = {
+		count >= 150
+		hd_yiguan_county_in_north_trigger = yes
+	}
+}
+
+# 任意作用域：洛阳、长安都已落入胡人（持有者的独立宗主为胡人且非汉化）
+hd_yiguan_two_capitals_lost_trigger = {
+	title:c_luoyang.holder ?= {
+		top_liege = {
+			hd_yiguan_is_hu_trigger = yes
+			NOT = { hd_yiguan_is_sinicized_trigger = yes }
+		}
+	}
+	title:c_uuii_p_867.holder ?= {	# 长安
+		top_liege = {
+			hd_yiguan_is_hu_trigger = yes
+			NOT = { hd_yiguan_is_sinicized_trigger = yes }
+		}
+	}
+}
+
+############################
+# 战争
+############################
+
+# Scope：角色。正以起兵北还 CB 作战（任一方）
+hd_yiguan_in_beihuan_war_trigger = {
+	any_character_war = { using_cb = hd_yiguan_beihuan_cb }
+}
+
+# Scope：角色（胡人宗主）。没有以其为主守方的义军 / 举兵起义 / 起兵北还战争
+# （同一宗主同时至多一场，防止战争堆积。prev 指本角色，先例：原版 09_mpo_greatest_of_khans_triggers.txt:184）
+hd_yiguan_no_active_uprising_trigger = {
+	NOT = {
+		any_character_war = {
+			primary_defender = prev
+			OR = {
+				using_cb = hd_yiguan_uprising_cb
+				using_cb = hd_yiguan_qiyi_cb
+				using_cb = hd_yiguan_beihuan_cb
+			}
+		}
+	}
+}
+
+############################
+# 事件与领地
+############################
+
+# Scope：角色。可收常规事件（成年、未被囚、有地）
 hd_yiguan_event_ready_trigger = {
 	is_alive = yes
 	is_adult = yes
@@ -136,16 +324,19 @@ hd_yiguan_has_occupied_county_trigger = {
 	}
 }
 
-# Scope：角色。领地与某位南方一侧参与者接壤（举州归南）
-hd_yiguan_borders_south_side_trigger = {
-	any_realm_county = {
-		any_neighboring_county = {
-			holder ?= {
-				top_liege = { hd_yiguan_south_side_trigger = yes }
-			}
+# Scope：头衔。持有者是 $LORD$ 本人或其下属
+hd_yiguan_title_in_realm_trigger = {
+	holder ?= {
+		OR = {
+			this = $LORD$
+			target_is_liege_or_above = $LORD$
 		}
 	}
 }
+
+############################
+# 北府
+############################
 
 # Scope：角色。北府兵招募：已初建、持有京口或广陵且控制度 ≥50、局势进行中
 hd_yiguan_can_recruit_beifu_trigger = {
@@ -156,6 +347,7 @@ hd_yiguan_can_recruit_beifu_trigger = {
 	}
 }
 
+# Scope：县头衔。北府基地且归 $LORD$ 所辖
 hd_yiguan_beifu_base_trigger = {
 	has_variable = hd_yiguan_beifu_base
 	county_control >= 50
@@ -167,54 +359,42 @@ hd_yiguan_beifu_base_trigger = {
 	}
 }
 
-# Scope：角色。持有京口或广陵（北府初建事件用）
-hd_yiguan_holds_jingkou_guangling_trigger = {
-	OR = {
-		title:c_uuii_p_2086 = { hd_yiguan_title_in_realm_trigger = { LORD = root } }
-		title:c_uuii_p_7062 = { hd_yiguan_title_in_realm_trigger = { LORD = root } }
-	}
-}
-
-hd_yiguan_title_in_realm_trigger = {
-	holder ?= {
-		OR = {
-			this = $LORD$
-			target_is_liege_or_above = $LORD$
-		}
-	}
-}
+############################
+# 侨州
+############################
 
 # 侨州可立：对应州有县沦陷、尚无人持有
+# 州按汉代原州的静态地理区域 $REGION$（uuii_han_*_region）判定，不看 k_uuii_* 的运行时法理：
+# 南北朝剧本 280.1.1 起（zz_hd_nbc_dejure.txt）河南、洛阳、河内等郡已改挂洛州、司州等新州；
+# 地理区域按 landed_titles 原始法理建立、不随法理改挂变化（原版 map_data/geographical_regions/_geographical_regions.info）
 hd_yiguan_qiao_available_trigger = {
 	NOT = { exists = title:$QIAO$.holder }
-	title:$KINGDOM$ = {
-		any_de_jure_county = { has_variable = hd_yiguan_occ }
+	any_county_in_region = {	# 写法同原版 tgp_story_cycle_tai_migrations.txt:80
+		region = $REGION$
+		has_variable = hd_yiguan_occ
 	}
 }
 
 hd_yiguan_any_qiao_available_trigger = {
 	OR = {
-		hd_yiguan_qiao_available_trigger = { QIAO = d_hd_qiao_nansi KINGDOM = k_uuii_sili }
-		hd_yiguan_qiao_available_trigger = { QIAO = d_hd_qiao_nanji KINGDOM = k_uuii_jizhou }
-		hd_yiguan_qiao_available_trigger = { QIAO = d_hd_qiao_nanyou KINGDOM = k_uuii_youzhou }
-		hd_yiguan_qiao_available_trigger = { QIAO = d_hd_qiao_nanbing KINGDOM = k_uuii_bingzhou }
-		hd_yiguan_qiao_available_trigger = { QIAO = d_hd_qiao_nanqing KINGDOM = k_uuii_qingzhou }
-		hd_yiguan_qiao_available_trigger = { QIAO = d_hd_qiao_nanyan KINGDOM = k_uuii_yanzhou }
-		hd_yiguan_qiao_available_trigger = { QIAO = d_hd_qiao_nanxu KINGDOM = k_uuii_xuzhou }
-		hd_yiguan_qiao_available_trigger = { QIAO = d_hd_qiao_nanyu KINGDOM = k_uuii_yuzhou }
+		hd_yiguan_qiao_available_trigger = { QIAO = d_hd_qiao_nansi REGION = uuii_han_sili_region }
+		hd_yiguan_qiao_available_trigger = { QIAO = d_hd_qiao_nanji REGION = uuii_han_jizhou_region }
+		hd_yiguan_qiao_available_trigger = { QIAO = d_hd_qiao_nanyou REGION = uuii_han_youzhou_region }
+		hd_yiguan_qiao_available_trigger = { QIAO = d_hd_qiao_nanbing REGION = uuii_han_bingzhou_region }
+		hd_yiguan_qiao_available_trigger = { QIAO = d_hd_qiao_nanqing REGION = uuii_han_qingzhou_region }
+		hd_yiguan_qiao_available_trigger = { QIAO = d_hd_qiao_nanyan REGION = uuii_han_yanzhou_region }
+		hd_yiguan_qiao_available_trigger = { QIAO = d_hd_qiao_nanxu REGION = uuii_han_xuzhou_region }
+		hd_yiguan_qiao_available_trigger = { QIAO = d_hd_qiao_nanyu REGION = uuii_han_yuzhou_region }
 	}
 }
+
+############################
+# 汉化改制
+############################
 
 # 北方版汉化改制当前步。即便中途取得中华霸权也照常推进
 hd_yiguan_north_reform_stage_trigger = {
 	has_variable = hd_yiguan_north_reform
 	has_variable = hd_dc_con_sinicization_stage
 	var:hd_dc_con_sinicization_stage = $STAGE$
-}
-
-# 未在应对衣冠南渡义军（同一宗主同时至多一场义军起义，防止战争堆积）
-hd_yiguan_no_active_uprising_trigger = {
-	NOT = {
-		any_character_war = { using_cb = hd_yiguan_uprising_cb }
-	}
 }

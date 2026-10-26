@@ -1,0 +1,169 @@
+﻿namespace = hd_yiguan
+
+# 衣冠南渡·汉人侧事件（docs/衣冠南渡_重做设计.md §5.10：4101–4149 起义、归附、流民、北伐/讨胡 AI 与通知；战争侧模块维护）
+# 4101 举兵起义求援：接壤的最强汉人政权受邀出兵（AI 按对起义者的好感，玩家弹事件）
+# 4110 归附南朝：受降的南方政权收到通知（只发玩家；不需同意）
+# 北伐、讨胡收复的 AI 宣战由 hd_yiguan_ai_war_pulse_effect 直接进行，捷报用弹窗（见 zz_hd_yiguan_war_effects.txt），不另设事件
+
+############################
+# 4101 起义求援
+# Scope：受邀的汉人政权。须有 scope:hd_yiguan_qy_rebel（起义者）、scope:hd_yiguan_qy_def（胡人领主），由 hd_yiguan_qiyi_start_effect 存
+# 战争可能在作答前已经结束，所以不用存下的战争作用域，改为从起义者身上重找
+############################
+hd_yiguan.4101 = {
+	type = character_event
+	title = hd_yiguan.4101.t
+	desc = hd_yiguan.4101.desc
+	theme = war
+	override_background = { reference = army_camp }
+	left_portrait = {
+		character = scope:hd_yiguan_qy_rebel
+		animation = war_attacker
+	}
+	right_portrait = {
+		character = scope:hd_yiguan_qy_def
+		animation = anger
+	}
+
+	trigger = {
+		exists = scope:hd_yiguan_qy_rebel
+		exists = scope:hd_yiguan_qy_def
+		scope:hd_yiguan_qy_rebel = {
+			is_alive = yes
+			any_character_war = {
+				using_cb = hd_yiguan_qiyi_cb
+				primary_attacker = scope:hd_yiguan_qy_rebel
+			}
+		}
+	}
+
+	immediate = {
+		scope:hd_yiguan_qy_rebel = {
+			random_character_war = {
+				limit = {
+					using_cb = hd_yiguan_qiyi_cb
+					primary_attacker = scope:hd_yiguan_qy_rebel
+				}
+				save_scope_as = hd_yiguan_qy_cur_war
+			}
+		}
+	}
+
+	option = {	# 出兵相助
+		name = hd_yiguan.4101.a
+		trigger = {
+			exists = scope:hd_yiguan_qy_cur_war
+			NOT = { is_allied_to = scope:hd_yiguan_qy_def }
+			NOT = { is_at_war_with = scope:hd_yiguan_qy_rebel }
+			NOT = {
+				scope:hd_yiguan_qy_cur_war = { is_participant = root }
+			}
+		}
+		custom_tooltip = hd_yiguan.4101.a.tt
+		hidden_effect = {
+			scope:hd_yiguan_qy_cur_war ?= { add_attacker = root }	# 先例：原版 07_ep3_wars.txt:139
+		}
+		add_prestige = minor_prestige_gain
+		scope:hd_yiguan_qy_rebel = {
+			add_opinion = {	# 原版通用好感"在我需要时给予过帮助"（+30，10 年递减）；资助北还好感 hd_yiguan_funded_opinion 专指北还，不借用
+				target = root
+				modifier = helped_me_in_time_of_need
+			}
+			if = {
+				limit = { is_ai = no }
+				send_interface_toast = {
+					type = event_toast_effect_good
+					title = hd_yiguan_qiyi_helper_joined_toast
+					left_icon = root
+					custom_tooltip = hd_yiguan_qiyi_helper_joined_toast_desc
+				}
+			}
+		}
+		ai_chance = {
+			base = 25
+			modifier = {
+				add = 30
+				opinion = {
+					target = scope:hd_yiguan_qy_rebel
+					value >= 20
+				}
+			}
+			modifier = {
+				add = 20
+				opinion = {
+					target = scope:hd_yiguan_qy_def
+					value <= -20
+				}
+			}
+			modifier = {
+				add = -30
+				opinion = {
+					target = scope:hd_yiguan_qy_rebel
+					value < 0
+				}
+			}
+			modifier = {	# 自顾不暇
+				add = -20
+				is_at_war = yes
+			}
+			ai_value_modifier = {
+				ai_boldness = 0.3
+				ai_honor = 0.2
+			}
+		}
+	}
+
+	option = {	# 坐观成败
+		name = hd_yiguan.4101.b
+		scope:hd_yiguan_qy_rebel = {
+			if = {
+				limit = { is_ai = no }
+				send_interface_toast = {
+					type = event_toast_effect_bad
+					title = hd_yiguan_qiyi_helper_declined_toast
+					left_icon = root
+					custom_tooltip = hd_yiguan_qiyi_helper_declined_toast_desc
+				}
+			}
+		}
+		ai_chance = {
+			base = 30
+			modifier = {
+				add = 20
+				has_trait = craven
+			}
+			ai_value_modifier = {
+				ai_boldness = -0.3
+			}
+		}
+	}
+}
+
+############################
+# 4110 归附南朝·受降通知
+# Scope：受降的南方政权（玩家）。须有 scope:hd_yiguan_gf_vassal（归附者），由 hd_yiguan_guifu_effect 存
+############################
+hd_yiguan.4110 = {
+	type = character_event
+	title = hd_yiguan.4110.t
+	desc = hd_yiguan.4110.desc
+	theme = diplomacy
+	override_background = { reference = tgp_asia_throne_room }
+	left_portrait = {
+		character = scope:hd_yiguan_gf_vassal
+		animation = personality_honorable
+	}
+	right_portrait = {
+		character = root
+		animation = happiness
+	}
+
+	trigger = {
+		exists = scope:hd_yiguan_gf_vassal
+	}
+
+	option = {	# 优诏褒答
+		name = hd_yiguan.4110.a
+		custom_tooltip = hd_yiguan.4110.a.tt
+	}
+}

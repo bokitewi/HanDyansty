@@ -1,0 +1,368 @@
+﻿# 531 年剧本「信都起兵」开局效果。只由 common/on_action/zz_hd_531_startup.txt 调用，调用处已带 531.7.1 闸门。
+# 计划见 /mnt/project-files/531高欢剧本_计划.md 第 6、13 节。复用的 nbc 效果都是不分开局日期的通用效果
+# （hd_nbc_set_era_effect、hd_nbc_realm_name_effect、hd_nbc_style_effect、hd_nbc_culture_effect、hd_nbc_start_war_effect、
+#   hd_nbc_spawn_army_effect、hd_nbc_minister_effect），带日期分支的 nbc 效果一律不调。
+
+############################################################
+# on_game_start
+############################################################
+hd_531_game_start_effect = {
+	hd_531_cleanup_effect = yes
+	# 终结乱世锁：韩陵之战结束或 534 年解除（tgp_dynastic_cycle_decisions.txt）
+	set_global_variable = hd_531_mandate_lock
+	# 衣冠南渡是 4 世纪的事：尔朱兆、天光都是北方胡人王国，不设的话开局第一个月就会触发（计划复核必改 10）。
+	# 只设标记，不调 hd_yiguan_start_effect
+	set_global_variable = hd_yiguan_started
+	# 僚人入蜀 343–344 年已发生（随机规则下仍放行；617 线程补设）
+	if = { limit = { NOT = { has_game_rule = hd_liao_rule_random } } set_global_variable = { name = hd_liao_migration_launched value = yes } }
+	# 历史入侵：尔朱荣已死；高欢起兵、宇文泰据关中由本剧本接管。侯景之乱（545 年起）保留
+	set_global_variable = { name = hd_hi_done_erzhurong value = yes }
+	set_global_variable = { name = hd_hi_done_gaohuan value = yes }
+	set_global_variable = { name = hd_hi_done_yuwentai value = yes }
+	# 天意青睐"每月主动开战"要求讨董链已结束（184 专用变量），同 304
+	set_global_variable = { name = hd_anti_regent_chain_resolved value = yes }
+	# 天子京城：洛阳
+	title:h_china = {
+		set_capital_county = title:c_luoyang
+		set_variable = { name = hd_court_capital_county value = title:c_luoyang }
+	}
+	# 传国玉玺归节闵帝
+	title:h_china.holder ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				NOT = { exists = global_var:hd_han_treasures_initialized }
+			}
+			hd_han_create_imperial_seal_effect = { OWNER = this }
+			set_global_variable = hd_han_treasures_initialized
+		}
+	}
+	hd_531_dynastic_cycle_effect = yes
+	hd_nbc_culture_effect = yes
+	hd_531_rouran_culture_effect = yes
+	hd_531_tributaries_effect = yes
+	hd_531_realm_display_effect = yes
+	debug_log = "HD_531 STAGE GAME_START"
+}
+
+# 开局清理：库里没写卒年、531 年已年过九十的陇西李氏 7 人（李暠一系，5 世纪初人）。
+# 404 的虚构郡守、首领和冉闵已由南北朝线程补了卒年，不再清理；长生人物（李意其、庄周、蚩尤残魂、吉诃德、簸箕天为）有意保留
+hd_531_vanish_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = { is_alive = yes }
+			death = { death_reason = death_vanished }
+		}
+	}
+}
+hd_531_cleanup_effect = {
+	hd_531_vanish_effect = { WHO = longxi_li_009 }
+	hd_531_vanish_effect = { WHO = longxi_li_011 }
+	hd_531_vanish_effect = { WHO = longxi_li_012 }
+	hd_531_vanish_effect = { WHO = longxi_li_013 }
+	hd_531_vanish_effect = { WHO = longxi_li_014 }
+	hd_531_vanish_effect = { WHO = longxi_li_015 }
+	hd_531_vanish_effect = { WHO = longxi_li_016 }
+	debug_log = "HD_531 CLEANUP DONE"
+}
+
+# 天朝循环：群雄逐鹿（斗争）开局，五德取北魏的水德；进度清零（写法同 hd_304_dynastic_cycle_effect）
+hd_531_dynastic_cycle_effect = {
+	if = {
+		limit = {
+			has_tgp_dlc_trigger = yes
+			exists = title:h_china.holder
+			NOT = { exists = situation:dynastic_cycle }
+		}
+		start_situation = {
+			type = dynastic_cycle
+			start_phase = situation_dynastic_cycle_phase_chaos
+		}
+	}
+	if = {
+		limit = {
+			has_tgp_dlc_trigger = yes
+			exists = situation:dynastic_cycle
+			NOT = { exists = global_var:saas_dynastic_cycle_initialized }
+		}
+		situation:dynastic_cycle = {
+			title:h_china = {
+				set_variable = {
+					name = years_since_imperial_examination
+					value = 0
+				}
+			}
+			tgp_set_wuking_element_effect = { ELEMENT = water }
+			every_situation_participant = {
+				recalculate_participant_group = situation:dynastic_cycle
+			}
+			every_situation_sub_region = {
+				hd_dc_zero_phase_points_effect = { PHASE = situation_dynastic_cycle_phase_hd_standoff }
+			}
+			trigger_event = { on_action = hd_531_dc_zero_progress days = 2 }
+		}
+		set_global_variable = {
+			name = saas_dynastic_cycle_initialized
+			value = yes
+		}
+		debug_log = "HD_531 DYNASTIC_CYCLE CHAOS"
+	}
+}
+
+# 柔然：hd_nbc_culture_effect 的漠北一段只对 404 生效，531 自己写。阿那瓌本人一并改
+hd_531_rouran_culture_effect = {
+	title:k_otuken = {
+		every_de_jure_county = {
+			limit = {
+				OR = {
+					culture = culture:xianbei
+					culture = culture:xiongnu
+				}
+			}
+			set_county_culture = culture:hd_rouran
+		}
+	}
+	character:a_na_gui ?= {
+		if = {
+			limit = { is_alive = yes }
+			set_culture = culture:hd_rouran
+		}
+	}
+}
+
+# 尔朱兆、天光、仲远开局独立，奉节闵帝为宗主（天朝朝贡合同：只有纳贡、册封，无参战义务）。
+# 不调 start_tributary_interaction_effect：它结尾会给双方加 25 年停战（计划复核必改 1），写法照 304
+hd_531_tributary_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_independent_ruler = yes
+				is_tributary = no
+				NOT = { this = title:h_china.holder }
+			}
+			start_tributary = {
+				contract_group = tributary_celestial
+				suzerain = title:h_china.holder
+			}
+			if = {
+				limit = { is_tributary = yes }
+				hidden_effect = {
+					tributary_contract_set_obligation_level = { type = celestial_tribute_gold level = 1 }
+					tributary_contract_set_obligation_level = { type = celestial_tribute_prestige level = 1 }
+				}
+				add_subject_standing = 10
+			}
+			debug_log = "HD_531 TRIBUTARY $WHO$"
+		}
+	}
+}
+hd_531_tributaries_effect = {
+	if = {
+		limit = {
+			title:h_china.holder ?= {
+				is_alive = yes
+				has_government = celestial_government
+			}
+		}
+		hd_531_tributary_effect = { WHO = erzhu_015 }    # 尔朱兆，颍川王，据并州
+		hd_531_tributary_effect = { WHO = erzhu_017 }    # 尔朱天光，据关右
+		hd_531_tributary_effect = { WHO = erzhu_008 }    # 尔朱仲远，彭城王，擅徐兖
+	}
+}
+
+############################################################
+# on_game_start_after_lobby
+############################################################
+hd_531_after_lobby_effect = {
+	hd_531_capitals_effect = yes
+	hd_531_courtiers_effect = yes
+	hd_531_heir_effect = yes
+	hd_531_era_effect = yes
+	hd_531_realm_display_effect = yes
+	character:erzhu_009 ?= { hd_531_regency_effect = yes }
+	hd_531_ministers_effect = yes
+	hd_531_guanga_war_effect = yes
+	# 天意青睐（名单在 zz_hd_rise_triggers.txt，带 531 闸门）
+	character:hd_hi_gaohuan ?= { hd_rise_ensure_story_effect = yes }
+	debug_log = "HD_531 STAGE AFTER_LOBBY"
+	hd_recommended_starting_resources_effect = yes
+}
+
+# 治所
+hd_531_capital_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				title:$COUNTY$.holder ?= this
+			}
+			set_realm_capital = title:$COUNTY$
+		}
+	}
+}
+hd_531_capitals_effect = {
+	hd_531_capital_effect = { WHO = hd_531_yuan_gong COUNTY = c_luoyang }        # 洛阳
+	hd_531_capital_effect = { WHO = hd_hi_gaohuan COUNTY = c_uuii_p_4226 }       # 信都
+	hd_531_capital_effect = { WHO = erzhu_015 COUNTY = c_uuii_p_351 }            # 晋阳
+	hd_531_capital_effect = { WHO = erzhu_017 COUNTY = c_uuii_p_867 }            # 长安
+	hd_531_capital_effect = { WHO = erzhu_008 COUNTY = c_uuii_p_4430 }           # 彭城
+	hd_531_capital_effect = { WHO = hd_531_liu_dan COUNTY = c_uuii_p_1172 }      # 邺
+	hd_531_capital_effect = { WHO = hd_531_xiao_yan COUNTY = c_uuii_p_4389 }     # 建康
+	hd_531_capital_effect = { WHO = hd_531_xiao_yi COUNTY = c_uuii_p_1813 }      # 江陵
+	hd_531_capital_effect = { WHO = hou_jing COUNTY = c_uuii_p_407 }             # 卢奴（定州治所）
+}
+
+# 无地的新建人物进宫廷：高欢部将进信都，高乾诸弟随兄，元氏宗室在洛阳
+hd_531_courtier_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = no
+				character:$COURT$ ?= { is_alive = yes is_landed = yes }
+				NOT = { employer ?= character:$COURT$ }
+			}
+			character:$COURT$ = { add_courtier = character:$WHO$ }
+		}
+	}
+}
+hd_531_courtiers_effect = {
+	hd_531_courtier_effect = { WHO = hd_531_sun_teng COURT = hd_hi_gaohuan }
+	hd_531_courtier_effect = { WHO = hd_531_sima_ziru COURT = hd_hi_gaohuan }
+	hd_531_courtier_effect = { WHO = hd_531_duan_rong COURT = hd_hi_gaohuan }
+	hd_531_courtier_effect = { WHO = hd_531_dou_tai COURT = hd_hi_gaohuan }
+	hd_531_courtier_effect = { WHO = hd_531_hulv_jin COURT = hd_hi_gaohuan }
+	hd_531_courtier_effect = { WHO = hd_531_gao_shen COURT = hd_531_gao_qian }
+	hd_531_courtier_effect = { WHO = hd_531_gao_ang COURT = hd_531_gao_qian }
+	hd_531_courtier_effect = { WHO = hd_531_gao_jishi COURT = hd_531_gao_qian }
+	hd_531_courtier_effect = { WHO = hd_531_yuan_xiu COURT = hd_531_yuan_gong }
+	hd_531_courtier_effect = { WHO = hd_531_yuan_shanjian COURT = hd_531_yuan_gong }
+	hd_531_courtier_effect = { WHO = hd_531_yuan_baoju COURT = hd_531_yuan_gong }
+	hd_531_courtier_effect = { WHO = heba_005 COURT = erzhu_020 }                 # 贺拔胜在洛阳，随尔朱度律
+}
+
+# 储君：梁太子萧纲（五月丙申立）；高欢长子高澄
+hd_531_heir_effect = {
+	character:hd_531_xiao_yan ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				character:hd_531_xiao_gang ?= { is_alive = yes }
+			}
+			set_designated_heir = character:hd_531_xiao_gang
+		}
+	}
+	character:hd_hi_gaohuan ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				character:hd_531_gao_cheng ?= { is_alive = yes }
+			}
+			set_designated_heir = character:hd_531_gao_cheng
+		}
+	}
+}
+
+# 年号：魏普泰元年（尔朱三家与高欢都奉魏年号，高欢此时"尚未显背尔朱氏"），梁中大通三年
+hd_531_era_effect = {
+	hd_nbc_set_era_effect = { WHO = hd_531_yuan_gong KEY = putai YEAR = 1 }
+	hd_nbc_set_era_effect = { WHO = erzhu_015 KEY = putai YEAR = 1 }
+	hd_nbc_set_era_effect = { WHO = erzhu_017 KEY = putai YEAR = 1 }
+	hd_nbc_set_era_effect = { WHO = erzhu_008 KEY = putai YEAR = 1 }
+	hd_nbc_set_era_effect = { WHO = hd_hi_gaohuan KEY = putai YEAR = 1 }
+	hd_nbc_set_era_effect = { WHO = hd_531_xiao_yan KEY = zhongdatong YEAR = 3 }
+}
+
+# 国号与称谓。都不记到王朝上（FIXED = no）：拓跋、萧氏王朝下还有别的家族（计划复核建议 5）
+hd_531_realm_display_effect = {
+	# 萧衍以建康为都：主头衔设为荆扬 e_jiangdong，梁的国号落在它上面（原先落在巴蜀 e_bashu）
+	hd_nbc_primary_effect = { WHO = hd_531_xiao_yan TITLE = e_jiangdong }
+	hd_nbc_realm_name_effect = { WHO = hd_531_yuan_gong NAME = dynn_title_wei FIXED = no }
+	hd_nbc_realm_name_effect = { WHO = hd_531_xiao_yan NAME = dynn_title_liang FIXED = no }
+	hd_nbc_style_effect = { WHO = hd_531_xiao_yan STYLE = huangdi }    # 梁武帝
+	hd_nbc_style_effect = { WHO = hd_hi_gaohuan STYLE = wang }         # 渤海王
+	hd_nbc_style_effect = { WHO = erzhu_015 STYLE = wang }             # 颍川王
+	hd_nbc_style_effect = { WHO = erzhu_017 STYLE = wang }             # 广宗王（普泰初改封陇西王）
+	hd_nbc_style_effect = { WHO = erzhu_008 STYLE = wang }             # 彭城王
+}
+
+# 挟天子：尔朱世隆为权臣兼丞相，元恭为傀儡，京城洛阳（照 hd253_regency_effect，换人）。Scope：尔朱世隆
+hd_531_regency_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			is_landed = yes
+			character:hd_531_yuan_gong ?= { is_alive = yes has_title = title:h_china }
+			liege ?= character:hd_531_yuan_gong
+		}
+		character:hd_531_yuan_gong = {
+			set_location = {
+				location = title:c_luoyang.title_province
+				stick_to_location = yes
+			}
+		}
+		# 玩家扮演时功名补到帝国级预期，否则丞相授不上（218 实测）
+		if = {
+			limit = {
+				is_ai = no
+				merit_level < merit_level_expected_empire_value
+			}
+			while = {
+				limit = { merit_level < merit_level_expected_empire_value }
+				change_merit_level = 1
+			}
+		}
+		hd218_grant_chengxiang_effect = yes
+		WJ_install_historical_secretariat_effect = { OFFICE = e_WJ_minister_cheng_xiang POSITION = WJ_minister_cheng_xiang LAW = WJ_grand_chengxiang_law }
+		hd_court_install_regency_effect = yes
+		hd_court_set_stance_effect = { STANCE = moni }
+		character:hd_531_yuan_gong = {
+			if = {
+				limit = { has_diarchy_type = grand_secretariat diarch ?= character:erzhu_009 }
+				set_diarchy_swing = 100
+			}
+		}
+		# 终身辅政锁：天子罢免后自动补回（hd_dc_kit_ten_regent_watch）
+		title:h_china = { set_variable = { name = hd_dc_ten_qjc_regent value = character:erzhu_009 } }
+		# 权臣任期：标记在就不能废帝（hd_court_depose_ceremonial_decision）。照 253 设 12 年，立孝武帝节点执行时清掉（计划复核必改 6）
+		add_character_flag = { flag = hd_court_regent_tenure years = 12 }
+		if = {
+			limit = { has_title = title:e_WJ_minister_cheng_xiang }
+			debug_log = "HD_531 REGENCY ERZHU_SHILONG OK"
+		}
+		else = { debug_log = "HD_531 REGENCY ERZHU_SHILONG NO_CHENGXIANG" }
+	}
+	else = { debug_log = "HD_531 REGENCY SKIPPED" }
+}
+
+# 朝官：只给库里查得到、在洛阳的史实人物授官，其余空着（WJ 随机补位对 531 关闭）
+hd_531_ministers_effect = {
+	title:h_china.holder ?= {
+		save_scope_as = councillor_liege
+		hd_nbc_minister_effect = { WHO = husi_002 TITLE = e_minister_grand_marshal POS = minister_grand_marshal }    # 斛斯椿 侍中、骠骑大将军
+		hd_nbc_minister_effect = { WHO = jingman_fan_002 TITLE = e_minister_of_personnel POS = minister_personnel }  # 樊子鹄 尚书
+	}
+}
+
+# 广阿之战：史实是尔朱兆八月攻殷州，李元忠弃城奔信都，十月高欢于广阿大破之。这里提前到开局，尔朱兆作攻方，目标巨鹿郡（殷州）。
+# 高欢在信都得 15,000 事件兵，代表六镇降户（数字是计划拟定的）
+hd_531_guanga_war_effect = {
+	if = {
+		limit = {
+			character:erzhu_015 ?= { is_alive = yes is_independent_ruler = yes }
+			character:hd_hi_gaohuan ?= { is_alive = yes is_independent_ruler = yes }
+			title:d_julu.holder ?= {
+				OR = {
+					this = character:hd_hi_gaohuan
+					top_liege = character:hd_hi_gaohuan
+				}
+			}
+		}
+		character:hd_hi_gaohuan = {
+			hd_nbc_spawn_army_effect = { SIZE = 15000 WHERE = title:c_uuii_p_4226 NAME = hd_531_liuzhen_army_name }
+		}
+		hd_nbc_start_war_effect = { ATTACKER = character:erzhu_015 DEFENDER = character:hd_hi_gaohuan TARGET = title:d_julu KIND = guanga }
+	}
+	else = { debug_log = "HD_531 GUANGA SKIPPED" }
+}

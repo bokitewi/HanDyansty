@@ -1,0 +1,1448 @@
+﻿# 衣冠南渡·士族侧效果（docs/衣冠南渡_重做设计.md §4 第 11 轮、§1 第 3/6/10 轮、§6 第 15–25 条）
+# 一、通用   二、举族南迁   三、起兵北还   四、资助   五、侨置授地   六、联姻吴姓   七、求取官职
+# 前缀 hd_yiguan_gt_ 为本模块私有。跨模块只调用登记键：hd_yiguan_fire_catalyst_effect、hd_yiguan_recalc_group_effect（A2），
+# hd_yiguan_ev_mark_qiao_effect、hd_yiguan_pick_origin_county_effect、hd_yiguan_pick_qiao_title_effect（E），事件 hd_yiguan.1203（E）
+#
+# 变量一览
+#   家族：hd_yiguan_qiao_house（侨姓）、hd_yiguan_qiao_origin（籍贯县）、hd_yiguan_qiaowu_married（侨吴联姻，20 年）
+#   角色：hd_yiguan_northerner（北人）
+#         hd_yiguan_gt_nanqian_pending（南迁请求待复，90 天）、hd_yiguan_gt_nanqian_refused（被拒，2 年）、hd_yiguan_gt_nanqian_paid（已付威望）
+#         hd_yiguan_gt_beihuan_done（已起兵北还，终身）、hd_yiguan_gt_bh_paid（北还已付威望）、hd_yiguan_gt_bh_*（北还快照）
+#         流亡者：变量列表 hd_yiguan_gt_funders（资助者）、hd_yiguan_gt_funders_x2（兵钱兼有的资助者，排名记 2 份）、
+#                 hd_yiguan_gt_funder_count、hd_yiguan_gt_fund_troops（兵士档份数）
+#         hd_yiguan_gt_ai_chk / hd_yiguan_gt_ai_chk_n（AI 流亡者起兵复核）
+#   全局：hd_yiguan_gt_<计数名>_year / _count（年度计数：nanqian 4、beihuan 3、qiaozhi_ai 4）
+
+############################################################
+# 一、通用
+############################################################
+
+# 任意作用域。全局年度计数 +1（跨年自动清零，配 hd_yiguan_gt_counter_below_trigger）
+hd_yiguan_gt_bump_counter_effect = {
+	if = {
+		limit = {
+			OR = {
+				NOT = { has_global_variable = hd_yiguan_gt_$NAME$_year }
+				NOT = { has_global_variable = hd_yiguan_gt_$NAME$_count }
+				NOT = { global_var:hd_yiguan_gt_$NAME$_year = current_year }
+			}
+		}
+		set_global_variable = { name = hd_yiguan_gt_$NAME$_year value = current_year }
+		set_global_variable = { name = hd_yiguan_gt_$NAME$_count value = 0 }
+	}
+	change_global_variable = { name = hd_yiguan_gt_$NAME$_count add = 1 }
+}
+
+# 角色。退出世族：退还庄园建筑、国库入私囊、销毁世族头衔（先例 mod dm_government_reform_effects.txt:213-252）
+hd_yiguan_gt_leave_noble_family_effect = {
+	if = {
+		limit = { any_held_title = { is_noble_family_title = yes } }
+		refund_noble_family_domicile_buildings_effect = yes
+		if = {
+			limit = { has_treasury = yes }
+			add_gold = treasury
+			remove_treasury = { value = treasury }
+		}
+		every_held_title = {
+			limit = { is_noble_family_title = yes }
+			# 爵位（WJ peerage）挂在世族头衔上：先走爵位系统的清理。on_title_destroyed 钩子（WJ_peerage_on_actions.txt:27）本也会清，
+			# 这里显式先清一次作保险；清后头衔已无 wj_peer_rank，钩子不会重复执行
+			if = {
+				limit = { has_variable = wj_peer_rank }
+				WJ_peer_clear_family = yes
+			}
+			holder = { destroy_title = prev }
+		}
+	}
+}
+
+# 角色。记为北人，家族记为侨姓（已是侨姓者不改籍贯）。须在一切头衔、世族变动之后调用（新建世族可能分出新家族）
+# 籍贯取 scope:hd_yiguan_gt_origin（县）；与 E 的 hd_yiguan_ev_mark_qiao_effect 用同一组变量
+hd_yiguan_gt_mark_qiao_effect = {
+	set_variable = hd_yiguan_northerner
+	house ?= {
+		if = {
+			limit = { NOT = { has_variable = hd_yiguan_qiao_house } }
+			set_variable = { name = hd_yiguan_qiao_house value = yes }
+		}
+		if = {
+			limit = {
+				NOT = { has_variable = hd_yiguan_qiao_origin }
+				exists = scope:hd_yiguan_gt_origin
+			}
+			set_variable = { name = hd_yiguan_qiao_origin value = scope:hd_yiguan_gt_origin }
+		}
+	}
+}
+
+############################################################
+# 二、举族南迁（§4 第 11 轮、§6 第 15–19 条）
+# 决议选目的地 → 4001 目的地复函 → 接纳：4002 迁徙者执行 / 拒绝：4003 / 条件已变：4004
+############################################################
+
+# 决议效果。Scope：迁徙者；须已存 scope:hd_yiguan_gt_dest
+hd_yiguan_gt_nanqian_request_effect = {
+	save_scope_as = hd_yiguan_gt_migrant
+	set_variable = { name = hd_yiguan_gt_nanqian_pending value = scope:hd_yiguan_gt_dest days = 90 }
+	set_variable = { name = hd_yiguan_gt_nanqian_paid value = hd_yiguan_gt_nanqian_cost_value days = 120 }
+	if = {
+		limit = { is_ai = yes }
+		hd_yiguan_gt_bump_counter_effect = { NAME = nanqian }
+	}
+	scope:hd_yiguan_gt_dest = { trigger_event = hd_yiguan.4001 }
+	debug_log = "hd_yiguan_gentry: nanqian requested"
+}
+
+# 角色（迁徙者）。退还已付威望并清除待复标记
+hd_yiguan_gt_nanqian_refund_effect = {
+	if = {
+		limit = { has_variable = hd_yiguan_gt_nanqian_paid }
+		add_prestige = var:hd_yiguan_gt_nanqian_paid
+		remove_variable = hd_yiguan_gt_nanqian_paid
+	}
+	remove_variable = hd_yiguan_gt_nanqian_pending
+}
+
+# 举族南迁执行。Scope：迁徙者（root）；须已存 scope:hd_yiguan_gt_dest
+# 次序：存旧主、胡人宗主与籍贯 → 收家属名单 → （玩家且投天朝制而无世族：先立世族）→ 封臣交胡人宗主 → 实地交胡人宗主
+#       → 分支（天朝制保留世族改投 / 其余销毁世族入宫廷）→ 家属随行 → 打侨姓标记 → 好感、催化剂、侨吴之争
+hd_yiguan_gt_nanqian_execute_effect = {
+	save_scope_as = hd_yiguan_gt_migrant
+	clear_saved_scope = hd_yiguan_gt_old_liege
+	clear_saved_scope = hd_yiguan_gt_hu_lord
+	clear_saved_scope = hd_yiguan_gt_old_top
+	clear_saved_scope = hd_yiguan_gt_origin
+
+	# 1. 旧主、胡人宗主与籍贯（籍贯：有地取都城县，无地取宅邸所在县，再不行取所在县）
+	# 旧主 = 直属主君（只用来收家属名单与通知）；胡人宗主（§4 第 11 轮"交还全部封地给胡人宗主"，收地并记好感 −30）：
+	# a. 无地者（只持世族头衔、有宅邸）：取宅邸所在县持有者的最高宗主，须是胡人且未汉化。
+	#    本 mod 的北方无地世族多半仍挂晋帝（汉人，持 h_china），胡人占了北方也不会自动换宗主，
+	#    只看宗主会把晋帝当成"胡人旧主"（判定与沦陷区汉人组 hd_yiguan_is_occupied_han_trigger 的无地一支一致；
+	#    取法先例原版 10_dlc_tgp_dynastic_cycle_scripted_effects.txt:585-592）
+	# b. 取不到（或有地者）：直属主君是胡人（未汉化）即取他，否则取最高宗主
+	#    （4002 执行前刚复核过沦陷区判定：有地者最高宗主必为胡人；无地者走到这里说明宅邸县不在胡人治下，则最高宗主为胡人）
+	liege ?= { save_scope_as = hd_yiguan_gt_old_liege }
+	if = {
+		limit = {
+			is_landed = no
+			domicile ?= {
+				domicile_location ?= {
+					county ?= {
+						holder ?= {
+							top_liege = {
+								hd_yiguan_is_hu_trigger = yes
+								NOT = { hd_yiguan_is_sinicized_trigger = yes }
+							}
+						}
+					}
+				}
+			}
+		}
+		domicile.domicile_location.county.holder.top_liege = { save_scope_as = hd_yiguan_gt_hu_lord }
+	}
+	else_if = {
+		limit = {
+			scope:hd_yiguan_gt_old_liege ?= {
+				hd_yiguan_is_hu_trigger = yes
+				NOT = { hd_yiguan_is_sinicized_trigger = yes }
+			}
+		}
+		scope:hd_yiguan_gt_old_liege = { save_scope_as = hd_yiguan_gt_hu_lord }
+	}
+	else_if = {
+		limit = {
+			exists = top_liege
+			NOT = { top_liege = root }
+		}
+		top_liege = { save_scope_as = hd_yiguan_gt_hu_lord }
+	}
+	else_if = {
+		limit = { exists = scope:hd_yiguan_gt_old_liege }
+		scope:hd_yiguan_gt_old_liege = { save_scope_as = hd_yiguan_gt_hu_lord }
+	}
+	# 最高宗主与胡人宗主不是同一人时另记一次好感：只在最高宗主本身是胡人（未汉化）且不是目的地时
+	# （无地世族的最高宗主多半是晋帝，常常就是目的地，不能记"弃地南奔"）
+	if = {
+		limit = {
+			exists = top_liege
+			exists = scope:hd_yiguan_gt_hu_lord
+			NOT = { top_liege = root }
+			NOT = { top_liege = scope:hd_yiguan_gt_hu_lord }
+			NOT = { top_liege = scope:hd_yiguan_gt_dest }
+			top_liege = {
+				hd_yiguan_is_hu_trigger = yes
+				NOT = { hd_yiguan_is_sinicized_trigger = yes }
+			}
+		}
+		top_liege = { save_scope_as = hd_yiguan_gt_old_top }
+	}
+	if = {
+		limit = { exists = capital_county }
+		capital_county = { save_scope_as = hd_yiguan_gt_origin }
+	}
+	else = {
+		domicile ?= {
+			domicile_location ?= {
+				county ?= { save_scope_as = hd_yiguan_gt_origin }
+			}
+		}
+	}
+	if = {
+		limit = { NOT = { exists = scope:hd_yiguan_gt_origin } }
+		location ?= {
+			county ?= { save_scope_as = hd_yiguan_gt_origin }
+		}
+	}
+
+	# 2. 家属名单：配偶、子女、未婚兄弟姐妹（须在交出头衔之前收，交出后廷臣去向未验证）
+	# 筛选仿原版 ep3_frankokratia_events.txt:7853-7871 / mpo_migration_events.txt:1825-1844
+	every_spouse = {
+		limit = {
+			is_ruler = no
+			is_imprisoned = no
+			OR = {
+				is_courtier_of = root
+				AND = {
+					exists = scope:hd_yiguan_gt_old_liege
+					is_courtier_of = scope:hd_yiguan_gt_old_liege
+				}
+			}
+		}
+		add_to_list = hd_yiguan_gt_family
+	}
+	every_child = {
+		limit = {
+			is_ruler = no
+			is_imprisoned = no
+			is_hostage = no
+			is_foreign_court_guest = no
+			NOT = { is_in_list = hd_yiguan_gt_family }
+			OR = {
+				is_courtier_of = root
+				AND = {
+					exists = scope:hd_yiguan_gt_old_liege
+					is_courtier_of = scope:hd_yiguan_gt_old_liege
+				}
+			}
+		}
+		add_to_list = hd_yiguan_gt_family
+	}
+	every_sibling = {
+		limit = {
+			is_ruler = no
+			is_married = no
+			is_imprisoned = no
+			is_hostage = no
+			NOT = { is_in_list = hd_yiguan_gt_family }
+			OR = {
+				is_courtier_of = root
+				AND = {
+					exists = scope:hd_yiguan_gt_old_liege
+					is_courtier_of = scope:hd_yiguan_gt_old_liege
+				}
+			}
+		}
+		add_to_list = hd_yiguan_gt_family
+	}
+
+	# 3. 玩家投天朝制而无世族：趁仍持实地先立世族，免得交地后一度无头衔（§6 第 17 条）
+	# create_noble_family_effect（mod 07_dlc_ep3_scripted_effects.txt:3379）：本人仍是统治者时不会自动宣誓，下面第 6 步再改投
+	if = {
+		limit = {
+			is_ai = no
+			NOT = { any_held_title = { is_noble_family_title = yes } }
+			scope:hd_yiguan_gt_dest = { government_has_flag = government_is_celestial }
+		}
+		create_noble_family_effect = { GOVERNMENT_GIVER = scope:hd_yiguan_gt_dest }
+	}
+
+	# 4. 封臣一律交胡人宗主（先例 mpo 09_dlc_mpo_scripted_effects.txt:700-713）
+	if = {
+		limit = {
+			exists = scope:hd_yiguan_gt_hu_lord
+			any_vassal = { always = yes }
+		}
+		create_title_and_vassal_change = {
+			type = granted
+			save_scope_as = hd_yiguan_gt_vassal_change
+			add_claim_on_loss = no
+		}
+		every_vassal = {
+			change_liege = {
+				liege = scope:hd_yiguan_gt_hu_lord
+				change = scope:hd_yiguan_gt_vassal_change
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_yiguan_gt_vassal_change
+	}
+
+	# 5. 实地全部交还胡人宗主（先例 mod yearly_on_actions.txt:1091-1111：stepped_down + 列表 + change_title_holder_include_vassals）
+	if = {
+		limit = {
+			exists = scope:hd_yiguan_gt_hu_lord
+			any_held_title = {
+				is_landless_type_title = no
+				is_noble_family_title = no
+			}
+		}
+		create_title_and_vassal_change = {
+			type = stepped_down
+			save_scope_as = hd_yiguan_gt_step_change
+			add_claim_on_loss = no
+		}
+		every_held_title = {
+			limit = {
+				is_landless_type_title = no
+				is_noble_family_title = no
+			}
+			add_to_list = hd_yiguan_gt_land_titles
+		}
+		every_in_list = {
+			list = hd_yiguan_gt_land_titles
+			change_title_holder_include_vassals = {
+				holder = scope:hd_yiguan_gt_hu_lord
+				change = scope:hd_yiguan_gt_step_change
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_yiguan_gt_step_change
+	}
+
+	# 6. 分支
+	if = {
+		limit = {
+			scope:hd_yiguan_gt_dest = { government_has_flag = government_is_celestial }
+			any_held_title = { is_noble_family_title = yes }
+			# 改投须主君高一级（此时已交出实地，比的是世族头衔级别；行政制世族为公国级）；目的地已是现任主君则不必改投
+			OR = {
+				liege ?= scope:hd_yiguan_gt_dest
+				scope:hd_yiguan_gt_dest = { highest_held_title_tier > scope:hd_yiguan_gt_migrant.highest_held_title_tier }	# 写法同原版 coronation.txt:2317
+			}
+		}
+		# 6a. 天朝制：以无地世族封臣身份改投目的地并迁宅邸（先例 mod 10_dlc_tgp_scripted_effects.txt:3578-3590）
+		# 不满足级别条件的 AI 落入 6b；玩家已由 hd_yiguan_gt_nanqian_dest_trigger 挡住
+		# 目的地已是现任主君（如宗主仍是晋帝的北方无地世族投晋帝）：跳过改投，只迁宅邸、收家属
+		if = {
+			limit = {
+				NOT = { liege ?= scope:hd_yiguan_gt_dest }
+			}
+			create_title_and_vassal_change = {
+				type = swear_fealty
+				save_scope_as = hd_yiguan_gt_fealty_change
+				add_claim_on_loss = no
+			}
+			change_liege = {
+				liege = scope:hd_yiguan_gt_dest
+				change = scope:hd_yiguan_gt_fealty_change
+			}
+			resolve_title_and_vassal_change = scope:hd_yiguan_gt_fealty_change
+		}
+		domicile ?= { move_domicile = scope:hd_yiguan_gt_dest.capital_province }	# ?= 写法见 mpo 09_dlc_mpo_scripted_effects.txt:748
+		every_in_list = {
+			list = hd_yiguan_gt_family
+			limit = {
+				is_alive = yes
+				is_ruler = no
+				NOT = { is_courtier_of = root }
+			}
+			root = { add_courtier = prev }
+		}
+		if = {
+			limit = { NOT = { liege ?= scope:hd_yiguan_gt_dest } }
+			debug_log = "hd_yiguan_gentry: nanqian swear_fealty to dest FAILED"
+		}
+	}
+	else = {
+		# 6b. 非天朝制，或 AI 无世族：退出世族，举家入目的地宫廷（写法同原版 00_courtier_and_guest_interactions.txt:751-756）
+		hd_yiguan_gt_leave_noble_family_effect = yes
+		if = {
+			limit = {
+				is_ruler = no
+				NOT = { is_courtier_of = scope:hd_yiguan_gt_dest }	# 目的地本是现任主君时可能已在其宫廷
+			}
+			scope:hd_yiguan_gt_dest = { add_courtier = root }
+			hidden_effect = { return_to_court = yes }
+		}
+		else_if = {
+			limit = { is_ruler = yes }
+			debug_log = "hd_yiguan_gentry: nanqian migrant still a ruler, add_courtier skipped"
+		}
+		every_in_list = {
+			list = hd_yiguan_gt_family
+			limit = {
+				is_alive = yes
+				is_ruler = no
+				NOT = { is_courtier_of = scope:hd_yiguan_gt_dest }
+			}
+			scope:hd_yiguan_gt_dest = { add_courtier = prev }
+			hidden_effect = { return_to_court = yes }
+		}
+	}
+
+	# 7. 侨姓标记（最后打，落在最终的家族上）
+	hd_yiguan_gt_mark_qiao_effect = yes
+	every_in_list = {
+		list = hd_yiguan_gt_family
+		limit = { is_alive = yes }
+		set_variable = hd_yiguan_northerner
+	}
+
+	# 8. 胡人宗主好感 −30（收地的胡人宗主与最高宗主各记一次）；玩家胡人旧主（收地者，或另为胡人的直属主君）收到通知
+	# 4005 是胡人君主视角的通知；直属主君是汉人（如无地世族的宗主晋帝，且常常就是目的地）时不发
+	scope:hd_yiguan_gt_hu_lord ?= {
+		if = {
+			limit = { is_alive = yes }
+			add_opinion = {
+				target = root
+				modifier = hd_yiguan_fled_opinion
+			}
+			if = {
+				limit = { is_ai = no }
+				trigger_event = hd_yiguan.4005
+			}
+		}
+	}
+	scope:hd_yiguan_gt_old_liege ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_ai = no
+				NOT = { scope:hd_yiguan_gt_hu_lord ?= this }
+				NOT = { this = scope:hd_yiguan_gt_dest }
+				hd_yiguan_is_hu_trigger = yes
+				NOT = { hd_yiguan_is_sinicized_trigger = yes }
+			}
+			trigger_event = hd_yiguan.4005
+		}
+	}
+	scope:hd_yiguan_gt_old_top ?= {
+		if = {
+			limit = { is_alive = yes }
+			add_opinion = {
+				target = root
+				modifier = hd_yiguan_fled_opinion
+			}
+		}
+	}
+
+	# 9. 催化剂"士族南迁"；目的地为南方政权时 30% 几率 1–3 年后起侨吴之争（事件 1203 归旧事件改编模块，只能发给南方政权）
+	hd_yiguan_fire_catalyst_effect = { CATALYST = catalyst_hd_yiguan_gentry_flee CHAR = root }
+	scope:hd_yiguan_gt_dest = {
+		if = {
+			limit = { hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_grp_south } }
+			random = {
+				chance = 30
+				trigger_event = {
+					id = hd_yiguan.1203
+					days = { 365 1095 }
+				}
+			}
+		}
+	}
+
+	# 10. 收尾
+	remove_variable = hd_yiguan_gt_nanqian_pending
+	remove_variable = hd_yiguan_gt_nanqian_paid
+	hd_yiguan_recalc_group_effect = yes
+	debug_log = "hd_yiguan_gentry: nanqian done"
+}
+
+############################################################
+# 三、起兵北还（§1 第 1、6、10 轮，§6 第 20–22 条）
+# 决议（或 AI 资助复核 4015）付威望 → 4011 择州 → hd_yiguan_gt_beihuan_execute_effect → 胜利后 C 发 4021
+############################################################
+
+# 角色（流亡者）。付威望后进入择州事件；决议的 cost 已扣，这里只记退款额
+# 不设期限：玩家可把 4011 开着不点；四条出口（起兵成功、时机未至、宣战失败、4011 条件不符）都会清掉
+hd_yiguan_gt_beihuan_begin_effect = {
+	set_variable = { name = hd_yiguan_gt_bh_paid value = medium_prestige_value }
+	trigger_event = hd_yiguan.4011
+}
+
+# 角色（流亡者）。退还北还已付威望
+hd_yiguan_gt_beihuan_refund_effect = {
+	if = {
+		limit = { has_variable = hd_yiguan_gt_bh_paid }
+		add_prestige = var:hd_yiguan_gt_bh_paid
+		remove_variable = hd_yiguan_gt_bh_paid
+	}
+}
+
+# 任意作用域。$REGION$ 州的守方：州内持县最多、合乎 hd_yiguan_gt_bh_def_ok_trigger 的胡人政权
+# 结果：scope:hd_yiguan_gt_bh_def_$KEY$（州选项可见性与守方选取共用 hd_yiguan_gt_bh_def_ok_trigger）
+# 州按汉代原州的静态地理区域（uuii_han_*_region）判定，不看 k_uuii_* 的运行时法理：南北朝剧本 280.1.1 起（zz_hd_nbc_dejure.txt）
+# 河南、洛阳、河内等郡改挂洛州、司州等新州，地理区域不随法理改挂变化（原版 map_data/geographical_regions/_geographical_regions.info）
+# 计数在 order_by 内联写（具名数值收不了 $REGION$ 参数）；候选守方都是独立君主，every_realm_county 即其体系所持县
+# （先例原版 03_dlc_fp2_script_values.txt:596）
+hd_yiguan_gt_bh_find_def_effect = {
+	clear_saved_scope = hd_yiguan_gt_bh_def_$KEY$
+	every_county_in_region = {	# 写法同原版 03_dlc_fp2_script_values.txt:739
+		region = $REGION$
+		limit = {
+			holder ?= {
+				top_liege = {
+					hd_yiguan_gt_bh_def_ok_trigger = yes
+					NOT = { is_in_list = hd_yiguan_gt_bh_defs_$KEY$ }
+				}
+			}
+		}
+		holder.top_liege = { add_to_list = hd_yiguan_gt_bh_defs_$KEY$ }	# 写法同 zz_hd_yiguan_event_effects.txt:hd_yiguan_join_south_effect
+	}
+	ordered_in_list = {
+		list = hd_yiguan_gt_bh_defs_$KEY$
+		order_by = {	# 内联排序值带迭代器，先例原版 00_faction_effects.txt:123-140
+			value = 0
+			every_realm_county = {
+				limit = { title_province ?= { geographical_region = $REGION$ } }	# ?=：防本 mod 伯爵级无地头衔（世族等）无省份
+				add = 1
+			}
+		}
+		save_scope_as = hd_yiguan_gt_bh_def_$KEY$
+	}
+}
+
+# 任意作用域。八州守方一并求出（4011 的 immediate 调用）
+hd_yiguan_gt_bh_find_all_defs_effect = {
+	hd_yiguan_gt_bh_find_def_effect = { REGION = uuii_han_sili_region KEY = sili }
+	hd_yiguan_gt_bh_find_def_effect = { REGION = uuii_han_jizhou_region KEY = jizhou }
+	hd_yiguan_gt_bh_find_def_effect = { REGION = uuii_han_youzhou_region KEY = youzhou }
+	hd_yiguan_gt_bh_find_def_effect = { REGION = uuii_han_bingzhou_region KEY = bingzhou }
+	hd_yiguan_gt_bh_find_def_effect = { REGION = uuii_han_qingzhou_region KEY = qingzhou }
+	hd_yiguan_gt_bh_find_def_effect = { REGION = uuii_han_yanzhou_region KEY = yanzhou }
+	hd_yiguan_gt_bh_find_def_effect = { REGION = uuii_han_xuzhou_region KEY = xuzhou }
+	hd_yiguan_gt_bh_find_def_effect = { REGION = uuii_han_yuzhou_region KEY = yuzhou }
+}
+
+# 任意作用域；须有 scope:hd_yiguan_gt_bh_def。北还战争目标（运行时法理王国）：
+# 在 $REGION$ 州内守方体系所持的县里，按各县当前法理王国（县作用域 kingdom 链接）分组，取守方持县最多的那个王国
+# 起兵北还 CB 为 target_title_tier = kingdom、target_de_jure_regions_above = yes，失效与夺地都按运行时法理结算，
+# 所以目标须是县现今所挂的王国（南北朝剧本里可能是洛州、司州等），不能直接用 k_uuii_* 原州
+# 结果：scope:hd_yiguan_gt_bh_kingdom，可能不存在（守方已不在该州持县）
+hd_yiguan_gt_bh_pick_kingdom_effect = {
+	clear_saved_scope = hd_yiguan_gt_bh_kingdom
+	every_county_in_region = {
+		region = $REGION$
+		limit = {
+			holder ?= { target_is_same_character_or_above = scope:hd_yiguan_gt_bh_def }	# 写法同 zz_hd_yiguan_cb.txt 北还 should_invalidate
+			exists = kingdom
+		}
+		kingdom = {	# 县的运行时法理王国（读法见原版 tgp_east_asia_decisions.txt:673）
+			if = {
+				limit = { NOT = { is_in_list = hd_yiguan_gt_bh_kingdoms } }
+				add_to_list = hd_yiguan_gt_bh_kingdoms
+			}
+		}
+	}
+	ordered_in_list = {	# 从候选王国中按法理县择优，写法同原版 00_faction_effects.txt:123-140
+		list = hd_yiguan_gt_bh_kingdoms
+		order_by = {	# 该王国法理下、位于 $REGION$ 州内、归守方体系的县数（数值内 every_de_jure_county 先例原版 03_dlc_fp2_script_values.txt:691）
+			value = 0
+			every_de_jure_county = {
+				limit = {
+					title_province = { geographical_region = $REGION$ }
+					holder ?= { target_is_same_character_or_above = scope:hd_yiguan_gt_bh_def }
+				}
+				add = 1
+			}
+		}
+		save_scope_as = hd_yiguan_gt_bh_kingdom
+	}
+}
+
+# 角色（流亡者）。折算快照：须在退出世族（退还庄园、国库入私囊）之前
+hd_yiguan_gt_bh_snapshot_effect = {
+	remove_variable = hd_yiguan_gt_bh_buildings
+	remove_variable = hd_yiguan_gt_bh_influence
+	# 本家庄园建筑数：本人有宅邸取本人的，否则取家主的
+	clear_saved_scope = hd_yiguan_gt_bh_bld
+	if = {
+		limit = { has_domicile = yes }
+		save_scope_value_as = { name = hd_yiguan_gt_bh_bld value = domicile.num_domicile_buildings }	# 写法见原版 10_dlc_tgp_scripted_effects.txt:3383
+	}
+	else = {
+		house ?= {
+			house_head ?= {
+				if = {
+					limit = { has_domicile = yes }
+					save_scope_value_as = { name = hd_yiguan_gt_bh_bld value = domicile.num_domicile_buildings }
+				}
+			}
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_yiguan_gt_bh_bld }
+		set_variable = { name = hd_yiguan_gt_bh_buildings value = scope:hd_yiguan_gt_bh_bld }
+	}
+	# 影响力（读法见原版 on_action/death.txt:1414-1425）
+	if = {
+		limit = {
+			is_ruler = yes
+			government_has_flag = government_has_influence
+		}
+		set_variable = { name = hd_yiguan_gt_bh_influence value = influence }
+	}
+	set_variable = { name = hd_yiguan_gt_bh_levy value = hd_yiguan_gt_beihuan_levy_base_value }
+	set_variable = { name = hd_yiguan_gt_bh_companions value = hd_yiguan_gt_beihuan_companion_value }
+}
+
+# 角色（流亡者）。同伴名单：本家族人、门下（廷臣、门生）里合格者优先，按军事取；不够则生成北方士族
+# 结果：列表 hd_yiguan_gt_bh_companions
+hd_yiguan_gt_bh_collect_companions_effect = {
+	house ?= {
+		every_house_member = {
+			limit = { hd_yiguan_gt_companion_ok_trigger = { EXILE = scope:hd_yiguan_gt_bh_exile } }
+			add_to_list = hd_yiguan_gt_bh_cands
+		}
+	}
+	every_courtier = {
+		limit = {
+			NOT = { is_in_list = hd_yiguan_gt_bh_cands }
+			hd_yiguan_gt_companion_ok_trigger = { EXILE = scope:hd_yiguan_gt_bh_exile }
+		}
+		add_to_list = hd_yiguan_gt_bh_cands
+	}
+	every_relation = {	# 门生（先例 mod hd_party_decisions.txt：ordered_relation type = disciple）
+		type = disciple
+		limit = {
+			NOT = { is_in_list = hd_yiguan_gt_bh_cands }
+			hd_yiguan_gt_companion_ok_trigger = { EXILE = scope:hd_yiguan_gt_bh_exile }
+		}
+		add_to_list = hd_yiguan_gt_bh_cands
+	}
+	hd_yiguan_gt_bh_pick_companion_effect = yes
+	if = {
+		limit = { var:hd_yiguan_gt_bh_companions >= 2 }
+		hd_yiguan_gt_bh_pick_companion_effect = yes
+	}
+	if = {
+		limit = { var:hd_yiguan_gt_bh_companions >= 3 }
+		hd_yiguan_gt_bh_pick_companion_effect = yes
+	}
+}
+
+# 取一名同伴：候选中军事最高者，没有则生成
+hd_yiguan_gt_bh_pick_companion_effect = {
+	clear_saved_scope = hd_yiguan_gt_bh_pick
+	ordered_in_list = {
+		list = hd_yiguan_gt_bh_cands
+		limit = { NOT = { is_in_list = hd_yiguan_gt_bh_companions } }
+		order_by = martial
+		save_scope_as = hd_yiguan_gt_bh_pick
+	}
+	if = {
+		limit = { exists = scope:hd_yiguan_gt_bh_pick }
+		scope:hd_yiguan_gt_bh_pick = { add_to_list = hd_yiguan_gt_bh_companions }
+	}
+	else = {
+		hd_yiguan_gt_bh_create_companion_effect = yes
+	}
+}
+
+# 生成一名北方士族作同伴（军事 8–18）。先生成，后打侨姓标记（籍贯取流亡者家族的，没有则随机一沦陷县）
+# create_character 不同时写 location 与 employer（reference-ck3-illegal-code-pitfalls）
+hd_yiguan_gt_bh_create_companion_effect = {
+	clear_saved_scope = hd_yiguan_gt_bh_new_cmp
+	clear_saved_scope = hd_yiguan_origin_county
+	scope:hd_yiguan_gt_bh_exile = {
+		house ?= {
+			var:hd_yiguan_qiao_origin ?= { save_scope_as = hd_yiguan_origin_county }
+		}
+	}
+	if = {
+		limit = { NOT = { exists = scope:hd_yiguan_origin_county } }
+		hd_yiguan_pick_origin_county_effect = yes
+	}
+	scope:hd_yiguan_gt_bh_exile = {
+		culture = { save_scope_as = hd_yiguan_gt_bh_cmp_culture }
+		faith = { save_scope_as = hd_yiguan_gt_bh_cmp_faith }
+		create_character = {
+			location = scope:hd_yiguan_gt_bh_exile.location
+			template = new_commander_character	# 先例 zz_hd_yiguan_war_effects.txt:hd_yiguan_create_rebel_leader_effect
+			age = { 22 45 }
+			gender_female_chance = 0
+			dynasty = generate
+			culture = scope:hd_yiguan_gt_bh_cmp_culture
+			faith = scope:hd_yiguan_gt_bh_cmp_faith
+			martial = { 8 18 }
+			save_scope_as = hd_yiguan_gt_bh_new_cmp
+		}
+	}
+	scope:hd_yiguan_gt_bh_new_cmp ?= {
+		hd_yiguan_ev_mark_qiao_effect = yes
+		add_to_list = hd_yiguan_gt_bh_companions
+	}
+}
+
+# 角色（流亡者）。集结地：与守方在目标州（战争目标，即 hd_yiguan_gt_bh_pick_kingdom_effect 求出的运行时法理王国）所持县接壤、
+# 属汉人政权的县。结果：scope:hd_yiguan_gt_bh_stage（省份），可能不存在
+hd_yiguan_gt_bh_pick_stage_effect = {
+	clear_saved_scope = hd_yiguan_gt_bh_stage
+	clear_saved_scope = hd_yiguan_gt_bh_stage_county
+	scope:hd_yiguan_gt_bh_kingdom = {
+		every_de_jure_county = {
+			limit = {
+				holder ?= { target_is_same_character_or_above = scope:hd_yiguan_gt_bh_def }	# 写法同 zz_hd_yiguan_cb.txt 北还 should_invalidate
+			}
+			every_neighboring_county = {
+				limit = {
+					NOT = { is_in_list = hd_yiguan_gt_bh_stage_counties }
+					holder ?= {
+						top_liege = { hd_yiguan_is_han_regime_trigger = yes }
+					}
+				}
+				add_to_list = hd_yiguan_gt_bh_stage_counties
+			}
+		}
+	}
+	random_in_list = {
+		list = hd_yiguan_gt_bh_stage_counties
+		save_scope_as = hd_yiguan_gt_bh_stage_county
+	}
+	scope:hd_yiguan_gt_bh_stage_county ?= {
+		title_province = { save_scope_as = hd_yiguan_gt_bh_stage }
+	}
+}
+
+# 同伴出兵：$MEN$ 人事件兵，绑定北还战争。Scope：任意；须有 scope:hd_yiguan_gt_bh_cmp、_war、_spawn
+hd_yiguan_gt_bh_companion_army_effect = {
+	scope:hd_yiguan_gt_bh_cmp = {
+		spawn_army = {
+			name = hd_yiguan_gt_beihuan_companion_army
+			levies = $MEN$
+			location = scope:hd_yiguan_gt_bh_spawn
+			origin = scope:hd_yiguan_gt_bh_spawn
+			uses_supply = yes
+			inheritable = no
+			war = scope:hd_yiguan_gt_bh_war
+			save_temporary_scope_as = hd_yiguan_gt_bh_cmp_army
+		}
+	}
+	scope:hd_yiguan_gt_bh_cmp_army ?= { assign_commander = scope:hd_yiguan_gt_bh_cmp }	# 先例 zz_hd_yiguan_war_effects.txt
+}
+
+# 同伴（列表元素作用域）变冒险者、以 add_attacker 加入北还战争、出兵 300–800（§1 第 10 轮）
+hd_yiguan_gt_bh_raise_companion_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			is_ruler = no
+		}
+		save_scope_as = hd_yiguan_gt_bh_cmp
+		scope:hd_yiguan_gt_bh_spawn ?= { save_scope_as = hd_yiguan_gt_bh_cmp_loc }
+		if = {
+			limit = { exists = scope:hd_yiguan_gt_bh_cmp_loc }
+			set_location = scope:hd_yiguan_gt_bh_cmp_loc
+		}
+		create_landless_adventurer_title_effect = {
+			REASON = flag:voluntary
+			FLAVOR_CHAR = scope:hd_yiguan_gt_bh_exile
+		}
+		set_variable = hd_yiguan_gt_beihuan_done
+		if = {
+			limit = {
+				is_ruler = yes
+				NOT = { is_at_war_with = scope:hd_yiguan_gt_bh_def }
+			}
+			scope:hd_yiguan_gt_bh_war = { add_attacker = scope:hd_yiguan_gt_bh_cmp }	# 先例：旧事件 2111 响应义军
+		}
+		if = {
+			limit = {
+				scope:hd_yiguan_gt_bh_war = { is_participant = scope:hd_yiguan_gt_bh_cmp }
+			}
+			# 随机兵力用 random_list 取档（具名数值里的随机不生效，见 reference-ck3-illegal-code-pitfalls）
+			random_list = {
+				25 = { hd_yiguan_gt_bh_companion_army_effect = { MEN = 300 } }
+				25 = { hd_yiguan_gt_bh_companion_army_effect = { MEN = 450 } }
+				25 = { hd_yiguan_gt_bh_companion_army_effect = { MEN = 600 } }
+				25 = { hd_yiguan_gt_bh_companion_army_effect = { MEN = 800 } }
+			}
+			add_opinion = {
+				target = scope:hd_yiguan_gt_bh_exile
+				modifier = hd_yiguan_gt_comrade_opinion
+			}
+		}
+		else = {
+			debug_log = "hd_yiguan_gentry: beihuan companion add_attacker FAILED"
+		}
+		if = {
+			limit = {
+				is_ai = yes
+				is_ruler = yes
+				NOT = { owns_story_of_type = story_adventurer_ai }
+			}
+			create_story = story_adventurer_ai	# 先例 mod hd_party_decisions.txt（投身乱世）
+		}
+	}
+}
+
+# 起兵北还执行。Scope：流亡者（root）；$REGION$ 所选汉代原州（静态地理区域），$DEF$ 守方（4011 的 immediate 已求出）
+# 战争目标与弱宣称都给 hd_yiguan_gt_bh_pick_kingdom_effect 求出的运行时法理王国（scope:hd_yiguan_gt_bh_kingdom）
+# 次序（spike_cb_kingdom.md）：校验 → 快照 → 同伴名单 → 集结地 → 退出世族 → 变冒险者 → 弱宣称 → 宣战 → 取战争 → 本人出兵 → 同伴出兵 → 记账
+hd_yiguan_gt_beihuan_execute_effect = {
+	save_scope_as = hd_yiguan_gt_bh_exile
+	clear_saved_scope = hd_yiguan_gt_bh_kingdom
+	clear_saved_scope = hd_yiguan_gt_bh_def
+	$DEF$ = { save_scope_as = hd_yiguan_gt_bh_def }
+	clear_saved_scope = hd_yiguan_gt_bh_war
+	clear_saved_scope = hd_yiguan_gt_bh_spawn
+	if = {
+		limit = { exists = scope:hd_yiguan_gt_bh_def }
+		hd_yiguan_gt_bh_pick_kingdom_effect = { REGION = $REGION$ }
+	}
+	if = {
+		limit = {
+			exists = scope:hd_yiguan_gt_bh_def
+			exists = scope:hd_yiguan_gt_bh_kingdom
+			scope:hd_yiguan_gt_bh_def = { hd_yiguan_gt_bh_def_ok_trigger = yes }
+			is_at_war = no
+			NOT = { is_at_war_with = scope:hd_yiguan_gt_bh_def }
+		}
+		# 1. 快照、同伴名单、集结地（都在变冒险者之前）
+		hd_yiguan_gt_bh_snapshot_effect = yes
+		hd_yiguan_gt_bh_collect_companions_effect = yes
+		hd_yiguan_gt_bh_pick_stage_effect = yes
+
+		# 2. 本人：退出世族，移到集结地，变无地冒险者（REASON 不用 exile/conquest 等，免被逐出、免加好感减值）
+		hd_yiguan_gt_leave_noble_family_effect = yes
+		if = {
+			limit = { exists = scope:hd_yiguan_gt_bh_stage }
+			set_location = scope:hd_yiguan_gt_bh_stage	# 先例 zz_hd_yiguan_war_effects.txt：义军首领先移地再建营地
+		}
+		create_landless_adventurer_title_effect = {
+			REASON = flag:voluntary
+			FLAVOR_CHAR = scope:hd_yiguan_gt_bh_exile
+		}
+		location ?= { save_scope_as = hd_yiguan_gt_bh_spawn }
+		if = {
+			limit = { NOT = { exists = scope:hd_yiguan_gt_bh_spawn } }
+			domicile ?= {
+				domicile_location ?= { save_scope_as = hd_yiguan_gt_bh_spawn }
+			}
+		}
+		add_unpressed_claim = scope:hd_yiguan_gt_bh_kingdom	# 弱宣称（先例 ep3_laamp_events.txt:156）
+
+		# 3. 宣战并取战争作用域（先例 07_frankokratia_scripted_effects.txt:212-221）
+		if = {
+			limit = {
+				scope:hd_yiguan_gt_bh_def = { is_alive = yes }
+				NOT = { is_at_war_with = scope:hd_yiguan_gt_bh_def }
+			}
+			start_war = {
+				cb = hd_yiguan_beihuan_cb
+				target = scope:hd_yiguan_gt_bh_def
+				target_title = scope:hd_yiguan_gt_bh_kingdom
+			}
+		}
+		random_character_war = {
+			limit = {
+				primary_attacker = scope:hd_yiguan_gt_bh_exile
+				using_cb = hd_yiguan_beihuan_cb
+			}
+			save_scope_as = hd_yiguan_gt_bh_war
+		}
+
+		if = {
+			limit = {
+				exists = scope:hd_yiguan_gt_bh_war
+				exists = scope:hd_yiguan_gt_bh_spawn
+			}
+			# 4. 本人出兵：北府兵 + 事件征召兵，同一效果内立即生成（北还 CB 无军即判负）
+			spawn_army = {
+				name = hd_yiguan_gt_beihuan_army
+				levies = hd_yiguan_gt_beihuan_levy_total_value
+				men_at_arms = {
+					type = hd_yiguan_beifu
+					stacks = hd_yiguan_gt_beihuan_beifu_total_value
+				}
+				location = scope:hd_yiguan_gt_bh_spawn
+				origin = scope:hd_yiguan_gt_bh_spawn
+				uses_supply = yes
+				inheritable = no
+				war = scope:hd_yiguan_gt_bh_war
+				war_keep_on_attacker_victory = yes	# 先例原版 07_ep3_wars.txt:114-134
+				save_temporary_scope_as = hd_yiguan_gt_bh_army
+			}
+			scope:hd_yiguan_gt_bh_army ?= { assign_commander = scope:hd_yiguan_gt_bh_exile }
+
+			# 5. 同伴：变冒险者、加入攻方、出兵
+			every_in_list = {
+				list = hd_yiguan_gt_bh_companions
+				hd_yiguan_gt_bh_raise_companion_effect = yes
+			}
+
+			# 6. 记账：一生一次、全局年计数、催化剂、通告资助者
+			set_variable = hd_yiguan_gt_beihuan_done
+			remove_variable = hd_yiguan_gt_bh_paid
+			remove_variable = hd_yiguan_gt_ai_chk
+			hd_yiguan_gt_bump_counter_effect = { NAME = beihuan }
+			hd_yiguan_fire_catalyst_effect = { CATALYST = catalyst_hd_yiguan_beihuan CHAR = scope:hd_yiguan_gt_bh_exile }
+			# 冲突期拖延（负值，点数不足不扣）：兵事未息，延缓 →停滞
+			hd_yiguan_fire_delay_catalyst_effect = { CATALYST = catalyst_hd_yiguan_beihuan_delay TOWARD = hd_yiguan_phase_tingzhi VALUE = 50 CHAR = scope:hd_yiguan_gt_bh_exile }
+			if = {
+				limit = { has_variable_list = hd_yiguan_gt_funders }
+				every_in_list = {
+					variable = hd_yiguan_gt_funders
+					limit = {
+						is_alive = yes
+						is_ai = no
+					}
+					trigger_event = hd_yiguan.4012
+				}
+			}
+			if = {
+				limit = {
+					is_ai = yes
+					NOT = { owns_story_of_type = story_adventurer_ai }
+				}
+				create_story = story_adventurer_ai
+			}
+			debug_log = "hd_yiguan_gentry: beihuan war declared"
+		}
+		else = {
+			debug_log = "hd_yiguan_gentry: beihuan start_war FAILED"
+			hd_yiguan_gt_beihuan_refund_effect = yes
+			trigger_event = hd_yiguan.4013
+		}
+	}
+	else = {
+		debug_log = "hd_yiguan_gentry: beihuan target invalid"
+		hd_yiguan_gt_beihuan_refund_effect = yes
+		trigger_event = hd_yiguan.4013
+	}
+}
+
+# 北还功成后选归附对象（4021）。Scope：已得地的流亡者。结果：scope:hd_yiguan_gt_patron
+# 资助额最多且仍合格的资助者；额度相同取兵力强者
+# 金额都是 5 的倍数（原版中额钱财取整到 5），兵力折算封顶 4，只在额度相同时起作用；不再乘 1000，免得数值过大
+hd_yiguan_gt_pick_patron_effect = {
+	save_scope_as = hd_yiguan_gt_bh_exile
+	clear_saved_scope = hd_yiguan_gt_patron
+	if = {
+		limit = { has_variable_list = hd_yiguan_gt_funders }
+		ordered_in_list = {
+			variable = hd_yiguan_gt_funders	# 先例 原版 07_frankokratia_scripted_effects.txt:2770
+			limit = { hd_yiguan_gt_patron_valid_trigger = { EXILE = scope:hd_yiguan_gt_bh_exile } }
+			order_by = {
+				value = hd_yiguan_gt_funder_amount_value
+				add = {
+					value = max_military_strength
+					divide = 10000
+					max = 4
+				}
+			}
+			save_scope_as = hd_yiguan_gt_patron
+		}
+	}
+}
+
+# 北还功成·归附资助者。Scope：流亡者；须有 scope:hd_yiguan_gt_patron（高其一级以上，触发器已保证）
+# 写法同 zz_hd_yiguan_war_effects.txt:hd_yiguan_guifu_effect（原版 offer_fealty 三行）
+# 4021 选项已判资格；玩家可能把事件开着不点，这里执行前再判一次，失格则不改投
+hd_yiguan_gt_submit_to_patron_effect = {
+	save_scope_as = hd_yiguan_gt_bh_exile
+	if = {
+		limit = {
+			scope:hd_yiguan_gt_patron ?= { hd_yiguan_gt_patron_valid_trigger = { EXILE = scope:hd_yiguan_gt_bh_exile } }
+		}
+		create_title_and_vassal_change = {
+			type = swear_fealty
+			save_scope_as = hd_yiguan_gt_submit_change
+			add_claim_on_loss = no
+		}
+		change_liege = {
+			liege = scope:hd_yiguan_gt_patron
+			change = scope:hd_yiguan_gt_submit_change
+		}
+		resolve_title_and_vassal_change = scope:hd_yiguan_gt_submit_change
+		add_opinion = {
+			target = scope:hd_yiguan_gt_patron
+			modifier = hd_yiguan_guifu_opinion
+		}
+		scope:hd_yiguan_gt_patron = {
+			add_prestige = 50
+			add_opinion = {
+				target = scope:hd_yiguan_gt_bh_exile
+				modifier = hd_yiguan_guifu_opinion
+			}
+			trigger_event = hd_yiguan.4022
+		}
+		hd_yiguan_recalc_group_effect = yes
+		debug_log = "hd_yiguan_gentry: beihuan exile submitted to patron"
+	}
+	else = {
+		debug_log = "hd_yiguan_gentry: beihuan patron no longer valid, submit skipped"
+	}
+}
+
+# 北还资助账目清理。Scope：流亡者（账全记在流亡者身上）
+hd_yiguan_gt_clear_funding_effect = {
+	if = {
+		limit = { has_variable_list = hd_yiguan_gt_funders }
+		clear_variable_list = hd_yiguan_gt_funders
+	}
+	if = {
+		limit = { has_variable_list = hd_yiguan_gt_funders_x2 }
+		clear_variable_list = hd_yiguan_gt_funders_x2
+	}
+	remove_variable = hd_yiguan_gt_funder_count
+	remove_variable = hd_yiguan_gt_fund_troops
+}
+
+############################################################
+# 四、资助（§1 第 6 轮、§6 第 22 条）
+# 金钱档 = 中额钱财付给流亡者；兵士档 = 资助者出募兵之费，流亡者起兵时另得北府兵 1 队 + 征召兵 500；兵钱兼有 = 两者
+# 有国库者（本 mod 天朝制）从国库付，无国库者付金币（写法同原版 00_interaction_effects.txt:4037 / hold_court_events_general.txt:822）
+# 资助者威望 +50 / +100 / +150；流亡者对资助者好感 +30；可受多人资助，同一人只资助一次
+############################################################
+
+# $FUNDER$ 资助者、$EXILE$ 流亡者、$GOLD$ / $TROOPS$ = yes|no、$PRESTIGE$ 资助者所得威望
+hd_yiguan_gt_fund_effect = {
+	$FUNDER$ = { save_scope_as = hd_yiguan_gt_fd_funder }
+	$EXILE$ = { save_scope_as = hd_yiguan_gt_fd_exile }
+	scope:hd_yiguan_gt_fd_funder = {
+		save_scope_value_as = { name = hd_yiguan_gt_fd_unit value = hd_yiguan_gt_fund_unit_value }
+	}
+	# 金钱
+	if = {
+		limit = { always = $GOLD$ }	# 写法同 zz_hd_yiguan_war_effects.txt（always = $BIG$）
+		scope:hd_yiguan_gt_fd_funder = {
+			pay_treasury_or_gold = {
+				target = scope:hd_yiguan_gt_fd_exile
+				value = scope:hd_yiguan_gt_fd_unit
+			}
+		}
+	}
+	# 兵士
+	if = {
+		limit = { always = $TROOPS$ }
+		scope:hd_yiguan_gt_fd_funder = { remove_treasury_or_gold = scope:hd_yiguan_gt_fd_unit }	# 写法同原版 pam_interactions.txt:22115
+		scope:hd_yiguan_gt_fd_exile = {
+			if = {
+				limit = { NOT = { has_variable = hd_yiguan_gt_fund_troops } }
+				set_variable = { name = hd_yiguan_gt_fund_troops value = 0 }
+			}
+			change_variable = { name = hd_yiguan_gt_fund_troops add = 1 }
+		}
+	}
+	# 资助者：威望
+	scope:hd_yiguan_gt_fd_funder = {
+		add_prestige = $PRESTIGE$
+	}
+	# 流亡者：名单（兼有档另入 x2 名单，4021 排名记 2 份）、人数、好感
+	scope:hd_yiguan_gt_fd_exile = {
+		add_to_variable_list = { name = hd_yiguan_gt_funders target = scope:hd_yiguan_gt_fd_funder }
+		if = {
+			limit = {
+				always = $GOLD$
+				always = $TROOPS$
+			}
+			add_to_variable_list = { name = hd_yiguan_gt_funders_x2 target = scope:hd_yiguan_gt_fd_funder }
+		}
+		if = {
+			limit = { NOT = { has_variable = hd_yiguan_gt_funder_count } }
+			set_variable = { name = hd_yiguan_gt_funder_count value = 0 }
+		}
+		change_variable = { name = hd_yiguan_gt_funder_count add = 1 }
+		add_opinion = {
+			target = scope:hd_yiguan_gt_fd_funder
+			modifier = hd_yiguan_funded_opinion
+		}
+		# AI 流亡者：受资助后起兵复核（不论阶段，冲突期才可能成行；一年一查，至多 10 次）
+		if = {
+			limit = {
+				is_ai = yes
+				NOT = { has_variable = hd_yiguan_gt_ai_chk }
+			}
+			set_variable = { name = hd_yiguan_gt_ai_chk value = yes days = 400 }
+			trigger_event = {
+				id = hd_yiguan.4015
+				days = { 30 90 }
+			}
+		}
+	}
+	debug_log = "hd_yiguan_gentry: funded"
+}
+
+############################################################
+# 五、侨置授地（§4 第 11 轮、§6 第 23 条）
+# 一个非都城直辖县（发展低、不在都城所在郡者优先），或一个可立的侨州（籍贯州对应者优先；受者无地时连县一并授）
+# 不用 E 的 hd_yiguan_create_qiao_effect：它把侨州授给随机北人封臣或君主自领，不能指定受者
+############################################################
+
+# 任意作用域。$GENTRY$ 籍贯属 $REGION$ 州（汉代原州的静态地理区域）且对应侨州可立时选它
+hd_yiguan_gt_pick_origin_qiao_effect = {
+	if = {
+		limit = {
+			NOT = { exists = scope:hd_yiguan_qiao_title }
+			scope:hd_yiguan_gt_qz_gentry = { hd_yiguan_gt_origin_in_zhou_trigger = { REGION = $REGION$ } }
+			hd_yiguan_qiao_available_trigger = { QIAO = $QIAO$ REGION = $REGION$ }
+		}
+		title:$QIAO$ = { save_scope_as = hd_yiguan_qiao_title }
+	}
+}
+
+# 任意作用域。选侨州：籍贯州对应者优先，否则随机（E 的 hd_yiguan_pick_qiao_title_effect）。结果：scope:hd_yiguan_qiao_title
+hd_yiguan_gt_pick_qiao_effect = {
+	clear_saved_scope = hd_yiguan_qiao_title
+	hd_yiguan_gt_pick_origin_qiao_effect = { QIAO = d_hd_qiao_nansi REGION = uuii_han_sili_region }
+	hd_yiguan_gt_pick_origin_qiao_effect = { QIAO = d_hd_qiao_nanji REGION = uuii_han_jizhou_region }
+	hd_yiguan_gt_pick_origin_qiao_effect = { QIAO = d_hd_qiao_nanyou REGION = uuii_han_youzhou_region }
+	hd_yiguan_gt_pick_origin_qiao_effect = { QIAO = d_hd_qiao_nanbing REGION = uuii_han_bingzhou_region }
+	hd_yiguan_gt_pick_origin_qiao_effect = { QIAO = d_hd_qiao_nanqing REGION = uuii_han_qingzhou_region }
+	hd_yiguan_gt_pick_origin_qiao_effect = { QIAO = d_hd_qiao_nanyan REGION = uuii_han_yanzhou_region }
+	hd_yiguan_gt_pick_origin_qiao_effect = { QIAO = d_hd_qiao_nanxu REGION = uuii_han_xuzhou_region }
+	hd_yiguan_gt_pick_origin_qiao_effect = { QIAO = d_hd_qiao_nanyu REGION = uuii_han_yuzhou_region }
+	if = {
+		limit = { NOT = { exists = scope:hd_yiguan_qiao_title } }
+		hd_yiguan_pick_qiao_title_effect = yes
+	}
+}
+
+# 授地。$LORD$ 君主、$GENTRY$ 侨姓；$COUNTY$ / $QIAO$ = yes|no（侨州档在受者无地时连县一并授）
+# 授县 type = granted（先例 zz_hd_yiguan_event_effects.txt:hd_yiguan_shuai_grant_county_effect），
+# 立侨州 type = created（先例同文件 hd_yiguan_create_qiao_effect）；君主须有实地王国级以上（触发器已保证）
+hd_yiguan_gt_qiaozhi_grant_effect = {
+	$LORD$ = { save_scope_as = hd_yiguan_gt_qz_lord }
+	$GENTRY$ = { save_scope_as = hd_yiguan_gt_qz_gentry }
+	clear_saved_scope = hd_yiguan_gt_qz_county
+	clear_saved_scope = hd_yiguan_qiao_title
+	# 选县
+	if = {
+		limit = {
+			OR = {
+				always = $COUNTY$
+				AND = {
+					always = $QIAO$
+					scope:hd_yiguan_gt_qz_gentry = { is_landed = no }
+				}
+			}
+		}
+		scope:hd_yiguan_gt_qz_lord = {
+			ordered_held_county = {	# 先例 原版 09_dlc_mpo_scripted_effects.txt:98
+				limit = { hd_yiguan_gt_grantable_county_trigger = { LORD = scope:hd_yiguan_gt_qz_lord } }
+				order_by = hd_yiguan_gt_grant_county_score_value
+				save_scope_as = hd_yiguan_gt_qz_county
+			}
+		}
+	}
+	# 选侨州
+	if = {
+		limit = {
+			always = $QIAO$
+			OR = {
+				exists = scope:hd_yiguan_gt_qz_county
+				scope:hd_yiguan_gt_qz_gentry = { is_landed = yes }
+			}
+		}
+		hd_yiguan_gt_pick_qiao_effect = yes
+	}
+	# 授县
+	if = {
+		limit = { exists = scope:hd_yiguan_gt_qz_county }
+		if = {
+			limit = {
+				scope:hd_yiguan_gt_qz_gentry = {
+					is_ruler = no
+					NOT = { is_courtier_of = scope:hd_yiguan_gt_qz_lord }
+				}
+			}
+			scope:hd_yiguan_gt_qz_lord = { add_courtier = scope:hd_yiguan_gt_qz_gentry }
+		}
+		create_title_and_vassal_change = {
+			type = granted
+			save_scope_as = hd_yiguan_gt_qz_change
+			add_claim_on_loss = no
+		}
+		scope:hd_yiguan_gt_qz_county = {
+			change_title_holder = {
+				holder = scope:hd_yiguan_gt_qz_gentry
+				change = scope:hd_yiguan_gt_qz_change
+				take_baronies = yes
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_yiguan_gt_qz_change
+	}
+	# 立侨州（受者须已有地）
+	if = {
+		limit = {
+			exists = scope:hd_yiguan_qiao_title
+			scope:hd_yiguan_gt_qz_gentry = { is_landed = yes }
+		}
+		create_title_and_vassal_change = {
+			type = created
+			save_scope_as = hd_yiguan_gt_qz_qiao_change
+			add_claim_on_loss = no
+		}
+		scope:hd_yiguan_qiao_title = {
+			change_title_holder = {
+				holder = scope:hd_yiguan_gt_qz_gentry
+				change = scope:hd_yiguan_gt_qz_qiao_change
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_yiguan_gt_qz_qiao_change
+	}
+	# 好感、催化剂
+	if = {
+		limit = {
+			OR = {
+				exists = scope:hd_yiguan_gt_qz_county
+				scope:hd_yiguan_qiao_title ?= { holder ?= scope:hd_yiguan_gt_qz_gentry }
+			}
+		}
+		scope:hd_yiguan_gt_qz_gentry = {
+			add_opinion = {
+				target = scope:hd_yiguan_gt_qz_lord
+				modifier = hd_yiguan_qiaozhi_opinion
+			}
+		}
+		hd_yiguan_fire_catalyst_effect = { CATALYST = catalyst_hd_yiguan_qiaozhi CHAR = scope:hd_yiguan_gt_qz_lord }
+		debug_log = "hd_yiguan_gentry: qiaozhi granted"
+	}
+	else = {
+		debug_log = "hd_yiguan_gentry: qiaozhi grant found nothing"
+	}
+}
+
+############################################################
+# 六、联姻吴姓（§4 第 11 轮、§6 第 24 条）
+# 双方各出一名未婚成年族人成婚；两家家主互加好感 +20；两家记 hd_yiguan_qiaowu_married 20 年（侨吴之争不卷入）
+############################################################
+
+# $A$ 侨姓一方、$B$ 吴姓一方（角色）
+hd_yiguan_gt_qiaowu_marry_effect = {
+	$A$ = { save_scope_as = hd_yiguan_gt_qw_a }
+	$B$ = { save_scope_as = hd_yiguan_gt_qw_b }
+	clear_saved_scope = hd_yiguan_gt_qw_x
+	clear_saved_scope = hd_yiguan_gt_qw_y
+	clear_saved_scope = hd_yiguan_gt_qw_ha
+	clear_saved_scope = hd_yiguan_gt_qw_hb
+	# 侨姓族人：年轻者优先，须在吴姓家中找得到可婚者
+	scope:hd_yiguan_gt_qw_a.house ?= {
+		every_house_member = {
+			limit = { hd_yiguan_gt_marriage_candidate_trigger = yes }
+			add_to_list = hd_yiguan_gt_qw_xs
+		}
+	}
+	# 互动 is_valid 只粗查（一男一女各有可婚者），精确配对在这里做一次；先比性别再走原版婚配判定，少做重判断
+	ordered_in_list = {
+		list = hd_yiguan_gt_qw_xs
+		limit = {
+			save_temporary_scope_as = hd_yiguan_gt_mc_check
+			scope:hd_yiguan_gt_qw_b.house ?= {
+				any_house_member = {
+					sex_opposite_of = scope:hd_yiguan_gt_mc_check
+					hd_yiguan_gt_marriage_candidate_trigger = yes
+					can_marry_character_trigger = { CHARACTER = scope:hd_yiguan_gt_mc_check }
+				}
+			}
+		}
+		order_by = hd_yiguan_gt_marriage_candidate_score_value
+		save_scope_as = hd_yiguan_gt_qw_x
+	}
+	if = {
+		limit = { exists = scope:hd_yiguan_gt_qw_x }
+		scope:hd_yiguan_gt_qw_b.house ?= {
+			ordered_house_member = {	# 先例 原版 01_fp1_wars.txt:1043
+				limit = {
+					sex_opposite_of = scope:hd_yiguan_gt_qw_x
+					hd_yiguan_gt_marriage_candidate_trigger = yes
+					can_marry_character_trigger = { CHARACTER = scope:hd_yiguan_gt_qw_x }
+				}
+				order_by = hd_yiguan_gt_marriage_candidate_score_value
+				save_scope_as = hd_yiguan_gt_qw_y
+			}
+		}
+	}
+	if = {
+		limit = {
+			exists = scope:hd_yiguan_gt_qw_x
+			exists = scope:hd_yiguan_gt_qw_y
+		}
+		scope:hd_yiguan_gt_qw_x = { marry = scope:hd_yiguan_gt_qw_y }
+		# 两家家主互加好感
+		scope:hd_yiguan_gt_qw_a.house ?= { house_head ?= { save_scope_as = hd_yiguan_gt_qw_ha } }
+		scope:hd_yiguan_gt_qw_b.house ?= { house_head ?= { save_scope_as = hd_yiguan_gt_qw_hb } }
+		if = {
+			limit = {
+				exists = scope:hd_yiguan_gt_qw_ha
+				exists = scope:hd_yiguan_gt_qw_hb
+				NOT = { scope:hd_yiguan_gt_qw_ha = scope:hd_yiguan_gt_qw_hb }
+			}
+			scope:hd_yiguan_gt_qw_ha = {
+				add_opinion = {
+					target = scope:hd_yiguan_gt_qw_hb
+					modifier = hd_yiguan_qiaowu_marriage_opinion
+				}
+			}
+			scope:hd_yiguan_gt_qw_hb = {
+				add_opinion = {
+					target = scope:hd_yiguan_gt_qw_ha
+					modifier = hd_yiguan_qiaowu_marriage_opinion
+				}
+			}
+		}
+		# 侨吴之争不卷入（E 的 hd_yiguan_qiao_wu_effect 读此变量）
+		scope:hd_yiguan_gt_qw_a.house ?= {
+			set_variable = { name = hd_yiguan_qiaowu_married value = yes years = 20 }
+		}
+		scope:hd_yiguan_gt_qw_b.house ?= {
+			set_variable = { name = hd_yiguan_qiaowu_married value = yes years = 20 }
+		}
+		debug_log = "hd_yiguan_gentry: qiaowu married"
+	}
+	else = {
+		# 粗查通过而精确配对落空（血亲、信仰、婚约等）：告知玩家一方（写法同原版 00_activity_effects.txt:4284）
+		scope:hd_yiguan_gt_qw_a = {
+			if = {
+				limit = { is_ai = no }
+				send_interface_toast = {
+					type = event_toast_effect_neutral
+					title = hd_yiguan_gt_qiaowu_fail_toast
+					left_icon = scope:hd_yiguan_gt_qw_b
+					custom_tooltip = hd_yiguan_gt_qiaowu_fail_toast_tt
+				}
+			}
+		}
+		scope:hd_yiguan_gt_qw_b = {
+			if = {
+				limit = { is_ai = no }
+				send_interface_toast = {
+					type = event_toast_effect_neutral
+					title = hd_yiguan_gt_qiaowu_fail_toast
+					left_icon = scope:hd_yiguan_gt_qw_a
+					custom_tooltip = hd_yiguan_gt_qiaowu_fail_toast_tt
+				}
+			}
+		}
+		debug_log = "hd_yiguan_gentry: qiaowu no pair"
+	}
+}
+
+############################################################
+# 七、求取官职（§4 第 11 轮、§6 第 25 条）
+# 同意则按其所长在议会空缺中任命；无空缺或任命不成则入廷并得"北人清望"10 年；本地吴姓封臣对君主好感 −5
+############################################################
+
+# $LORD$ 君主、$GENTRY$ 侨姓
+hd_yiguan_gt_office_effect = {
+	$LORD$ = { save_scope_as = hd_yiguan_gt_of_lord }
+	$GENTRY$ = { save_scope_as = hd_yiguan_gt_of_gentry }
+	# 非统治者先入廷（写法同原版 00_petition_liege_effects.txt:213-216）
+	if = {
+		limit = {
+			scope:hd_yiguan_gt_of_gentry = {
+				is_ruler = no
+				NOT = { is_courtier_of = scope:hd_yiguan_gt_of_lord }
+			}
+		}
+		scope:hd_yiguan_gt_of_lord = { add_courtier = scope:hd_yiguan_gt_of_gentry }
+	}
+	# 卿档贤望门槛放行（短期标记，先例 zz_hd_218_history_effects.txt:1780；任上者门槛另有豁免）
+	scope:hd_yiguan_gt_of_gentry = {
+		add_character_flag = {
+			flag = hd_cp_merit_exempt
+			days = 30
+		}
+	}
+	scope:hd_yiguan_gt_of_lord = {
+		if = {
+			limit = {
+				NOT = { exists = cp:councillor_chancellor }
+				scope:hd_yiguan_gt_of_gentry = {
+					diplomacy >= stewardship
+					diplomacy >= martial
+					diplomacy >= intrigue
+				}
+			}
+			assign_councillor_type = {
+				type = councillor_chancellor
+				target = scope:hd_yiguan_gt_of_gentry
+			}
+		}
+		else_if = {
+			limit = {
+				NOT = { exists = cp:councillor_steward }
+				scope:hd_yiguan_gt_of_gentry = {
+					stewardship >= martial
+					stewardship >= intrigue
+				}
+			}
+			assign_councillor_type = {
+				type = councillor_steward
+				target = scope:hd_yiguan_gt_of_gentry
+			}
+		}
+		else_if = {
+			limit = {
+				NOT = { exists = cp:councillor_marshal }
+				scope:hd_yiguan_gt_of_gentry = { martial >= intrigue }
+			}
+			assign_councillor_type = {
+				type = councillor_marshal
+				target = scope:hd_yiguan_gt_of_gentry
+			}
+		}
+		else_if = {
+			limit = { NOT = { exists = cp:councillor_spymaster } }
+			assign_councillor_type = {
+				type = councillor_spymaster
+				target = scope:hd_yiguan_gt_of_gentry
+			}
+		}
+		else_if = {
+			limit = { NOT = { exists = cp:councillor_chancellor } }
+			assign_councillor_type = {
+				type = councillor_chancellor
+				target = scope:hd_yiguan_gt_of_gentry
+			}
+		}
+		else_if = {
+			limit = { NOT = { exists = cp:councillor_steward } }
+			assign_councillor_type = {
+				type = councillor_steward
+				target = scope:hd_yiguan_gt_of_gentry
+			}
+		}
+		else_if = {
+			limit = { NOT = { exists = cp:councillor_marshal } }
+			assign_councillor_type = {
+				type = councillor_marshal
+				target = scope:hd_yiguan_gt_of_gentry
+			}
+		}
+	}
+	# 任命是否成功（mod 议会 valid_character 门槛多，不假定成功；检查写法同 zz_hd_218_history_effects.txt:1787）
+	if = {
+		limit = {
+			scope:hd_yiguan_gt_of_gentry = { is_councillor_of = scope:hd_yiguan_gt_of_lord }
+		}
+		debug_log = "hd_yiguan_gentry: office appointed"
+	}
+	else = {
+		scope:hd_yiguan_gt_of_gentry = {
+			add_character_modifier = {
+				modifier = hd_yiguan_gt_qingwang_modifier
+				years = 10
+			}
+		}
+		debug_log = "hd_yiguan_gentry: office fallback qingwang"
+	}
+	scope:hd_yiguan_gt_of_gentry = {
+		add_opinion = {
+			target = scope:hd_yiguan_gt_of_lord
+			modifier = hd_yiguan_office_opinion
+		}
+	}
+	# 本地吴姓封臣不满
+	scope:hd_yiguan_gt_of_lord = {
+		every_vassal = {
+			limit = {
+				hd_yiguan_is_wuxing_trigger = yes
+				NOT = { this = scope:hd_yiguan_gt_of_gentry }
+			}
+			add_opinion = {
+				target = scope:hd_yiguan_gt_of_lord
+				modifier = hd_yiguan_wu_slighted_opinion
+			}
+		}
+	}
+}

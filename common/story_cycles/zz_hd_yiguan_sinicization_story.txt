@@ -1,0 +1,159 @@
+﻿# 衣冠南渡·北方版汉化改制：故事循环（docs/衣冠南渡_重做设计.md §4 第 4 轮、§5.9、§6 第 26 条）
+# 由 hd_yiguan_sinicization_decision 创建；随主继承人传承；主人失地即结束。
+# 故事变量为权威状态：
+#   hd_yg_stage          已完成步数（0~4）
+#   hd_yg_native_culture 本族文化（本族叛乱判定用）
+#   hd_yg_wait           距下一步的月数（每步 24~36 个月）
+#   hd_yg_sent           已发出事件、等待答复（期间不计时、不重发）
+#   hd_yg_sent_months    等待答复的月数；AI 满 12 个月、玩家满 60 个月视为事件未能送达，清除后重发（事件里有防重复推进的守卫）
+#                        玩家的事件不会自动消失，阈值放宽到 60 个月只作 trigger 意外失败时的兜底，免得面前挂两封相同诏令
+# 角色变量 hd_yiguan_north_reform / hd_dc_con_sinicization_stage / hd_dc_con_native_culture 由故事在
+# ①传给嗣君时、②每次发事件前 写回当前主人（事件 trigger、决议 is_valid、本族叛乱读的都是角色变量）。
+# 写法依据：原版 story_cycle_tax_rivalry.txt:23-29（传主继承人）、story_cycle_conqueror.txt:128-137（on_end 先判存活）、
+# ep3_story_cycle_el_cid.txt:66（months = 1）；本 mod zz_hd_liao_story.txt。
+
+story_hd_yiguan_sinicization = {
+	on_setup = {
+		set_variable = { name = hd_yg_stage value = 0 }
+		if = {
+			limit = { story_owner = { has_variable = hd_dc_con_native_culture } }
+			set_variable = { name = hd_yg_native_culture value = story_owner.var:hd_dc_con_native_culture }
+		}
+		else = {
+			story_owner.culture = { save_scope_as = hd_yg_start_culture }
+			set_variable = { name = hd_yg_native_culture value = scope:hd_yg_start_culture }
+		}
+		# 2~3 年（24~36 个月）后颁行第一步（随机数内联，见 mod 报错清单）
+		set_variable = { name = hd_yg_wait value = 0 }
+		change_variable = { name = hd_yg_wait add = { integer_range = { min = 24 max = 36 } } }
+	}
+
+	# 完成 / 放弃 / 失地 / 无合格嗣君都会走到这里；可能在主人已死时执行，须判存活
+	on_end = {
+		story_owner = {
+			if = {
+				limit = { is_alive = yes }
+				remove_variable = hd_yiguan_north_reform
+				remove_variable = hd_dc_con_sinicization_stage
+			}
+		}
+	}
+
+	# 传给主继承人；嗣君已在其他改制（天子版/北方版汉化、胡化、保俗）中、已完成汉化、王朝已汉化或并非胡人，则改制就此中止
+	on_owner_death = {
+		save_scope_as = story
+		if = {
+			limit = {
+				exists = story_owner.primary_heir
+				story_owner.primary_heir = {
+					is_alive = yes
+					hd_yiguan_is_hu_trigger = yes
+					NOT = { hd_yiguan_is_sinicized_trigger = yes }
+					NOT = { has_variable = hd_dc_con_sinicization_stage }
+					NOT = { has_variable = hd_dc_con_sinicization_done }
+					NOT = { has_variable = hd_yiguan_huhua }
+					NOT = { has_character_flag = hd_dc_con_baosu }
+					NOT = { owns_story_of_type = story_hd_yiguan_sinicization }
+				}
+			}
+			story_owner.primary_heir = { save_scope_as = hd_yg_new_owner }
+			make_story_owner = scope:hd_yg_new_owner
+			# 先君死时事件未答：下月改发给嗣君
+			if = {
+				limit = { has_variable = hd_yg_sent }
+				remove_variable = hd_yg_sent
+				set_variable = { name = hd_yg_wait value = 1 }
+			}
+			set_variable = { name = hd_yg_sent_months value = 0 }
+			# 立即写回，防止嗣君在下一步事件前重新发起决议
+			scope:hd_yg_new_owner = {
+				hd_yiguan_sinicization_sync_owner_effect = { STORY = scope:story }
+				trigger_event = { id = hd_yiguan.3014 days = 1 }
+			}
+		}
+		else = {
+			end_story = yes
+		}
+	}
+
+	# 推进：每月一次。待答期间只累计等待月数；否则倒计时，到期按步数发下一步事件
+	effect_group = {
+		months = 1
+		trigger = {
+			var:hd_yg_stage < 4
+			story_owner = {
+				is_alive = yes
+				is_landed = yes
+			}
+		}
+		first_valid = {
+			triggered_effect = {
+				trigger = { has_variable = hd_yg_sent }
+				effect = {
+					change_variable = { name = hd_yg_sent_months add = 1 }
+					if = {
+						limit = {
+							OR = {
+								AND = {
+									var:hd_yg_sent_months >= 12
+									story_owner = { is_ai = yes }
+								}
+								var:hd_yg_sent_months >= 60
+							}
+						}
+						remove_variable = hd_yg_sent
+						set_variable = { name = hd_yg_sent_months value = 0 }
+					}
+				}
+			}
+			triggered_effect = {
+				trigger = { var:hd_yg_wait > 0 }
+				effect = { change_variable = { name = hd_yg_wait add = -1 } }
+			}
+			triggered_effect = {
+				trigger = { var:hd_yg_stage = 0 }
+				effect = { hd_yiguan_sinicization_story_fire_effect = { EVENT = hd_yiguan.3001 } }
+			}
+			triggered_effect = {
+				trigger = { var:hd_yg_stage = 1 }
+				effect = { hd_yiguan_sinicization_story_fire_effect = { EVENT = hd_yiguan.3002 } }
+			}
+			triggered_effect = {
+				trigger = { var:hd_yg_stage = 2 }
+				effect = { hd_yiguan_sinicization_story_fire_effect = { EVENT = hd_yiguan.3003 } }
+			}
+			triggered_effect = {
+				trigger = { var:hd_yg_stage = 3 }
+				effect = { hd_yiguan_sinicization_story_fire_effect = { EVENT = hd_yiguan.3004 } }
+			}
+		}
+	}
+
+	# 主人失地：改制无以为继，结束（on_end 清掉角色变量，日后复得封地可重新发起）
+	effect_group = {
+		months = 1
+		trigger = {
+			story_owner = {
+				is_alive = yes
+				is_landed = no
+			}
+		}
+		triggered_effect = {
+			trigger = { always = yes }
+			effect = {
+				story_owner = {
+					if = {
+						limit = { is_ai = no }
+						send_interface_toast = {
+							type = event_toast_effect_neutral
+							title = hd_yiguan_sinicization_lapsed_toast
+							left_icon = this
+							custom_tooltip = hd_yiguan_sinicization_lapsed_toast_tt
+						}
+					}
+				}
+				end_story = yes
+			}
+		}
+	}
+}

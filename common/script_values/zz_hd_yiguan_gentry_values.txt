@@ -1,0 +1,215 @@
+﻿# 衣冠南渡·士族侧数值（docs/衣冠南渡_重做设计.md §1 第 10 轮、§6 第 16–25 条）
+# 起兵北还的折算公式读流亡者身上的快照变量（变冒险者、销毁世族头衔之前存下，见 hd_yiguan_gt_beihuan_execute_effect）
+
+############################
+# 举族南迁
+############################
+
+# 举族南迁所需威望：逃亡期 50，其他阶段 100（§6 第 16 条）
+hd_yiguan_gt_nanqian_cost_value = {
+	value = 100
+	if = {
+		limit = { hd_yiguan_phase_taowang_trigger = yes }
+		value = 50
+	}
+}
+
+# AI 选目的地的分数（root = 候选目的地，scope:actor = 迁徙者）：兵强者、南方政权、天朝制、好感高者优先，宿敌不去
+hd_yiguan_gt_nanqian_dest_score_value = {
+	value = 10
+	add = {
+		value = max_military_strength
+		divide = 100
+		max = 100
+	}
+	if = {
+		limit = { hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_grp_south } }
+		add = 30
+	}
+	if = {
+		limit = { government_has_flag = government_is_celestial }
+		add = 20
+	}
+	if = {
+		limit = {
+			scope:actor ?= {
+				opinion = {
+					target = prev
+					value >= 20
+				}
+			}
+		}
+		add = 20
+	}
+	if = {
+		limit = {
+			OR = {
+				has_relation_rival = scope:actor
+				has_relation_nemesis = scope:actor
+			}
+		}
+		add = -1000
+	}
+}
+
+############################
+# 起兵北还（§1 第 10 轮）
+############################
+
+# 北府兵基础队数 = 1 + 本家庄园建筑数 ÷ 3（取整），上限 4；无庄园为 1
+hd_yiguan_gt_beihuan_beifu_base_value = {
+	value = 1
+	if = {
+		limit = { has_variable = hd_yiguan_gt_bh_buildings }
+		add = {
+			value = var:hd_yiguan_gt_bh_buildings
+			divide = 3
+			floor = yes
+		}
+	}
+	max = 4
+}
+
+# 北府兵总队数 = 基础 + 每位"兵士"资助者 1 队
+hd_yiguan_gt_beihuan_beifu_total_value = {
+	value = hd_yiguan_gt_beihuan_beifu_base_value
+	if = {
+		limit = { has_variable = hd_yiguan_gt_fund_troops }
+		add = var:hd_yiguan_gt_fund_troops
+	}
+}
+
+# 事件征召兵基础 = 500 + 威望等级 × 300 + 影响力 ÷ 2（无影响力政体改用金币 ÷ 2），上限 3000
+# 影响力取快照 hd_yiguan_gt_bh_influence；须在退还庄园、国库入私囊之前求值
+hd_yiguan_gt_beihuan_levy_base_value = {
+	value = 500
+	add = {
+		value = prestige_level
+		multiply = 300
+	}
+	if = {
+		limit = { has_variable = hd_yiguan_gt_bh_influence }
+		add = {
+			value = var:hd_yiguan_gt_bh_influence
+			divide = 2
+			min = 0
+		}
+	}
+	else_if = {
+		limit = { gold > 0 }
+		add = {
+			value = gold
+			divide = 2
+		}
+	}
+	max = 3000
+	round = yes
+}
+
+# 事件征召兵总数 = 快照基础 + 每位"兵士"资助者 500
+hd_yiguan_gt_beihuan_levy_total_value = {
+	value = 500
+	if = {
+		limit = { has_variable = hd_yiguan_gt_bh_levy }
+		value = var:hd_yiguan_gt_bh_levy
+	}
+	if = {
+		limit = { has_variable = hd_yiguan_gt_fund_troops }
+		add = {
+			value = var:hd_yiguan_gt_fund_troops
+			multiply = 500
+		}
+	}
+}
+
+# 同伴人数 = 1 + 威望等级 ÷ 2（取整），上限 3
+hd_yiguan_gt_beihuan_companion_value = {
+	value = prestige_level
+	divide = 2
+	floor = yes
+	add = 1
+	min = 1
+	max = 3
+}
+
+# AI 流亡者受资助后自行起兵的几率：基础 25，每位资助者 +15，进取/勇敢 +10，怯懦/知足 -20，上限 80
+hd_yiguan_gt_beihuan_ai_chance_value = {
+	value = 25
+	if = {
+		limit = { has_variable = hd_yiguan_gt_funder_count }
+		add = {
+			value = var:hd_yiguan_gt_funder_count
+			multiply = 15
+		}
+	}
+	if = {
+		limit = { has_trait = ambitious }
+		add = 10
+	}
+	if = {
+		limit = { has_trait = brave }
+		add = 10
+	}
+	if = {
+		limit = {
+			OR = {
+				has_trait = craven
+				has_trait = content
+			}
+		}
+		add = -20
+	}
+	min = 0
+	max = 80
+}
+
+############################
+# 资助
+############################
+
+# 资助一档的金额（当前作用域 = 资助者）：中额钱财，有国库者按国库折算、从国库付，无国库者按金币（原版 medium_treasury_or_gold_value）
+# 本 mod 天朝制有国库（replace_gold_cost_by_treasury），付款写法同原版 00_interaction_effects.txt:4037 pay_treasury_or_gold
+# "金钱"档付给流亡者；"兵士"档作募兵之费（自拟，§6 第 22 条未写兵士档代价）；"兵钱兼有"两者都付
+hd_yiguan_gt_fund_unit_value = {
+	value = medium_treasury_or_gold_value
+}
+
+# 资助者（当前作用域）给 scope:hd_yiguan_gt_bh_exile 的资助额，供 4021 排序：资助者现时的一份金额 × 份数
+# 账记在流亡者身上（名单 hd_yiguan_gt_funders；兼有档另入 hd_yiguan_gt_funders_x2，记 2 份），资助者再资助别人也不会冲掉
+# 份数：钱财档 1、兵马档 1（付了募兵之费）、兼有档 2；金额按现时收入折算，与当初实付可能略有出入
+hd_yiguan_gt_funder_amount_value = {
+	value = hd_yiguan_gt_fund_unit_value
+	if = {
+		limit = {
+			scope:hd_yiguan_gt_bh_exile ?= {
+				is_target_in_variable_list = { name = hd_yiguan_gt_funders_x2 target = prev }	# prev = 资助者，写法同原版 04_ep2_wedding_values.txt:24-31（scope:impress_check = { ... target = prev }）
+			}
+		}
+		multiply = 2
+	}
+}
+
+############################
+# 侨置、联姻
+############################
+
+# 授县排序（root = 县，scope:hd_yiguan_gt_qz_lord = 君主）：发展度低者优先，不在都城所在郡者优先（"空闲"）
+hd_yiguan_gt_grant_county_score_value = {
+	value = 100
+	subtract = development_level
+	if = {
+		limit = {
+			exists = scope:hd_yiguan_gt_qz_lord.capital_county
+			NOT = {
+				duchy ?= { this = scope:hd_yiguan_gt_qz_lord.capital_county.duchy }
+			}
+		}
+		add = 50
+	}
+}
+
+# 联姻候选排序（root = 族人）：年轻者优先
+hd_yiguan_gt_marriage_candidate_score_value = {
+	value = 100
+	subtract = age
+}

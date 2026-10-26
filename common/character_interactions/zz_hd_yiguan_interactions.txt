@@ -1,0 +1,739 @@
+﻿# 衣冠南渡·士族侧互动（docs/衣冠南渡_重做设计.md §5.8、§4 第 11 轮、§1 第 6 轮、§6 第 22–25 条）
+# 请资助 / 主动资助 / 请求侨置授地 / 君主授地 / 联姻吴姓 / 求取官职
+# 只在局势进行中显示。AI 目标一律用窄名单（liege、courtiers、vassals、peer_vassals），较重的判断只放 is_valid
+# 档位写法同 mod hd_dc_royal_support_interactions.txt（send_option + send_options_exclusive，scope:<flag> = yes 读取）
+
+############################################################
+# 流亡者请资助（流亡者 → 南方政权 / 北方汉人）
+############################################################
+hd_yiguan_request_funding_interaction = {
+	category = interaction_category_diplomacy
+	icon = request_funding_interaction
+	desc = hd_yiguan_request_funding_interaction_desc
+	use_diplomatic_range = yes
+
+	is_shown = {
+		hd_yiguan_active_trigger = yes
+		NOT = { scope:actor = scope:recipient }
+		scope:actor = { hd_yiguan_gt_exile_base_trigger = yes }
+		scope:recipient = { hd_yiguan_gt_funder_base_trigger = yes }
+	}
+	is_valid_showing_failures_only = {
+		scope:actor = { hd_yiguan_gt_fundable_trigger = { FUNDER = scope:recipient } }
+		scope:recipient = { treasury_or_gold >= hd_yiguan_gt_fund_unit_value }	# 国库或金币，写法同原版 00_demand_church_succession_interactions.txt:34
+	}
+
+	send_option = {
+		flag = hd_yiguan_gt_tier_gold
+		localization = hd_yiguan_gt_tier_gold
+		starts_enabled = { always = yes }
+		is_valid = { scope:recipient = { treasury_or_gold >= hd_yiguan_gt_fund_unit_value } }
+	}
+	send_option = {
+		flag = hd_yiguan_gt_tier_troops
+		localization = hd_yiguan_gt_tier_troops
+		is_valid = { scope:recipient = { treasury_or_gold >= hd_yiguan_gt_fund_unit_value } }
+	}
+	send_option = {
+		flag = hd_yiguan_gt_tier_both
+		localization = hd_yiguan_gt_tier_both
+		is_valid = {
+			scope:recipient = {
+				treasury_or_gold >= {
+					value = hd_yiguan_gt_fund_unit_value
+					multiply = 2
+				}
+			}
+		}
+	}
+	send_options_exclusive = yes
+
+	on_accept = {
+		if = {
+			limit = { scope:hd_yiguan_gt_tier_both = yes }
+			hidden_effect = { hd_yiguan_gt_fund_effect = { FUNDER = scope:recipient EXILE = scope:actor GOLD = yes TROOPS = yes PRESTIGE = 150 } }
+		}
+		else_if = {
+			limit = { scope:hd_yiguan_gt_tier_troops = yes }
+			hidden_effect = { hd_yiguan_gt_fund_effect = { FUNDER = scope:recipient EXILE = scope:actor GOLD = no TROOPS = yes PRESTIGE = 100 } }
+		}
+		else = {
+			hidden_effect = { hd_yiguan_gt_fund_effect = { FUNDER = scope:recipient EXILE = scope:actor GOLD = yes TROOPS = no PRESTIGE = 50 } }
+		}
+		custom_tooltip = hd_yiguan_gt_fund_accept_tt
+	}
+
+	ai_accept = {
+		base = -10
+		opinion_modifier = {
+			who = scope:recipient
+			opinion_target = scope:actor
+			multiplier = 0.5
+		}
+		modifier = {
+			desc = hd_yiguan_gt_ai_reason_conflict
+			trigger = { hd_yiguan_phase_chongtu_trigger = yes }
+			add = 15
+		}
+		modifier = {
+			desc = hd_yiguan_gt_ai_reason_own_court
+			trigger = { scope:actor = { liege_or_court_owner ?= scope:recipient } }
+			add = 10
+		}
+		modifier = {
+			desc = hd_yiguan_gt_ai_reason_martial
+			trigger = { scope:actor = { martial >= 12 } }
+			add = 10
+		}
+		modifier = {
+			desc = hd_yiguan_gt_ai_reason_generous
+			trigger = { scope:recipient = { has_trait = generous } }
+			add = 15
+		}
+		modifier = {
+			desc = hd_yiguan_gt_ai_reason_greedy
+			trigger = { scope:recipient = { has_trait = greedy } }
+			add = -20
+		}
+		modifier = {
+			desc = hd_yiguan_gt_ai_reason_big_ask
+			trigger = { scope:hd_yiguan_gt_tier_both = yes }
+			add = -15
+		}
+		modifier = {
+			desc = hd_yiguan_gt_ai_reason_rival
+			trigger = {
+				scope:recipient = {
+					OR = {
+						has_relation_rival = scope:actor
+						has_relation_nemesis = scope:actor
+					}
+				}
+			}
+			add = -100
+		}
+	}
+
+	cooldown_against_recipient = { years = 3 }
+	ai_targets = {
+		ai_recipients = liege
+		ai_recipients = top_liege
+	}
+	ai_frequency = 36
+	ai_potential = {
+		hd_yiguan_gt_exile_base_trigger = yes
+		hd_yiguan_phase_chongtu_trigger = yes
+	}
+	ai_will_do = {
+		base = 20
+		modifier = {
+			add = 20
+			scope:actor = {
+				has_trait = ambitious
+			}
+		}
+		modifier = {
+			add = -15
+			scope:actor = {
+				has_trait = content
+			}
+		}
+		# 档位：AI 取 ai_will_do 最高的档（原版 _character_interactions.info:611），各档须分开打分（先例 原版 pam_interactions.txt:1884）
+		# 默认求钱财；通晓兵事者求兵马；通晓兵事又进取或勇敢、对方钱多者求兵钱兼有
+		modifier = {
+			add = 5
+			scope:hd_yiguan_gt_tier_gold = yes
+		}
+		modifier = {
+			add = 10
+			scope:hd_yiguan_gt_tier_troops = yes
+			scope:actor = { martial >= 12 }
+		}
+		modifier = {
+			add = 15
+			scope:hd_yiguan_gt_tier_both = yes
+			scope:actor = {
+				martial >= 12
+				OR = {
+					has_trait = ambitious
+					has_trait = brave
+				}
+			}
+			scope:recipient = {
+				treasury_or_gold >= {
+					value = hd_yiguan_gt_fund_unit_value
+					multiply = 4
+				}
+			}
+		}
+	}
+}
+
+############################################################
+# 领主主动资助（南方政权 / 北方汉人 → 流亡者）
+############################################################
+hd_yiguan_offer_funding_interaction = {
+	category = interaction_category_friendly
+	icon = icon_gold
+	desc = hd_yiguan_offer_funding_interaction_desc
+	use_diplomatic_range = yes
+	auto_accept = yes
+
+	is_shown = {
+		hd_yiguan_active_trigger = yes
+		NOT = { scope:actor = scope:recipient }
+		scope:actor = { hd_yiguan_gt_funder_base_trigger = yes }
+		scope:recipient = { hd_yiguan_gt_exile_base_trigger = yes }
+	}
+	is_valid_showing_failures_only = {
+		scope:recipient = { hd_yiguan_gt_fundable_trigger = { FUNDER = scope:actor } }
+		scope:actor = { treasury_or_gold >= hd_yiguan_gt_fund_unit_value }
+	}
+
+	send_option = {
+		flag = hd_yiguan_gt_tier_gold
+		localization = hd_yiguan_gt_tier_gold
+		starts_enabled = { always = yes }
+		is_valid = { scope:actor = { treasury_or_gold >= hd_yiguan_gt_fund_unit_value } }
+	}
+	send_option = {
+		flag = hd_yiguan_gt_tier_troops
+		localization = hd_yiguan_gt_tier_troops
+		is_valid = { scope:actor = { treasury_or_gold >= hd_yiguan_gt_fund_unit_value } }
+	}
+	send_option = {
+		flag = hd_yiguan_gt_tier_both
+		localization = hd_yiguan_gt_tier_both
+		is_valid = {
+			scope:actor = {
+				treasury_or_gold >= {
+					value = hd_yiguan_gt_fund_unit_value
+					multiply = 2
+				}
+			}
+		}
+	}
+	send_options_exclusive = yes
+
+	on_accept = {
+		if = {
+			limit = { scope:hd_yiguan_gt_tier_both = yes }
+			hidden_effect = { hd_yiguan_gt_fund_effect = { FUNDER = scope:actor EXILE = scope:recipient GOLD = yes TROOPS = yes PRESTIGE = 150 } }
+		}
+		else_if = {
+			limit = { scope:hd_yiguan_gt_tier_troops = yes }
+			hidden_effect = { hd_yiguan_gt_fund_effect = { FUNDER = scope:actor EXILE = scope:recipient GOLD = no TROOPS = yes PRESTIGE = 100 } }
+		}
+		else = {
+			hidden_effect = { hd_yiguan_gt_fund_effect = { FUNDER = scope:actor EXILE = scope:recipient GOLD = yes TROOPS = no PRESTIGE = 50 } }
+		}
+		custom_tooltip = hd_yiguan_gt_fund_accept_tt
+	}
+
+	cooldown_against_recipient = { years = 3 }
+	ai_targets = {
+		ai_recipients = courtiers
+		ai_recipients = vassals
+	}
+	ai_frequency = 36
+	ai_potential = {
+		hd_yiguan_gt_funder_base_trigger = yes
+		hd_yiguan_phase_chongtu_trigger = yes
+		treasury_or_gold >= 200
+	}
+	ai_will_do = {
+		base = 5
+		modifier = {
+			add = 10
+			scope:recipient = { martial >= 12 }
+		}
+		# 档位：AI 取 ai_will_do 最高的档（原版 _character_interactions.info:611），各档须分开打分（先例 原版 pam_interactions.txt:1884）
+		# 默认给钱财；流亡者通晓兵事则给兵马；家底厚（四份以上）且看重此人或慷慨、虔诚者给兵钱兼有
+		modifier = {
+			add = 5
+			scope:hd_yiguan_gt_tier_gold = yes
+		}
+		modifier = {
+			add = 10
+			scope:hd_yiguan_gt_tier_troops = yes
+			scope:recipient = { martial >= 12 }
+		}
+		modifier = {
+			add = 15
+			scope:hd_yiguan_gt_tier_both = yes
+			scope:actor = {
+				treasury_or_gold >= {
+					value = hd_yiguan_gt_fund_unit_value
+					multiply = 4
+				}
+				OR = {
+					has_trait = generous
+					has_trait = zealous
+					opinion = {
+						target = scope:recipient
+						value >= 30
+					}
+				}
+			}
+		}
+		modifier = {
+			add = 10
+			scope:actor = {
+				opinion = {
+					target = scope:recipient
+					value >= 30
+				}
+			}
+		}
+		modifier = {
+			add = 10
+			scope:actor = {
+				OR = {
+					has_trait = generous
+					has_trait = zealous
+				}
+			}
+		}
+		modifier = {
+			add = -10
+			scope:actor = {
+				has_trait = greedy
+			}
+		}
+		modifier = {	# 一人至多三家资助
+			factor = 0
+			scope:recipient = {
+				has_variable = hd_yiguan_gt_funder_count
+				var:hd_yiguan_gt_funder_count >= 3
+			}
+		}
+	}
+}
+
+############################################################
+# 请求侨置授地（侨姓 → 其主君）：非都城直辖县，或可立的侨州（无地者连县一并授）
+############################################################
+hd_yiguan_request_qiaozhi_interaction = {
+	category = interaction_category_vassal
+	icon = request_land_interaction
+	desc = hd_yiguan_request_qiaozhi_interaction_desc
+
+	is_shown = {
+		hd_yiguan_active_trigger = yes
+		NOT = { scope:actor = scope:recipient }
+		scope:actor = { hd_yiguan_gt_qiaozhi_gentry_trigger = yes }
+		scope:recipient = { hd_yiguan_gt_qiaozhi_lord_trigger = { LORD = scope:recipient GENTRY = scope:actor } }
+	}
+	is_valid_showing_failures_only = {
+		custom_tooltip = {
+			text = hd_yiguan_gt_qiaozhi_nothing_tt
+			OR = {
+				hd_yiguan_gt_qiaozhi_county_ok_trigger = { LORD = scope:recipient }
+				hd_yiguan_gt_qiaozhi_qiao_ok_trigger = { LORD = scope:recipient GENTRY = scope:actor }
+			}
+		}
+	}
+
+	send_option = {
+		flag = hd_yiguan_gt_qz_county
+		localization = hd_yiguan_gt_qz_county
+		starts_enabled = { hd_yiguan_gt_qiaozhi_county_ok_trigger = { LORD = scope:recipient } }
+		is_valid = { hd_yiguan_gt_qiaozhi_county_ok_trigger = { LORD = scope:recipient } }
+	}
+	send_option = {
+		flag = hd_yiguan_gt_qz_qiao
+		localization = hd_yiguan_gt_qz_qiao
+		is_valid = { hd_yiguan_gt_qiaozhi_qiao_ok_trigger = { LORD = scope:recipient GENTRY = scope:actor } }
+	}
+	send_options_exclusive = yes
+
+	on_accept = {
+		if = {
+			limit = {
+				OR = {
+					scope:hd_yiguan_gt_qz_qiao = yes
+					NOT = { hd_yiguan_gt_qiaozhi_county_ok_trigger = { LORD = scope:recipient } }
+				}
+			}
+			hidden_effect = { hd_yiguan_gt_qiaozhi_grant_effect = { LORD = scope:recipient GENTRY = scope:actor COUNTY = no QIAO = yes } }
+		}
+		else = {
+			hidden_effect = { hd_yiguan_gt_qiaozhi_grant_effect = { LORD = scope:recipient GENTRY = scope:actor COUNTY = yes QIAO = no } }
+		}
+		custom_tooltip = hd_yiguan_gt_qiaozhi_accept_tt
+	}
+
+	ai_accept = {
+		base = -20
+		opinion_modifier = {
+			who = scope:recipient
+			opinion_target = scope:actor
+			multiplier = 0.5
+		}
+		modifier = {
+			desc = hd_yiguan_gt_ai_reason_talent
+			trigger = {
+				scope:actor = {
+					OR = {
+						stewardship >= 12
+						martial >= 12
+					}
+				}
+			}
+			add = 15
+		}
+		modifier = {
+			desc = hd_yiguan_gt_ai_reason_over_domain
+			trigger = { scope:recipient = { domain_size > domain_limit } }	# 写法见原版 00_tributarize.txt:546
+			add = 20
+		}
+		modifier = {
+			desc = hd_yiguan_gt_ai_reason_qiao_cheap
+			trigger = { scope:hd_yiguan_gt_qz_qiao = yes }
+			add = 10
+		}
+		modifier = {
+			desc = hd_yiguan_gt_ai_reason_generous
+			trigger = { scope:recipient = { has_trait = generous } }
+			add = 10
+		}
+		modifier = {
+			desc = hd_yiguan_gt_ai_reason_greedy
+			trigger = { scope:recipient = { has_trait = greedy } }
+			add = -15
+		}
+	}
+
+	cooldown_against_recipient = { years = 5 }
+	ai_targets = {
+		ai_recipients = liege
+	}
+	ai_frequency = 60
+	ai_potential = {
+		hd_yiguan_gt_qiaozhi_gentry_trigger = yes
+	}
+	ai_will_do = {
+		base = 15
+		modifier = {
+			add = 10
+			scope:actor = {
+				OR = {
+					has_trait = ambitious
+					has_trait = greedy
+				}
+			}
+		}
+		modifier = {
+			add = -10
+			scope:actor = {
+				has_trait = content
+			}
+		}
+	}
+}
+
+############################################################
+# 君主授侨置（君主 → 侨姓廷臣或封臣）
+############################################################
+hd_yiguan_grant_qiaozhi_interaction = {
+	category = interaction_category_vassal
+	icon = grant_titles_interaction
+	desc = hd_yiguan_grant_qiaozhi_interaction_desc
+	auto_accept = yes
+
+	is_shown = {
+		hd_yiguan_active_trigger = yes
+		NOT = { scope:actor = scope:recipient }
+		scope:recipient = { hd_yiguan_gt_qiaozhi_gentry_trigger = yes }
+		scope:actor = { hd_yiguan_gt_qiaozhi_lord_trigger = { LORD = scope:actor GENTRY = scope:recipient } }
+	}
+	is_valid_showing_failures_only = {
+		custom_tooltip = {
+			text = hd_yiguan_gt_qiaozhi_nothing_tt
+			OR = {
+				hd_yiguan_gt_qiaozhi_county_ok_trigger = { LORD = scope:actor }
+				hd_yiguan_gt_qiaozhi_qiao_ok_trigger = { LORD = scope:actor GENTRY = scope:recipient }
+			}
+		}
+		trigger_if = {	# AI 君主每年至多授 4 次（全局）
+			limit = { scope:actor = { is_ai = yes } }
+			hd_yiguan_gt_counter_below_trigger = { NAME = qiaozhi_ai MAX = 4 }
+		}
+	}
+
+	send_option = {
+		flag = hd_yiguan_gt_qz_county
+		localization = hd_yiguan_gt_qz_county
+		starts_enabled = { hd_yiguan_gt_qiaozhi_county_ok_trigger = { LORD = scope:actor } }
+		is_valid = { hd_yiguan_gt_qiaozhi_county_ok_trigger = { LORD = scope:actor } }
+	}
+	send_option = {
+		flag = hd_yiguan_gt_qz_qiao
+		localization = hd_yiguan_gt_qz_qiao
+		is_valid = { hd_yiguan_gt_qiaozhi_qiao_ok_trigger = { LORD = scope:actor GENTRY = scope:recipient } }
+	}
+	send_options_exclusive = yes
+
+	on_accept = {
+		if = {
+			limit = {
+				OR = {
+					scope:hd_yiguan_gt_qz_qiao = yes
+					NOT = { hd_yiguan_gt_qiaozhi_county_ok_trigger = { LORD = scope:actor } }
+				}
+			}
+			hidden_effect = { hd_yiguan_gt_qiaozhi_grant_effect = { LORD = scope:actor GENTRY = scope:recipient COUNTY = no QIAO = yes } }
+		}
+		else = {
+			hidden_effect = { hd_yiguan_gt_qiaozhi_grant_effect = { LORD = scope:actor GENTRY = scope:recipient COUNTY = yes QIAO = no } }
+		}
+		if = {
+			limit = { scope:actor = { is_ai = yes } }
+			hidden_effect = { hd_yiguan_gt_bump_counter_effect = { NAME = qiaozhi_ai } }
+		}
+		custom_tooltip = hd_yiguan_gt_qiaozhi_accept_tt
+	}
+
+	cooldown_against_recipient = { years = 5 }
+	ai_targets = {
+		ai_recipients = courtiers
+		ai_recipients = vassals
+	}
+	ai_frequency = 60
+	ai_potential = {
+		is_landed = yes
+		hd_yiguan_is_han_trigger = yes
+		top_liege ?= { hd_yiguan_is_han_regime_trigger = yes }
+		domain_size > domain_limit
+	}
+	ai_will_do = {
+		base = 10
+		modifier = {
+			add = 15
+			scope:recipient = {
+				OR = {
+					stewardship >= 12
+					martial >= 12
+				}
+			}
+		}
+		modifier = {
+			add = 10
+			scope:actor = {
+				opinion = {
+					target = scope:recipient
+					value >= 30
+				}
+			}
+		}
+		modifier = {
+			add = 10
+			scope:actor = {
+				has_trait = generous
+			}
+		}
+		modifier = {
+			add = -10
+			scope:actor = {
+				has_trait = greedy
+			}
+		}
+	}
+}
+
+############################################################
+# 联姻吴姓（侨姓 → 南方本地家族的统治者）：双方各出一名未婚成年族人成婚
+# 接受度基础 +25 再按好感（§6 第 24 条）；不投"胡汉联姻"催化剂
+############################################################
+hd_yiguan_qiaowu_marriage_interaction = {
+	category = interaction_category_diplomacy
+	icon = icon_marriage
+	desc = hd_yiguan_qiaowu_marriage_interaction_desc
+	use_diplomatic_range = yes
+
+	is_shown = {
+		hd_yiguan_active_trigger = yes
+		NOT = { scope:actor = scope:recipient }
+		scope:actor = {
+			is_adult = yes
+			exists = house
+			hd_yiguan_is_qiaoxing_trigger = yes
+		}
+		scope:recipient = {
+			is_ruler = yes
+			is_adult = yes
+			exists = house
+			hd_yiguan_is_wuxing_trigger = yes
+		}
+		NOT = { scope:actor.house = scope:recipient.house }
+	}
+	is_valid_showing_failures_only = {
+		custom_tooltip = {
+			text = hd_yiguan_gt_qiaowu_no_pair_tt
+			hd_yiguan_gt_qiaowu_pair_exists_trigger = { A = scope:actor B = scope:recipient }
+		}
+	}
+
+	on_accept = {
+		custom_tooltip = hd_yiguan_gt_qiaowu_accept_tt
+		hidden_effect = { hd_yiguan_gt_qiaowu_marry_effect = { A = scope:actor B = scope:recipient } }
+	}
+
+	ai_accept = {
+		base = 25
+		opinion_modifier = {
+			who = scope:recipient
+			opinion_target = scope:actor
+			multiplier = 0.5
+		}
+		modifier = {
+			desc = hd_yiguan_gt_ai_reason_rival
+			trigger = {
+				scope:recipient = {
+					OR = {
+						has_relation_rival = scope:actor
+						has_relation_nemesis = scope:actor
+					}
+				}
+			}
+			add = -100
+		}
+		modifier = {
+			desc = hd_yiguan_gt_ai_reason_arrogant
+			trigger = { scope:recipient = { has_trait = arrogant } }
+			add = -15
+		}
+		modifier = {
+			desc = hd_yiguan_gt_ai_reason_prestige
+			trigger = { scope:actor = { prestige_level >= 3 } }
+			add = 10
+		}
+	}
+
+	cooldown_against_recipient = { years = 10 }
+	ai_targets = {
+		ai_recipients = peer_vassals
+		ai_recipients = liege
+	}
+	ai_frequency = 60
+	ai_potential = {
+		is_ruler = yes
+		hd_yiguan_is_qiaoxing_trigger = yes
+	}
+	ai_will_do = {
+		base = 10
+		modifier = {
+			add = 10
+			scope:actor = {
+				opinion = {
+					target = scope:recipient
+					value >= 20
+				}
+			}
+		}
+		modifier = {
+			add = 10
+			scope:actor = {
+				has_trait = gregarious
+			}
+		}
+		modifier = {
+			add = -10
+			scope:actor = {
+				has_trait = arrogant
+			}
+		}
+	}
+}
+
+############################################################
+# 求取官职（侨姓 → 汉人君主）：同意则按其所长补议会空缺；无空缺或任命不成则入廷并得"北人清望"
+############################################################
+hd_yiguan_request_office_interaction = {
+	category = interaction_category_vassal
+	icon = council
+	desc = hd_yiguan_request_office_interaction_desc
+	use_diplomatic_range = yes
+
+	is_shown = {
+		hd_yiguan_active_trigger = yes
+		NOT = { scope:actor = scope:recipient }
+		scope:actor = { hd_yiguan_gt_office_seeker_trigger = yes }
+		scope:recipient = {
+			is_landed = yes
+			hd_yiguan_is_han_trigger = yes
+			top_liege ?= { hd_yiguan_is_han_regime_trigger = yes }
+		}
+		OR = {
+			scope:actor = { liege_or_court_owner ?= scope:recipient }
+			scope:actor = { is_ruler = no }
+		}
+	}
+
+	on_accept = {
+		custom_tooltip = hd_yiguan_gt_office_accept_tt
+		hidden_effect = { hd_yiguan_gt_office_effect = { LORD = scope:recipient GENTRY = scope:actor } }
+	}
+
+	ai_accept = {
+		base = -10
+		opinion_modifier = {
+			who = scope:recipient
+			opinion_target = scope:actor
+			multiplier = 0.5
+		}
+		modifier = {
+			desc = hd_yiguan_gt_ai_reason_vacancy
+			trigger = { scope:recipient = { hd_yiguan_gt_council_vacancy_trigger = yes } }
+			add = 20
+		}
+		modifier = {
+			desc = hd_yiguan_gt_ai_reason_talent
+			trigger = {
+				scope:actor = {
+					OR = {
+						diplomacy >= 14
+						stewardship >= 14
+						martial >= 14
+						intrigue >= 14
+						learning >= 14
+					}
+				}
+			}
+			add = 15
+		}
+		modifier = {
+			desc = hd_yiguan_gt_ai_reason_stranger
+			trigger = {
+				scope:actor = {
+					NOT = { liege_or_court_owner ?= scope:recipient }
+				}
+			}
+			add = -10
+		}
+	}
+
+	cooldown_against_recipient = { years = 5 }
+	ai_targets = {
+		ai_recipients = liege
+	}
+	ai_frequency = 60
+	ai_potential = {
+		hd_yiguan_gt_office_seeker_trigger = yes
+	}
+	ai_will_do = {
+		base = 10
+		modifier = {
+			add = 15
+			scope:actor = {
+				has_trait = ambitious
+			}
+		}
+		modifier = {
+			add = -10
+			scope:actor = {
+				has_trait = content
+			}
+		}
+	}
+}

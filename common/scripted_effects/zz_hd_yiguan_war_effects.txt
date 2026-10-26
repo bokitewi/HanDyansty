@@ -1,23 +1,40 @@
-﻿# 衣冠南渡：义军起义与举州归南的战争效果（复用 zz_hd_uprising_war_effects.txt 的结算）
+﻿# 衣冠南渡·战争侧效果（docs/衣冠南渡_重做设计.md §5.7、§6 #10–14；战争侧模块维护）
+# 一、义军起义（保留旧版接口，供旧事件改编模块调用）
+# 二、公用：夺取法理头衔内守方领地、营地善后、补立郡号
+# 三、北伐 / 讨胡收复 / 起兵北还 / 举兵起义 胜负结算（宣战理由文件调用）
+# 四、举兵起义发动、归附南朝、招集流民
+# 五、AI 年度宣战脉冲（核心逻辑模块的年度 on_action 调用）
+# 已删：举州归南（旧 hd_yiguan_guinan_* 效果与宣战理由）
+
+############################################################
+# 一、义军起义
+############################################################
 
 ############################
 # 发动义军起义
 # $LEADER$：首领（已有角色或刚生成）；$COUNTY$：起事县；$MEN$：义军人数；$BIG$ = yes 时目标另含两个相邻沦陷县
 # 结果：scope:hd_yiguan_up_war（成功时存在）
+# 守方已在应付一场义军 / 举兵起义 / 起兵北还时不再开战（hd_yiguan_no_active_uprising_trigger，§5.3）
 ############################
 hd_yiguan_spawn_uprising_effect = {
 	clear_saved_scope = hd_yiguan_up_war
 	clear_saved_scope = hd_yiguan_up_n1
 	clear_saved_scope = hd_yiguan_up_n2
+	clear_saved_scope = hd_yiguan_up_defender
 	$COUNTY$ = {
 		save_scope_as = hd_yiguan_up_county
 		title_province = { save_scope_as = hd_yiguan_up_province }
-		holder.top_liege = { save_scope_as = hd_yiguan_up_defender }
+		holder ?= {
+			top_liege = { save_scope_as = hd_yiguan_up_defender }
+		}
 	}
 	$LEADER$ = { save_scope_as = hd_yiguan_up_leader }
 
 	if = {
-		limit = { always = $BIG$ }
+		limit = {
+			always = $BIG$
+			exists = scope:hd_yiguan_up_defender
+		}
 		scope:hd_yiguan_up_county = {
 			random_neighboring_county = {
 				limit = {
@@ -41,6 +58,8 @@ hd_yiguan_spawn_uprising_effect = {
 		limit = {
 			exists = scope:hd_yiguan_up_defender
 			NOT = { scope:hd_yiguan_up_leader = scope:hd_yiguan_up_defender }
+			scope:hd_yiguan_up_leader = { is_alive = yes }
+			scope:hd_yiguan_up_defender = { hd_yiguan_no_active_uprising_trigger = yes }
 		}
 		scope:hd_yiguan_up_leader = {
 			if = {
@@ -103,6 +122,22 @@ hd_yiguan_spawn_uprising_effect = {
 				}
 			}
 			scope:hd_yiguan_up_army ?= { assign_commander = scope:hd_yiguan_up_leader }
+			# 催化剂"沦陷区汉人起义"：只在守方为胡人宗主（非汉化）时投；流民帅作乱、北府兵变打的是南方政权，不投
+			if = {
+				limit = {
+					scope:hd_yiguan_up_defender = {
+						hd_yiguan_is_hu_trigger = yes
+						NOT = { hd_yiguan_is_sinicized_trigger = yes }
+					}
+				}
+				hd_yiguan_fire_catalyst_effect = {
+					CATALYST = catalyst_hd_yiguan_uprising
+					CHAR = scope:hd_yiguan_up_leader
+				}
+			}
+		}
+		else = {
+			debug_log = "hd_yiguan_war: uprising start_war FAILED"
 		}
 	}
 }
@@ -149,12 +184,24 @@ hd_yiguan_reinforce_uprising_effect = {
 }
 
 ############################
-# 义军胜利：取得目标县与占领县，独立并改天朝制；响应起义的封臣一并独立，与南方接壤者可议归南
+# 义军胜利：取得目标县与占领县，独立并改天朝制，销毁营地
+# 守方为胡人宗主（非汉化，即沦陷区起义）时：主头衔不足公国级则补立郡号、重算参与者组；
+# 响应起义而一并独立的封臣 3 天后收"归南之议"（hd_yiguan.2120，旧事件改编模块；事件自查是否与南方政权接壤），同旧版；首领本人不收
 ############################
 hd_yiguan_uprising_victory_effect = {
 	if = {
 		limit = { exists = root.war }
 		root.war = { save_scope_as = hd_yiguan_victory_war }
+		clear_saved_scope = hd_yiguan_up_hu_def
+		if = {
+			limit = {
+				scope:defender = {
+					hd_yiguan_is_hu_trigger = yes
+					NOT = { hd_yiguan_is_sinicized_trigger = yes }
+				}
+			}
+			scope:defender = { save_scope_as = hd_yiguan_up_hu_def }
+		}
 		hd_uprising_settle_occupied_counties_on_victory_effect = {
 			WAR = scope:hd_yiguan_victory_war
 		}
@@ -183,7 +230,23 @@ hd_yiguan_uprising_victory_effect = {
 		hd_uprising_grant_independence_effect = {
 			WAR = scope:hd_yiguan_victory_war
 		}
-		scope:attacker = { hd_force_celestial_effect = yes }
+		scope:attacker = {
+			if = {
+				limit = {
+					is_alive = yes
+					is_landed = yes
+				}
+				hd_force_celestial_effect = yes
+				hd_yiguan_war_leave_camp_effect = yes
+				if = {
+					limit = { exists = scope:hd_yiguan_up_hu_def }
+					hd_yiguan_war_ensure_duchy_effect = yes
+					hd_yiguan_refresh_realm_effect = yes
+					hd_yiguan_recalc_group_effect = yes
+					# 首领本人不发归南之议（§1 第 7 轮：胜则独立、进北方汉人组；要归附可自用"归附南朝"决议）
+				}
+			}
+		}
 
 		# 响应起义的封臣
 		create_title_and_vassal_change = {
@@ -205,6 +268,7 @@ hd_yiguan_uprising_victory_effect = {
 		resolve_title_and_vassal_change = scope:hd_yiguan_ally_change
 		every_in_list = {
 			list = hd_yiguan_freed_allies
+			limit = { is_alive = yes }
 			add_truce_both_ways = {
 				character = scope:defender
 				days = 1825
@@ -212,13 +276,16 @@ hd_yiguan_uprising_victory_effect = {
 				result = victory
 			}
 			if = {
-				limit = {
-					hd_yiguan_active_trigger = yes
-					hd_yiguan_borders_south_side_trigger = yes
-				}
-				trigger_event = {
-					id = hd_yiguan.2120
-					days = 3
+				limit = { exists = scope:hd_yiguan_up_hu_def }
+				hd_yiguan_war_ensure_duchy_effect = yes
+				hd_yiguan_refresh_realm_effect = yes
+				hd_yiguan_recalc_group_effect = yes
+				if = {
+					limit = { hd_yiguan_active_trigger = yes }
+					trigger_event = {
+						id = hd_yiguan.2120
+						days = 3
+					}
 				}
 			}
 		}
@@ -247,110 +314,921 @@ hd_yiguan_uprising_failed_allies_effect = {
 	}
 }
 
-############################
-# 举州归南。Scope：发起的汉人封臣
-############################
-hd_yiguan_guinan_start_effect = {
-	save_scope_as = hd_yiguan_gn_vassal
-	liege = { save_scope_as = hd_yiguan_gn_liege }
-	clear_saved_scope = hd_yiguan_gn_lord
-	clear_saved_scope = hd_yiguan_gn_war
-	every_realm_county = {
-		every_neighboring_county = {
-			limit = {
-				holder ?= {
-					top_liege = {
-						hd_yiguan_south_side_trigger = yes
-						NOT = { is_in_list = hd_yiguan_gn_candidates }
-					}
+############################################################
+# 二、公用
+############################################################
+
+# 夺取法理头衔内守方领地。Scope：法理头衔（州或郡）。
+# 须已有 scope:attacker、scope:defender、scope:change（宣战理由结算时由引擎提供，change 由调用方建立）
+# 先例：mod zz_hd_253_beifa_cb.txt、原版 10_tgp_china_wars.txt:816（china_seize_duchy_cb）
+hd_yiguan_war_seize_dejure_effect = {
+	save_scope_as = hd_yiguan_seize_root
+	every_de_jure_county = {
+		limit = {
+			is_landless_type_title = no
+			holder ?= {
+				OR = {
+					this = scope:defender
+					target_is_liege_or_above = scope:defender
 				}
 			}
-			holder.top_liege = { add_to_list = hd_yiguan_gn_candidates }
+		}
+		change_title_holder = {
+			holder = scope:attacker
+			change = scope:change
+			take_baronies = yes
 		}
 	}
-	ordered_in_list = {
-		list = hd_yiguan_gn_candidates
-		order_by = max_military_strength
-		save_scope_as = hd_yiguan_gn_lord
+	# 守方本人在此法理头衔下持有的郡（州目标时；目标本身另由下段处理）
+	every_in_de_jure_hierarchy = {
+		continue = { tier > tier_duchy }
+		limit = {
+			tier = tier_duchy
+			NOT = { this = scope:hd_yiguan_seize_root }
+			holder ?= scope:defender
+		}
+		change_title_holder = {
+			holder = scope:attacker
+			change = scope:change
+		}
 	}
+	# 目标头衔本身由守方持有时一并交出
 	if = {
-		limit = { exists = scope:hd_yiguan_gn_lord }
-		start_war = {
-			cb = hd_yiguan_guinan_cb
-			target = scope:hd_yiguan_gn_liege
-		}
-		random_character_war = {
-			limit = {
-				primary_attacker = scope:hd_yiguan_gn_vassal
-				using_cb = hd_yiguan_guinan_cb
-			}
-			save_scope_as = hd_yiguan_gn_war
-		}
-		scope:hd_yiguan_gn_war ?= {
-			set_variable = {
-				name = hd_yiguan_guinan_lord
-				value = scope:hd_yiguan_gn_lord
-			}
-			if = {
-				limit = {
-					NOT = { is_participant = scope:hd_yiguan_gn_lord }
-				}
-				add_attacker = scope:hd_yiguan_gn_lord
-			}
-		}
-		if = {
-			limit = { exists = scope:hd_yiguan_gn_war }
-			scope:hd_yiguan_gn_lord = { trigger_event = hd_yiguan.3101 }
+		limit = { holder ?= scope:defender }
+		change_title_holder = {
+			holder = scope:attacker
+			change = scope:change
 		}
 	}
 }
 
-# 归南胜利：脱离原宗主，改投接壤的南方宗主（其已不在则自立）
-hd_yiguan_guinan_victory_effect = {
-	clear_saved_scope = hd_yiguan_gn_lord
-	root.war ?= {
-		save_scope_as = hd_yiguan_gn_war
-		var:hd_yiguan_guinan_lord ?= { save_scope_as = hd_yiguan_gn_lord }
-	}
+# 营地善后。Scope：刚获地的前冒险者。销毁营地头衔（原版 destroy_laamp_effect，07_dlc_ep3_scripted_effects.txt:643）
+# 须在改政体之后调用（原版 ep3_become_landed_transfer_effect 的顺序：先换政体、末尾再销毁营地）
+hd_yiguan_war_leave_camp_effect = {
 	if = {
 		limit = {
-			exists = scope:hd_yiguan_gn_lord
-			scope:hd_yiguan_gn_lord = {
+			is_alive = yes
+			is_landed = yes
+			any_held_title = { has_variable = adventurer_creation_reason }
+		}
+		save_scope_as = hd_yiguan_camp_leaver
+		destroy_laamp_effect = { ADVENTURER = scope:hd_yiguan_camp_leaver }
+	}
+}
+
+# 补立郡号。Scope：刚独立或刚获地的汉人（在宣战理由结算中调用；scope:defender 为本战守方）。
+# 参与者组要求实领公爵级以上（§5.3 hd_yiguan_is_regime_base_trigger）；实领不足公爵级时依次尝试，保证能归入北方汉人组：
+#  1. 都城所在法理郡无人持有：为其立郡（原版 00_decisions_effects.txt:43，type = created）
+#  2. 该郡由本战守方本人持有、且不是守方的主头衔：以征服转给胜者（只转头衔不带封臣；守方封臣公爵的郡不夺）
+#  3. 否则新建动态郡号，以都城县命名（原版 create_popular_revolt_title_effect，00_faction_effects.txt:757；
+#     不设 set_landless_title，否则过不了政权基础判定）。日后得到其他公爵级头衔时自动销毁
+hd_yiguan_war_ensure_duchy_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			is_landed = yes
+			hd_yiguan_war_landed_tier_value < 3	# 实领不足公爵级（官职等无地头衔不算）
+		}
+		save_scope_as = hd_yiguan_duchy_receiver
+		clear_saved_scope = hd_yiguan_duchy_county
+		clear_saved_scope = hd_yiguan_new_duchy
+		capital_county ?= {
+			save_scope_as = hd_yiguan_duchy_county
+			duchy ?= { save_scope_as = hd_yiguan_new_duchy }
+		}
+		if = {
+			limit = {
+				exists = scope:hd_yiguan_new_duchy
+				scope:hd_yiguan_new_duchy = {
+					NOT = { exists = holder }
+				}
+			}
+			create_title_and_vassal_change = {
+				type = created
+				save_scope_as = hd_yiguan_duchy_change
+				add_claim_on_loss = no
+			}
+			scope:hd_yiguan_new_duchy = {
+				change_title_holder = {
+					holder = scope:hd_yiguan_duchy_receiver
+					change = scope:hd_yiguan_duchy_change
+				}
+			}
+			resolve_title_and_vassal_change = scope:hd_yiguan_duchy_change
+		}
+		else_if = {
+			limit = {
+				exists = scope:defender
+				exists = scope:hd_yiguan_new_duchy
+				scope:hd_yiguan_new_duchy = {
+					holder ?= scope:defender
+				}
+				scope:defender = {
+					primary_title ?= {
+						NOT = { this = scope:hd_yiguan_new_duchy }
+					}
+				}
+			}
+			create_title_and_vassal_change = {
+				type = conquest
+				save_scope_as = hd_yiguan_duchy_change
+				add_claim_on_loss = yes
+			}
+			scope:hd_yiguan_new_duchy = {
+				change_title_holder = {
+					holder = scope:hd_yiguan_duchy_receiver
+					change = scope:hd_yiguan_duchy_change
+				}
+			}
+			resolve_title_and_vassal_change = scope:hd_yiguan_duchy_change
+		}
+		else_if = {
+			limit = { exists = scope:hd_yiguan_duchy_county }
+			create_dynamic_title = {
+				tier = duchy
+				name = hd_yiguan_war_dyn_duchy_name
+			}
+			create_title_and_vassal_change = {
+				type = created
+				save_scope_as = hd_yiguan_duchy_change
+				add_claim_on_loss = no
+			}
+			scope:new_title = {
+				set_capital_county = scope:hd_yiguan_duchy_county
+				set_color_from_title = scope:hd_yiguan_duchy_county
+				set_no_automatic_claims = yes
+				set_destroy_on_gain_same_tier = yes
+				set_delete_on_destroy = yes
+				set_can_be_named_after_dynasty = no
+				change_title_holder = {
+					holder = scope:hd_yiguan_duchy_receiver
+					change = scope:hd_yiguan_duchy_change
+				}
+			}
+			resolve_title_and_vassal_change = scope:hd_yiguan_duchy_change
+			scope:new_title = { generate_coa = yes }
+			debug_log = "hd_yiguan_war: ensure_duchy created dynamic duchy"
+		}
+	}
+}
+
+############################################################
+# 三、胜负结算（宣战理由文件调用；作用域同宣战理由 on_victory 等，scope:attacker / scope:defender / list target_titles 可用）
+############################################################
+
+############################
+# 北伐（§6 #10）：夺取守方体系在该州法理下全部县；州内华夏文化县"王师北定"；威望 +中；催化剂"北伐胜利"
+############################
+hd_yiguan_beifa_victory_effect = {
+	create_title_and_vassal_change = {
+		type = conquest
+		save_scope_as = change
+		add_claim_on_loss = yes
+	}
+	every_in_list = {
+		list = target_titles
+		hd_yiguan_war_seize_dejure_effect = yes
+	}
+	resolve_title_and_vassal_change = scope:change
+	every_in_list = {
+		list = target_titles
+		hd_yiguan_wangshi_beiding_effect = yes
+	}
+	scope:attacker = {
+		add_prestige = medium_prestige_gain
+		if = {
+			limit = { is_alive = yes }
+			hd_yiguan_refresh_realm_effect = yes
+		}
+	}
+	scope:defender = {
+		if = {
+			limit = { is_alive = yes }
+			hd_yiguan_recalc_group_effect = yes
+		}
+	}
+	hd_yiguan_fire_catalyst_effect = {
+		CATALYST = catalyst_hd_yiguan_beifa_won
+		CHAR = scope:attacker
+	}
+	# 冲突期拖延（负值，点数不足不扣）
+	hd_yiguan_fire_delay_catalyst_effect = {
+		CATALYST = catalyst_hd_yiguan_beifa_won_delay
+		TOWARD = hd_yiguan_phase_tingzhi
+		VALUE = 100
+		CHAR = scope:attacker
+	}
+	# 其余参与局势的玩家收到捷报
+	ordered_in_list = {
+		list = target_titles
+		order_by = tier
+		save_scope_as = hd_yiguan_toast_title
+	}
+	scope:attacker = { save_scope_as = hd_yiguan_toast_attacker }
+	every_player = {
+		limit = {
+			NOT = { this = scope:attacker }
+			top_participant_group:hd_yiguan_nandu ?= { always = yes }
+		}
+		send_interface_toast = {
+			type = event_toast_effect_neutral
+			title = hd_yiguan_beifa_won_toast
+			left_icon = scope:hd_yiguan_toast_attacker
+			custom_tooltip = hd_yiguan_beifa_won_toast_desc
+		}
+	}
+	debug_log = "hd_yiguan_war: beifa won"
+}
+
+# 北伐白和或战败：催化剂"北伐失败"
+hd_yiguan_beifa_failed_effect = {
+	hd_yiguan_fire_catalyst_effect = {
+		CATALYST = catalyst_hd_yiguan_beifa_failed
+		CHAR = scope:attacker
+	}
+	debug_log = "hd_yiguan_war: beifa failed"
+}
+
+############################
+# 讨胡收复（§6 #11）：夺取守方体系在该郡的全部县；威望 +中、王朝威望 +中；郡内华夏文化县"王师北定"；
+# 免费补一次招集流民（不计冷却）；催化剂"讨胡收复胜利"
+############################
+hd_yiguan_taohu_victory_effect = {
+	create_title_and_vassal_change = {
+		type = conquest
+		save_scope_as = change
+		add_claim_on_loss = yes
+	}
+	every_in_list = {
+		list = target_titles
+		hd_yiguan_war_seize_dejure_effect = yes
+	}
+	resolve_title_and_vassal_change = scope:change
+	every_in_list = {
+		list = target_titles
+		hd_yiguan_wangshi_beiding_effect = yes
+	}
+	scope:attacker = {
+		add_prestige = medium_prestige_gain
+		dynasty ?= { add_dynasty_prestige = medium_dynasty_prestige_value }
+		if = {
+			limit = {
 				is_alive = yes
 				is_landed = yes
-				is_independent_ruler = yes
 			}
+			hd_yiguan_refresh_realm_effect = yes
+			custom_tooltip = hd_yiguan_taohu_liumin_tt
+			hidden_effect = { hd_yiguan_liumin_effect = yes }
+		}
+	}
+	scope:defender = {
+		if = {
+			limit = { is_alive = yes }
+			hd_yiguan_recalc_group_effect = yes
+		}
+	}
+	hd_yiguan_fire_catalyst_effect = {
+		CATALYST = catalyst_hd_yiguan_taohu_won
+		CHAR = scope:attacker
+	}
+	# 冲突期拖延（负值，点数不足不扣）
+	hd_yiguan_fire_delay_catalyst_effect = {
+		CATALYST = catalyst_hd_yiguan_taohu_won_delay
+		TOWARD = hd_yiguan_phase_tingzhi
+		VALUE = 50
+		CHAR = scope:attacker
+	}
+	debug_log = "hd_yiguan_war: taohu won"
+}
+
+############################
+# 起兵北还（§1 第 6 轮、§6 #20–21）：攻方为无地冒险者。
+# 夺取守方体系在该州的全部县（及守方本人在州内持有的郡）→ 独立 → 改天朝制 → 销毁营地 → 定都 → 补立郡号 → 重算组 → 3 天后 hd_yiguan.4021（士族侧）
+# 守方持有的州号不交出：交出会使流亡者一跃为州级，士族侧 4021 要求资助者爵位高于流亡者，州级资助者将因此失格（§6 #21）
+# 不走原版 ep3_become_landed_transfer_effect：它会替冒险者创建州头衔、照搬胡人政体（spike_cb_kingdom.md）
+############################
+hd_yiguan_beihuan_victory_effect = {
+	clear_saved_scope = hd_yiguan_bh_target
+	clear_saved_scope = hd_yiguan_bh_capital
+	ordered_in_list = {
+		list = target_titles
+		order_by = tier
+		save_scope_as = hd_yiguan_bh_target
+	}
+	create_title_and_vassal_change = {
+		type = conquest
+		save_scope_as = change
+		add_claim_on_loss = yes
+	}
+	scope:hd_yiguan_bh_target ?= {
+		every_de_jure_county = {
+			limit = {
+				is_landless_type_title = no
+				holder ?= {
+					OR = {
+						this = scope:defender
+						target_is_liege_or_above = scope:defender
+					}
+				}
+			}
+			add_to_list = hd_yiguan_bh_taken
+			change_title_holder = {
+				holder = scope:attacker
+				change = scope:change
+				take_baronies = yes
+			}
+		}
+		every_in_de_jure_hierarchy = {
+			continue = { tier > tier_duchy }
+			limit = {
+				tier = tier_duchy
+				holder ?= scope:defender
+			}
+			change_title_holder = {
+				holder = scope:attacker
+				change = scope:change
+			}
+		}
+	}
+	resolve_title_and_vassal_change = scope:change
+	scope:attacker = {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = yes
+			}
+			# 独立（同原版 ep3_become_landed_cleanup_effect）
+			if = {
+				limit = { NOT = { top_liege = this } }
+				create_title_and_vassal_change = {
+					type = independency
+					save_scope_as = hd_yiguan_bh_indep
+					add_claim_on_loss = no
+				}
+				becomes_independent = { change = scope:hd_yiguan_bh_indep }
+				resolve_title_and_vassal_change = scope:hd_yiguan_bh_indep
+			}
+			hd_force_celestial_effect = yes
+			hd_yiguan_war_leave_camp_effect = yes
+			add_character_flag = {	# 3 年内不主动请求归附他国（同 hd_dc_kit_independence_cb.txt:32）
+				flag = hd_dc_recently_independent
+				years = 3
+			}
+			# 定都：优先州治，否则取所得发展度最高之县（原版 07_ep3_wars.txt 冒险者入侵的选法）
+			if = {
+				limit = {
+					scope:hd_yiguan_bh_target.title_capital_county ?= { is_in_list = hd_yiguan_bh_taken }
+				}
+				scope:hd_yiguan_bh_target.title_capital_county = { save_scope_as = hd_yiguan_bh_capital }
+			}
+			else = {
+				ordered_in_list = {
+					list = hd_yiguan_bh_taken
+					limit = { holder ?= scope:attacker }
+					order_by = development_level
+					save_scope_as = hd_yiguan_bh_capital
+				}
+			}
+			if = {
+				limit = {
+					exists = scope:hd_yiguan_bh_capital
+					scope:hd_yiguan_bh_capital = { holder ?= scope:attacker }
+				}
+				set_realm_capital = scope:hd_yiguan_bh_capital
+			}
+			# 补立郡号须在定都之后：刚由无地转有地，定都前 capital_county 可能不存在或不是州治
+			hd_yiguan_war_ensure_duchy_effect = yes
+			add_prestige = medium_prestige_gain
+			hd_yiguan_refresh_realm_effect = yes
+			hd_yiguan_recalc_group_effect = yes
+			trigger_event = {
+				id = hd_yiguan.4021
+				days = 3
+			}
+		}
+	}
+	scope:defender = {
+		if = {
+			limit = { is_alive = yes }
+			hd_yiguan_recalc_group_effect = yes
+		}
+	}
+	debug_log = "hd_yiguan_war: beihuan won"
+}
+
+############################
+# 举兵起义（§6 #12）胜利：脱离胡人领主完全独立（各级封臣都可，同 hd_dc_demand_independence_war）；补立郡号；重算组
+############################
+hd_yiguan_qiyi_victory_effect = {
+	create_title_and_vassal_change = {
+		type = independency
+		save_scope_as = change
+		add_claim_on_loss = no
+	}
+	scope:attacker = {
+		becomes_independent = { change = scope:change }
+	}
+	resolve_title_and_vassal_change = scope:change
+	scope:attacker = {
+		if = {
+			limit = { is_alive = yes }
+			add_character_flag = {
+				flag = hd_dc_recently_independent
+				years = 3
+			}
+			add_truce_both_ways = {
+				character = scope:defender
+				days = 1825
+				war = root.war
+				result = victory
+			}
+			add_prestige = medium_prestige_gain
+			hd_yiguan_war_ensure_duchy_effect = yes
+			hd_yiguan_refresh_realm_effect = yes
+			hd_yiguan_recalc_group_effect = yes
+			# 不发归南之议（§6 #12：胜则独立、进北方汉人组；要归附可自用"归附南朝"决议）
+		}
+	}
+	# 出兵相助者（应邀加入攻方的汉人政权，hd_yiguan.4101）：威望 +小（起义者的感激好感在应邀时已给）
+	root.war ?= {
+		every_war_attacker = {
+			limit = {
+				NOT = { this = scope:attacker }
+				is_alive = yes
+			}
+			add_prestige = minor_prestige_gain
+		}
+	}
+	debug_log = "hd_yiguan_war: qiyi won"
+}
+
+# 起义、北还、沦陷区义军失败或白和：催化剂"起义或北还失败"
+hd_yiguan_rising_failed_effect = {
+	hd_yiguan_fire_catalyst_effect = {
+		CATALYST = catalyst_hd_yiguan_rising_failed
+		CHAR = scope:attacker
+	}
+}
+
+############################################################
+# 四、举兵起义发动、归附南朝、招集流民
+############################################################
+
+############################
+# 举兵起义发动。Scope：起义者（有地沦陷区汉人，直属领主为胡人且即最高宗主；决议已校验）
+# 对胡人宗主打独立战争；
+# 事件兵 = 500 + 每个直辖县 100（上限 3000），不可继承；邀请接壤的最强汉人政权助战（hd_yiguan.4101）
+# 结果：scope:hd_yiguan_qy_war（成功时存在）。脚本 start_war 不查宣战理由条件，条件全在决议与此处
+############################
+hd_yiguan_qiyi_start_effect = {
+	save_scope_as = hd_yiguan_qy_rebel
+	clear_saved_scope = hd_yiguan_qy_war
+	clear_saved_scope = hd_yiguan_qy_helper
+	clear_saved_scope = hd_yiguan_qy_province
+	clear_saved_scope = hd_yiguan_qy_def
+	top_liege = {
+		if = {
+			limit = { NOT = { this = root } }
+			save_scope_as = hd_yiguan_qy_def
+		}
+	}
+	# 作者 2026-10-26 定：任何层级的汉人封臣都可对胡人最高宗主举兵。独立战争只能打直属领主，
+	# 所以先改挂为最高宗主的直属封臣（宣誓效忠式头衔变更，先例：原版 offer_fealty_interaction_effect）
+	if = {
+		limit = {
+			exists = scope:hd_yiguan_qy_def
+			NOT = { liege ?= scope:hd_yiguan_qy_def }
+			NOT = { is_at_war_with = scope:hd_yiguan_qy_def }
 		}
 		create_title_and_vassal_change = {
 			type = swear_fealty
-			save_scope_as = hd_yiguan_gn_change
-			add_claim_on_loss = no
+			save_scope_as = hd_yiguan_qy_reattach
 		}
-		scope:attacker = {
-			change_liege = {
-				liege = scope:hd_yiguan_gn_lord
-				change = scope:hd_yiguan_gn_change
+		change_liege = {
+			liege = scope:hd_yiguan_qy_def
+			change = scope:hd_yiguan_qy_reattach
+		}
+		resolve_title_and_vassal_change = scope:hd_yiguan_qy_reattach
+	}
+	if = {
+		limit = {
+			exists = scope:hd_yiguan_qy_def
+			liege ?= scope:hd_yiguan_qy_def
+			NOT = { is_at_war_with = scope:hd_yiguan_qy_def }
+			scope:hd_yiguan_qy_def = {
+				is_independent_ruler = yes
+				hd_yiguan_no_active_uprising_trigger = yes
 			}
 		}
-		resolve_title_and_vassal_change = scope:hd_yiguan_gn_change
+		start_war = {
+			cb = hd_yiguan_qiyi_cb
+			target = scope:hd_yiguan_qy_def
+		}
+		random_character_war = {
+			limit = {
+				primary_attacker = scope:hd_yiguan_qy_rebel
+				using_cb = hd_yiguan_qiyi_cb
+			}
+			save_scope_as = hd_yiguan_qy_war
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_yiguan_qy_war }
+		debug_log = "hd_yiguan_war: qiyi declared"
+		capital_province ?= { save_scope_as = hd_yiguan_qy_province }
+		if = {
+			limit = { exists = scope:hd_yiguan_qy_province }
+			spawn_army = {
+				name = hd_yiguan_qiyi_army
+				levies = hd_yiguan_qiyi_army_value
+				location = scope:hd_yiguan_qy_province
+				origin = scope:hd_yiguan_qy_province
+				uses_supply = yes
+				inheritable = no
+				war = scope:hd_yiguan_qy_war
+			}
+		}
+		# 邀援：先找与起义者领地接壤的汉人政权，没有则找与胡人宗主国境接壤者，取兵力最强者
+		every_realm_county = {
+			every_neighboring_county = {
+				limit = {
+					holder ?= {
+						top_liege = {
+							hd_yiguan_is_han_regime_trigger = yes
+							NOT = { is_in_list = hd_yiguan_qy_helpers }
+						}
+					}
+				}
+				holder.top_liege = { add_to_list = hd_yiguan_qy_helpers }
+			}
+		}
+		hd_yiguan_war_pick_qiyi_helper_effect = yes
+		if = {
+			limit = { NOT = { exists = scope:hd_yiguan_qy_helper } }
+			scope:hd_yiguan_qy_def.top_liege = {
+				every_neighboring_top_liege_realm_owner = {
+					limit = {
+						hd_yiguan_is_han_regime_trigger = yes
+						NOT = { is_in_list = hd_yiguan_qy_helpers }
+					}
+					add_to_list = hd_yiguan_qy_helpers
+				}
+			}
+			hd_yiguan_war_pick_qiyi_helper_effect = yes
+		}
+		scope:hd_yiguan_qy_helper ?= {
+			trigger_event = hd_yiguan.4101
+		}
 	}
 	else = {
-		create_title_and_vassal_change = {
-			type = independency
-			save_scope_as = hd_yiguan_gn_change
-			add_claim_on_loss = no
-		}
-		scope:attacker = {
-			becomes_independent = { change = scope:hd_yiguan_gn_change }
-		}
-		resolve_title_and_vassal_change = scope:hd_yiguan_gn_change
+		debug_log = "hd_yiguan_war: qiyi start_war FAILED"
 	}
-	scope:attacker = {
-		add_truce_both_ways = {
-			character = scope:defender
-			days = 1825
-			war = scope:hd_yiguan_gn_war
-			result = victory
+}
+
+# 从候选名单取兵力最强、能参战者。结果：scope:hd_yiguan_qy_helper
+hd_yiguan_war_pick_qiyi_helper_effect = {
+	ordered_in_list = {
+		list = hd_yiguan_qy_helpers
+		limit = {
+			is_alive = yes
+			is_landed = yes
+			NOT = { this = scope:hd_yiguan_qy_def }
+			NOT = { this = scope:hd_yiguan_qy_rebel }
+			NOT = { is_allied_to = scope:hd_yiguan_qy_def }
+			NOT = { is_at_war_with = scope:hd_yiguan_qy_rebel }
+			NOT = {
+				scope:hd_yiguan_qy_war = { is_participant = prev }
+			}
+		}
+		order_by = max_military_strength
+		save_scope_as = hd_yiguan_qy_helper
+	}
+}
+
+############################
+# 归附南朝（§6 #14）
+############################
+
+# 选受降者：与本人国境接壤、实领爵级高于本人、未与本人交战的南方政权，先比爵级再比兵力。Scope：北方汉人。结果：scope:hd_yiguan_gf_lord
+# 爵级用 hd_yiguan_war_landed_tier_value（只算有地头衔）；另要求 highest_held_title_tier 也高于本人，
+# 否则封臣化会失败（被收编者最高头衔须低于新主君，见 reference-ck3-illegal-code-pitfalls）
+# 决议 hd_yiguan_guifu_nanchao_decision 的 is_valid 里有同样条件的触发器写法，两处须同步
+hd_yiguan_guifu_pick_lord_effect = {
+	save_scope_as = hd_yiguan_gf_seeker
+	clear_saved_scope = hd_yiguan_gf_lord
+	every_neighboring_top_liege_realm_owner = {
+		limit = {
+			hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_grp_south }
+			hd_yiguan_war_landed_tier_value > scope:hd_yiguan_gf_seeker.hd_yiguan_war_landed_tier_value
+			highest_held_title_tier > scope:hd_yiguan_gf_seeker.highest_held_title_tier
+			NOT = { is_at_war_with = scope:hd_yiguan_gf_seeker }
+		}
+		add_to_list = hd_yiguan_gf_candidates
+	}
+	ordered_in_list = {
+		list = hd_yiguan_gf_candidates
+		limit = { is_alive = yes }
+		order_by = hd_yiguan_guifu_score_value
+		save_scope_as = hd_yiguan_gf_lord
+	}
+}
+
+# 宣誓效忠。Scope：归附者；$LORD$：受降的南方政权。双方好感 +30（hd_yiguan_guifu_opinion），本人威望 +100，对方威望 +50，对方收通知
+# 被收编者最高头衔须低于新主君（调用方保证）；写法同原版 offer_fealty_interaction_effect
+hd_yiguan_guifu_effect = {
+	save_scope_as = hd_yiguan_gf_vassal
+	$LORD$ = { save_scope_as = hd_yiguan_gf_lord }
+	create_title_and_vassal_change = {
+		type = swear_fealty
+		save_scope_as = hd_yiguan_gf_change
+		add_claim_on_loss = no
+	}
+	change_liege = {
+		liege = scope:hd_yiguan_gf_lord
+		change = scope:hd_yiguan_gf_change
+	}
+	resolve_title_and_vassal_change = scope:hd_yiguan_gf_change
+	add_prestige = 100
+	add_opinion = {
+		target = scope:hd_yiguan_gf_lord
+		modifier = hd_yiguan_guifu_opinion
+	}
+	scope:hd_yiguan_gf_lord = {
+		add_prestige = 50
+		add_opinion = {
+			target = scope:hd_yiguan_gf_vassal
+			modifier = hd_yiguan_guifu_opinion
+		}
+		if = {
+			limit = { is_ai = no }
+			trigger_event = hd_yiguan.4110
+		}
+	}
+	hd_yiguan_recalc_group_effect = yes
+	debug_log = "hd_yiguan_war: guifu"
+}
+
+############################
+# 招集流民（§6 #13）。Scope：招集者（北方汉人）。
+# 威望等级（最低按 1 级）个直辖县加"流民归附"10 年（先选尚无此修正、发展度低的县），另得可继承流民军 600×威望等级 人。
+# 本效果不计冷却（决议另设 5 年冷却；讨胡收复胜利免费补一次）
+############################
+hd_yiguan_liumin_effect = {
+	ordered_held_title = {
+		limit = {
+			tier = tier_county
+			is_landless_type_title = no	# 世族等无地县级头衔不算
+		}
+		order_by = {
+			value = 100
+			subtract = development_level
+			if = {
+				limit = { has_county_modifier = hd_yiguan_liumin_county_modifier }
+				subtract = 1000
+			}
+		}
+		max = hd_yiguan_liumin_level_value
+		check_range_bounds = no
+		if = {
+			limit = { has_county_modifier = hd_yiguan_liumin_county_modifier }
+			remove_county_modifier = hd_yiguan_liumin_county_modifier
+		}
+		add_county_modifier = {
+			modifier = hd_yiguan_liumin_county_modifier
+			years = 10
+		}
+	}
+	clear_saved_scope = hd_yiguan_lm_province
+	capital_province ?= { save_scope_as = hd_yiguan_lm_province }
+	if = {
+		limit = { exists = scope:hd_yiguan_lm_province }
+		spawn_army = {
+			name = hd_yiguan_liumin_army
+			levies = hd_yiguan_liumin_army_value
+			location = scope:hd_yiguan_lm_province
+			origin = scope:hd_yiguan_lm_province
+			uses_supply = yes
+			inheritable = yes
+		}
+	}
+}
+
+############################################################
+# 五、AI 年度宣战脉冲（§6 #10–11）。Scope：任意（核心逻辑模块的年度 on_action 调用）
+# 北伐：冲突期，南方政权 AI 各 20%，兵力不低于守方 80%，全局同时至多一场北伐，花威望 150
+# 讨胡：冲突期，北方汉人 AI 各 25%，兵力不低于守方 80%，花威望 75
+# 脚本宣战绕过宣战理由的 valid_to_start（spike_cb_kingdom.md），条件全部在此校验；
+# 宣战理由的威望花费只对玩家计（AI 由此处扣），避免重复扣费
+############################################################
+hd_yiguan_ai_war_pulse_effect = {
+	if = {
+		limit = {
+			hd_yiguan_active_trigger = yes
+			hd_yiguan_phase_chongtu_trigger = yes
+		}
+		clear_saved_scope = hd_yiguan_aw_beifa_done
+		situation:hd_yiguan_nandu = {
+			# 北伐
+			if = {
+				limit = {
+					NOT = {
+						situation_participant_group:hd_yiguan_grp_south ?= {
+							any_situation_group_participant = {
+								any_character_war = { using_cb = hd_yiguan_beifa_cb }
+							}
+						}
+					}
+				}
+				situation_participant_group:hd_yiguan_grp_south ?= {
+					every_situation_group_participant = {
+						limit = {
+							is_ai = yes
+							is_alive = yes
+							is_adult = yes
+							is_imprisoned = no
+							is_at_war = no
+							prestige >= 150
+							top_participant_group:hd_yiguan_nandu ?= { has_participant_group_parameter = hd_yiguan_can_beifa }
+						}
+						if = {
+							limit = { NOT = { exists = scope:hd_yiguan_aw_beifa_done } }
+							random = {
+								chance = 20
+								hd_yiguan_war_ai_try_beifa_effect = yes
+							}
+						}
+					}
+				}
+			}
+			# 讨胡收复
+			situation_participant_group:hd_yiguan_grp_north_han ?= {
+				every_situation_group_participant = {
+					limit = {
+						is_ai = yes
+						is_alive = yes
+						is_adult = yes
+						is_imprisoned = no
+						is_at_war = no
+						prestige >= 75
+						top_participant_group:hd_yiguan_nandu ?= { has_participant_group_parameter = hd_yiguan_can_taohu }
+					}
+					random = {
+						chance = 25
+						hd_yiguan_war_ai_try_taohu_effect = yes
+					}
+				}
+			}
+		}
+	}
+}
+
+# AI 北伐一次。Scope：南方政权 AI。
+# 在北方八州里随机取一个与本国接壤、属胡人或汉化政权（兵力不超过本国 1.25 倍、无停战、未结盟）的县，以其所在州为目标、其独立宗主为守方
+hd_yiguan_war_ai_try_beifa_effect = {
+	save_scope_as = hd_yiguan_aw_att
+	clear_saved_scope = hd_yiguan_aw_county
+	clear_saved_scope = hd_yiguan_aw_def
+	clear_saved_scope = hd_yiguan_aw_title
+	clear_saved_scope = hd_yiguan_aw_war
+	random_county_in_region = {
+		region = hd_yiguan_north_region
+		limit = {
+			holder ?= {
+				top_liege = {
+					NOT = { this = scope:hd_yiguan_aw_att }
+					OR = {
+						hd_yiguan_is_hu_regime_trigger = yes
+						hd_yiguan_is_sinicized_regime_trigger = yes
+					}
+					NOT = { government_has_flag = government_is_herder }
+					NOT = { is_at_war_with = scope:hd_yiguan_aw_att }
+					NOT = { is_allied_to = scope:hd_yiguan_aw_att }
+					NOT = {
+						scope:hd_yiguan_aw_att = { has_truce = prev }
+					}
+					# 朝贡关系两向都不打（同原版 herders_and_tributary_constraints，00_war_and_peace_triggers.txt:1144）
+					NOT = { is_tributary_of_suzerain_or_above = scope:hd_yiguan_aw_att }
+					NOT = {
+						scope:hd_yiguan_aw_att = { is_tributary_of_suzerain_or_above = prev }
+					}
+					max_military_strength <= {
+						value = scope:hd_yiguan_aw_att.max_military_strength
+						multiply = 1.25
+					}
+				}
+			}
+			any_neighboring_county = {
+				holder ?= { target_is_same_character_or_above = scope:hd_yiguan_aw_att }
+			}
+		}
+		save_scope_as = hd_yiguan_aw_county
+	}
+	if = {
+		limit = { exists = scope:hd_yiguan_aw_county }
+		scope:hd_yiguan_aw_county = {
+			holder.top_liege = { save_scope_as = hd_yiguan_aw_def }
+			kingdom ?= { save_scope_as = hd_yiguan_aw_title }
+		}
+	}
+	if = {
+		limit = {
+			exists = scope:hd_yiguan_aw_def
+			exists = scope:hd_yiguan_aw_title
+		}
+		start_war = {
+			cb = hd_yiguan_beifa_cb
+			target = scope:hd_yiguan_aw_def
+			target_title = scope:hd_yiguan_aw_title
+		}
+		random_character_war = {
+			limit = {
+				primary_attacker = scope:hd_yiguan_aw_att
+				using_cb = hd_yiguan_beifa_cb
+			}
+			save_scope_as = hd_yiguan_aw_war
+		}
+		if = {
+			limit = { exists = scope:hd_yiguan_aw_war }
+			add_prestige = -150
+			save_scope_as = hd_yiguan_aw_beifa_done
+			debug_log = "hd_yiguan_war: AI beifa declared"
+			debug_log_scopes = yes
+		}
+		else = {
+			debug_log = "hd_yiguan_war: AI beifa start_war FAILED"
+		}
+	}
+}
+
+# AI 讨胡收复一次。Scope：北方汉人 AI。
+# 随机取一个与本国接壤、属胡人政权（不含汉化；兵力不超过本国 1.25 倍、无停战、未结盟）的北方县，以其所在郡为目标
+hd_yiguan_war_ai_try_taohu_effect = {
+	save_scope_as = hd_yiguan_aw_att
+	clear_saved_scope = hd_yiguan_aw_county
+	clear_saved_scope = hd_yiguan_aw_def
+	clear_saved_scope = hd_yiguan_aw_title
+	clear_saved_scope = hd_yiguan_aw_war
+	random_county_in_region = {
+		region = hd_yiguan_north_region
+		limit = {
+			holder ?= {
+				top_liege = {
+					NOT = { this = scope:hd_yiguan_aw_att }
+					hd_yiguan_is_hu_regime_trigger = yes
+					NOT = { government_has_flag = government_is_herder }
+					NOT = { is_at_war_with = scope:hd_yiguan_aw_att }
+					NOT = { is_allied_to = scope:hd_yiguan_aw_att }
+					NOT = {
+						scope:hd_yiguan_aw_att = { has_truce = prev }
+					}
+					NOT = { is_tributary_of_suzerain_or_above = scope:hd_yiguan_aw_att }
+					NOT = {
+						scope:hd_yiguan_aw_att = { is_tributary_of_suzerain_or_above = prev }
+					}
+					max_military_strength <= {
+						value = scope:hd_yiguan_aw_att.max_military_strength
+						multiply = 1.25
+					}
+				}
+			}
+			any_neighboring_county = {
+				holder ?= { target_is_same_character_or_above = scope:hd_yiguan_aw_att }
+			}
+		}
+		save_scope_as = hd_yiguan_aw_county
+	}
+	if = {
+		limit = { exists = scope:hd_yiguan_aw_county }
+		scope:hd_yiguan_aw_county = {
+			holder.top_liege = { save_scope_as = hd_yiguan_aw_def }
+			duchy ?= { save_scope_as = hd_yiguan_aw_title }
+		}
+	}
+	if = {
+		limit = {
+			exists = scope:hd_yiguan_aw_def
+			exists = scope:hd_yiguan_aw_title
+		}
+		start_war = {
+			cb = hd_yiguan_taohu_cb
+			target = scope:hd_yiguan_aw_def
+			target_title = scope:hd_yiguan_aw_title
+		}
+		random_character_war = {
+			limit = {
+				primary_attacker = scope:hd_yiguan_aw_att
+				using_cb = hd_yiguan_taohu_cb
+			}
+			save_scope_as = hd_yiguan_aw_war
+		}
+		if = {
+			limit = { exists = scope:hd_yiguan_aw_war }
+			add_prestige = -75
+			debug_log = "hd_yiguan_war: AI taohu declared"
+			debug_log_scopes = yes
+		}
+		else = {
+			debug_log = "hd_yiguan_war: AI taohu start_war FAILED"
 		}
 	}
 }

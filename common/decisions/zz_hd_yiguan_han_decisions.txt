@@ -1,0 +1,349 @@
+﻿# 衣冠南渡·汉人侧决议（docs/衣冠南渡_重做设计.md §1 第 3/5/7 轮、§5.6、§6 #12–14；战争侧模块维护）
+# hd_yiguan_jubing_qiyi_decision     举兵起义（沦陷区汉人，任何阶段）
+# hd_yiguan_zhaoji_liumin_decision   招集流民（北方汉人，冷却 5 年）
+# hd_yiguan_guifu_nanchao_decision   归附南朝（北方汉人）
+# hd_yiguan_return_capital_decision  还都旧京（键不变，自旧 zz_hd_yiguan_decisions.txt 移来，行为照旧）
+# 局势窗口 gui/window_hd_yiguan.gui 写死了以上四个键；四个决议都不设 is_invisible，决议面板与局势窗口同时显示
+
+############################################################
+# 举兵起义（§1 第 7 轮、§6 #12）
+# 有地沦陷区汉人，直属领主须是胡人（非汉化）且就是最高宗主；对其打独立战争（hd_yiguan_qiyi_cb），胜则完全独立、进北方汉人组
+# 冲突期花威望 100，其他阶段威望 200 + 金币 100；领主或最高宗主推行胡化期间减半；冷却 10 年
+# 同一胡人宗主同时至多一场义军 / 举兵起义 / 起兵北还（hd_yiguan_no_active_uprising_trigger）
+############################################################
+hd_yiguan_jubing_qiyi_decision = {
+	decision_group_type = major
+	picture = {
+		reference = "gfx/interface/illustrations/decisions/decision_war.dds"
+	}
+	sort_order = 58
+	cooldown = { years = 10 }
+
+	is_shown = {
+		hd_yiguan_active_trigger = yes
+		is_landed = yes
+		hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_grp_occupied }
+	}
+
+	is_valid_showing_failures_only = {
+		is_available_adult = yes
+	}
+
+	is_valid = {
+		# 作者 2026-10-26 定：只看最高宗主是不是胡人（汉化王朝不算），任何层级的汉人封臣都能举兵。
+		# 独立战争只能打直属领主，所以举兵时先把起义者改挂为最高宗主的直属封臣，再对最高宗主宣战（见 hd_yiguan_qiyi_start_effect）
+		custom_tooltip = {
+			text = hd_yiguan_qiyi_liege_hu_tt
+			top_liege = {
+				NOT = { this = root }
+				hd_yiguan_is_hu_trigger = yes
+				NOT = { hd_yiguan_is_sinicized_trigger = yes }
+			}
+		}
+		custom_tooltip = {
+			text = hd_yiguan_qiyi_not_at_war_tt
+			top_liege = {
+				NOT = { is_at_war_with = root }
+			}
+			liege ?= {
+				NOT = { is_at_war_with = root }
+			}
+		}
+		custom_tooltip = {
+			text = hd_yiguan_qiyi_one_war_tt
+			liege ?= { hd_yiguan_no_active_uprising_trigger = yes }
+			top_liege = { hd_yiguan_no_active_uprising_trigger = yes }
+		}
+	}
+
+	cost = {
+		prestige = hd_yiguan_qiyi_prestige_cost_value
+		gold = hd_yiguan_qiyi_gold_cost_value
+	}
+
+	effect = {
+		top_liege = { save_scope_as = hd_yiguan_qy_def }
+		if = {
+			limit = { NOT = { liege ?= scope:hd_yiguan_qy_def } }
+			custom_tooltip = hd_yiguan_qiyi_direct_vassal_tt
+		}
+		custom_tooltip = hd_yiguan_jubing_qiyi_decision_effect_tt
+		custom_tooltip = hd_yiguan_jubing_qiyi_decision_army_tt
+		custom_tooltip = hd_yiguan_jubing_qiyi_decision_help_tt
+		hidden_effect = {
+			hd_yiguan_qiyi_start_effect = yes
+		}
+	}
+
+	ai_check_interval = 60
+
+	# 胡人最高宗主兵力超过（自身兵力 + 义军事件兵）× 4 时不起义
+	ai_potential = {
+		top_liege = {
+			NOT = { this = root }
+			max_military_strength <= root.hd_yiguan_qiyi_ai_strength_cap_value
+		}
+	}
+
+	ai_will_do = {
+		base = 0
+		modifier = {	# 冲突期，人心思汉
+			add = 15
+			hd_yiguan_phase_chongtu_trigger = yes
+		}
+		modifier = {	# 宗主强推胡化
+			add = 20
+			OR = {
+				liege ?= { has_variable = hd_yiguan_huhua }
+				top_liege ?= { has_variable = hd_yiguan_huhua }
+			}
+		}
+		modifier = {	# 素与胡人宗主不睦
+			add = 15
+			opinion = {
+				target = top_liege
+				value <= -25
+			}
+		}
+		modifier = {
+			add = 10
+			has_trait = ambitious
+		}
+		modifier = {
+			add = 10
+			has_trait = brave
+		}
+		modifier = {
+			add = 5
+			has_trait = wrathful
+		}
+		modifier = {
+			add = -15
+			has_trait = craven
+		}
+		modifier = {
+			add = -10
+			has_trait = content
+		}
+		modifier = {	# 与胡人宗主相得，不忍背之
+			factor = 0
+			opinion = {
+				target = top_liege
+				value >= 40
+			}
+		}
+	}
+}
+
+############################################################
+# 招集流民（§1 第 3/5 轮、§6 #13）
+# 北方汉人：威望等级（最低按 1 级）个直辖县加"流民归附"10 年，另得可继承流民军 600×威望等级 人；冷却 5 年
+# 讨胡收复胜利时另免费补一次（不计冷却，见 hd_yiguan_taohu_victory_effect）
+############################################################
+hd_yiguan_zhaoji_liumin_decision = {
+	decision_group_type = major
+	picture = {
+		reference = "gfx/interface/illustrations/decisions/decision_levy_outcasts.dds"
+	}
+	sort_order = 57
+	cooldown = { years = 5 }
+
+	is_shown = {
+		hd_yiguan_active_trigger = yes
+		hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_grp_north_han }
+	}
+
+	is_valid_showing_failures_only = {
+		is_available_adult = yes
+		is_landed = yes
+	}
+
+	effect = {
+		custom_tooltip = hd_yiguan_zhaoji_liumin_decision_effect_tt
+		custom_tooltip = hd_yiguan_zhaoji_liumin_decision_army_tt
+		hidden_effect = {
+			hd_yiguan_liumin_effect = yes
+		}
+	}
+
+	ai_check_interval = 24
+	# 流民军可继承、不随战争解散：AI 平时少用，免得几十年间白白攒下大批常驻兵
+	ai_will_do = {
+		base = 5
+		modifier = {	# 战事方殷，急需兵员
+			add = 65
+			is_at_war = yes
+		}
+		modifier = {
+			add = 10
+			hd_yiguan_phase_chongtu_trigger = yes
+		}
+	}
+}
+
+############################################################
+# 归附南朝（§1 第 3 轮、§6 #14）
+# 北方汉人向一个接壤、实领爵级高于己的南方政权宣誓效忠：双方好感 +30，本人威望 +100，对方威望 +50；对方收通知，不需同意
+# 多个候选时取爵级最高、兵力最强者（hd_yiguan_guifu_pick_lord_effect）；下面 is_valid 的候选条件须与该效果同步
+############################################################
+hd_yiguan_guifu_nanchao_decision = {
+	decision_group_type = major
+	picture = {
+		reference = "gfx/interface/illustrations/decisions/tgp_kowtow.dds"
+	}
+	sort_order = 56
+
+	is_shown = {
+		hd_yiguan_active_trigger = yes
+		hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_grp_north_han }
+	}
+
+	is_valid_showing_failures_only = {
+		is_available_adult = yes
+	}
+
+	is_valid = {
+		is_independent_ruler = yes
+		custom_tooltip = {
+			text = hd_yiguan_guifu_not_at_war_tt
+			is_at_war = no
+		}
+		custom_tooltip = {
+			text = hd_yiguan_guifu_no_lord_tt
+			any_neighboring_top_liege_realm_owner = {
+				hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_grp_south }
+				hd_yiguan_war_landed_tier_value > root.hd_yiguan_war_landed_tier_value
+				highest_held_title_tier > root.highest_held_title_tier
+				NOT = { is_at_war_with = root }
+			}
+		}
+	}
+
+	effect = {
+		hd_yiguan_guifu_pick_lord_effect = yes
+		if = {
+			limit = { exists = scope:hd_yiguan_gf_lord }
+			custom_tooltip = hd_yiguan_guifu_nanchao_decision_effect_tt
+			hd_yiguan_guifu_effect = { LORD = scope:hd_yiguan_gf_lord }
+		}
+	}
+
+	ai_check_interval = 60
+
+	ai_potential = {
+		is_at_war = no
+	}
+
+	ai_will_do = {
+		base = -10
+		modifier = {	# 强胡压境
+			add = 35
+			any_neighboring_top_liege_realm_owner = {
+				hd_yiguan_is_hu_regime_trigger = yes
+				max_military_strength >= {
+					value = root.max_military_strength
+					multiply = 2
+				}
+			}
+		}
+		modifier = {	# 南朝势大，足以倚恃
+			add = 15
+			any_neighboring_top_liege_realm_owner = {
+				hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_grp_south }
+				max_military_strength >= {
+					value = root.max_military_strength
+					multiply = 3
+				}
+			}
+		}
+		modifier = {
+			add = 15
+			has_trait = content
+		}
+		modifier = {
+			add = 10
+			has_trait = craven
+		}
+		modifier = {
+			add = 10
+			has_trait = loyal
+		}
+		modifier = {
+			add = -30
+			has_trait = ambitious
+		}
+		modifier = {
+			add = -20
+			has_trait = arrogant
+		}
+		modifier = {	# 已据一州，不甘人下
+			add = -20
+			hd_yiguan_war_landed_tier_value >= 4
+		}
+	}
+}
+
+############################################################
+# 还都旧京（键不变，自旧决议文件移来，行为照旧）
+# 光复中原结局（核心逻辑 hd_yiguan_outcome_guangfu_effect）设全局变量 hd_yiguan_restore_window，20 年内可用
+# 可用者：光复的宣布者（全局变量 hd_yiguan_restorer，可能是北方汉人或王国级南方政权）或汉霸权持有者（旧版口径）
+############################################################
+hd_yiguan_return_capital_decision = {
+	decision_group_type = major
+	picture = {
+		reference = "gfx/interface/illustrations/decisions/decision_realm.dds"
+	}
+	sort_order = 57
+
+	is_shown = {
+		exists = global_var:hd_yiguan_restore_window
+		NOT = { exists = global_var:hd_yiguan_capital_returned }
+		OR = {
+			has_title = title:h_china
+			AND = {
+				exists = global_var:hd_yiguan_restorer
+				this = global_var:hd_yiguan_restorer	# 先例：原版 00_chronicles.txt:934
+			}
+		}
+	}
+	is_valid = {
+		custom_tooltip = {
+			text = hd_yiguan_return_capital_hold_tt
+			OR = {
+				has_title = title:c_luoyang
+				has_title = title:c_uuii_p_867
+			}
+		}
+		custom_tooltip = {
+			text = hd_yiguan_return_capital_already_tt
+			NOR = {
+				capital_county = title:c_luoyang
+				capital_county = title:c_uuii_p_867
+			}
+		}
+	}
+	is_valid_showing_failures_only = {
+		is_available_adult = yes
+	}
+	cost = {
+		gold = major_gold_value
+	}
+
+	effect = {
+		set_global_variable = hd_yiguan_capital_returned
+		if = {
+			limit = { has_title = title:c_luoyang }
+			set_realm_capital = title:c_luoyang
+		}
+		else = {
+			set_realm_capital = title:c_uuii_p_867
+		}
+		add_prestige = major_prestige_gain
+		add_legitimacy = major_legitimacy_gain
+	}
+
+	ai_check_interval = 60
+	ai_will_do = {
+		base = 60
+	}
+}

@@ -1,0 +1,201 @@
+﻿# 衣冠南渡·结局决议（核心逻辑，模块 A2；见 docs/衣冠南渡_重做设计.md §1 第 8 轮、§5.6、§6 第 28 条）
+# 光复中原（冲突期）/ 胡汉合流（停滞期）/ 衣冠沦丧（逃亡期）
+# 不设 is_invisible：同时出现在决议面板和局势窗口（gui/window_hd_yiguan.gui 的结局卡片读 picture）
+# 骨架参照原版 fp3_decisions.txt 的 struggle_persia_ending_rekindle_iran_decision（阶段/资格/区域占比逐条提示）
+# "本人势力"含全部封臣（holder.top_liege = 本人）；占比按北方八州县数（数值见 zz_hd_yiguan_main_values.txt）
+# 结局效果在决议里直接执行，随后发通告（hd_yiguan_end_effect）
+# is_shown 只放局势存在与本组身份这类便宜判断；is_valid 先判阶段、爵位，最后才遍历县
+
+############################################################
+# 光复中原：冲突期；南方政权或北方汉人的独立君主，王国级以上，
+# 本人势力占北方八州 ≥60% 的县，且势力内据有洛阳或长安
+############################################################
+hd_yiguan_ending_guangfu_decision = {
+	decision_group_type = major
+	picture = {
+		reference = "gfx/interface/illustrations/decisions/tgp_dominance.dds"
+	}
+	sort_order = 85
+
+	is_shown = {
+		hd_yiguan_active_trigger = yes
+		hd_yiguan_is_han_regime_trigger = yes
+	}
+	is_valid_showing_failures_only = {
+		is_available_adult = yes
+	}
+	is_valid = {
+		custom_tooltip = {
+			text = hd_yiguan_end_phase_chongtu_tt
+			hd_yiguan_phase_chongtu_trigger = yes
+		}
+		custom_tooltip = {
+			text = hd_yiguan_end_kingdom_tt
+			highest_held_title_tier >= tier_kingdom
+			any_held_title = {	# 官职等无地头衔不算
+				tier >= tier_kingdom
+				is_landless_type_title = no
+			}
+		}
+		custom_tooltip = {
+			text = hd_yiguan_end_guangfu_capital_tt
+			OR = {
+				title:c_luoyang.holder ?= { top_liege = root }
+				title:c_uuii_p_867.holder ?= { top_liege = root }
+			}
+		}
+		custom_tooltip = {
+			text = hd_yiguan_end_guangfu_share_tt
+			hd_yiguan_realm_north_pct_value >= hd_yiguan_end_guangfu_pct_value
+		}
+	}
+
+	effect = {
+		custom_tooltip = hd_yiguan_ending_guangfu_effect_tt
+		show_as_tooltip = {
+			add_character_modifier = {
+				modifier = hd_yiguan_zhongxing_modifier
+				years = 30
+			}
+			dynasty ?= { add_dynasty_prestige = monumental_dynasty_prestige_value }
+			give_nickname = nick_hd_yiguan_zhongxing
+		}
+		hidden_effect = {
+			save_scope_as = hd_yiguan_declarer
+			hd_yiguan_end_effect = { OUTCOME = guangfu }
+		}
+	}
+
+	ai_check_interval = 12
+	ai_will_do = {
+		base = 100
+	}
+}
+
+############################################################
+# 胡汉合流：停滞期；所有汉化政权合计占北方八州 ≥60% 的县，由其中北方县数最多者宣布
+############################################################
+hd_yiguan_ending_heliu_decision = {
+	decision_group_type = major
+	picture = {
+		reference = "gfx/interface/illustrations/decisions/fp2_decision_struggle_conciliation.dds"
+	}
+	sort_order = 85
+
+	is_shown = {
+		hd_yiguan_active_trigger = yes
+		hd_yiguan_is_sinicized_regime_trigger = yes
+	}
+	is_valid_showing_failures_only = {
+		is_available_adult = yes
+	}
+	is_valid = {
+		custom_tooltip = {
+			text = hd_yiguan_end_phase_tingzhi_tt
+			hd_yiguan_phase_tingzhi_trigger = yes
+		}
+		custom_tooltip = {
+			text = hd_yiguan_end_heliu_share_tt
+			hd_yiguan_north_sin_pct_value >= hd_yiguan_end_heliu_pct_value
+		}
+		custom_tooltip = {
+			text = hd_yiguan_end_heliu_largest_tt
+			# 只比汉化政权组成员（先例：原版 10_tgp_interactions.txt:2824 的组链接；跨作用域比数值见 00_character_interactions.txt:1319）
+			NOT = {
+				situation:hd_yiguan_nandu.situation_participant_group:hd_yiguan_grp_sinicized ?= {
+					any_situation_group_participant = {
+						NOT = { this = root }
+						hd_yiguan_realm_north_counties_value > root.hd_yiguan_realm_north_counties_value
+					}
+				}
+			}
+		}
+	}
+
+	effect = {
+		custom_tooltip = hd_yiguan_ending_heliu_effect_tt
+		show_as_tooltip = {
+			add_character_modifier = {
+				modifier = hd_yiguan_heliu_modifier
+				years = 50
+			}
+			dynasty ?= { add_dynasty_prestige = monumental_dynasty_prestige_value }
+		}
+		hidden_effect = {
+			save_scope_as = hd_yiguan_declarer
+			hd_yiguan_end_effect = { OUTCOME = heliu }
+		}
+	}
+
+	ai_check_interval = 12
+	ai_will_do = {
+		base = 100
+	}
+}
+
+############################################################
+# 衣冠沦丧：逃亡期；胡人政权的独立君主，王国级以上，本人势力占北方八州 ≥70% 的县，
+# 势力内兼据洛阳与长安；北方属汉人（华夏、非汉化）独立君主的县 <10%
+############################################################
+hd_yiguan_ending_lunsang_decision = {
+	decision_group_type = major
+	picture = {
+		reference = "gfx/interface/illustrations/decisions/mpo_decision_great_khan.dds"
+	}
+	sort_order = 85
+
+	is_shown = {
+		hd_yiguan_active_trigger = yes
+		hd_yiguan_is_hu_regime_trigger = yes
+	}
+	is_valid_showing_failures_only = {
+		is_available_adult = yes
+	}
+	is_valid = {
+		custom_tooltip = {
+			text = hd_yiguan_end_phase_taowang_tt
+			hd_yiguan_phase_taowang_trigger = yes
+		}
+		custom_tooltip = {
+			text = hd_yiguan_end_kingdom_tt
+			highest_held_title_tier >= tier_kingdom
+			any_held_title = {
+				tier >= tier_kingdom
+				is_landless_type_title = no
+			}
+		}
+		custom_tooltip = {
+			text = hd_yiguan_end_lunsang_capitals_tt
+			title:c_luoyang.holder ?= { top_liege = root }
+			title:c_uuii_p_867.holder ?= { top_liege = root }
+		}
+		custom_tooltip = {
+			text = hd_yiguan_end_lunsang_share_tt
+			hd_yiguan_realm_north_pct_value >= hd_yiguan_end_lunsang_pct_value
+		}
+		custom_tooltip = {
+			text = hd_yiguan_end_lunsang_han_tt
+			hd_yiguan_north_han_pct_value < hd_yiguan_end_lunsang_han_max_pct_value
+		}
+	}
+
+	effect = {
+		custom_tooltip = hd_yiguan_ending_lunsang_effect_tt
+		show_as_tooltip = {
+			add_character_modifier = {
+				modifier = hd_yiguan_ruzhu_modifier
+				years = 30
+			}
+			dynasty ?= { add_dynasty_prestige = monumental_dynasty_prestige_value }
+		}
+		hidden_effect = {
+			save_scope_as = hd_yiguan_declarer
+			hd_yiguan_end_effect = { OUTCOME = lunsang }
+		}
+	}
+
+	ai_check_interval = 12
+	ai_will_do = {
+		base = 100
+	}
+}

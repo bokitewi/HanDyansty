@@ -1,0 +1,369 @@
+﻿# 衣冠南渡·胡人侧效果（docs/衣冠南渡_重做设计.md §4 第 4 / 11 轮、§5.9、§6 第 26~27 条）
+# 汉化改制（故事循环）：hd_yiguan_sinicization_sync_owner_effect / _story_fire_effect / _step_effect / hd_yiguan_abandon_sinicization_effect
+# 推行胡化：hd_yiguan_huhua_convert_one_effect / _batch_effect / _yearly_effect
+# 通知：hd_yiguan_hu_notify_players_effect / hd_yiguan_hu_toast_players_effect
+# 天子版（hd_dc_con_*）一律不改，只调用其公共效果。
+
+############################################################
+# 汉化改制·故事辅助
+############################################################
+
+# Scope：角色（故事主人）。把故事状态写回角色变量
+# $STORY$ = 故事（scope:story）
+hd_yiguan_sinicization_sync_owner_effect = {
+	set_variable = hd_yiguan_north_reform
+	set_variable = { name = hd_dc_con_sinicization_stage value = $STORY$.var:hd_yg_stage }
+	set_variable = { name = hd_dc_con_native_culture value = $STORY$.var:hd_yg_native_culture }
+}
+
+# Scope：故事。发下一步事件（$EVENT$ = hd_yiguan.3001~3004）
+# 先标记待答，再写回角色变量，最后对主人发事件（ep3_story_cycle_el_cid.txt:88-90 写法）
+hd_yiguan_sinicization_story_fire_effect = {
+	save_scope_as = story
+	set_variable = hd_yg_sent
+	set_variable = { name = hd_yg_sent_months value = 0 }
+	story_owner = {
+		hd_yiguan_sinicization_sync_owner_effect = { STORY = scope:story }
+		trigger_event = $EVENT$
+	}
+}
+
+############################################################
+# 汉化改制·推进一步。Scope：改制者（事件 root）；$STAGE$ = 1~4（迁都 / 易服 / 改姓 / 禁胡语）
+# 守卫：角色变量里的步数须小于 $STAGE$，同一步的重复事件（超时重发后两封都答）不会重复生效
+############################################################
+hd_yiguan_sinicization_step_effect = {
+	save_scope_as = hd_dc_con_ruler
+	save_scope_as = hd_yiguan_reform_ruler
+	if = {
+		limit = {
+			has_variable = hd_dc_con_sinicization_stage
+			var:hd_dc_con_sinicization_stage < $STAGE$
+		}
+		# 旧档兜底：更新前已在改制中、没有故事的，补建（on_setup 读角色身上的本族文化）
+		hidden_effect = {
+			if = {
+				limit = { NOT = { owns_story_of_type = story_hd_yiguan_sinicization } }
+				create_story = { type = story_hd_yiguan_sinicization }
+			}
+		}
+		set_variable = { name = hd_dc_con_sinicization_stage value = $STAGE$ }
+		# 本族封臣不满（每步 -10，可叠加）
+		every_vassal = {
+			limit = { hd_dc_con_native_trigger = { CULTURE = scope:hd_dc_con_ruler.var:hd_dc_con_native_culture } }
+			add_opinion = {
+				target = scope:hd_dc_con_ruler
+				modifier = hd_dc_con_sinicization_native_opinion
+			}
+		}
+		# 汉人封臣欣然（每步 +5，可叠加）
+		every_vassal = {
+			limit = { hd_dc_is_chinese_heritage_trigger = yes }
+			add_opinion = {
+				target = scope:hd_dc_con_ruler
+				modifier = hd_dc_con_sinicization_han_opinion
+			}
+		}
+		# 本族反弹：20% 引发本族叛乱
+		random = {
+			chance = 20
+			custom_tooltip = hd_dc_con_native_revolt_risk_tt
+			hidden_effect = { hd_dc_con_native_revolt_effect = yes }
+		}
+		# 每一步（含第 4 步）都投"汉化改制一步"催化剂（§3.2：每一步 25 / 完成 100）
+		hidden_effect = {
+			hd_yiguan_fire_catalyst_effect = { CATALYST = catalyst_hd_yiguan_reform_step CHAR = scope:hd_yiguan_reform_ruler }
+			# 停滞期拖延（负值，点数不足不扣）：胡汉相安，推迟 →冲突、→逃亡
+			hd_yiguan_fire_delay_catalyst_effect = { CATALYST = catalyst_hd_yiguan_reform_step_delay_c TOWARD = hd_yiguan_phase_chongtu VALUE = 25 CHAR = scope:hd_yiguan_reform_ruler }
+			hd_yiguan_fire_delay_catalyst_effect = { CATALYST = catalyst_hd_yiguan_reform_step_delay_t TOWARD = hd_yiguan_phase_taowang VALUE = 25 CHAR = scope:hd_yiguan_reform_ruler }
+		}
+		if = {
+			limit = { var:hd_dc_con_sinicization_stage < 4 }
+			# 第 1~3 步：故事记下步数，重新倒计时 24~36 个月
+			hidden_effect = {
+				random_owned_story = {
+					type = story_hd_yiguan_sinicization
+					remove_variable = hd_yg_sent
+					set_variable = { name = hd_yg_sent_months value = 0 }
+					set_variable = { name = hd_yg_stage value = $STAGE$ }
+					set_variable = { name = hd_yg_wait value = 0 }
+					change_variable = { name = hd_yg_wait add = { integer_range = { min = 24 max = 36 } } }
+				}
+			}
+			custom_tooltip = hd_yiguan_sinicization_next_step_tt
+		}
+		else = {
+			# 第 4 步即告成：王朝记为汉化（hd_dc_con_complete_sinicization_effect 设 hd_yiguan_sinicized）
+			remove_variable = hd_yiguan_north_reform
+			hd_dc_con_complete_sinicization_effect = yes
+			custom_tooltip = hd_yiguan_sinicization_done_tt
+			hidden_effect = {
+				# 先投"汉化改制完成"催化剂（此时尚在胡人政权组），再刷新沦陷、重算参与者组
+				hd_yiguan_fire_catalyst_effect = { CATALYST = catalyst_hd_yiguan_reform_done CHAR = scope:hd_yiguan_reform_ruler }
+				hd_yiguan_fire_delay_catalyst_effect = { CATALYST = catalyst_hd_yiguan_reform_done_delay_c TOWARD = hd_yiguan_phase_chongtu VALUE = 100 CHAR = scope:hd_yiguan_reform_ruler }
+				hd_yiguan_fire_delay_catalyst_effect = { CATALYST = catalyst_hd_yiguan_reform_done_delay_t TOWARD = hd_yiguan_phase_taowang VALUE = 100 CHAR = scope:hd_yiguan_reform_ruler }
+				# 通知须在重算参与者组之前：境内沦陷区汉人重算后即离组，之后就收不到了
+				hd_yiguan_hu_notify_players_effect = {
+					EVENT = hd_yiguan.3011
+					TITLE = hd_yiguan_reform_done_toast
+					TT = hd_yiguan_reform_done_toast_tt
+				}
+				if = {
+					limit = { hd_yiguan_active_trigger = yes }
+					hd_yiguan_refresh_realm_effect = yes
+					hd_yiguan_recalc_group_effect = yes
+					# 治下汉人封臣与宅邸在境内的无地士族此时已不算沦陷：重算沦陷区汉人组现有成员
+					# （先例：原版 11_dlc_pam_scripted_effects.txt:737-741；组内 participant_group_type 见 activity_invite_rules.txt:824）
+					situation:hd_yiguan_nandu ?= {
+						every_participant_group = {
+							limit = { participant_group_type = hd_yiguan_grp_occupied }
+							mass_recalculate_participant_groups = yes
+						}
+					}
+				}
+				if = {
+					limit = { is_ai = no }
+					trigger_event = { id = hd_yiguan.3012 days = 1 }
+				}
+				random_owned_story = {
+					type = story_hd_yiguan_sinicization
+					end_story = yes
+				}
+			}
+		}
+	}
+}
+
+# 放弃改制：天子版公共效果（10 年内不得重启、失威望），并结束故事。Scope：改制者
+hd_yiguan_abandon_sinicization_effect = {
+	remove_variable = hd_yiguan_north_reform
+	hd_dc_con_abandon_sinicization_effect = yes
+	hidden_effect = {
+		random_owned_story = {
+			type = story_hd_yiguan_sinicization
+			end_story = yes
+		}
+		hd_yiguan_hu_toast_players_effect = {
+			TITLE = hd_yiguan_sinicization_abandoned_toast
+			TT = hd_yiguan_sinicization_abandoned_toast_tt
+		}
+	}
+}
+
+############################################################
+# 通知。Scope：行为人（存为 scope:hd_yiguan_hu_actor）
+# 发给除行为人以外、在衣冠南渡参与者组中的玩家（写法同旧 hd_yiguan.0009:21）：
+#   南方政权收 $EVENT$（正文是江左视角）；其他参与者（含行为人境内的沦陷区汉人）收中性弹窗 $TITLE$ / $TT$
+############################################################
+hd_yiguan_hu_notify_players_effect = {
+	save_scope_as = hd_yiguan_hu_actor
+	every_player = {
+		limit = {
+			NOT = { this = scope:hd_yiguan_hu_actor }
+			top_participant_group:hd_yiguan_nandu ?= { always = yes }
+		}
+		if = {
+			limit = { hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_grp_south } }
+			trigger_event = $EVENT$
+		}
+		else = {
+			send_interface_toast = {
+				type = event_toast_effect_neutral
+				title = $TITLE$
+				left_icon = scope:hd_yiguan_hu_actor
+				custom_tooltip = $TT$
+			}
+		}
+	}
+}
+
+hd_yiguan_hu_toast_players_effect = {
+	save_scope_as = hd_yiguan_hu_actor
+	every_player = {
+		limit = {
+			NOT = { this = scope:hd_yiguan_hu_actor }
+			top_participant_group:hd_yiguan_nandu ?= { always = yes }
+		}
+		send_interface_toast = {
+			type = event_toast_effect_neutral
+			title = $TITLE$
+			left_icon = scope:hd_yiguan_hu_actor
+			custom_tooltip = $TT$
+		}
+	}
+}
+
+############################################################
+# 推行胡化（§4 第 11 轮、§6 第 27 条）
+# 角色变量：hd_yiguan_huhua（推行中，20 年；值 = 期满之年）、hd_yiguan_huhua_count（累计改县数，上限 30）
+# 脚本值：hd_yiguan_huhua_years_left_value（common/script_values/zz_hd_yiguan_b_values.txt）
+# 全局名单：hd_yiguan_huhua_rulers（推行中的统治者，年度脉冲遍历）
+############################################################
+
+# 改一县。Scope：推行者；须先 save_scope_as = hd_yiguan_hh_ruler
+# 选其领内（直辖与封臣）北方的汉文化沦陷县，与本族文化县接壤者权重 ×10；只改文化，不改信仰
+hd_yiguan_huhua_convert_one_effect = {
+	if = {
+		limit = {
+			has_variable = hd_yiguan_huhua_count
+			var:hd_yiguan_huhua_count < 30
+			any_realm_county = {
+				hd_yiguan_county_in_north_trigger = yes
+				hd_yiguan_occupied_county_trigger = yes
+				NOT = { culture = scope:hd_yiguan_hh_ruler.culture }
+			}
+		}
+		random_realm_county = {
+			limit = {
+				hd_yiguan_county_in_north_trigger = yes
+				hd_yiguan_occupied_county_trigger = yes
+				NOT = { culture = scope:hd_yiguan_hh_ruler.culture }
+			}
+			weight = {
+				base = 1
+				modifier = {
+					factor = 10
+					any_neighboring_county = { culture = scope:hd_yiguan_hh_ruler.culture }
+				}
+			}
+			save_scope_as = hd_yiguan_hh_county
+			set_county_culture = scope:hd_yiguan_hh_ruler.culture
+			# 改为非汉文化即去掉沦陷标记与减益（核心效果）
+			if = {
+				limit = { hd_yiguan_active_trigger = yes }
+				hd_yiguan_refresh_county_effect = yes
+			}
+			# 县主是玩家且不是推行者本人：通知
+			holder ?= {
+				if = {
+					limit = {
+						is_ai = no
+						NOT = { this = scope:hd_yiguan_hh_ruler }
+					}
+					send_interface_toast = {
+						type = event_toast_effect_bad
+						title = hd_yiguan_huhua_county_holder_toast
+						left_icon = scope:hd_yiguan_hh_ruler
+						custom_tooltip = hd_yiguan_huhua_county_holder_toast_tt
+					}
+				}
+			}
+		}
+		change_variable = { name = hd_yiguan_huhua_count add = 1 }
+		hd_yiguan_fire_catalyst_effect = { CATALYST = catalyst_hd_yiguan_huhua_county CHAR = scope:hd_yiguan_hh_ruler }
+		if = {
+			limit = { is_ai = no }
+			send_interface_toast = {
+				type = event_toast_effect_neutral
+				title = hd_yiguan_huhua_county_toast
+				left_icon = this
+				custom_tooltip = hd_yiguan_huhua_county_toast_tt
+			}
+		}
+	}
+}
+
+# 一年的改县：1~3 县（40% / 35% / 25%），各自受 30 县上限约束。Scope：推行者
+hd_yiguan_huhua_batch_effect = {
+	save_scope_as = hd_yiguan_hh_ruler
+	clear_saved_scope = hd_yiguan_hh_county
+	random_list = {
+		40 = {
+			hd_yiguan_huhua_convert_one_effect = yes
+		}
+		35 = {
+			hd_yiguan_huhua_convert_one_effect = yes
+			hd_yiguan_huhua_convert_one_effect = yes
+		}
+		25 = {
+			hd_yiguan_huhua_convert_one_effect = yes
+			hd_yiguan_huhua_convert_one_effect = yes
+			hd_yiguan_huhua_convert_one_effect = yes
+		}
+	}
+	# 改了县：30% 引出"汉户流散"（scope:hd_yiguan_hh_county 为本年最后改的一县）
+	if = {
+		limit = { exists = scope:hd_yiguan_hh_county }
+		random = {
+			chance = 30
+			trigger_event = { id = hd_yiguan.3210 days = { 7 30 } }
+		}
+	}
+}
+
+# 年度（yearly_global_pulse → hd_yiguan_hu_yearly_pulse）。Scope：无（全局）
+# 先清名单（死亡、失地、期满、满 30 县者移出），再对仍在推行者各掷 25%
+# 局势结束后已在推行者照常推进（只有"发起"限停滞期）
+hd_yiguan_huhua_yearly_effect = {
+	every_in_global_list = {
+		variable = hd_yiguan_huhua_rulers
+		limit = {
+			OR = {
+				is_alive = no
+				is_landed = no
+				NOT = { has_variable = hd_yiguan_huhua }
+				NOT = { has_variable = hd_yiguan_huhua_count }
+				var:hd_yiguan_huhua_count >= 30
+			}
+		}
+		add_to_temporary_list = hd_yiguan_hh_done
+	}
+	every_in_list = {
+		list = hd_yiguan_hh_done
+		remove_list_global_variable = { name = hd_yiguan_huhua_rulers target = this }
+		if = {
+			limit = { is_alive = yes }
+			# 推行结束（含满 30 县提前结束）：撤去汉人封臣的"强令胡化"好感
+			save_scope_as = hd_yiguan_hh_ruler
+			every_vassal_or_below = {
+				limit = {
+					has_opinion_modifier = {
+						target = scope:hd_yiguan_hh_ruler
+						modifier = hd_yiguan_huhua_opinion
+					}
+				}
+				remove_opinion = {
+					target = scope:hd_yiguan_hh_ruler
+					modifier = hd_yiguan_huhua_opinion
+				}
+			}
+			remove_variable = hd_yiguan_huhua
+			if = {
+				limit = {
+					is_ai = no
+					is_landed = yes
+				}
+				trigger_event = hd_yiguan.3203
+			}
+		}
+	}
+	every_in_global_list = {
+		variable = hd_yiguan_huhua_rulers
+		limit = {
+			is_alive = yes
+			has_variable = hd_yiguan_huhua
+		}
+		# 推行期间新出现的汉人封臣（新附、新继承、新封、次级封臣）补上好感，时长到推行期满为止
+		save_scope_as = hd_yiguan_hh_ruler
+		every_vassal_or_below = {
+			limit = {
+				hd_yiguan_is_han_trigger = yes
+				NOT = {
+					has_opinion_modifier = {
+						target = scope:hd_yiguan_hh_ruler
+						modifier = hd_yiguan_huhua_opinion
+					}
+				}
+			}
+			add_opinion = {
+				target = scope:hd_yiguan_hh_ruler
+				modifier = hd_yiguan_huhua_opinion
+				years = hd_yiguan_huhua_years_left_value
+			}
+		}
+		random = {
+			chance = 25
+			hd_yiguan_huhua_batch_effect = yes
+		}
+	}
+}

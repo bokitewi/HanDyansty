@@ -1,0 +1,597 @@
+﻿namespace = hd_yiguan
+
+# 衣冠南渡·士族侧事件（docs/衣冠南渡_重做设计.md §5.10：4001–4049 南迁、北还、资助）
+# 4001 南迁请纳（目的地）  4002 举族南渡（迁徙者，执行）  4003 南迁被拒  4004 南迁中止  4005 士族南奔（旧主，玩家）
+# 4011 起兵北还·择州  4012 北还起兵（资助者，玩家）  4013 北还未成  4015 AI 流亡者起兵复核（隐藏）
+# 4021 北还功成·归附之议（C 的北还胜利效果 3 天后发给攻方）  4022 来归（资助者）  4023 不肯来归（资助者）
+
+############################
+# 举族南迁
+############################
+
+# 目的地收到投奔请求。root = 目的地；scope:hd_yiguan_gt_migrant 迁徙者，scope:hd_yiguan_gt_dest = root
+hd_yiguan.4001 = {
+	type = character_event
+	title = hd_yiguan.4001.t
+	desc = hd_yiguan.4001.desc
+	theme = diplomacy
+	override_background = { reference = tgp_asia_throne_room }
+	left_portrait = {
+		character = root
+		animation = thinking
+	}
+	right_portrait = {
+		character = scope:hd_yiguan_gt_migrant
+		animation = worry
+	}
+	trigger = {
+		exists = scope:hd_yiguan_gt_migrant
+		scope:hd_yiguan_gt_migrant = { is_alive = yes }
+	}
+	on_trigger_fail = {	# 先例 原版 coronation_events.txt:3942
+		scope:hd_yiguan_gt_migrant ?= {
+			if = {
+				limit = { is_alive = yes }
+				trigger_event = hd_yiguan.4004
+			}
+		}
+	}
+
+	option = {	# 纳之
+		name = hd_yiguan.4001.a
+		custom_tooltip = hd_yiguan.4001.a.tt
+		if = {
+			limit = {
+				scope:hd_yiguan_gt_migrant = { hd_yiguan_gt_nanqian_still_valid_trigger = yes }
+			}
+			scope:hd_yiguan_gt_migrant = { trigger_event = hd_yiguan.4002 }
+		}
+		else = {
+			scope:hd_yiguan_gt_migrant = { trigger_event = hd_yiguan.4004 }
+		}
+		ai_chance = {
+			base = 50
+			opinion_modifier = {	# 写法见原版 coronation_events_1.txt:1203
+				opinion_target = scope:hd_yiguan_gt_migrant
+				multiplier = 0.5
+			}
+			modifier = {	# 才具（§6 第 18 条：本人能力）
+				add = 15
+				scope:hd_yiguan_gt_migrant = {
+					OR = {
+						diplomacy >= 14
+						stewardship >= 14
+						learning >= 14
+						martial >= 14
+					}
+				}
+			}
+			modifier = {	# 天朝制得一世族封臣
+				add = 15
+				government_has_flag = government_is_celestial
+				scope:hd_yiguan_gt_migrant = { any_held_title = { is_noble_family_title = yes } }
+			}
+			modifier = {	# 宿敌
+				add = -100
+				OR = {
+					has_relation_rival = scope:hd_yiguan_gt_migrant
+					has_relation_nemesis = scope:hd_yiguan_gt_migrant
+				}
+			}
+			ai_value_modifier = {
+				ai_compassion = 0.3
+			}
+		}
+	}
+	option = {	# 婉拒
+		name = hd_yiguan.4001.b
+		custom_tooltip = hd_yiguan.4001.b.tt
+		scope:hd_yiguan_gt_migrant = { trigger_event = hd_yiguan.4003 }
+		ai_chance = {
+			base = 20
+			ai_value_modifier = {
+				ai_compassion = -0.3
+				ai_greed = 0.2
+			}
+		}
+	}
+}
+
+# 举族南渡（执行）。root = 迁徙者；scope:hd_yiguan_gt_dest 目的地
+hd_yiguan.4002 = {
+	type = character_event
+	title = hd_yiguan.4002.t
+	desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { scope:hd_yiguan_gt_dest = { hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_grp_north_han } } }
+				desc = hd_yiguan.4002.desc_north
+			}
+			desc = hd_yiguan.4002.desc
+		}
+	}
+	theme = realm
+	override_background = { reference = tgp_docks_asia }
+	left_portrait = {
+		character = root
+		animation = sadness
+	}
+	right_portrait = {
+		character = scope:hd_yiguan_gt_dest
+		animation = happiness
+	}
+	trigger = {
+		hd_yiguan_gt_nanqian_still_valid_trigger = yes
+	}
+	on_trigger_fail = {
+		if = {
+			limit = { is_alive = yes }
+			trigger_event = hd_yiguan.4004
+		}
+	}
+	immediate = {
+		hd_yiguan_gt_nanqian_execute_effect = yes
+	}
+
+	option = {	# 举族启程
+		name = hd_yiguan.4002.a
+		custom_tooltip = hd_yiguan.4002.a.tt
+	}
+}
+
+# 南迁被拒。root = 迁徙者
+hd_yiguan.4003 = {
+	type = character_event
+	title = hd_yiguan.4003.t
+	desc = hd_yiguan.4003.desc
+	theme = diplomacy
+	override_background = { reference = tgp_crossroad_inn_asia }
+	left_portrait = {
+		character = root
+		animation = disappointed
+	}
+	trigger = { is_alive = yes }
+	immediate = {
+		hd_yiguan_gt_nanqian_refund_effect = yes
+		set_variable = { name = hd_yiguan_gt_nanqian_refused value = yes years = 2 }
+		scope:hd_yiguan_gt_dest ?= {
+			save_scope_as = hd_yiguan_gt_refuser
+		}
+		if = {
+			limit = { exists = scope:hd_yiguan_gt_refuser }
+			add_opinion = {
+				target = scope:hd_yiguan_gt_refuser
+				modifier = hd_yiguan_gt_shelter_refused_opinion
+			}
+		}
+	}
+
+	option = {
+		name = hd_yiguan.4003.a
+		custom_tooltip = hd_yiguan.4003.a.tt
+	}
+}
+
+# 南迁中止（条件已变）。root = 迁徙者
+hd_yiguan.4004 = {
+	type = character_event
+	title = hd_yiguan.4004.t
+	desc = hd_yiguan.4004.desc
+	theme = realm
+	override_background = { reference = tgp_crossroad_inn_asia }
+	left_portrait = {
+		character = root
+		animation = worry
+	}
+	trigger = { is_alive = yes }
+	immediate = {
+		hd_yiguan_gt_nanqian_refund_effect = yes
+	}
+
+	option = {
+		name = hd_yiguan.4004.a
+	}
+}
+
+# 士族南奔（旧主，玩家）。root = 旧主；scope:hd_yiguan_gt_migrant 南迁者，scope:hd_yiguan_gt_dest 去处
+hd_yiguan.4005 = {
+	type = character_event
+	title = hd_yiguan.4005.t
+	desc = hd_yiguan.4005.desc
+	theme = realm
+	override_background = { reference = tgp_ruined_holding }
+	left_portrait = {
+		character = root
+		animation = anger
+	}
+	right_portrait = {
+		character = scope:hd_yiguan_gt_migrant
+		animation = worry
+	}
+	trigger = {
+		is_alive = yes
+		exists = scope:hd_yiguan_gt_migrant
+	}
+
+	option = {
+		name = hd_yiguan.4005.a
+	}
+}
+
+############################
+# 起兵北还
+############################
+
+# 择州。root = 流亡者（已付威望，变量 hd_yiguan_gt_bh_paid）
+# 八州各一项，只显示有可作守方的胡人政权持县的州；"时机未至"退还威望
+# 州按汉代原州的静态地理区域（uuii_han_*_region）判定；战争目标另取该区域内守方持县最多的运行时法理王国（见 hd_yiguan_gt_bh_pick_kingdom_effect）
+hd_yiguan.4011 = {
+	type = character_event
+	title = hd_yiguan.4011.t
+	desc = hd_yiguan.4011.desc
+	theme = war
+	override_background = { reference = tgp_camp_asia }
+	left_portrait = {
+		character = root
+		animation = marshal
+	}
+	trigger = {
+		hd_yiguan_gt_beihuan_can_start_trigger = yes
+	}
+	on_trigger_fail = {
+		if = {
+			limit = { is_alive = yes }
+			hd_yiguan_gt_beihuan_refund_effect = yes
+		}
+	}
+	immediate = {
+		hd_yiguan_gt_bh_find_all_defs_effect = yes
+	}
+
+	option = {
+		name = hd_yiguan.4011.sili
+		trigger = { exists = scope:hd_yiguan_gt_bh_def_sili }
+		custom_tooltip = hd_yiguan.4011.go.tt
+		hidden_effect = { hd_yiguan_gt_beihuan_execute_effect = { REGION = uuii_han_sili_region DEF = scope:hd_yiguan_gt_bh_def_sili } }
+		ai_chance = {
+			base = 10
+			modifier = {
+				add = 100
+				hd_yiguan_gt_origin_in_zhou_trigger = { REGION = uuii_han_sili_region }
+			}
+		}
+	}
+	option = {
+		name = hd_yiguan.4011.jizhou
+		trigger = { exists = scope:hd_yiguan_gt_bh_def_jizhou }
+		custom_tooltip = hd_yiguan.4011.go.tt
+		hidden_effect = { hd_yiguan_gt_beihuan_execute_effect = { REGION = uuii_han_jizhou_region DEF = scope:hd_yiguan_gt_bh_def_jizhou } }
+		ai_chance = {
+			base = 10
+			modifier = {
+				add = 100
+				hd_yiguan_gt_origin_in_zhou_trigger = { REGION = uuii_han_jizhou_region }
+			}
+		}
+	}
+	option = {
+		name = hd_yiguan.4011.youzhou
+		trigger = { exists = scope:hd_yiguan_gt_bh_def_youzhou }
+		custom_tooltip = hd_yiguan.4011.go.tt
+		hidden_effect = { hd_yiguan_gt_beihuan_execute_effect = { REGION = uuii_han_youzhou_region DEF = scope:hd_yiguan_gt_bh_def_youzhou } }
+		ai_chance = {
+			base = 10
+			modifier = {
+				add = 100
+				hd_yiguan_gt_origin_in_zhou_trigger = { REGION = uuii_han_youzhou_region }
+			}
+		}
+	}
+	option = {
+		name = hd_yiguan.4011.bingzhou
+		trigger = { exists = scope:hd_yiguan_gt_bh_def_bingzhou }
+		custom_tooltip = hd_yiguan.4011.go.tt
+		hidden_effect = { hd_yiguan_gt_beihuan_execute_effect = { REGION = uuii_han_bingzhou_region DEF = scope:hd_yiguan_gt_bh_def_bingzhou } }
+		ai_chance = {
+			base = 10
+			modifier = {
+				add = 100
+				hd_yiguan_gt_origin_in_zhou_trigger = { REGION = uuii_han_bingzhou_region }
+			}
+		}
+	}
+	option = {
+		name = hd_yiguan.4011.qingzhou
+		trigger = { exists = scope:hd_yiguan_gt_bh_def_qingzhou }
+		custom_tooltip = hd_yiguan.4011.go.tt
+		hidden_effect = { hd_yiguan_gt_beihuan_execute_effect = { REGION = uuii_han_qingzhou_region DEF = scope:hd_yiguan_gt_bh_def_qingzhou } }
+		ai_chance = {
+			base = 10
+			modifier = {
+				add = 100
+				hd_yiguan_gt_origin_in_zhou_trigger = { REGION = uuii_han_qingzhou_region }
+			}
+		}
+	}
+	option = {
+		name = hd_yiguan.4011.yanzhou
+		trigger = { exists = scope:hd_yiguan_gt_bh_def_yanzhou }
+		custom_tooltip = hd_yiguan.4011.go.tt
+		hidden_effect = { hd_yiguan_gt_beihuan_execute_effect = { REGION = uuii_han_yanzhou_region DEF = scope:hd_yiguan_gt_bh_def_yanzhou } }
+		ai_chance = {
+			base = 10
+			modifier = {
+				add = 100
+				hd_yiguan_gt_origin_in_zhou_trigger = { REGION = uuii_han_yanzhou_region }
+			}
+		}
+	}
+	option = {
+		name = hd_yiguan.4011.xuzhou
+		trigger = { exists = scope:hd_yiguan_gt_bh_def_xuzhou }
+		custom_tooltip = hd_yiguan.4011.go.tt
+		hidden_effect = { hd_yiguan_gt_beihuan_execute_effect = { REGION = uuii_han_xuzhou_region DEF = scope:hd_yiguan_gt_bh_def_xuzhou } }
+		ai_chance = {
+			base = 10
+			modifier = {
+				add = 100
+				hd_yiguan_gt_origin_in_zhou_trigger = { REGION = uuii_han_xuzhou_region }
+			}
+		}
+	}
+	option = {
+		name = hd_yiguan.4011.yuzhou
+		trigger = { exists = scope:hd_yiguan_gt_bh_def_yuzhou }
+		custom_tooltip = hd_yiguan.4011.go.tt
+		hidden_effect = { hd_yiguan_gt_beihuan_execute_effect = { REGION = uuii_han_yuzhou_region DEF = scope:hd_yiguan_gt_bh_def_yuzhou } }
+		ai_chance = {
+			base = 10
+			modifier = {
+				add = 100
+				hd_yiguan_gt_origin_in_zhou_trigger = { REGION = uuii_han_yuzhou_region }
+			}
+		}
+	}
+	option = {	# 时机未至
+		name = hd_yiguan.4011.z
+		custom_tooltip = hd_yiguan.4011.z.tt
+		hd_yiguan_gt_beihuan_refund_effect = yes
+		ai_chance = {
+			base = 1
+		}
+	}
+}
+
+# 北还起兵（资助者，玩家）。root = 资助者；scope:hd_yiguan_gt_bh_exile、scope:hd_yiguan_gt_bh_kingdom
+hd_yiguan.4012 = {
+	type = character_event
+	title = hd_yiguan.4012.t
+	desc = hd_yiguan.4012.desc
+	theme = war
+	override_background = { reference = tgp_camp_asia }
+	left_portrait = {
+		character = scope:hd_yiguan_gt_bh_exile
+		animation = marshal
+	}
+	trigger = {
+		is_alive = yes
+		exists = scope:hd_yiguan_gt_bh_exile
+		exists = scope:hd_yiguan_gt_bh_kingdom
+	}
+
+	option = {
+		name = hd_yiguan.4012.a
+	}
+}
+
+# 北还未成（宣战不成或目标已失）。root = 流亡者
+hd_yiguan.4013 = {
+	type = character_event
+	title = hd_yiguan.4013.t
+	desc = hd_yiguan.4013.desc
+	theme = war
+	override_background = { reference = tgp_crossroad_inn_asia }
+	left_portrait = {
+		character = root
+		animation = disappointed
+	}
+	trigger = { is_alive = yes }
+
+	option = {
+		name = hd_yiguan.4013.a
+	}
+}
+
+# AI 流亡者起兵复核（隐藏）。受资助后发起；一年一查，至多 10 次
+hd_yiguan.4015 = {
+	type = character_event
+	hidden = yes
+	trigger = {
+		is_ai = yes
+		hd_yiguan_gt_exile_base_trigger = yes
+	}
+	immediate = {
+		remove_variable = hd_yiguan_gt_ai_chk
+		if = {
+			limit = {
+				hd_yiguan_gt_beihuan_can_start_trigger = yes
+				prestige >= medium_prestige_value
+			}
+			random = {
+				chance = hd_yiguan_gt_beihuan_ai_chance_value	# 具名数值作几率，先例 原版 00_bastard_effects.txt:410
+				add_prestige = {
+					value = medium_prestige_value
+					multiply = -1
+				}
+				hd_yiguan_gt_beihuan_begin_effect = yes
+			}
+		}
+		if = {
+			limit = {
+				NOT = { has_variable = hd_yiguan_gt_beihuan_done }
+				NOT = { has_variable = hd_yiguan_gt_bh_paid }
+				OR = {
+					NOT = { has_variable = hd_yiguan_gt_ai_chk_n }
+					var:hd_yiguan_gt_ai_chk_n < 10
+				}
+			}
+			if = {
+				limit = { NOT = { has_variable = hd_yiguan_gt_ai_chk_n } }
+				set_variable = { name = hd_yiguan_gt_ai_chk_n value = 0 }
+			}
+			change_variable = { name = hd_yiguan_gt_ai_chk_n add = 1 }
+			set_variable = { name = hd_yiguan_gt_ai_chk value = yes days = 400 }
+			trigger_event = {
+				id = hd_yiguan.4015
+				days = 365
+			}
+		}
+	}
+}
+
+# 北还功成·归附之议。root = 已得地独立的流亡者（C 的 hd_yiguan_beihuan_victory_effect 3 天后发来）
+# 有仍合格的资助者才发生；无资助者即已独立，不另作选择（§6 第 21 条）
+hd_yiguan.4021 = {
+	type = character_event
+	title = hd_yiguan.4021.t
+	desc = hd_yiguan.4021.desc
+	theme = war
+	override_background = { reference = tgp_asia_throne_room }
+	left_portrait = {
+		character = root
+		animation = war_over_win
+	}
+	right_portrait = {
+		character = scope:hd_yiguan_gt_patron
+		animation = thinking
+	}
+	trigger = {
+		is_alive = yes
+		is_landed = yes
+		is_independent_ruler = yes
+		has_variable_list = hd_yiguan_gt_funders
+		any_in_list = {	# 先例 原版 00_scripted_triggers.txt:507
+			variable = hd_yiguan_gt_funders
+			hd_yiguan_gt_patron_valid_trigger = { EXILE = root }
+		}
+	}
+	immediate = {
+		hd_yiguan_gt_pick_patron_effect = yes
+	}
+
+	option = {	# 奉表来归（玩家可能把事件开着不点，资助者须此刻仍合格；失格时灰显，只能据地自立）
+		name = hd_yiguan.4021.a
+		trigger = {
+			scope:hd_yiguan_gt_patron ?= { hd_yiguan_gt_patron_valid_trigger = { EXILE = root } }
+		}
+		show_as_unavailable = { exists = scope:hd_yiguan_gt_patron }	# 写法同原版 chariot_ongoing_events_jp.txt:992
+		hd_yiguan_gt_submit_to_patron_effect = yes
+		hidden_effect = { hd_yiguan_gt_clear_funding_effect = yes }
+		ai_chance = {
+			base = 50
+			opinion_modifier = {
+				opinion_target = scope:hd_yiguan_gt_patron
+				multiplier = 0.5
+			}
+			modifier = {
+				add = 20
+				has_trait = content
+			}
+			modifier = {
+				add = 15
+				has_trait = humble
+			}
+			modifier = {
+				add = 10
+				has_trait = just
+			}
+			modifier = {
+				add = -30
+				has_trait = ambitious
+			}
+			modifier = {
+				add = -20
+				has_trait = arrogant
+			}
+		}
+	}
+	option = {	# 据地自立（资助者已失格时也走这里，不记"负资不归"）
+		name = hd_yiguan.4021.b
+		scope:hd_yiguan_gt_patron ?= {
+			if = {
+				limit = { hd_yiguan_gt_patron_valid_trigger = { EXILE = root } }
+				add_opinion = {
+					target = root
+					modifier = hd_yiguan_gt_spurned_opinion
+				}
+				trigger_event = hd_yiguan.4023
+			}
+		}
+		add_prestige = minor_prestige_gain
+		hidden_effect = { hd_yiguan_gt_clear_funding_effect = yes }
+		ai_chance = {
+			base = 40
+			modifier = {
+				add = 30
+				has_trait = ambitious
+			}
+			modifier = {
+				add = 20
+				has_trait = arrogant
+			}
+			ai_value_modifier = {
+				ai_boldness = 0.3
+			}
+		}
+	}
+}
+
+# 来归（资助者）。root = 资助者；scope:hd_yiguan_gt_bh_exile 来归者
+hd_yiguan.4022 = {
+	type = character_event
+	title = hd_yiguan.4022.t
+	desc = hd_yiguan.4022.desc
+	theme = diplomacy
+	override_background = { reference = tgp_asia_throne_room }
+	left_portrait = {
+		character = root
+		animation = happiness
+	}
+	right_portrait = {
+		character = scope:hd_yiguan_gt_bh_exile
+		animation = personality_honorable
+	}
+	trigger = {
+		is_alive = yes
+		exists = scope:hd_yiguan_gt_bh_exile
+	}
+
+	option = {
+		name = hd_yiguan.4022.a
+	}
+}
+
+# 不肯来归（资助者）。root = 资助者；scope:hd_yiguan_gt_bh_exile 自立者
+hd_yiguan.4023 = {
+	type = character_event
+	title = hd_yiguan.4023.t
+	desc = hd_yiguan.4023.desc
+	theme = diplomacy
+	override_background = { reference = tgp_asia_throne_room }
+	left_portrait = {
+		character = root
+		animation = anger
+	}
+	right_portrait = {
+		character = scope:hd_yiguan_gt_bh_exile
+		animation = schadenfreude
+	}
+	trigger = {
+		is_alive = yes
+		exists = scope:hd_yiguan_gt_bh_exile
+	}
+
+	option = {
+		name = hd_yiguan.4023.a
+	}
+}

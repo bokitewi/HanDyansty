@@ -1,0 +1,386 @@
+﻿# 衣冠南渡·胡人侧决议（docs/衣冠南渡_重做设计.md §4 第 4 / 11 轮、§5.6、§6 第 26~27 条）
+# 推行汉化（开故事）/ 推行胡化 / 建天朝制
+# 发起汉化、胡化：胡人政权组 × 停滞期（组参数 hd_yiguan_can_reform），独立王国级以上；二者互斥
+
+############################################################
+# 推行汉化：迁都、易服、改姓、禁胡语四步，改为故事循环推进，可传主继承人
+############################################################
+hd_yiguan_sinicization_decision = {
+	decision_group_type = major
+	picture = {
+		reference = "gfx/interface/illustrations/decisions/tgp_scholars.dds"
+	}
+	sort_order = 59
+
+	is_shown = {
+		hd_yiguan_active_trigger = yes
+		hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_grp_hu }
+		NOT = { has_title = title:h_china }	# 天子另有天朝循环版汉化改制（hd_dc_con_sinicization_decision）
+		NOT = { has_variable = hd_dc_con_sinicization_done }
+		NOT = { hd_yiguan_is_sinicized_trigger = yes }
+	}
+	is_valid_showing_failures_only = {
+		is_available_adult = yes
+	}
+	is_valid = {
+		custom_tooltip = {
+			text = hd_yiguan_hu_reform_phase_tt
+			top_participant_group:hd_yiguan_nandu ?= { has_participant_group_parameter = hd_yiguan_can_reform }
+		}
+		is_independent_ruler = yes
+		custom_tooltip = {
+			text = hd_yiguan_end_kingdom_tt
+			highest_held_title_tier >= tier_kingdom
+			any_held_title = {	# 官职等无地头衔不算（e_WJ_minister_* 会抬高 highest_held_title_tier）
+				tier >= tier_kingdom
+				is_landless_type_title = no
+			}
+		}
+		custom_tooltip = {
+			text = hd_dc_con_sinicization_active_tt
+			NOT = { has_variable = hd_dc_con_sinicization_stage }
+			NOT = { owns_story_of_type = story_hd_yiguan_sinicization }
+		}
+		custom_tooltip = {
+			text = hd_yiguan_huhua_blocks_reform_tt
+			NOT = { has_variable = hd_yiguan_huhua }
+		}
+		custom_tooltip = {
+			text = hd_dc_con_baosu_blocks_tt
+			NOT = { has_character_flag = hd_dc_con_baosu }
+		}
+		custom_tooltip = {
+			text = hd_dc_con_sinicization_abandoned_tt
+			NOT = { has_character_flag = hd_dc_con_sinicization_abandoned }
+		}
+	}
+
+	effect = {
+		custom_tooltip = hd_yiguan_sinicization_decision_effect_tt
+		show_as_tooltip = {
+			every_vassal = {
+				limit = { culture = root.culture }
+				custom = hd_dc_con_native_vassals_tt
+				add_opinion = {
+					target = root
+					modifier = hd_dc_con_sinicization_native_opinion
+				}
+			}
+			every_vassal = {
+				limit = { hd_dc_is_chinese_heritage_trigger = yes }
+				custom = hd_dc_con_han_vassals_tt
+				add_opinion = {
+					target = root
+					modifier = hd_dc_con_sinicization_han_opinion
+				}
+			}
+		}
+		hidden_effect = {
+			# 先写角色变量，再建故事（on_setup 读本族文化）
+			if = {
+				limit = { NOT = { has_variable = hd_dc_con_native_culture } }
+				culture = { save_scope_as = hd_dc_con_start_culture }
+				set_variable = { name = hd_dc_con_native_culture value = scope:hd_dc_con_start_culture }
+			}
+			set_variable = hd_yiguan_north_reform
+			set_variable = { name = hd_dc_con_sinicization_stage value = 0 }
+			if = {
+				limit = { NOT = { owns_story_of_type = story_hd_yiguan_sinicization } }
+				create_story = { type = story_hd_yiguan_sinicization }
+			}
+			hd_yiguan_hu_notify_players_effect = {
+				EVENT = hd_yiguan.3010
+				TITLE = hd_yiguan_reform_decreed_toast
+				TT = hd_yiguan_reform_decreed_toast_tt
+			}
+		}
+	}
+
+	ai_check_interval = 60
+	ai_will_do = {
+		base = 10
+		modifier = {
+			add = 20
+			learning >= 15
+		}
+		modifier = {
+			add = 10
+			has_trait = ambitious
+		}
+		# 有汉人谋臣（议会中至少两名华夏传承者），雄心者更愿改制
+		modifier = {
+			add = 10
+			any_councillor = {
+				count >= 2
+				hd_yiguan_is_huaxia_trigger = yes
+			}
+		}
+		modifier = {
+			add = 15
+			has_trait = ambitious
+			any_councillor = {
+				count >= 2
+				hd_yiguan_is_huaxia_trigger = yes
+			}
+		}
+		# 胡汉对峙事件中每选一次"擢用汉士"+10
+		modifier = {
+			add = hd_yiguan_zhuoyong_ai_value
+			has_variable = hd_yiguan_zhuoyong_count
+		}
+		modifier = {
+			add = -20
+			OR = {
+				has_trait = stubborn
+				has_trait = paranoid
+			}
+		}
+		modifier = {
+			add = -15
+			OR = {
+				has_trait = zealous
+				has_trait = arrogant
+			}
+		}
+	}
+}
+
+############################################################
+# 推行胡化：20 年内每年 25% 把领内 1~3 个汉文化沦陷县改为统治者文化；累计上限 30 县
+############################################################
+hd_yiguan_huhua_decision = {
+	decision_group_type = major
+	picture = {
+		reference = "gfx/interface/illustrations/decisions/mpo_decision_great_khan.dds"
+	}
+	sort_order = 59
+
+	is_shown = {
+		hd_yiguan_active_trigger = yes
+		hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_grp_hu }
+		NOT = { has_title = title:h_china }
+		NOT = { has_variable = hd_dc_con_sinicization_done }
+		NOT = { hd_yiguan_is_sinicized_trigger = yes }
+	}
+	is_valid_showing_failures_only = {
+		is_available_adult = yes
+	}
+	is_valid = {
+		custom_tooltip = {
+			text = hd_yiguan_hu_reform_phase_tt
+			top_participant_group:hd_yiguan_nandu ?= { has_participant_group_parameter = hd_yiguan_can_reform }
+		}
+		is_independent_ruler = yes
+		custom_tooltip = {
+			text = hd_yiguan_end_kingdom_tt
+			highest_held_title_tier >= tier_kingdom
+			any_held_title = {	# 官职等无地头衔不算
+				tier >= tier_kingdom
+				is_landless_type_title = no
+			}
+		}
+		custom_tooltip = {
+			text = hd_yiguan_huhua_active_tt
+			NOT = { has_variable = hd_yiguan_huhua }
+		}
+		custom_tooltip = {
+			text = hd_yiguan_reform_blocks_huhua_tt
+			NOT = { has_variable = hd_dc_con_sinicization_stage }
+			NOT = { owns_story_of_type = story_hd_yiguan_sinicization }
+		}
+		custom_tooltip = {
+			text = hd_yiguan_huhua_cap_tt
+			OR = {
+				NOT = { has_variable = hd_yiguan_huhua_count }
+				var:hd_yiguan_huhua_count < 30
+			}
+		}
+		custom_tooltip = {
+			text = hd_yiguan_huhua_target_tt
+			any_realm_county = {
+				hd_yiguan_county_in_north_trigger = yes
+				hd_yiguan_occupied_county_trigger = yes
+				NOT = { culture = root.culture }
+			}
+		}
+	}
+
+	cost = {
+		prestige = medium_prestige_value
+	}
+
+	effect = {
+		save_scope_as = hd_yiguan_hu_actor
+		custom_tooltip = hd_yiguan_huhua_decision_effect_tt
+		# 汉人封臣（含次级封臣）好感 −15；推行期间新出现的汉人封臣由年度脉冲补上（hd_yiguan_huhua_yearly_effect）
+		every_vassal_or_below = {
+			limit = { hd_yiguan_is_han_trigger = yes }
+			custom = hd_yiguan_huhua_han_vassals_tt
+			add_opinion = {
+				target = root
+				modifier = hd_yiguan_huhua_opinion
+			}
+		}
+		custom_tooltip = hd_yiguan_huhua_uprising_tt
+		hidden_effect = {
+			# 变量值 = 期满之年（年度补发好感时据此算剩余年数）；别处只判 has_variable
+			set_variable = { name = hd_yiguan_huhua value = { value = current_year add = 20 } years = 20 }
+			if = {
+				limit = { NOT = { has_variable = hd_yiguan_huhua_count } }
+				set_variable = { name = hd_yiguan_huhua_count value = 0 }
+			}
+			if = {
+				limit = {
+					NOT = { is_target_in_global_variable_list = { name = hd_yiguan_huhua_rulers target = root } }
+				}
+				add_to_global_variable_list = { name = hd_yiguan_huhua_rulers target = root }
+			}
+			hd_yiguan_fire_catalyst_effect = { CATALYST = catalyst_hd_yiguan_huhua_decreed CHAR = root }
+			# 通知玩家：境内有地汉人封臣（含次级）收本身视角的 3202；南方政权收江左视角的 3201；其他参与者收弹窗
+			every_player = {
+				limit = {
+					NOT = { this = scope:hd_yiguan_hu_actor }
+					OR = {
+						top_participant_group:hd_yiguan_nandu ?= { always = yes }
+						AND = {
+							top_liege = scope:hd_yiguan_hu_actor
+							is_landed = yes
+							hd_yiguan_is_han_trigger = yes
+						}
+					}
+				}
+				if = {
+					limit = {
+						top_liege = scope:hd_yiguan_hu_actor
+						is_landed = yes
+						hd_yiguan_is_han_trigger = yes
+					}
+					trigger_event = hd_yiguan.3202
+				}
+				else_if = {
+					limit = { hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_grp_south } }
+					trigger_event = hd_yiguan.3201
+				}
+				else = {
+					send_interface_toast = {
+						type = event_toast_effect_neutral
+						title = hd_yiguan_huhua_decreed_toast
+						left_icon = scope:hd_yiguan_hu_actor
+						custom_tooltip = hd_yiguan_huhua_decreed_toast_tt
+					}
+				}
+			}
+		}
+	}
+
+	ai_check_interval = 60
+	ai_potential = {
+		is_at_war = no
+		any_realm_county = {
+			count >= 5
+			hd_yiguan_county_in_north_trigger = yes
+			hd_yiguan_occupied_county_trigger = yes
+		}
+	}
+	ai_will_do = {
+		base = 0
+		modifier = {
+			add = 25
+			has_trait = zealous
+		}
+		modifier = {
+			add = 20
+			has_trait = arrogant
+		}
+		modifier = {
+			add = 15
+			has_trait = wrathful
+		}
+		modifier = {
+			add = 10
+			OR = {
+				has_trait = stubborn
+				has_trait = callous
+			}
+		}
+		modifier = {
+			add = -20
+			OR = {
+				has_trait = compassionate
+				has_trait = just
+			}
+		}
+		modifier = {
+			add = -15
+			learning >= 15
+		}
+		# 有汉人谋臣、或曾"擢用汉士"者不愿胡化
+		modifier = {
+			add = -15
+			any_councillor = {
+				count >= 2
+				hd_yiguan_is_huaxia_trigger = yes
+			}
+		}
+		modifier = {
+			add = {
+				value = hd_yiguan_zhuoyong_ai_value
+				multiply = -1
+			}
+			has_variable = hd_yiguan_zhuoyong_count
+		}
+	}
+}
+
+############################################################
+# 建天朝制：汉化王朝、独立、王国级以上、非天朝制（原样移自旧 zz_hd_yiguan_decisions.txt）
+############################################################
+hd_yiguan_celestial_decision = {
+	decision_group_type = major
+	picture = {
+		reference = "gfx/interface/illustrations/decisions/tgp_scholars.dds"
+	}
+	sort_order = 58
+
+	is_shown = {
+		hd_yiguan_is_sinicized_trigger = yes
+		is_independent_ruler = yes
+		highest_held_title_tier >= tier_kingdom
+		any_held_title = {	# 官职等无地头衔不算
+			tier >= tier_kingdom
+			is_landless_type_title = no
+		}
+		NOT = { has_government = celestial_government }
+	}
+	is_valid_showing_failures_only = {
+		is_available_adult = yes
+	}
+	cost = {
+		prestige = major_prestige_value
+		gold = medium_gold_value
+	}
+
+	effect = {
+		custom_tooltip = hd_yiguan_celestial_decision_effect_tt
+		hidden_effect = { hd_force_celestial_effect = yes }
+		if = {
+			limit = { has_variable = hd_dc_con_native_culture }
+			every_vassal = {
+				limit = { culture = root.var:hd_dc_con_native_culture }
+				add_opinion = {
+					target = root
+					modifier = hd_yiguan_celestial_native_opinion
+				}
+			}
+		}
+	}
+
+	ai_check_interval = 60
+	ai_will_do = {
+		base = 40
+		modifier = {
+			add = -30
+			has_trait = stubborn
+		}
+	}
+}

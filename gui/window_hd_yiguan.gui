@@ -1,0 +1,1388 @@
+﻿######################################################
+############ 衣冠南渡 局势窗口（仿斗争窗口） ############
+######################################################
+# 由局势 hd_yiguan_nandu 的 gui_window_name = window_hd_yiguan 打开（_situations.info:23-29：根控件须同名）。
+# 骨架：原版 window_tgp_natural_disaster.gui:4-30（单分区 + 自定义窗口），主页签尺寸 Window_Size_MainTab。
+# 版式：原版 window_struggle.gui（阶段大图、去向卡片、结局卡片）。
+# 自上而下：标题栏（参与者 / 地图模式 / 返回 / 关闭）→ 可滚动正文：
+#   1 阶段大图 + 当前阶段 + 已历年数   2 阶段说明与开放事项   3 你的组
+#   4 去向卡片（x/1000）+ 选中去向的诱因   5 本阶段各组效果（五组页签）
+#   6 本组可用决议（写死 9 个决议键）   7 结局卡片（写死 3 个结局决议键）
+# 页签状态：界面变量 hd_yiguan_grp_tab（存参与者组键），打开窗口时清空 = 默认显示玩家所在组。
+# 只复用 mod 未覆盖的原版文件里的类型；新类型一律 hd_yiguan_ 前缀。
+
+window = {
+	name = "window_hd_yiguan"
+	widgetid = "window_hd_yiguan"
+	datacontext = "[SituationWindow.GetSituation]"
+	datacontext = "[Situation.GetTopSubRegion]"
+	datacontext = "[GetVariableSystem]"
+	datacontext = "[GetPlayer]"
+	parentanchor = top|right
+	layer = windows_layer
+	movable = no
+	allow_outside = yes
+
+	using = Window_Size_MainTab
+
+	state = {
+		name = _show
+		using = Animation_FadeIn_Quick
+		using = Sound_WindowShow_Standard
+		using = Window_Position_MainTab
+
+		# 写法同原版 window_tgp_dynastic_cycle.gui:26-28、window_struggle.gui:25
+		on_start = "[SituationWindow.ClearSelectedFuturePhaseType]"
+		on_start = "[GetVariableSystem.Clear( 'hd_yiguan_grp_tab' )]"
+		on_start = "[SituationWindow.AccessParticipantCharacterList.SetSelectedParticipantGroup( Situation.GetTopCharacterParticipantGroup( GetPlayer.Self ) )]"
+	}
+
+	state = {
+		name = _hide
+		using = Animation_FadeOut_Quick
+		using = Sound_WindowHide_Standard
+		using = Window_Position_MainTab_Hide
+	}
+
+	margin_widget = {
+		size = { 100% 100% }
+		margin = { 0 26 }
+		margin_right = 13
+
+		widget = {
+			size = { 100% 100% }
+
+			vbox = {
+				using = Window_Margins
+
+				layoutpolicy_vertical = expanding
+				layoutpolicy_horizontal = expanding
+
+				### 标题栏 ###
+				header_pattern = {
+					layoutpolicy_horizontal = expanding
+
+					blockoverride "header_text"
+					{
+						text = "[Situation.GetNameNoTooltip]"
+					}
+
+					# 参与者按钮（写法同原版 window_character.gui:431-440 的标题栏图标按钮）
+					blockoverride "extra_buttons"
+					{
+						button = {
+							size = { 30 30 }
+							datacontext = "[SituationWindow.AccessParticipantCharacterList]"
+							onclick = "[SituationParticipantCharacterList.Toggle]"
+							tooltip = "hd_yiguan_gui_participants_tt"
+							using = tooltip_se
+
+							icon = {
+								size = { 30 30 }
+								texture = "gfx/interface/icons/icon_group_of_characters.dds"
+							}
+						}
+
+						# 地图模式（§1 第 10 轮：右上 参与者 / 地图模式 / 关闭）。原版 button_situation（gui/shared/buttons_icons.gui:482，图标即局势地图模式）；
+						# 切换写法同原版 hud.gui:6146 SetMapMode、hud.gui:99 IsMapMode。未开局势地图时点开，已开时点回国家地图
+						button_situation = {
+							visible = "[Not( IsMapMode( 'situation' ) )]"
+							size = { 30 30 }
+							onclick = "[SetMapMode( 'situation' )]"
+							tooltip = "hd_yiguan_gui_map_situation_tt"
+							using = tooltip_se
+						}
+
+						button_situation = {
+							visible = "[IsMapMode( 'situation' )]"
+							size = { 30 30 }
+							down = "[IsMapMode( 'situation' )]"
+							onclick = "[SetMapMode( 'realms' )]"
+							tooltip = "hd_yiguan_gui_map_realms_tt"
+							using = tooltip_se
+						}
+					}
+
+					blockoverride "button_back"
+					{
+						onclick = "[OpenGameView( 'situations' )]"
+					}
+
+					blockoverride "button_close"
+					{
+						onclick = "[SituationWindow.Close]"
+						onclick = "[SetMapMode( 'realms' )]"
+					}
+				}
+
+				### 正文（可滚动）###
+				scrollbox = {
+					name = "hd_yiguan_body"
+					layoutpolicy_horizontal = expanding
+					layoutpolicy_vertical = expanding
+
+					blockoverride "scrollbox_background" {}
+					blockoverride "scrollbox_background_fade" {}
+
+					# 只给滚动条留出右边距，正文约 545 宽
+					blockoverride "scrollbox_margins"
+					{
+						margin_right = 16
+					}
+
+					blockoverride "scrollbox_content"
+					{
+						vbox = {
+							name = "hd_yiguan_content"
+							layoutpolicy_horizontal = expanding
+							spacing = 8
+
+							visible = "[SituationSubRegion.IsValid]"
+							datacontext = "[SituationSubRegion.GetCurrentPhase]"
+
+							############################
+							# 1 阶段大图 + 当前阶段
+							############################
+							vbox = {
+								name = "hd_yiguan_phase_banner"
+								layoutpolicy_horizontal = expanding
+								datacontext = "[SituationPhase.GetType]"
+
+								# 阶段插图（局势阶段 illustration；写法同原版 window_pam_christian_church.gui:98-102）
+								background = {
+									texture = "[SituationPhaseType.GetIllustration]"
+									using = Mask_Rough_Edges
+									fittype = centercrop
+									alpha = 0.95
+
+									modify_texture = {
+										texture = "gfx/interface/component_masks/mask_fade_vertical.dds"
+										blend_mode = alphamultiply
+									}
+								}
+
+								spacer = {
+									size = { 10 150 }
+								}
+
+								hbox = {
+									name = "hd_yiguan_phase_plate"
+									layoutpolicy_horizontal = expanding
+									margin = { 14 8 }
+									spacing = 12
+
+									tooltipwidget = {
+										cooltip_situation_phase_type = {}
+									}
+									using = tooltip_ws
+
+									background = {
+										using = Background_Area_Dark
+										alpha = 0.85
+									}
+
+									container = {
+										icon = {
+											size = { 74 74 }
+											texture = "gfx/interface/icons/struggle_banners/icon_background_02.dds"
+										}
+
+										icon = {
+											parentanchor = center
+											position = { 0 -2 }
+											size = { 54 54 }
+											texture = "[SituationPhaseType.GetIcon]"
+										}
+									}
+
+									vbox = {
+										layoutpolicy_horizontal = expanding
+
+										text_single = {
+											layoutpolicy_horizontal = expanding
+											text = "hd_yiguan_gui_current_phase"
+											using = Font_Size_Medium
+											align = nobaseline
+										}
+
+										text_single = {
+											layoutpolicy_horizontal = expanding
+											text = "[SituationPhaseType.GetNameNoTooltip]"
+											using = Font_Size_Big
+											default_format = "#high"
+											align = nobaseline
+										}
+
+										# 局势变量读取先例：原版 situation_window_l_*.yml SITUATION_WINDOW_CURRENT_PHASE_FATALITIES；IsSet 先例 window_pam_christian_church.gui:577
+										text_single = {
+											visible = "[Situation.MakeScope.Var( 'hd_yiguan_years' ).IsSet]"
+											layoutpolicy_horizontal = expanding
+											text = "hd_yiguan_gui_years"
+											default_format = "#weak"
+											align = nobaseline
+										}
+
+										text_single = {
+											visible = "[Not( Situation.MakeScope.Var( 'hd_yiguan_years' ).IsSet )]"
+											layoutpolicy_horizontal = expanding
+											text = "hd_yiguan_gui_years_new"
+											default_format = "#weak"
+											align = nobaseline
+										}
+
+										text_single = {
+											layoutpolicy_horizontal = expanding
+											text = "hd_yiguan_gui_fallback_note"
+											default_format = "#weak"
+											using = Font_Size_Small
+											align = nobaseline
+										}
+									}
+
+									expand = {}
+								}
+							}
+
+							############################
+							# 2 阶段说明与本阶段开放事项
+							############################
+							vbox = {
+								name = "hd_yiguan_phase_desc"
+								layoutpolicy_horizontal = expanding
+								margin = { 15 10 }
+								spacing = 6
+								datacontext = "[SituationPhase.GetType]"
+
+								background = {
+									using = Background_Area
+								}
+
+								text_multi = {
+									min_width = 500
+									max_width = 500
+									autoresize = yes
+									text = "[SituationPhaseType.GetDesc]"
+								}
+
+								# 阶段参数说明（先例 window_pam_christian_church.gui:1255、1330）
+								vbox = {
+									visible = "[Not( StringIsEmpty( SituationPhaseType.GetParameterDesc ) )]"
+									layoutpolicy_horizontal = expanding
+
+									text_single = {
+										layoutpolicy_horizontal = expanding
+										text = "hd_yiguan_gui_phase_unlocks"
+										default_format = "#high"
+										align = nobaseline
+									}
+
+									text_multi = {
+										min_width = 500
+										max_width = 500
+										autoresize = yes
+										using = Font_Size_Small
+										text = "[SituationPhaseType.GetParameterDesc]"
+									}
+								}
+							}
+
+							############################
+							# 3 你的组（写法同原版 window_situation.gui:127-193）
+							############################
+							vbox = {
+								name = "hd_yiguan_my_group"
+								layoutpolicy_horizontal = expanding
+								margin = { 15 10 }
+								spacing = 6
+								datacontext = "[SituationSubRegion.GetCharacterParticipantGroup( GetPlayer )]"
+
+								background = {
+									using = Background_Area
+								}
+
+								text_label_center = {
+									layoutpolicy_horizontal = expanding
+									text = "hd_yiguan_gui_my_group_header"
+								}
+
+								hbox = {
+									layoutpolicy_horizontal = expanding
+									spacing = 10
+
+									icon = {
+										visible = "[SituationParticipantGroup.IsValid]"
+										size = { 44 44 }
+										texture = "[SituationParticipantGroup.GetType.GetIcon]"
+
+										background = {
+											texture = "gfx/interface/icons/struggle_banners/icon_background_dark.dds"
+											margin = { 6 6 }
+										}
+									}
+
+									text_multi = {
+										visible = "[Not( SituationParticipantGroup.IsValid )]"
+										min_width = 330
+										max_width = 330
+										autoresize = yes
+										text = "hd_yiguan_gui_no_group"
+										default_format = "#low"
+									}
+
+									vbox = {
+										visible = "[SituationParticipantGroup.IsValid]"
+
+										text_single = {
+											layoutpolicy_horizontal = expanding
+											text = "[SituationParticipantGroup.GetNameNoTooltip]"
+											using = Font_Size_Medium
+											default_format = "#high"
+											align = nobaseline
+										}
+
+										text_single = {
+											layoutpolicy_horizontal = expanding
+											text = "hd_yiguan_gui_my_group_sub"
+											default_format = "#weak"
+											align = nobaseline
+										}
+									}
+
+									expand = {}
+
+									# 参与者名录开关（写法同原版 window_tgp_natural_disaster.gui:423、470-475）
+									button_standard = {
+										size = { 150 32 }
+										datacontext = "[SituationWindow.AccessParticipantCharacterList]"
+										onclick = "[SituationParticipantCharacterList.Toggle]"
+										down = "[SituationParticipantCharacterList.IsVisible]"
+										text = "hd_yiguan_gui_view_participants"
+									}
+								}
+
+								text_multi = {
+									visible = "[SituationParticipantGroup.IsValid]"
+									min_width = 500
+									max_width = 500
+									autoresize = yes
+									using = Font_Size_Small
+									text = "[SituationParticipantGroup.GetType.GetDescription]"
+								}
+							}
+
+							############################
+							# 4 去向卡片 + 诱因
+							############################
+							vbox = {
+								name = "hd_yiguan_future"
+								layoutpolicy_horizontal = expanding
+								margin = { 15 10 }
+								spacing = 6
+
+								visible = "[DataModelHasItems( SituationPhase.GetFuturePhases )]"
+
+								background = {
+									using = Background_Area
+								}
+
+								text_label_center = {
+									layoutpolicy_horizontal = expanding
+									text = "hd_yiguan_gui_future_header"
+								}
+
+								text_multi = {
+									min_width = 500
+									max_width = 500
+									autoresize = yes
+									using = Font_Size_Small
+									default_format = "#weak"
+									text = "hd_yiguan_gui_future_hint"
+								}
+
+								# 去向卡片（列表同原版 window_situation.gui:460-553）
+								hbox = {
+									layoutpolicy_horizontal = expanding
+
+									expand = {}
+
+									hbox = {
+										name = "hd_yiguan_future_cards"
+										spacing = 40
+										datamodel = "[SituationPhase.GetFuturePhases]"
+
+										item = {
+											hd_yiguan_future_phase_card = {}
+										}
+									}
+
+									expand = {}
+								}
+
+								# 选中（或领先）去向的诱因（同原版 window_tgp_dynastic_cycle.gui:3027-3030 的双重数据上下文）
+								vbox = {
+									name = "hd_yiguan_catalysts"
+									layoutpolicy_horizontal = expanding
+									margin_top = 6
+									spacing = 4
+
+									datacontext = "[SituationWindow.GetSelectedSubRegion.GetCurrentPhase]"
+									datacontext = "[SituationWindow.GetSelectedOrLeadingFuturePhaseType]"
+									visible = "[SituationPhaseType.IsValid]"
+
+									hbox = {
+										layoutpolicy_horizontal = expanding
+										spacing = 6
+
+										icon = {
+											size = { 28 28 }
+											texture = "[SituationPhaseType.GetIcon]"
+										}
+
+										text_single = {
+											text = "hd_yiguan_gui_catalyst_header"
+											using = Font_Size_Medium
+											align = nobaseline
+										}
+
+										expand = {}
+
+										# 取消选择（同原版 window_tgp_dynastic_cycle.gui 的 return_current_era_button）
+										button_standard_small = {
+											visible = "[SituationWindow.GetSelectedFuturePhaseType.IsValid]"
+											size = { 90 25 }
+											onclick = "[SituationWindow.ClearSelectedFuturePhaseType]"
+											text = "hd_yiguan_gui_catalyst_back"
+											tooltip = "hd_yiguan_gui_catalyst_back_tt"
+										}
+									}
+
+									text_multi = {
+										min_width = 500
+										max_width = 500
+										autoresize = yes
+										using = Font_Size_Small
+										default_format = "#weak"
+										text = "hd_yiguan_gui_catalyst_hint"
+									}
+
+									text_single = {
+										visible = "[IsDataModelEmpty( SituationWindow.GetCatalystsForSelectedPhase )]"
+										layoutpolicy_horizontal = expanding
+										text = "hd_yiguan_gui_catalyst_none"
+										default_format = "#low"
+										align = nobaseline
+									}
+
+									vbox = {
+										name = "hd_yiguan_catalyst_entries"
+										layoutpolicy_horizontal = expanding
+										spacing = 3
+										datamodel = "[SituationWindow.GetCatalystsForSelectedPhase]"
+
+										item = {
+											hd_yiguan_catalyst_entry = {}
+										}
+									}
+								}
+							}
+
+							############################
+							# 5 本阶段各组效果（五组页签）
+							############################
+							vbox = {
+								name = "hd_yiguan_effects"
+								layoutpolicy_horizontal = expanding
+								margin = { 15 10 }
+								spacing = 6
+								datacontext = "[SituationPhase.GetType]"
+
+								background = {
+									using = Background_Area
+								}
+
+								text_label_center = {
+									layoutpolicy_horizontal = expanding
+									text = "hd_yiguan_gui_effects_header"
+								}
+
+								# 页签：按局势定义顺序列出五组（数据模型先例 cooltip.gui:8485、window_pam_christian_church.gui:1275）
+								hbox = {
+									name = "hd_yiguan_group_tabs"
+									layoutpolicy_horizontal = expanding
+									datamodel = "[Situation.GetType.GetParticipantGroupTypes]"
+
+									item = {
+										button_tab = {
+											onclick = "[GetVariableSystem.Set( 'hd_yiguan_grp_tab', SituationParticipantGroupType.GetKey )]"
+											down = "[Or( GetVariableSystem.HasValue( 'hd_yiguan_grp_tab', SituationParticipantGroupType.GetKey ), And( Not( GetVariableSystem.Exists( 'hd_yiguan_grp_tab' ) ), ObjectsEqual( SituationSubRegion.GetCharacterParticipantGroup( GetPlayer ).GetName, SituationParticipantGroupType.GetName ) ) )]"
+
+											blockoverride "tab_label"
+											{
+												text = "[SituationParticipantGroupType.GetNameNoTooltip]"
+											}
+										}
+									}
+								}
+
+								# 选中组的效果明细（GetParticipantGroupEffectTooltipBreakdown 先例 cooltip.gui:8687-8705；玩家组判定同 window_the_great_steppe.gui:346）
+								vbox = {
+									name = "hd_yiguan_group_effects"
+									layoutpolicy_horizontal = expanding
+									ignoreinvisible = yes
+									datamodel = "[Situation.GetType.GetParticipantGroupTypes]"
+
+									item = {
+										vbox = {
+											visible = "[Or( GetVariableSystem.HasValue( 'hd_yiguan_grp_tab', SituationParticipantGroupType.GetKey ), And( Not( GetVariableSystem.Exists( 'hd_yiguan_grp_tab' ) ), ObjectsEqual( SituationSubRegion.GetCharacterParticipantGroup( GetPlayer ).GetName, SituationParticipantGroupType.GetName ) ) )]"
+											layoutpolicy_horizontal = expanding
+											margin = { 6 6 }
+											spacing = 4
+
+											hbox = {
+												layoutpolicy_horizontal = expanding
+												spacing = 8
+
+												icon = {
+													size = { 36 36 }
+													texture = "[SituationParticipantGroupType.GetIcon]"
+												}
+
+												text_single = {
+													text = "[SituationParticipantGroupType.GetNameNoTooltip]"
+													using = Font_Size_Medium
+													default_format = "#high"
+													align = nobaseline
+												}
+
+												text_single = {
+													visible = "[ObjectsEqual( SituationSubRegion.GetCharacterParticipantGroup( GetPlayer ).GetName, SituationParticipantGroupType.GetName )]"
+													text = "hd_yiguan_gui_effects_yours"
+													default_format = "#P"
+													align = nobaseline
+												}
+
+												expand = {}
+											}
+
+											text_multi = {
+												visible = "[Not( StringIsEmpty( SituationPhaseType.GetParticipantGroupEffectTooltipBreakdown( SituationParticipantGroupType.Self ) ) )]"
+												min_width = 500
+												max_width = 500
+												autoresize = yes
+												using = Font_Size_Small
+												text = "[SituationPhaseType.GetParticipantGroupEffectTooltipBreakdown( SituationParticipantGroupType.Self )]"
+											}
+
+											text_single = {
+												visible = "[StringIsEmpty( SituationPhaseType.GetParticipantGroupEffectTooltipBreakdown( SituationParticipantGroupType.Self ) )]"
+												layoutpolicy_horizontal = expanding
+												text = "hd_yiguan_gui_effects_none"
+												default_format = "#low"
+												align = nobaseline
+											}
+										}
+									}
+								}
+
+								text_single = {
+									visible = "[And( Not( GetVariableSystem.Exists( 'hd_yiguan_grp_tab' ) ), Not( SituationSubRegion.GetCharacterParticipantGroup( GetPlayer ).IsValid ) )]"
+									layoutpolicy_horizontal = expanding
+									text = "hd_yiguan_gui_effects_pick"
+									default_format = "#weak"
+									align = nobaseline
+								}
+							}
+
+							############################
+							# 6 本组可用决议（写死决议键；写法同原版 window_pam_christian_church.gui:433-447）
+							############################
+							vbox = {
+								name = "hd_yiguan_decisions"
+								layoutpolicy_horizontal = expanding
+								margin = { 15 10 }
+								spacing = 3
+
+								background = {
+									using = Background_Area
+								}
+
+								text_label_center = {
+									layoutpolicy_horizontal = expanding
+									text = "hd_yiguan_gui_decisions_header"
+								}
+
+								text_single = {
+									layoutpolicy_horizontal = expanding
+									text = "hd_yiguan_gui_decisions_hint"
+									default_format = "#weak"
+									using = Font_Size_Small
+									align = nobaseline
+								}
+
+								text_multi = {
+									visible = "[Not( Or3( Or4( GetDecisionWithKey( 'hd_yiguan_qizu_nanqian_decision' ).IsShownForPlayer, GetDecisionWithKey( 'hd_yiguan_jubing_qiyi_decision' ).IsShownForPlayer, GetDecisionWithKey( 'hd_yiguan_qibing_beihuan_decision' ).IsShownForPlayer, GetDecisionWithKey( 'hd_yiguan_zhaoji_liumin_decision' ).IsShownForPlayer ), Or4( GetDecisionWithKey( 'hd_yiguan_guifu_nanchao_decision' ).IsShownForPlayer, GetDecisionWithKey( 'hd_yiguan_sinicization_decision' ).IsShownForPlayer, GetDecisionWithKey( 'hd_yiguan_huhua_decision' ).IsShownForPlayer, GetDecisionWithKey( 'hd_yiguan_return_capital_decision' ).IsShownForPlayer ), GetDecisionWithKey( 'hd_yiguan_celestial_decision' ).IsShownForPlayer ) )]"
+									min_width = 500
+									max_width = 500
+									autoresize = yes
+									text = "hd_yiguan_gui_decisions_none"
+									default_format = "#low"
+								}
+
+								# 沦陷区汉人：举族南迁、举兵起义
+								button_decision_entry = {
+									datacontext = "[GetDecisionWithKey( 'hd_yiguan_qizu_nanqian_decision' )]"
+									visible = "[Decision.IsShownForPlayer]"
+									layoutpolicy_horizontal = expanding
+									onclick = "[OpenGameViewData( 'decision_detail', Decision.Self )]"
+									using = tooltip_se
+								}
+
+								button_decision_entry = {
+									datacontext = "[GetDecisionWithKey( 'hd_yiguan_jubing_qiyi_decision' )]"
+									visible = "[Decision.IsShownForPlayer]"
+									layoutpolicy_horizontal = expanding
+									onclick = "[OpenGameViewData( 'decision_detail', Decision.Self )]"
+									using = tooltip_se
+								}
+
+								# 侨姓流亡者：起兵北还
+								button_decision_entry = {
+									datacontext = "[GetDecisionWithKey( 'hd_yiguan_qibing_beihuan_decision' )]"
+									visible = "[Decision.IsShownForPlayer]"
+									layoutpolicy_horizontal = expanding
+									onclick = "[OpenGameViewData( 'decision_detail', Decision.Self )]"
+									using = tooltip_se
+								}
+
+								# 北方汉人：招集流民、归附南朝
+								button_decision_entry = {
+									datacontext = "[GetDecisionWithKey( 'hd_yiguan_zhaoji_liumin_decision' )]"
+									visible = "[Decision.IsShownForPlayer]"
+									layoutpolicy_horizontal = expanding
+									onclick = "[OpenGameViewData( 'decision_detail', Decision.Self )]"
+									using = tooltip_se
+								}
+
+								button_decision_entry = {
+									datacontext = "[GetDecisionWithKey( 'hd_yiguan_guifu_nanchao_decision' )]"
+									visible = "[Decision.IsShownForPlayer]"
+									layoutpolicy_horizontal = expanding
+									onclick = "[OpenGameViewData( 'decision_detail', Decision.Self )]"
+									using = tooltip_se
+								}
+
+								# 胡人政权：推行汉化、推行胡化
+								button_decision_entry = {
+									datacontext = "[GetDecisionWithKey( 'hd_yiguan_sinicization_decision' )]"
+									visible = "[Decision.IsShownForPlayer]"
+									layoutpolicy_horizontal = expanding
+									onclick = "[OpenGameViewData( 'decision_detail', Decision.Self )]"
+									using = tooltip_se
+								}
+
+								button_decision_entry = {
+									datacontext = "[GetDecisionWithKey( 'hd_yiguan_huhua_decision' )]"
+									visible = "[Decision.IsShownForPlayer]"
+									layoutpolicy_horizontal = expanding
+									onclick = "[OpenGameViewData( 'decision_detail', Decision.Self )]"
+									using = tooltip_se
+								}
+
+								# 还都旧京、建天朝制
+								button_decision_entry = {
+									datacontext = "[GetDecisionWithKey( 'hd_yiguan_return_capital_decision' )]"
+									visible = "[Decision.IsShownForPlayer]"
+									layoutpolicy_horizontal = expanding
+									onclick = "[OpenGameViewData( 'decision_detail', Decision.Self )]"
+									using = tooltip_se
+								}
+
+								button_decision_entry = {
+									datacontext = "[GetDecisionWithKey( 'hd_yiguan_celestial_decision' )]"
+									visible = "[Decision.IsShownForPlayer]"
+									layoutpolicy_horizontal = expanding
+									onclick = "[OpenGameViewData( 'decision_detail', Decision.Self )]"
+									using = tooltip_se
+								}
+							}
+
+							############################
+							# 7 结局卡片（写死三个结局决议键；卡片仿原版 window_struggle.gui:1008-1113）
+							############################
+							vbox = {
+								name = "hd_yiguan_endings"
+								layoutpolicy_horizontal = expanding
+								margin = { 8 10 }
+								spacing = 6
+
+								background = {
+									using = Background_Area
+								}
+
+								text_label_center = {
+									layoutpolicy_horizontal = expanding
+									text = "hd_yiguan_gui_endings_header"
+								}
+
+								text_single = {
+									layoutpolicy_horizontal = expanding
+									text = "hd_yiguan_gui_endings_hint"
+									default_format = "#weak"
+									using = Font_Size_Small
+									align = nobaseline
+								}
+
+								# "有结局可以宣布"：先判 IsShownForPlayer，再嵌套判 IsPossibleForPlayer（原版只对已显示的决议判可否，见 window_struggle.gui:1017-1019）。
+								# 三个结局的 is_shown 分别要求汉人政权 / 汉化政权 / 胡人政权，互斥，故至多一行可见、只有一个决议真正求 is_valid
+								vbox = {
+									name = "hd_yiguan_endings_ready"
+									layoutpolicy_horizontal = expanding
+									ignoreinvisible = yes
+
+									hd_yiguan_ending_ready_line = {
+										datacontext = "[GetDecisionWithKey( 'hd_yiguan_ending_guangfu_decision' )]"
+									}
+
+									hd_yiguan_ending_ready_line = {
+										datacontext = "[GetDecisionWithKey( 'hd_yiguan_ending_heliu_decision' )]"
+									}
+
+									hd_yiguan_ending_ready_line = {
+										datacontext = "[GetDecisionWithKey( 'hd_yiguan_ending_lunsang_decision' )]"
+									}
+								}
+
+								hbox = {
+									layoutpolicy_horizontal = expanding
+									spacing = 10
+
+									expand = {}
+
+									# 光复中原：冲突期
+									hd_yiguan_ending_card = {
+										datacontext = "[GetDecisionWithKey( 'hd_yiguan_ending_guangfu_decision' )]"
+
+										blockoverride "phase_lines"
+										{
+											text_single = {
+												visible = "[EqualTo_string( Situation.GetTopCurrentPhase.GetType.GetKey, 'hd_yiguan_phase_chongtu' )]"
+												max_width = 160
+												text = "hd_yiguan_gui_end_phase_chongtu_ok"
+												default_format = "#P"
+												align = nobaseline
+											}
+
+											text_single = {
+												visible = "[Not( EqualTo_string( Situation.GetTopCurrentPhase.GetType.GetKey, 'hd_yiguan_phase_chongtu' ) )]"
+												max_width = 160
+												text = "hd_yiguan_gui_end_phase_chongtu_bad"
+												default_format = "#N"
+												align = nobaseline
+											}
+										}
+
+										# 实时进度：只在有资格（卡片类型里已套 IsShownForPlayer）且正值冲突期时求值，免得平时每帧遍历北方诸县
+										blockoverride "progress_lines"
+										{
+											text_multi = {
+												visible = "[EqualTo_string( Situation.GetTopCurrentPhase.GetType.GetKey, 'hd_yiguan_phase_chongtu' )]"
+												min_width = 160
+												max_width = 160
+												autoresize = yes
+												using = Font_Size_Small
+												text = "hd_yiguan_gui_end_prog_guangfu"
+											}
+										}
+
+										blockoverride "condition_text"
+										{
+											text = "hd_yiguan_gui_end_cond_guangfu"
+										}
+									}
+
+									# 胡汉合流：停滞期
+									hd_yiguan_ending_card = {
+										datacontext = "[GetDecisionWithKey( 'hd_yiguan_ending_heliu_decision' )]"
+
+										blockoverride "phase_lines"
+										{
+											text_single = {
+												visible = "[EqualTo_string( Situation.GetTopCurrentPhase.GetType.GetKey, 'hd_yiguan_phase_tingzhi' )]"
+												max_width = 160
+												text = "hd_yiguan_gui_end_phase_tingzhi_ok"
+												default_format = "#P"
+												align = nobaseline
+											}
+
+											text_single = {
+												visible = "[Not( EqualTo_string( Situation.GetTopCurrentPhase.GetType.GetKey, 'hd_yiguan_phase_tingzhi' ) )]"
+												max_width = 160
+												text = "hd_yiguan_gui_end_phase_tingzhi_bad"
+												default_format = "#N"
+												align = nobaseline
+											}
+										}
+
+										# 实时进度：只在有资格且正值停滞期时求值
+										blockoverride "progress_lines"
+										{
+											text_multi = {
+												visible = "[EqualTo_string( Situation.GetTopCurrentPhase.GetType.GetKey, 'hd_yiguan_phase_tingzhi' )]"
+												min_width = 160
+												max_width = 160
+												autoresize = yes
+												using = Font_Size_Small
+												text = "hd_yiguan_gui_end_prog_heliu"
+											}
+										}
+
+										blockoverride "condition_text"
+										{
+											text = "hd_yiguan_gui_end_cond_heliu"
+										}
+									}
+
+									# 衣冠沦丧：逃亡期
+									hd_yiguan_ending_card = {
+										datacontext = "[GetDecisionWithKey( 'hd_yiguan_ending_lunsang_decision' )]"
+
+										blockoverride "phase_lines"
+										{
+											text_single = {
+												visible = "[EqualTo_string( Situation.GetTopCurrentPhase.GetType.GetKey, 'hd_yiguan_phase_taowang' )]"
+												max_width = 160
+												text = "hd_yiguan_gui_end_phase_taowang_ok"
+												default_format = "#P"
+												align = nobaseline
+											}
+
+											text_single = {
+												visible = "[Not( EqualTo_string( Situation.GetTopCurrentPhase.GetType.GetKey, 'hd_yiguan_phase_taowang' ) )]"
+												max_width = 160
+												text = "hd_yiguan_gui_end_phase_taowang_bad"
+												default_format = "#N"
+												align = nobaseline
+											}
+										}
+
+										# 实时进度：只在有资格且正值逃亡期时求值
+										blockoverride "progress_lines"
+										{
+											text_multi = {
+												visible = "[EqualTo_string( Situation.GetTopCurrentPhase.GetType.GetKey, 'hd_yiguan_phase_taowang' )]"
+												min_width = 160
+												max_width = 160
+												autoresize = yes
+												using = Font_Size_Small
+												text = "hd_yiguan_gui_end_prog_lunsang"
+											}
+										}
+
+										blockoverride "condition_text"
+										{
+											text = "hd_yiguan_gui_end_cond_lunsang"
+										}
+									}
+
+									expand = {}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	# 参与者名录（内嵌子窗口，照抄原版 window_situation.gui:723-733）
+	window_situation_participant_groups = {
+		datacontext = "[SituationWindow.AccessParticipantCharacterList]"
+		datacontext = "[SituationParticipantCharacterList.AccessCharacterList]"
+		visible = "[SituationParticipantCharacterList.IsVisible]"
+
+		datacontext = "[SituationWindow.GetSelectedSubRegion]"
+		blockoverride "header_text"
+		{
+			text = "[SituationWindow.GetParticipationWindowHeader]"
+		}
+	}
+
+	# 小地图模式按钮（局势窗口打开时 HUD 会隐藏地图模式栏，须自带；仿原版 window_struggle.gui:1126）
+	hd_yiguan_mini_map_mode = {}
+}
+
+types HdYiguanWindow
+{
+	### 去向卡片（视觉仿原版 window_struggle.gui:1133-1232 next_phase_banner；数据换成 FutureSituationPhase）
+	type hd_yiguan_future_phase_card = widget {
+		size = { 150 186 }
+
+		# 领先去向的箭头
+		icon = {
+			name = "hd_yiguan_leading_arrow"
+			visible = "[ObjectsEqual( SituationPhase.GetLeadingPhaseType.Self, FutureSituationPhase.GetType.Self )]"
+			parentanchor = top|hcenter
+			size = { 30 18 }
+			texture = "gfx/interface/window_struggle/arrow.dds"
+			tooltip = "hd_yiguan_gui_leading_tt"
+		}
+
+		button = {
+			parentanchor = bottom|hcenter
+			size = { 148 160 }
+			onclick = "[SituationWindow.ToggleSelectedFuturePhaseType( FutureSituationPhase.GetType.Self )]"
+
+			tooltipwidget = {
+				cooltip_situation_phase_type = {
+					datacontext = "[FutureSituationPhase.GetType]"
+				}
+			}
+
+			icon = {
+				size = { 100% 100% }
+				texture = "gfx/interface/window_struggle/current_phase_point_based_phase.dds"
+				alwaystransparent = yes
+
+				# 选中时提亮（同原版 window_struggle.gui:1405-1411）
+				modify_texture = {
+					visible = "[ObjectsEqual( SituationWindow.GetSelectedFuturePhaseType().Self, FutureSituationPhase.GetType.Self )]"
+					texture = "gfx/interface/colors/white.dds"
+					alpha = 0.4
+					blend_mode = overlay
+				}
+			}
+
+			icon = {
+				parentanchor = top|hcenter
+				position = { 0 7 }
+				size = { 21 21 }
+				texture = "gfx/interface/icons/struggle_types/point_based_phase_icon.dds"
+				alwaystransparent = yes
+			}
+
+			text_single = {
+				parentanchor = center
+				position = { 0 -46 }
+				max_width = 140
+				text = "[FutureSituationPhase.GetType.GetNameNoTooltip]"
+				default_format = "#high"
+				alwaystransparent = yes
+			}
+
+			container = {
+				parentanchor = center
+				position = { 0 -6 }
+				alwaystransparent = yes
+
+				icon = {
+					size = { 60 60 }
+					texture = "gfx/interface/icons/struggle_banners/icon_background_dark.dds"
+				}
+
+				icon = {
+					parentanchor = center
+					position = { 0 -1 }
+					size = { 42 42 }
+					texture = "[FutureSituationPhase.GetType.GetIcon]"
+				}
+			}
+
+			# 进度条：领先者橙色，其余金色（同原版 window_struggle.gui:1449-1463）
+			progressbar_standard = {
+				visible = "[ObjectsEqual( SituationPhase.GetLeadingPhaseType.Self, FutureSituationPhase.GetType.Self )]"
+				parentanchor = center
+				position = { 0 38 }
+				size = { 96 12 }
+				value = "[FutureSituationPhase.GetRelativeProgressPercent]"
+				progresstexture = "gfx/interface/progressbars/progress_orange.dds"
+				alwaystransparent = yes
+			}
+
+			progressbar_standard = {
+				visible = "[Not( ObjectsEqual( SituationPhase.GetLeadingPhaseType.Self, FutureSituationPhase.GetType.Self ) )]"
+				parentanchor = center
+				position = { 0 38 }
+				size = { 96 12 }
+				value = "[FutureSituationPhase.GetRelativeProgressPercent]"
+				progresstexture = "gfx/interface/progressbars/progress_grandeur_increase.dds"
+				alwaystransparent = yes
+			}
+
+			text_single = {
+				parentanchor = center
+				position = { 0 56 }
+				text = "hd_yiguan_gui_phase_points"
+				default_format = "#high"
+				alwaystransparent = yes
+			}
+		}
+	}
+
+	### 诱因条目（照原版 window_tgp_dynastic_cycle.gui:3036-3146，去掉纵向撑满的滚动布局）
+	type hd_yiguan_catalyst_entry = hbox {
+		layoutpolicy_horizontal = expanding
+		min_height = 44
+
+		background = {
+			using = Background_Area_Dark
+		}
+
+		hbox = {
+			layoutpolicy_vertical = expanding
+			min_width = 76
+			spacing = 2
+
+			background = {
+				using = Background_Area_Dark
+				using = Color_Green
+				alpha = 0.1
+				margin_left = 4
+				margin_right = 6
+			}
+
+			background = {
+				using = Background_Frame
+				using = Color_Green
+				alpha = 0.3
+				margin_left = 4
+				margin_right = 6
+			}
+
+			icon = {
+				size = { 25 25 }
+				texture = "[SituationPhaseType.GetIcon]"
+			}
+
+			text_single = {
+				text = "[SituationCatalystEntry.GetPoints|+=]"
+				align = nobaseline
+			}
+		}
+
+		text_multi = {
+			min_width = 350
+			max_width = 350
+			autoresize = yes
+			margin = { 10 5 }
+			align = left|nobaseline
+			text = "[SituationCatalystEntry.GetCatalystDescription]"
+		}
+
+		expand = {}
+
+		hbox = {
+			layoutpolicy_vertical = expanding
+			min_width = 60
+
+			background = {
+				visible = "[GreaterThan_int32( SituationPhase.GetNumCompletionsOfCatalystForPhase( SituationPhaseType.Self, SituationCatalystEntry.GetCatalyst ), '(int32)0' )]"
+				using = Background_Frame
+				color = { 0.4 0.603 0.298 1 }
+				alpha = 0.6
+			}
+
+			background = {
+				visible = "[GreaterThan_int32( SituationPhase.GetNumCompletionsOfCatalystForPhase( SituationPhaseType.Self, SituationCatalystEntry.GetCatalyst ), '(int32)0' )]"
+				using = Background_Area
+				color = { 0.4 0.603 0.298 1 }
+				alpha = 0.1
+			}
+
+			background = {
+				visible = "[EqualTo_int32( SituationPhase.GetNumCompletionsOfCatalystForPhase( SituationPhaseType.Self, SituationCatalystEntry.GetCatalyst ), '(int32)0' )]"
+				using = Background_Frame
+				using = Color_Grey
+				alpha = 0.4
+			}
+
+			background = {
+				visible = "[EqualTo_int32( SituationPhase.GetNumCompletionsOfCatalystForPhase( SituationPhaseType.Self, SituationCatalystEntry.GetCatalyst ), '(int32)0' )]"
+				using = Background_Area
+				using = Color_Grey
+				alpha = 0.1
+			}
+
+			text_single = {
+				min_width = 60
+				align = nobaseline|center
+				text = "hd_yiguan_gui_catalyst_count"
+			}
+		}
+	}
+
+	### 结局卡片（仿原版 window_struggle.gui:1017-1111；图片改用 Decision.GetPicture，不依赖 extra_picture）
+	# 设计 §1 第 10 轮要求三张卡常显（可用亮起可点，否则灰显）；原版整张卡挂 visible = IsShownForPlayer，这里改为卡内分两支：
+	#   有资格（IsShownForPlayer）：按 IsPossibleForPlayer 亮/暗，可点开决议详情；
+	#   无资格：固定灰显、按钮禁用，不求 IsPossibleForPlayer（原版从不对未显示的决议开详情页：hud.gui:4016-4019、window_struggle.gui:1017-1019）。
+	# IsPossibleForPlayer 一律嵌在 IsShownForPlayer 之下，不靠 And() 短路；三结局 is_shown 互斥，每帧至多一张卡真正求 is_valid
+	type hd_yiguan_ending_card = vbox {
+		spacing = 3
+
+		button_standard_clean = {
+			size = { 160 210 }
+			enabled = "[Decision.IsShownForPlayer]"
+			onclick = "[OpenGameViewData( 'decision_detail', Decision.Self )]"
+
+			tooltipwidget = {
+				decision_tooltip = {}
+			}
+
+			# 有资格
+			widget = {
+				size = { 100% 100% }
+				visible = "[Decision.IsShownForPlayer]"
+
+				# 可以宣布：亮图、#clickable 标题
+				hd_yiguan_ending_face = {
+					visible = "[Decision.IsPossibleForPlayer]"
+				}
+
+				# 条件未满足：暗图、警告条、#low 标题
+				hd_yiguan_ending_face = {
+					visible = "[Not( Decision.IsPossibleForPlayer )]"
+
+					blockoverride "picture_alpha"
+					{
+						alpha = 0.4
+					}
+
+					blockoverride "warning_visible" {}
+
+					blockoverride "title_format"
+					{
+						default_format = "#low"
+					}
+				}
+			}
+
+			# 无资格：固定灰显
+			hd_yiguan_ending_face = {
+				visible = "[Not( Decision.IsShownForPlayer )]"
+
+				blockoverride "picture_alpha"
+				{
+					alpha = 0.4
+				}
+
+				blockoverride "warning_visible" {}
+
+				blockoverride "title_format"
+				{
+					default_format = "#low"
+				}
+			}
+		}
+
+		# 有资格：可否宣布
+		vbox = {
+			visible = "[Decision.IsShownForPlayer]"
+
+			text_single = {
+				visible = "[Decision.IsPossibleForPlayer]"
+				max_width = 160
+				text = "hd_yiguan_gui_end_possible"
+				default_format = "#P"
+				align = nobaseline
+			}
+
+			text_single = {
+				visible = "[Not( Decision.IsPossibleForPlayer )]"
+				max_width = 160
+				text = "hd_yiguan_gui_end_blocked"
+				default_format = "#N"
+				align = nobaseline
+			}
+		}
+
+		text_single = {
+			visible = "[Not( Decision.IsShownForPlayer )]"
+			max_width = 160
+			text = "hd_yiguan_gui_end_not_eligible"
+			default_format = "#low"
+			align = nobaseline
+		}
+
+		# 阶段要求（实例里按结局分别填写）
+		block "phase_lines" {}
+
+		# 有资格：实时进度（实例里按结局填写，并自行再套阶段判断）
+		vbox = {
+			visible = "[Decision.IsShownForPlayer]"
+
+			block "progress_lines" {}
+		}
+
+		# 条件摘要
+		text_multi = {
+			min_width = 160
+			max_width = 160
+			autoresize = yes
+			using = Font_Size_Small
+			default_format = "#weak"
+			block "condition_text" {}
+		}
+	}
+
+	### 结局卡片画面（图、警告条、标题）；默认是"可宣布"样式，暗样式由实例覆盖 picture_alpha / warning_visible / title_format
+	# 显式铺满按钮（size 100%），不依赖 layoutpolicy 在非布局父控件里的表现
+	type hd_yiguan_ending_face = vbox {
+		size = { 100% 100% }
+
+		background = {
+			name = "hd_yiguan_ending_picture"
+			texture = "[Decision.GetPicture( GetPlayer.Self )]"
+			using = Mask_Rough_Edges
+			fittype = centercrop
+			margin = { -1 -1 }
+
+			block "picture_alpha"
+			{
+				alpha = 1
+			}
+
+			modify_texture = {
+				texture = "gfx/interface/component_masks/mask_fade_vertical.dds"
+				blend_mode = alphamultiply
+				translate_uv = { 0 -0.1 }
+			}
+		}
+
+		hbox = {
+			block "warning_visible"
+			{
+				visible = no
+			}
+			layoutpolicy_horizontal = expanding
+			margin = { 0 5 }
+
+			background = {
+				using = Background_Area_Dark
+			}
+
+			warning_icon = {
+				name = "not_possible"
+				size = { 30 30 }
+			}
+		}
+
+		expand = {}
+
+		hbox = {
+			layoutpolicy_horizontal = growing
+
+			background = {
+				using = Background_Area_Dark
+
+				modify_texture = {
+					texture = "gfx/interface/component_masks/mask_fade_vertical.dds"
+					blend_mode = alphamultiply
+					mirror = vertical
+				}
+			}
+
+			background = {
+				texture = "gfx/interface/skinned/mask_pattern.dds"
+				texture_density = 3
+				spriteType = Corneredtiled
+				color = { 0.6 0.7 0.65 0.2 }
+				alpha = 0.7
+
+				modify_texture = {
+					texture = "gfx/interface/component_masks/mask_fade_vertical_up.dds"
+					blend_mode = alphamultiply
+				}
+			}
+
+			text_single = {
+				max_width = 150
+				margin = { 0 12 }
+				text = "[Decision.GetTitleForPlayer]"
+				align = center
+
+				block "title_format"
+				{
+					default_format = "#clickable"
+				}
+			}
+		}
+	}
+
+	### "有结局可以宣布"一行：先判 IsShownForPlayer，子控件再判 IsPossibleForPlayer
+	type hd_yiguan_ending_ready_line = vbox {
+		visible = "[Decision.IsShownForPlayer]"
+		layoutpolicy_horizontal = expanding
+
+		text_single = {
+			visible = "[Decision.IsPossibleForPlayer]"
+			layoutpolicy_horizontal = expanding
+			text = "hd_yiguan_gui_endings_ready"
+			default_format = "#P"
+			using = Font_Size_Medium
+			align = nobaseline
+		}
+	}
+
+	### 小地图模式（照原版 window_struggle.gui:1538-1599，struggle 换成 situation；situation 地图模式见 gfx/map/map_modes/map_modes.txt）
+	type hd_yiguan_mini_map_mode = mini_map_mode {
+		parentanchor = bottom|left
+		widgetanchor = bottom|right
+		position = { -230 -87 }
+
+		blockoverride "map_mode_buttons"
+		{
+			icon_button_mapmode = {
+				blockoverride = "mm_datacontext"
+				{
+					datacontext = "[GetMapMode( 'situation' )]"
+				}
+			}
+
+			icon_button_mapmode = {
+				blockoverride = "mm_datacontext"
+				{
+					datacontext = "[GetMapMode( 'realms' )]"
+				}
+
+				blockoverride "mm_icon"
+				{
+					size = { 40 40 }
+				}
+
+				blockoverride "mm_button"
+				{
+					shortcut = "map_mode_1"
+				}
+			}
+
+			icon_button_mapmode = {
+				blockoverride = "mm_datacontext"
+				{
+					datacontext = "[GetMapMode( 'religions' )]"
+				}
+
+				blockoverride "mm_button"
+				{
+					shortcut = "map_mode_3"
+				}
+			}
+
+			icon_button_mapmode = {
+				blockoverride = "mm_datacontext"
+				{
+					datacontext = "[GetMapMode( 'cultures' )]"
+				}
+
+				blockoverride "mm_button"
+				{
+					shortcut = "map_mode_2"
+				}
+			}
+		}
+
+		blockoverride "map_mode_button_expand" {}
+
+		blockoverride "map_mode_button_expand_menu" {
+			visible = no
+		}
+	}
+}

@@ -1,6 +1,10 @@
-﻿# 衣冠南渡 on_action（见 docs/衣冠南渡_设计草案.md）
+﻿# 衣冠南渡 on_action（核心逻辑，模块 A2；见 docs/衣冠南渡_重做设计.md §5.2、§5.11、§5.12）
+# 只追加子 on_action，不改原版/本 mod 已有 on_action 的 trigger 与 effect（原版 _on_actions.info:104-119）
+# 局势自身的月度、年度效果由局势文件的 on_monthly / on_yearly 调用，这里不再重复调用
 
-# 触发检测：每月，挂在天朝循环局势月度脉冲上（只追加，不改原定义）
+############################################################
+# 开局检测：每月，挂在天朝循环局势月度脉冲上
+############################################################
 dynastic_cycle_monthly_pulse = {
 	on_actions = { hd_yiguan_monthly_check }
 }
@@ -11,7 +15,9 @@ hd_yiguan_monthly_check = {
 	}
 }
 
-# 年度：无天朝循环局势时兜底检测；侨郡与土断善后
+############################################################
+# 年度全局脉冲：无天朝循环时兜底检测开局；200 年兜底结局；AI 北伐/讨胡宣战；结局后土断善后
+############################################################
 yearly_global_pulse = {
 	on_actions = { hd_yiguan_yearly_pulse }
 }
@@ -22,41 +28,22 @@ hd_yiguan_yearly_pulse = {
 			limit = { NOT = { exists = situation:dynastic_cycle } }
 			hd_yiguan_try_start_effect = yes
 		}
-		# 局势结束后 10 年内，持有侨郡的宗主仍可能收到土断事件
+		hd_yiguan_fallback_check_effect = yes
 		if = {
 			limit = {
-				exists = global_var:hd_yiguan_outcome
-				exists = global_var:hd_yiguan_tuduan_window
+				exists = situation:hd_yiguan_nandu
+				NOT = { exists = global_var:hd_yiguan_outcome }	# 兜底刚结局、局势尚未销毁时不再宣战
 			}
-			every_in_global_list = {
-				variable = hd_yiguan_qiaojun_list
-				limit = { has_county_modifier = hd_yiguan_qiaojun_county_modifier }
-				holder ?= {
-					top_liege = {
-						if = {
-							limit = { NOT = { is_in_list = hd_yiguan_tuduan_lords } }
-							add_to_list = hd_yiguan_tuduan_lords
-						}
-					}
-				}
-			}
-			every_in_list = {
-				list = hd_yiguan_tuduan_lords
-				limit = {
-					NOT = { has_variable = hd_yiguan_event_cd }
-					is_alive = yes
-				}
-				random = {
-					chance = 25
-					trigger_event = hd_yiguan.1210
-				}
-			}
+			hd_yiguan_ai_war_pulse_effect = yes	# 战争侧定义（zz_hd_yiguan_war_effects.txt）
 		}
 		hd_yiguan_aftermath_yearly_effect = yes
 	}
 }
 
-# 参与者事件池（事件自身按群体、阶段筛选，weight_multiplier 体现阶段侧重）
+############################################################
+# 参与者事件池（月度效果按 8% / 2% 抽取；事件自身按组、阶段筛选，weight_multiplier 体现阶段侧重）
+# 1110、1111、2120 由别的事件或效果直接触发，不入池
+############################################################
 hd_yiguan_event_pulse = {
 	random_events = {
 		# 南方·难民
@@ -67,7 +54,7 @@ hd_yiguan_event_pulse = {
 		100 = hd_yiguan.1101
 		100 = hd_yiguan.1102
 		100 = hd_yiguan.1103
-		# 南方·侨置
+		# 南方·侨置、土断
 		100 = hd_yiguan.1201
 		100 = hd_yiguan.1202
 		100 = hd_yiguan.1203
@@ -97,5 +84,159 @@ hd_yiguan_event_pulse = {
 		100 = hd_yiguan.2211
 		100 = hd_yiguan.2212
 		100 = hd_yiguan.2213
+	}
+}
+
+############################################################
+# 催化剂挂钩（§5.2；钩子表见调研 spike_catalyst_hooks.md）
+# 只用 scope:attacker / defender / war、scope:title / transfer_type、scope:killer、scope:imprisoner、scope:spouse
+# trigger 里先判局势存在与最便宜的条件，具体判定在 zz_hd_yiguan_effects.txt 的 hd_yiguan_hook_* 效果里
+# 先例：mod hd_dc_kit_on_actions.txt、hd_cycle_catalyst_on_actions.txt（同样向这些 on_action 追加子项）
+############################################################
+
+# 宣战：胡人政权向汉人政权宣战（原版 war_on_actions.txt:309-312：对所有 CB 触发）
+on_war_started = {
+	on_actions = { hd_yiguan_cat_war_started }
+}
+
+hd_yiguan_cat_war_started = {
+	trigger = {
+		exists = situation:hd_yiguan_nandu
+		exists = scope:attacker
+		exists = scope:defender
+	}
+	effect = {
+		hd_yiguan_hook_war_started_effect = yes
+	}
+}
+
+# 攻方胜（原版 war_on_actions.txt:1259：两个 won 只触发一个）
+on_war_won_attacker = {
+	on_actions = { hd_yiguan_cat_won_attacker }
+}
+
+hd_yiguan_cat_won_attacker = {
+	trigger = {
+		exists = situation:hd_yiguan_nandu
+		exists = scope:attacker
+		exists = scope:defender
+	}
+	effect = {
+		hd_yiguan_hook_war_ended_effect = { WINNER = scope:attacker LOSER = scope:defender }
+	}
+}
+
+# 守方胜
+on_war_won_defender = {
+	on_actions = { hd_yiguan_cat_won_defender }
+}
+
+hd_yiguan_cat_won_defender = {
+	trigger = {
+		exists = situation:hd_yiguan_nandu
+		exists = scope:attacker
+		exists = scope:defender
+	}
+	effect = {
+		hd_yiguan_hook_war_ended_effect = { WINNER = scope:defender LOSER = scope:attacker }
+	}
+}
+
+# 白和
+on_war_white_peace = {
+	on_actions = { hd_yiguan_cat_white_peace }
+}
+
+hd_yiguan_cat_white_peace = {
+	trigger = {
+		exists = situation:hd_yiguan_nandu
+		exists = scope:attacker
+		exists = scope:defender
+	}
+	effect = {
+		hd_yiguan_hook_white_peace_effect = yes
+	}
+}
+
+# 得头衔：只看有地的县（无地世族县 c_WJ_nf_* 等不算，原版 title_on_actions.txt:229-233）
+on_title_gain = {
+	on_actions = { hd_yiguan_cat_title_gain }
+}
+
+hd_yiguan_cat_title_gain = {
+	trigger = {
+		exists = situation:hd_yiguan_nandu
+		exists = scope:title
+		scope:title = {
+			tier = tier_county
+			is_landless_type_title = no
+		}
+	}
+	effect = {
+		hd_yiguan_hook_title_gain_effect = yes
+	}
+}
+
+# 死亡（原版 death.txt:1-7：root 为将死者，仍在世）
+on_death = {
+	on_actions = { hd_yiguan_cat_death }
+}
+
+hd_yiguan_cat_death = {
+	trigger = {
+		exists = situation:hd_yiguan_nandu
+		is_independent_ruler = yes
+		exists = scope:killer
+	}
+	effect = {
+		hd_yiguan_hook_death_effect = yes
+	}
+}
+
+# 囚禁（原版 prison_on_actions.txt:5-7：root 为囚犯，scope:imprisoner）
+on_imprison = {
+	on_actions = { hd_yiguan_cat_imprison }
+}
+
+hd_yiguan_cat_imprison = {
+	trigger = {
+		exists = situation:hd_yiguan_nandu
+		is_independent_ruler = yes
+		exists = scope:imprisoner
+	}
+	effect = {
+		hd_yiguan_hook_imprison_effect = yes
+	}
+}
+
+# 获释（原版 prison_on_actions.txt:268-270：root 为囚犯，死亡时不触发）：移除"被俘已计"标记，此后再被杀、俘照常计
+# 不要求局势存在，局势结束后也清掉
+on_release_from_prison = {
+	on_actions = { hd_yiguan_cat_release }
+}
+
+hd_yiguan_cat_release = {
+	trigger = {
+		has_variable = hd_yiguan_slain_counted
+	}
+	effect = {
+		remove_variable = hd_yiguan_slain_counted
+	}
+}
+
+# 成婚（原版 marriage_concubinage.txt:1-4：root 为主方，scope:spouse 为次方；历史婚姻不触发）
+on_marriage = {
+	on_actions = { hd_yiguan_cat_marriage }
+}
+
+hd_yiguan_cat_marriage = {
+	trigger = {
+		exists = situation:hd_yiguan_nandu
+		is_ruler = yes
+		exists = scope:spouse
+		scope:spouse = { is_ruler = yes }
+	}
+	effect = {
+		hd_yiguan_hook_marriage_effect = yes
 	}
 }

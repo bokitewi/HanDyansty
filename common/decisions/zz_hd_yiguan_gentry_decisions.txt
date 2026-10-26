@@ -1,0 +1,196 @@
+﻿# 衣冠南渡·士族侧决议（docs/衣冠南渡_重做设计.md §4 第 11 轮、§1 第 6/10 轮、§5.6、§6 第 16–22 条）
+# 举族南迁 hd_yiguan_qizu_nanqian_decision / 起兵北还 hd_yiguan_qibing_beihuan_decision
+# 两决议都不设 is_invisible，同时出现在决议面板与衣冠南渡窗口（window_hd_yiguan.gui 写死了这两个键）
+
+############################################################
+# 举族南迁：沦陷区汉人中的士族，任何阶段可用（逃亡期威望 50，其他 100）
+# 选一个南方政权或北方汉人为去处（玩家只能投天朝制），对方接纳后弃地南迁
+############################################################
+hd_yiguan_qizu_nanqian_decision = {
+	decision_group_type = major
+	picture = {
+		reference = "gfx/interface/illustrations/decisions/tgp_house_fief.dds"
+	}
+	sort_order = 58
+
+	is_shown = {
+		hd_yiguan_gt_nanqian_shown_trigger = yes
+	}
+	is_valid_showing_failures_only = {
+		is_available_adult = yes
+	}
+	is_valid = {
+		hd_yiguan_gt_nanqian_valid_trigger = yes
+	}
+
+	cost = {
+		prestige = hd_yiguan_gt_nanqian_cost_value
+	}
+
+	# 选目的地（先例 原版 pam_antipope_decisions.txt:167-220）
+	widget = {
+		gui = "decision_view_widget_select_character"
+		controller = select_scope_object
+		show_from_start = yes
+		decision_to_second_step_button = "SELECT"
+
+		setup_items = {
+			situation:hd_yiguan_nandu ?= {
+				every_situation_participant = {
+					limit = { hd_yiguan_gt_nanqian_dest_trigger = { MIGRANT = scope:actor } }
+					add_to_list = item_list
+				}
+			}
+		}
+		default_item = {
+			situation:hd_yiguan_nandu ?= {
+				ordered_situation_participant = {
+					limit = { hd_yiguan_gt_nanqian_dest_trigger = { MIGRANT = scope:actor } }
+					order_by = hd_yiguan_gt_nanqian_dest_score_value
+					save_scope_as = selected_item
+				}
+			}
+		}
+		is_item_valid = {
+			hd_yiguan_gt_nanqian_dest_trigger = { MIGRANT = scope:actor }
+		}
+		ai_select_item = {
+			situation:hd_yiguan_nandu ?= {
+				ordered_situation_participant = {
+					limit = { hd_yiguan_gt_nanqian_dest_trigger = { MIGRANT = scope:actor } }
+					order_by = hd_yiguan_gt_nanqian_dest_score_value
+					save_scope_as = selected_item
+				}
+			}
+		}
+	}
+
+	effect = {
+		custom_tooltip = hd_yiguan_qizu_nanqian_decision_effect_tt
+		if = {
+			limit = { exists = scope:selected_item }
+			scope:selected_item = { save_scope_as = hd_yiguan_gt_dest }
+			hidden_effect = { hd_yiguan_gt_nanqian_request_effect = yes }
+		}
+	}
+
+	ai_check_interval = 60
+	ai_potential = {
+		is_ai = yes
+		is_adult = yes
+	}
+	ai_will_do = {
+		base = 0
+		modifier = {	# 无地世族牵挂少
+			add = 15
+			is_landed = no
+		}
+		modifier = {
+			add = 10
+			hd_yiguan_phase_taowang_trigger = yes
+		}
+		modifier = {	# 为胡主所忌
+			add = 15
+			liege ?= {
+				opinion = {
+					target = root
+					value <= -20
+				}
+			}
+		}
+		modifier = {	# 自己也恨其主
+			add = 10
+			exists = liege
+			opinion = {
+				target = liege
+				value <= -20
+			}
+		}
+		modifier = {
+			add = 5
+			OR = {
+				has_trait = paranoid
+				has_trait = zealous
+			}
+		}
+		modifier = {
+			add = -15
+			OR = {
+				has_trait = content
+				has_trait = greedy
+			}
+		}
+		modifier = {	# 有地者不轻弃祖业
+			add = -10
+			is_landed = yes
+		}
+		modifier = {	# 郡守以上更不肯走
+			add = -15
+			any_held_title = {
+				tier >= tier_duchy
+				is_landless_type_title = no
+			}
+		}
+		modifier = {
+			factor = 0
+			is_at_war = yes
+		}
+	}
+}
+
+############################################################
+# 起兵北还：侨姓中成年、无实地者，在南方政权或北方汉人治下，冲突期；每人一生一次，全局每年至多 3 起
+# 付威望后由事件选州；本人变无地冒险者，带北府兵、事件兵与同伴打回北方（§1 第 10 轮公式）
+############################################################
+hd_yiguan_qibing_beihuan_decision = {
+	decision_group_type = major
+	picture = {
+		reference = "gfx/interface/illustrations/decisions/ep3_decision_laamp_neutral_mountain.dds"
+	}
+	sort_order = 57
+
+	is_shown = {
+		hd_yiguan_active_trigger = yes
+		is_adult = yes
+		is_landed = no
+		hd_yiguan_is_qiaoxing_trigger = yes
+		NOT = { government_has_flag = government_is_landless_adventurer }
+		NOT = { has_variable = hd_yiguan_gt_beihuan_done }
+		hd_yiguan_gt_under_han_regime_trigger = yes
+	}
+	is_valid_showing_failures_only = {
+		is_available_adult = yes
+	}
+	is_valid = {
+		hd_yiguan_gt_beihuan_can_start_trigger = yes
+		custom_tooltip = {	# 择州事件（4011）还开着时不能再付一次威望
+			text = hd_yiguan_gt_beihuan_pending_tt
+			NOT = { has_variable = hd_yiguan_gt_bh_paid }
+		}
+	}
+
+	cost = {
+		prestige = medium_prestige_value
+	}
+
+	effect = {
+		custom_tooltip = hd_yiguan_qibing_beihuan_decision_effect_tt
+		hidden_effect = { hd_yiguan_gt_beihuan_begin_effect = yes }
+	}
+
+	ai_check_interval = 24
+	ai_potential = {
+		is_ai = yes
+		is_adult = yes
+	}
+	ai_will_do = {
+		base = 0
+		modifier = {	# 基础 25、每位资助者 +15、进取/勇敢 +10、怯懦/知足 −20，上限 80
+			add = hd_yiguan_gt_beihuan_ai_chance_value
+		}
+		modifier = {	# 无人资助则少有起意
+			factor = 0.2
+			NOT = { has_variable = hd_yiguan_gt_funder_count }
+		}
+	}
+}

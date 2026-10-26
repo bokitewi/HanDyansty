@@ -1,22 +1,37 @@
 ﻿namespace = hd_yiguan
 
-# 衣冠南渡·北方事件（见 docs/衣冠南渡_设计草案.md 7.5–7.7）
+# 衣冠南渡·北方事件（docs/衣冠南渡_重做设计.md §5.10；旧事件改编）
 # 2001–2003 流民逃窜·胡  2011–2013 流民逃窜·汉  2101–2103 义军·胡  2111–2113 义军·汉  2120 归南之议
 # 2201–2203 胡汉对峙·胡  2211–2213 胡汉对峙·汉
+# 收事件者：·胡 = 胡人政权；·汉 = 有地的沦陷区汉人；无地的沦陷区汉人（世族）只收不依赖封地的 2011、2211、2213
+# 义军事件任何阶段都会发生；"沦陷区汉人起义"催化剂由战争侧的义军起兵效果在战争确实开始时投，本文件不重复投
+# 事件义军开战后，胡人宗主 4 年内不再收事件义军（变量 hd_yiguan_evt_uprising_cd），给举兵起义、起兵北还留出空档
 
-scripted_trigger hd_yiguan_hu_lord_with_occ_trigger = {
-	hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_hu_lord }
+# 胡人政权，领内有都城以外的沦陷县
+scripted_trigger hd_yiguan_evn_hu_with_occ_trigger = {
+	hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_grp_hu }
 	hd_yiguan_has_occupied_county_trigger = yes
 }
 
-scripted_trigger hd_yiguan_han_vassal_trigger = {
-	hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_han_vassal }
+# 有地的沦陷区汉人（有主君）
+scripted_trigger hd_yiguan_evn_occupied_landed_trigger = {
+	hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_grp_occupied }
+	is_landed = yes
 	exists = liege
 }
 
-# 宗主治下另有可起事的沦陷县（不在你领内）
-scripted_trigger hd_yiguan_han_vassal_uprising_site_trigger = {
-	top_liege = { hd_yiguan_no_active_uprising_trigger = yes }
+# 沦陷区汉人，有地无地都算（有主君）。只给选项不依赖封地的事件用：坞堡选项须有直辖县，无地者自动不显示
+scripted_trigger hd_yiguan_evn_occupied_member_trigger = {
+	hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_grp_occupied }
+	exists = liege
+}
+
+# 宗主治下另有可起事的沦陷县（不在你领内），且宗主眼下没有在应对义军、不在事件义军冷却中
+scripted_trigger hd_yiguan_evn_uprising_site_trigger = {
+	top_liege = {
+		hd_yiguan_no_active_uprising_trigger = yes
+		NOT = { has_variable = hd_yiguan_evt_uprising_cd }
+	}
 	top_liege = {
 		any_realm_county = {
 			has_variable = hd_yiguan_occ
@@ -28,7 +43,7 @@ scripted_trigger hd_yiguan_han_vassal_uprising_site_trigger = {
 	}
 }
 
-scripted_trigger hd_yiguan_has_kin_to_send_trigger = {
+scripted_trigger hd_yiguan_evn_has_kin_to_send_trigger = {
 	any_courtier = {
 		is_close_or_extended_family_of = root
 		NOT = { root.player_heir ?= this }
@@ -37,8 +52,19 @@ scripted_trigger hd_yiguan_has_kin_to_send_trigger = {
 	}
 }
 
+# 有可归附的南方政权（归南之议）：与本人国境接壤、实领爵级和最高头衔都高于本人、未与本人交战
+# 与战争侧 hd_yiguan_guifu_pick_lord_effect、决议 hd_yiguan_guifu_nanchao_decision 的候选条件一致，三处须同步
+scripted_trigger hd_yiguan_evn_guifu_lord_available_trigger = {
+	any_neighboring_top_liege_realm_owner = {
+		hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_grp_south }
+		hd_yiguan_war_landed_tier_value > root.hd_yiguan_war_landed_tier_value
+		highest_held_title_tier > root.highest_held_title_tier
+		NOT = { is_at_war_with = root }
+	}
+}
+
 ############################
-# 流民逃窜·胡人宗主
+# 流民逃窜·胡人政权（逃亡期 ×2）
 ############################
 
 hd_yiguan.2001 = {	# 汉民南奔
@@ -52,22 +78,17 @@ hd_yiguan.2001 = {	# 汉民南奔
 		animation = anger
 	}
 	trigger = {
-		NOT = { exists = global_var:hd_yiguan_late_start }	# 南北朝剧本以对峙阶段开局时不放（docs/南北朝剧本_改进计划.md 8.1 第 5 条）
-		hd_yiguan_hu_lord_with_occ_trigger = yes
+		hd_yiguan_evn_hu_with_occ_trigger = yes
 	}
 	weight_multiplier = {
 		base = 1
 		modifier = {
 			factor = 2
-			hd_yiguan_phase_is_trigger = { PHASE = 1 }
-		}
-		modifier = {
-			factor = 1.5
-			hd_yiguan_phase_is_trigger = { PHASE = 2 }
+			hd_yiguan_phase_taowang_trigger = yes
 		}
 	}
 	immediate = {
-		hd_yiguan_event_cd_effect = yes
+		hd_yiguan_ev_cd_effect = yes
 		hd_yiguan_pick_own_occupied_county_effect = yes
 	}
 	option = {	# 发兵追捕
@@ -127,22 +148,17 @@ hd_yiguan.2002 = {	# 坞主携众出走
 		animation = anger
 	}
 	trigger = {
-		NOT = { exists = global_var:hd_yiguan_late_start }	# 南北朝剧本以对峙阶段开局时不放（docs/南北朝剧本_改进计划.md 8.1 第 5 条）
-		hd_yiguan_hu_lord_with_occ_trigger = yes
+		hd_yiguan_evn_hu_with_occ_trigger = yes
 	}
 	weight_multiplier = {
 		base = 1
 		modifier = {
 			factor = 2
-			hd_yiguan_phase_is_trigger = { PHASE = 1 }
-		}
-		modifier = {
-			factor = 1.5
-			hd_yiguan_phase_is_trigger = { PHASE = 2 }
+			hd_yiguan_phase_taowang_trigger = yes
 		}
 	}
 	immediate = {
-		hd_yiguan_event_cd_effect = yes
+		hd_yiguan_ev_cd_effect = yes
 		hd_yiguan_pick_own_occupied_county_effect = yes
 	}
 	option = {	# 发兵追捕
@@ -202,22 +218,17 @@ hd_yiguan.2003 = {	# 边县空虚
 		animation = worry
 	}
 	trigger = {
-		NOT = { exists = global_var:hd_yiguan_late_start }	# 南北朝剧本以对峙阶段开局时不放（docs/南北朝剧本_改进计划.md 8.1 第 5 条）
-		hd_yiguan_hu_lord_with_occ_trigger = yes
+		hd_yiguan_evn_hu_with_occ_trigger = yes
 	}
 	weight_multiplier = {
 		base = 1
 		modifier = {
 			factor = 2
-			hd_yiguan_phase_is_trigger = { PHASE = 1 }
-		}
-		modifier = {
-			factor = 1.5
-			hd_yiguan_phase_is_trigger = { PHASE = 2 }
+			hd_yiguan_phase_taowang_trigger = yes
 		}
 	}
 	immediate = {
-		hd_yiguan_event_cd_effect = yes
+		hd_yiguan_ev_cd_effect = yes
 		hd_yiguan_pick_own_occupied_county_effect = yes
 	}
 	option = {	# 发兵追捕
@@ -267,11 +278,11 @@ hd_yiguan.2003 = {	# 边县空虚
 }
 
 ############################
-# 流民逃窜·汉人封臣
+# 流民逃窜·沦陷区汉人（逃亡期 ×1.5）
 ############################
 
-scripted_effect hd_yiguan_flee_han_setup_effect = {
-	hd_yiguan_event_cd_effect = yes
+scripted_effect hd_yiguan_evn_flee_han_setup_effect = {
+	hd_yiguan_ev_cd_effect = yes
 	hd_yiguan_pick_near_south_lord_effect = yes
 	clear_saved_scope = hd_yiguan_wubao_county
 	random_held_county = {
@@ -297,28 +308,23 @@ hd_yiguan.2011 = {	# 族人议南渡
 		animation = worry
 	}
 	trigger = {
-		NOT = { exists = global_var:hd_yiguan_late_start }	# 南北朝剧本以对峙阶段开局时不放（docs/南北朝剧本_改进计划.md 8.1 第 5 条）
-		hd_yiguan_han_vassal_trigger = yes
+		hd_yiguan_evn_occupied_member_trigger = yes
 	}
 	weight_multiplier = {
 		base = 1
 		modifier = {
-			factor = 2
-			hd_yiguan_phase_is_trigger = { PHASE = 1 }
-		}
-		modifier = {
 			factor = 1.5
-			hd_yiguan_phase_is_trigger = { PHASE = 2 }
+			hd_yiguan_phase_taowang_trigger = yes
 		}
 	}
 	immediate = {
-		hd_yiguan_flee_han_setup_effect = yes
+		hd_yiguan_evn_flee_han_setup_effect = yes
 	}
 	option = {	# 送子弟南渡
 		name = hd_yiguan.2011.a
 		trigger = {
 			exists = scope:hd_yiguan_near_south
-			hd_yiguan_has_kin_to_send_trigger = yes
+			hd_yiguan_evn_has_kin_to_send_trigger = yes
 		}
 		hd_yiguan_send_kin_south_effect = yes
 		ai_chance = {
@@ -367,28 +373,23 @@ hd_yiguan.2012 = {	# 乡里父老请命
 		animation = thinking
 	}
 	trigger = {
-		NOT = { exists = global_var:hd_yiguan_late_start }	# 南北朝剧本以对峙阶段开局时不放（docs/南北朝剧本_改进计划.md 8.1 第 5 条）
-		hd_yiguan_han_vassal_trigger = yes
+		hd_yiguan_evn_occupied_landed_trigger = yes
 	}
 	weight_multiplier = {
 		base = 1
 		modifier = {
-			factor = 2
-			hd_yiguan_phase_is_trigger = { PHASE = 1 }
-		}
-		modifier = {
 			factor = 1.5
-			hd_yiguan_phase_is_trigger = { PHASE = 2 }
+			hd_yiguan_phase_taowang_trigger = yes
 		}
 	}
 	immediate = {
-		hd_yiguan_flee_han_setup_effect = yes
+		hd_yiguan_evn_flee_han_setup_effect = yes
 	}
 	option = {	# 送子弟南渡
 		name = hd_yiguan.2012.a
 		trigger = {
 			exists = scope:hd_yiguan_near_south
-			hd_yiguan_has_kin_to_send_trigger = yes
+			hd_yiguan_evn_has_kin_to_send_trigger = yes
 		}
 		hd_yiguan_send_kin_south_effect = yes
 		ai_chance = {
@@ -437,28 +438,23 @@ hd_yiguan.2013 = {	# 南朝密使相招
 		animation = thinking
 	}
 	trigger = {
-		NOT = { exists = global_var:hd_yiguan_late_start }	# 南北朝剧本以对峙阶段开局时不放（docs/南北朝剧本_改进计划.md 8.1 第 5 条）
-		hd_yiguan_han_vassal_trigger = yes
+		hd_yiguan_evn_occupied_landed_trigger = yes
 	}
 	weight_multiplier = {
 		base = 1
 		modifier = {
-			factor = 2
-			hd_yiguan_phase_is_trigger = { PHASE = 1 }
-		}
-		modifier = {
 			factor = 1.5
-			hd_yiguan_phase_is_trigger = { PHASE = 2 }
+			hd_yiguan_phase_taowang_trigger = yes
 		}
 	}
 	immediate = {
-		hd_yiguan_flee_han_setup_effect = yes
+		hd_yiguan_evn_flee_han_setup_effect = yes
 	}
 	option = {	# 送子弟南渡
 		name = hd_yiguan.2013.a
 		trigger = {
 			exists = scope:hd_yiguan_near_south
-			hd_yiguan_has_kin_to_send_trigger = yes
+			hd_yiguan_evn_has_kin_to_send_trigger = yes
 		}
 		hd_yiguan_send_kin_south_effect = yes
 		ai_chance = {
@@ -497,11 +493,42 @@ hd_yiguan.2013 = {	# 南朝密使相招
 }
 
 ############################
-# 义军起义·胡人宗主（发兵镇压时战争才开始）
+# 义军起义·胡人政权（任何阶段，冲突期 ×2；发兵镇压时战争才开始）
 ############################
 
-scripted_effect hd_yiguan_uprising_hu_setup_effect = {
-	hd_yiguan_event_cd_effect = yes
+# 事件义军开战后记冷却：胡人宗主 4 年内不再收事件义军。须在战争侧起兵效果之后调用（scope:hd_yiguan_up_defender 由该效果重存）
+scripted_effect hd_yiguan_evn_uprising_cd_effect = {
+	if = {
+		limit = {
+			exists = scope:hd_yiguan_up_war
+			exists = scope:hd_yiguan_up_defender
+		}
+		scope:hd_yiguan_up_defender = {
+			set_variable = { name = hd_yiguan_evt_uprising_cd value = yes years = 4 }
+		}
+	}
+}
+
+# 事件结束（after）时清理没有起事的义军首领（赎买遣散、起兵失败），免得留下孤立的角色和新王朝；
+# 已招安得县（有地）或战争已开者不动。写法同原版 07_dlc_ep3_scripted_effects.txt 的 death_vanished
+scripted_effect hd_yiguan_evn_cleanup_leader_effect = {
+	if = {
+		limit = {
+			exists = scope:hd_yiguan_new_leader
+			NOT = { exists = scope:hd_yiguan_up_war }
+			scope:hd_yiguan_new_leader = {
+				is_alive = yes
+				is_landed = no
+			}
+		}
+		scope:hd_yiguan_new_leader = {
+			death = { death_reason = death_vanished }
+		}
+	}
+}
+
+scripted_effect hd_yiguan_evn_uprising_hu_setup_effect = {
+	hd_yiguan_ev_cd_effect = yes
 	hd_yiguan_pick_own_occupied_county_effect = yes
 	if = {
 		limit = { exists = scope:hd_yiguan_occ_county }
@@ -525,19 +552,22 @@ hd_yiguan.2101 = {	# 坞堡起兵
 		animation = war_attacker
 	}
 	trigger = {
-		NOT = { exists = global_var:hd_yiguan_late_start }	# 南北朝剧本以对峙阶段开局时不放（docs/南北朝剧本_改进计划.md 8.1 第 5 条）
-		hd_yiguan_hu_lord_with_occ_trigger = yes
+		hd_yiguan_evn_hu_with_occ_trigger = yes
 		hd_yiguan_no_active_uprising_trigger = yes
+		NOT = { has_variable = hd_yiguan_evt_uprising_cd }
 	}
 	weight_multiplier = {
 		base = 1
 		modifier = {
 			factor = 2
-			hd_yiguan_phase_is_trigger = { PHASE = 3 }
+			hd_yiguan_phase_chongtu_trigger = yes
 		}
 	}
 	immediate = {
-		hd_yiguan_uprising_hu_setup_effect = yes
+		hd_yiguan_evn_uprising_hu_setup_effect = yes
+	}
+	after = {
+		hd_yiguan_evn_cleanup_leader_effect = yes
 	}
 	option = {	# 发兵镇压
 		name = hd_yiguan.2101.a
@@ -549,6 +579,7 @@ hd_yiguan.2101 = {	# 坞堡起兵
 			BIG = no
 		}
 		add_prestige = minor_prestige_gain
+		hidden_effect = { hd_yiguan_evn_uprising_cd_effect = yes }
 		ai_chance = {
 			base = 45
 			ai_value_modifier = {
@@ -559,7 +590,10 @@ hd_yiguan.2101 = {	# 坞堡起兵
 	}
 	option = {	# 招安授县
 		name = hd_yiguan.2101.b
-		trigger = { exists = scope:hd_yiguan_new_leader }
+		trigger = {	# 起事县须是你直辖的县：招安是拿自己的县封赏，不能夺封臣的地
+			exists = scope:hd_yiguan_new_leader
+			scope:hd_yiguan_up_county = { holder ?= root }
+		}
 		hd_yiguan_amnesty_rebel_effect = yes
 		ai_chance = {
 			base = 25
@@ -595,19 +629,22 @@ hd_yiguan.2102 = {	# 乞活军
 		animation = war_attacker
 	}
 	trigger = {
-		NOT = { exists = global_var:hd_yiguan_late_start }	# 南北朝剧本以对峙阶段开局时不放（docs/南北朝剧本_改进计划.md 8.1 第 5 条）
-		hd_yiguan_hu_lord_with_occ_trigger = yes
+		hd_yiguan_evn_hu_with_occ_trigger = yes
 		hd_yiguan_no_active_uprising_trigger = yes
+		NOT = { has_variable = hd_yiguan_evt_uprising_cd }
 	}
 	weight_multiplier = {
 		base = 1
 		modifier = {
 			factor = 2
-			hd_yiguan_phase_is_trigger = { PHASE = 3 }
+			hd_yiguan_phase_chongtu_trigger = yes
 		}
 	}
 	immediate = {
-		hd_yiguan_uprising_hu_setup_effect = yes
+		hd_yiguan_evn_uprising_hu_setup_effect = yes
+	}
+	after = {
+		hd_yiguan_evn_cleanup_leader_effect = yes
 	}
 	option = {	# 发兵镇压
 		name = hd_yiguan.2102.a
@@ -619,6 +656,7 @@ hd_yiguan.2102 = {	# 乞活军
 			BIG = no
 		}
 		add_prestige = minor_prestige_gain
+		hidden_effect = { hd_yiguan_evn_uprising_cd_effect = yes }
 		ai_chance = {
 			base = 45
 			ai_value_modifier = {
@@ -629,7 +667,10 @@ hd_yiguan.2102 = {	# 乞活军
 	}
 	option = {	# 招安授县
 		name = hd_yiguan.2102.b
-		trigger = { exists = scope:hd_yiguan_new_leader }
+		trigger = {	# 起事县须是你直辖的县：招安是拿自己的县封赏，不能夺封臣的地
+			exists = scope:hd_yiguan_new_leader
+			scope:hd_yiguan_up_county = { holder ?= root }
+		}
 		hd_yiguan_amnesty_rebel_effect = yes
 		ai_chance = {
 			base = 25
@@ -665,19 +706,22 @@ hd_yiguan.2103 = {	# 豪杰举义（冉闵型）
 		animation = war_attacker
 	}
 	trigger = {
-		NOT = { exists = global_var:hd_yiguan_late_start }	# 南北朝剧本以对峙阶段开局时不放（docs/南北朝剧本_改进计划.md 8.1 第 5 条）
-		hd_yiguan_hu_lord_with_occ_trigger = yes
+		hd_yiguan_evn_hu_with_occ_trigger = yes
 		hd_yiguan_no_active_uprising_trigger = yes
+		NOT = { has_variable = hd_yiguan_evt_uprising_cd }
 	}
 	weight_multiplier = {
 		base = 1
 		modifier = {
 			factor = 2
-			hd_yiguan_phase_is_trigger = { PHASE = 3 }
+			hd_yiguan_phase_chongtu_trigger = yes
 		}
 	}
 	immediate = {
-		hd_yiguan_uprising_hu_setup_effect = yes
+		hd_yiguan_evn_uprising_hu_setup_effect = yes
+	}
+	after = {
+		hd_yiguan_evn_cleanup_leader_effect = yes
 	}
 	option = {	# 发兵镇压
 		name = hd_yiguan.2103.a
@@ -689,6 +733,7 @@ hd_yiguan.2103 = {	# 豪杰举义（冉闵型）
 			BIG = yes
 		}
 		add_prestige = minor_prestige_gain
+		hidden_effect = { hd_yiguan_evn_uprising_cd_effect = yes }
 		ai_chance = {
 			base = 50
 			ai_value_modifier = {
@@ -699,7 +744,10 @@ hd_yiguan.2103 = {	# 豪杰举义（冉闵型）
 	}
 	option = {	# 招安授县
 		name = hd_yiguan.2103.b
-		trigger = { exists = scope:hd_yiguan_new_leader }
+		trigger = {	# 起事县须是你直辖的县：招安是拿自己的县封赏，不能夺封臣的地
+			exists = scope:hd_yiguan_new_leader
+			scope:hd_yiguan_up_county = { holder ?= root }
+		}
 		hd_yiguan_amnesty_rebel_effect = yes
 		ai_chance = {
 			base = 20
@@ -721,11 +769,11 @@ hd_yiguan.2103 = {	# 豪杰举义（冉闵型）
 }
 
 ############################
-# 义军起义·汉人封臣（邻县已举义，战争在事件开始时发生）
+# 义军起义·沦陷区汉人（任何阶段，冲突期 ×2；邻县已举义，战争在事件开始时发生）
 ############################
 
-scripted_effect hd_yiguan_uprising_han_setup_effect = {
-	hd_yiguan_event_cd_effect = yes
+scripted_effect hd_yiguan_evn_uprising_han_setup_effect = {
+	hd_yiguan_ev_cd_effect = yes
 	hd_yiguan_pick_neighbor_uprising_county_effect = yes
 	if = {
 		limit = { exists = scope:hd_yiguan_up_county }
@@ -739,14 +787,15 @@ scripted_effect hd_yiguan_uprising_han_setup_effect = {
 			MEN = 2000
 			BIG = no
 		}
+		hd_yiguan_evn_uprising_cd_effect = yes
 	}
 }
 
-scripted_effect hd_yiguan_join_uprising_effect = {
+scripted_effect hd_yiguan_evn_join_uprising_effect = {
 	scope:hd_yiguan_up_war = { add_attacker = root }
 }
 
-scripted_effect hd_yiguan_report_uprising_effect = {
+scripted_effect hd_yiguan_evn_report_uprising_effect = {
 	liege = {
 		add_opinion = {
 			target = root
@@ -756,7 +805,7 @@ scripted_effect hd_yiguan_report_uprising_effect = {
 	add_prestige = medium_prestige_loss
 }
 
-scripted_effect hd_yiguan_fund_uprising_effect = {
+scripted_effect hd_yiguan_evn_fund_uprising_effect = {
 	remove_short_term_gold = minor_gold_value
 	hd_yiguan_reinforce_uprising_effect = { MEN = 1000 }
 }
@@ -776,24 +825,26 @@ hd_yiguan.2111 = {	# 邻县举义
 		animation = war_attacker
 	}
 	trigger = {
-		NOT = { exists = global_var:hd_yiguan_late_start }	# 南北朝剧本以对峙阶段开局时不放（docs/南北朝剧本_改进计划.md 8.1 第 5 条）
-		hd_yiguan_han_vassal_trigger = yes
-		hd_yiguan_han_vassal_uprising_site_trigger = yes
+		hd_yiguan_evn_occupied_landed_trigger = yes
+		hd_yiguan_evn_uprising_site_trigger = yes
 	}
 	weight_multiplier = {
 		base = 1
 		modifier = {
 			factor = 2
-			hd_yiguan_phase_is_trigger = { PHASE = 3 }
+			hd_yiguan_phase_chongtu_trigger = yes
 		}
 	}
 	immediate = {
-		hd_yiguan_uprising_han_setup_effect = yes
+		hd_yiguan_evn_uprising_han_setup_effect = yes
+	}
+	after = {
+		hd_yiguan_evn_cleanup_leader_effect = yes
 	}
 	option = {	# 响应起义
 		name = hd_yiguan.2111.a
 		trigger = { exists = scope:hd_yiguan_up_war }
-		hd_yiguan_join_uprising_effect = yes
+		hd_yiguan_evn_join_uprising_effect = yes
 		ai_chance = {
 			base = 25
 			ai_value_modifier = {
@@ -808,7 +859,7 @@ hd_yiguan.2111 = {	# 邻县举义
 	}
 	option = {	# 告发
 		name = hd_yiguan.2111.b
-		hd_yiguan_report_uprising_effect = yes
+		hd_yiguan_evn_report_uprising_effect = yes
 		ai_chance = {
 			base = 35
 			ai_value_modifier = {
@@ -823,7 +874,7 @@ hd_yiguan.2111 = {	# 邻县举义
 			exists = scope:hd_yiguan_up_war
 			gold >= minor_gold_value
 		}
-		hd_yiguan_fund_uprising_effect = yes
+		hd_yiguan_evn_fund_uprising_effect = yes
 		ai_chance = {
 			base = 30
 			ai_value_modifier = { ai_rationality = 0.3 }
@@ -846,24 +897,26 @@ hd_yiguan.2112 = {	# 义军来使
 		animation = personality_bold
 	}
 	trigger = {
-		NOT = { exists = global_var:hd_yiguan_late_start }	# 南北朝剧本以对峙阶段开局时不放（docs/南北朝剧本_改进计划.md 8.1 第 5 条）
-		hd_yiguan_han_vassal_trigger = yes
-		hd_yiguan_han_vassal_uprising_site_trigger = yes
+		hd_yiguan_evn_occupied_landed_trigger = yes
+		hd_yiguan_evn_uprising_site_trigger = yes
 	}
 	weight_multiplier = {
 		base = 1
 		modifier = {
 			factor = 2
-			hd_yiguan_phase_is_trigger = { PHASE = 3 }
+			hd_yiguan_phase_chongtu_trigger = yes
 		}
 	}
 	immediate = {
-		hd_yiguan_uprising_han_setup_effect = yes
+		hd_yiguan_evn_uprising_han_setup_effect = yes
+	}
+	after = {
+		hd_yiguan_evn_cleanup_leader_effect = yes
 	}
 	option = {	# 响应起义
 		name = hd_yiguan.2112.a
 		trigger = { exists = scope:hd_yiguan_up_war }
-		hd_yiguan_join_uprising_effect = yes
+		hd_yiguan_evn_join_uprising_effect = yes
 		ai_chance = {
 			base = 25
 			ai_value_modifier = {
@@ -878,7 +931,7 @@ hd_yiguan.2112 = {	# 义军来使
 	}
 	option = {	# 告发
 		name = hd_yiguan.2112.b
-		hd_yiguan_report_uprising_effect = yes
+		hd_yiguan_evn_report_uprising_effect = yes
 		ai_chance = {
 			base = 35
 			ai_value_modifier = {
@@ -893,7 +946,7 @@ hd_yiguan.2112 = {	# 义军来使
 			exists = scope:hd_yiguan_up_war
 			gold >= minor_gold_value
 		}
-		hd_yiguan_fund_uprising_effect = yes
+		hd_yiguan_evn_fund_uprising_effect = yes
 		ai_chance = {
 			base = 30
 			ai_value_modifier = { ai_rationality = 0.3 }
@@ -916,24 +969,26 @@ hd_yiguan.2113 = {	# 故旧相邀
 		animation = personality_honorable
 	}
 	trigger = {
-		NOT = { exists = global_var:hd_yiguan_late_start }	# 南北朝剧本以对峙阶段开局时不放（docs/南北朝剧本_改进计划.md 8.1 第 5 条）
-		hd_yiguan_han_vassal_trigger = yes
-		hd_yiguan_han_vassal_uprising_site_trigger = yes
+		hd_yiguan_evn_occupied_landed_trigger = yes
+		hd_yiguan_evn_uprising_site_trigger = yes
 	}
 	weight_multiplier = {
 		base = 1
 		modifier = {
 			factor = 2
-			hd_yiguan_phase_is_trigger = { PHASE = 3 }
+			hd_yiguan_phase_chongtu_trigger = yes
 		}
 	}
 	immediate = {
-		hd_yiguan_uprising_han_setup_effect = yes
+		hd_yiguan_evn_uprising_han_setup_effect = yes
+	}
+	after = {
+		hd_yiguan_evn_cleanup_leader_effect = yes
 	}
 	option = {	# 响应起义
 		name = hd_yiguan.2113.a
 		trigger = { exists = scope:hd_yiguan_up_war }
-		hd_yiguan_join_uprising_effect = yes
+		hd_yiguan_evn_join_uprising_effect = yes
 		ai_chance = {
 			base = 30
 			ai_value_modifier = {
@@ -948,7 +1003,7 @@ hd_yiguan.2113 = {	# 故旧相邀
 	}
 	option = {	# 告发
 		name = hd_yiguan.2113.b
-		hd_yiguan_report_uprising_effect = yes
+		hd_yiguan_evn_report_uprising_effect = yes
 		ai_chance = {
 			base = 30
 			ai_value_modifier = {
@@ -963,7 +1018,7 @@ hd_yiguan.2113 = {	# 故旧相邀
 			exists = scope:hd_yiguan_up_war
 			gold >= minor_gold_value
 		}
-		hd_yiguan_fund_uprising_effect = yes
+		hd_yiguan_evn_fund_uprising_effect = yes
 		ai_chance = {
 			base = 30
 			ai_value_modifier = { ai_rationality = 0.3 }
@@ -971,7 +1026,8 @@ hd_yiguan.2113 = {	# 故旧相邀
 	}
 }
 
-# 归南之议：响应义军得胜而自立、与南方接壤者
+# 归南之议：义军得胜而独立、有可归附的南方政权者（由战争侧的义军胜利效果触发）
+# 归附走战争侧的 hd_yiguan_guifu_pick_lord_effect + hd_yiguan_guifu_effect（§6 #14：双方好感 +30、本人威望 +100、对方威望 +50、玩家受降者收 4110）
 hd_yiguan.2120 = {
 	type = character_event
 	title = hd_yiguan.2120.t
@@ -983,13 +1039,24 @@ hd_yiguan.2120 = {
 		animation = thinking
 	}
 	trigger = {
-		NOT = { exists = global_var:hd_yiguan_late_start }	# 南北朝剧本以对峙阶段开局时不放（docs/南北朝剧本_改进计划.md 8.1 第 5 条）
+		is_landed = yes
 		is_independent_ruler = yes
-		hd_yiguan_borders_south_side_trigger = yes
+		is_at_war = no	# 同决议 hd_yiguan_guifu_nanchao_decision
+		hd_yiguan_evn_guifu_lord_available_trigger = yes
+	}
+	immediate = {
+		hd_yiguan_guifu_pick_lord_effect = yes
 	}
 	option = {	# 归附南朝
 		name = hd_yiguan.2120.a
-		hd_yiguan_join_south_effect = yes
+		trigger = {	# 作答时复核受降者
+			scope:hd_yiguan_gf_lord ?= {
+				is_alive = yes
+				highest_held_title_tier > root.highest_held_title_tier
+				NOT = { is_at_war_with = root }
+			}
+		}
+		hd_yiguan_guifu_effect = { LORD = scope:hd_yiguan_gf_lord }
 		ai_chance = {
 			base = 50
 			ai_value_modifier = { ai_honor = 0.3 }
@@ -1009,17 +1076,17 @@ hd_yiguan.2120 = {
 }
 
 ############################
-# 胡汉对峙·胡人宗主
+# 胡汉对峙·胡人政权（停滞期 ×2）
 ############################
 
-scripted_effect hd_yiguan_huhan_hu_options_a_effect = {
+scripted_effect hd_yiguan_evn_huhan_hu_a_effect = {
 	add_character_modifier = {
 		modifier = hd_yiguan_fenzhi_modifier
 		years = 10
 	}
 }
 
-scripted_effect hd_yiguan_huhan_hu_options_b_effect = {
+scripted_effect hd_yiguan_evn_huhan_hu_b_effect = {
 	add_character_modifier = {
 		modifier = hd_yiguan_zhuoyong_modifier
 		years = 10
@@ -1027,19 +1094,13 @@ scripted_effect hd_yiguan_huhan_hu_options_b_effect = {
 	hidden_effect = {
 		if = {
 			limit = { NOT = { has_variable = hd_yiguan_zhuoyong_count } }
-			set_variable = {
-				name = hd_yiguan_zhuoyong_count
-				value = 0
-			}
+			set_variable = { name = hd_yiguan_zhuoyong_count value = 0 }
 		}
-		change_variable = {
-			name = hd_yiguan_zhuoyong_count
-			add = 1
-		}
+		change_variable = { name = hd_yiguan_zhuoyong_count add = 1 }
 	}
 }
 
-scripted_effect hd_yiguan_huhan_hu_options_c_effect = {
+scripted_effect hd_yiguan_evn_huhan_hu_c_effect = {
 	add_character_modifier = {
 		modifier = hd_yiguan_qiangya_modifier
 		years = 10
@@ -1057,22 +1118,21 @@ hd_yiguan.2201 = {	# 胡汉争田
 		animation = thinking
 	}
 	trigger = {
-		NOT = { exists = global_var:hd_yiguan_late_start }	# 南北朝剧本以对峙阶段开局时不放（docs/南北朝剧本_改进计划.md 8.1 第 5 条）
-		hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_hu_lord }
+		hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_grp_hu }
 	}
 	weight_multiplier = {
 		base = 1
 		modifier = {
 			factor = 2
-			hd_yiguan_phase_is_trigger = { PHASE = 3 }
+			hd_yiguan_phase_tingzhi_trigger = yes
 		}
 	}
 	immediate = {
-		hd_yiguan_event_cd_effect = yes
+		hd_yiguan_ev_cd_effect = yes
 	}
 	option = {	# 胡汉分治
 		name = hd_yiguan.2201.a
-		hd_yiguan_huhan_hu_options_a_effect = yes
+		hd_yiguan_evn_huhan_hu_a_effect = yes
 		ai_chance = {
 			base = 40
 			ai_value_modifier = { ai_rationality = 0.3 }
@@ -1080,7 +1140,7 @@ hd_yiguan.2201 = {	# 胡汉争田
 	}
 	option = {	# 擢用汉士
 		name = hd_yiguan.2201.b
-		hd_yiguan_huhan_hu_options_b_effect = yes
+		hd_yiguan_evn_huhan_hu_b_effect = yes
 		ai_chance = {
 			base = 30
 			ai_value_modifier = {
@@ -1091,7 +1151,7 @@ hd_yiguan.2201 = {	# 胡汉争田
 	}
 	option = {	# 强压汉人
 		name = hd_yiguan.2201.c
-		hd_yiguan_huhan_hu_options_c_effect = yes
+		hd_yiguan_evn_huhan_hu_c_effect = yes
 		ai_chance = {
 			base = 30
 			ai_value_modifier = {
@@ -1113,22 +1173,21 @@ hd_yiguan.2202 = {	# 胡人凌汉
 		animation = disapproval
 	}
 	trigger = {
-		NOT = { exists = global_var:hd_yiguan_late_start }	# 南北朝剧本以对峙阶段开局时不放（docs/南北朝剧本_改进计划.md 8.1 第 5 条）
-		hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_hu_lord }
+		hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_grp_hu }
 	}
 	weight_multiplier = {
 		base = 1
 		modifier = {
 			factor = 2
-			hd_yiguan_phase_is_trigger = { PHASE = 3 }
+			hd_yiguan_phase_tingzhi_trigger = yes
 		}
 	}
 	immediate = {
-		hd_yiguan_event_cd_effect = yes
+		hd_yiguan_ev_cd_effect = yes
 	}
 	option = {	# 胡汉分治
 		name = hd_yiguan.2202.a
-		hd_yiguan_huhan_hu_options_a_effect = yes
+		hd_yiguan_evn_huhan_hu_a_effect = yes
 		ai_chance = {
 			base = 40
 			ai_value_modifier = { ai_rationality = 0.3 }
@@ -1136,7 +1195,7 @@ hd_yiguan.2202 = {	# 胡人凌汉
 	}
 	option = {	# 擢用汉士
 		name = hd_yiguan.2202.b
-		hd_yiguan_huhan_hu_options_b_effect = yes
+		hd_yiguan_evn_huhan_hu_b_effect = yes
 		ai_chance = {
 			base = 25
 			ai_value_modifier = {
@@ -1147,7 +1206,7 @@ hd_yiguan.2202 = {	# 胡人凌汉
 	}
 	option = {	# 强压汉人
 		name = hd_yiguan.2202.c
-		hd_yiguan_huhan_hu_options_c_effect = yes
+		hd_yiguan_evn_huhan_hu_c_effect = yes
 		ai_chance = {
 			base = 35
 			ai_value_modifier = {
@@ -1169,22 +1228,21 @@ hd_yiguan.2203 = {	# 汉士进言
 		animation = thinking
 	}
 	trigger = {
-		NOT = { exists = global_var:hd_yiguan_late_start }	# 南北朝剧本以对峙阶段开局时不放（docs/南北朝剧本_改进计划.md 8.1 第 5 条）
-		hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_hu_lord }
+		hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_grp_hu }
 	}
 	weight_multiplier = {
 		base = 1
 		modifier = {
 			factor = 2
-			hd_yiguan_phase_is_trigger = { PHASE = 3 }
+			hd_yiguan_phase_tingzhi_trigger = yes
 		}
 	}
 	immediate = {
-		hd_yiguan_event_cd_effect = yes
+		hd_yiguan_ev_cd_effect = yes
 	}
 	option = {	# 胡汉分治
 		name = hd_yiguan.2203.a
-		hd_yiguan_huhan_hu_options_a_effect = yes
+		hd_yiguan_evn_huhan_hu_a_effect = yes
 		ai_chance = {
 			base = 30
 			ai_value_modifier = { ai_rationality = 0.3 }
@@ -1192,7 +1250,7 @@ hd_yiguan.2203 = {	# 汉士进言
 	}
 	option = {	# 擢用汉士
 		name = hd_yiguan.2203.b
-		hd_yiguan_huhan_hu_options_b_effect = yes
+		hd_yiguan_evn_huhan_hu_b_effect = yes
 		ai_chance = {
 			base = 45
 			ai_value_modifier = {
@@ -1203,7 +1261,7 @@ hd_yiguan.2203 = {	# 汉士进言
 	}
 	option = {	# 强压汉人
 		name = hd_yiguan.2203.c
-		hd_yiguan_huhan_hu_options_c_effect = yes
+		hd_yiguan_evn_huhan_hu_c_effect = yes
 		ai_chance = {
 			base = 25
 			ai_value_modifier = {
@@ -1215,10 +1273,10 @@ hd_yiguan.2203 = {	# 汉士进言
 }
 
 ############################
-# 胡汉对峙·汉人封臣
+# 胡汉对峙·沦陷区汉人（停滞期 ×2）
 ############################
 
-scripted_effect hd_yiguan_huhan_han_a_effect = {
+scripted_effect hd_yiguan_evn_huhan_han_a_effect = {
 	add_stress = 15
 	liege = {
 		add_opinion = {
@@ -1228,7 +1286,7 @@ scripted_effect hd_yiguan_huhan_han_a_effect = {
 	}
 }
 
-scripted_effect hd_yiguan_huhan_han_b_effect = {
+scripted_effect hd_yiguan_evn_huhan_han_b_effect = {
 	liege = {
 		add_opinion = {
 			target = root
@@ -1249,22 +1307,21 @@ hd_yiguan.2211 = {	# 胡吏凌辱
 		animation = anger
 	}
 	trigger = {
-		NOT = { exists = global_var:hd_yiguan_late_start }	# 南北朝剧本以对峙阶段开局时不放（docs/南北朝剧本_改进计划.md 8.1 第 5 条）
-		hd_yiguan_han_vassal_trigger = yes
+		hd_yiguan_evn_occupied_member_trigger = yes
 	}
 	weight_multiplier = {
 		base = 1
 		modifier = {
 			factor = 2
-			hd_yiguan_phase_is_trigger = { PHASE = 3 }
+			hd_yiguan_phase_tingzhi_trigger = yes
 		}
 	}
 	immediate = {
-		hd_yiguan_event_cd_effect = yes
+		hd_yiguan_ev_cd_effect = yes
 	}
 	option = {	# 隐忍事胡
 		name = hd_yiguan.2211.a
-		hd_yiguan_huhan_han_a_effect = yes
+		hd_yiguan_evn_huhan_han_a_effect = yes
 		ai_chance = {
 			base = 40
 			ai_value_modifier = { ai_rationality = 0.3 }
@@ -1272,7 +1329,7 @@ hd_yiguan.2211 = {	# 胡吏凌辱
 	}
 	option = {	# 据理力争
 		name = hd_yiguan.2211.b
-		hd_yiguan_huhan_han_b_effect = yes
+		hd_yiguan_evn_huhan_han_b_effect = yes
 		ai_chance = {
 			base = 30
 			ai_value_modifier = {
@@ -1302,22 +1359,21 @@ hd_yiguan.2212 = {	# 宗主征发
 		animation = worry
 	}
 	trigger = {
-		NOT = { exists = global_var:hd_yiguan_late_start }	# 南北朝剧本以对峙阶段开局时不放（docs/南北朝剧本_改进计划.md 8.1 第 5 条）
-		hd_yiguan_han_vassal_trigger = yes
+		hd_yiguan_evn_occupied_landed_trigger = yes
 	}
 	weight_multiplier = {
 		base = 1
 		modifier = {
 			factor = 2
-			hd_yiguan_phase_is_trigger = { PHASE = 3 }
+			hd_yiguan_phase_tingzhi_trigger = yes
 		}
 	}
 	immediate = {
-		hd_yiguan_event_cd_effect = yes
+		hd_yiguan_ev_cd_effect = yes
 	}
 	option = {	# 隐忍事胡
 		name = hd_yiguan.2212.a
-		hd_yiguan_huhan_han_a_effect = yes
+		hd_yiguan_evn_huhan_han_a_effect = yes
 		ai_chance = {
 			base = 45
 			ai_value_modifier = { ai_rationality = 0.3 }
@@ -1325,7 +1381,7 @@ hd_yiguan.2212 = {	# 宗主征发
 	}
 	option = {	# 据理力争
 		name = hd_yiguan.2212.b
-		hd_yiguan_huhan_han_b_effect = yes
+		hd_yiguan_evn_huhan_han_b_effect = yes
 		ai_chance = {
 			base = 25
 			ai_value_modifier = {
@@ -1355,22 +1411,21 @@ hd_yiguan.2213 = {	# 南音北传
 		animation = thinking
 	}
 	trigger = {
-		NOT = { exists = global_var:hd_yiguan_late_start }	# 南北朝剧本以对峙阶段开局时不放（docs/南北朝剧本_改进计划.md 8.1 第 5 条）
-		hd_yiguan_han_vassal_trigger = yes
+		hd_yiguan_evn_occupied_member_trigger = yes
 	}
 	weight_multiplier = {
 		base = 1
 		modifier = {
 			factor = 2
-			hd_yiguan_phase_is_trigger = { PHASE = 3 }
+			hd_yiguan_phase_tingzhi_trigger = yes
 		}
 	}
 	immediate = {
-		hd_yiguan_event_cd_effect = yes
+		hd_yiguan_ev_cd_effect = yes
 	}
 	option = {	# 隐忍事胡
 		name = hd_yiguan.2213.a
-		hd_yiguan_huhan_han_a_effect = yes
+		hd_yiguan_evn_huhan_han_a_effect = yes
 		ai_chance = {
 			base = 30
 			ai_value_modifier = { ai_rationality = 0.3 }
@@ -1378,7 +1433,7 @@ hd_yiguan.2213 = {	# 南音北传
 	}
 	option = {	# 据理力争
 		name = hd_yiguan.2213.b
-		hd_yiguan_huhan_han_b_effect = yes
+		hd_yiguan_evn_huhan_han_b_effect = yes
 		ai_chance = {
 			base = 25
 			ai_value_modifier = {

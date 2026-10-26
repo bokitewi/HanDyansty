@@ -1,0 +1,461 @@
+﻿# 衣冠南渡·士族侧私有触发器（docs/衣冠南渡_重做设计.md §4 第 11 轮、§1 第 3/6/10 轮、§6 第 15–25 条）
+# 前缀 hd_yiguan_gt_ 为本模块私有；共享触发器（hd_yiguan_is_*、hd_yiguan_in_group_trigger 等）见 zz_hd_yiguan_triggers.txt
+# 本 mod 的无地官职头衔（e_minister_*、e_WJ_minister_*）会抬高 highest_held_title_tier，爵位判断另用 any_held_title + is_landless_type_title = no 复核
+
+############################
+# 通用
+############################
+
+# 任意作用域。全局年度计数未满：$NAME$ 计数名，$MAX$ 上限。存的年份不是今年即视为已清零
+# 计数写法见 hd_yiguan_gt_bump_counter_effect；年份比较先例 zz_hd_confederation_on_actions.txt:16
+hd_yiguan_gt_counter_below_trigger = {
+	OR = {
+		NOT = { has_global_variable = hd_yiguan_gt_$NAME$_year }
+		NOT = { has_global_variable = hd_yiguan_gt_$NAME$_count }
+		NOT = { global_var:hd_yiguan_gt_$NAME$_year = current_year }
+		global_var:hd_yiguan_gt_$NAME$_count < $MAX$
+	}
+}
+
+# 角色。属于南方政权或北方汉人组（以局势参与者组为准）
+hd_yiguan_gt_han_group_trigger = {
+	OR = {
+		hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_grp_south }
+		hd_yiguan_in_group_trigger = { GROUP = hd_yiguan_grp_north_han }
+	}
+}
+
+# 角色。身居汉人政权之下：其主君或雇主的最高宗主是南方政权或北方汉人
+hd_yiguan_gt_under_han_regime_trigger = {
+	liege_or_court_owner ?= {
+		top_liege ?= { hd_yiguan_is_han_regime_trigger = yes }
+	}
+}
+
+# 角色。未任官职：除世族头衔外不持有任何无地头衔（尚书、九卿等官职头衔会挡住迁徙与起兵）
+hd_yiguan_gt_no_office_trigger = {
+	tgp_has_minister_title = no
+	NOT = {
+		any_held_title = {
+			is_noble_family_title = no
+			is_landless_type_title = yes
+		}
+	}
+}
+
+############################
+# 举族南迁
+############################
+
+# 角色。可见举族南迁：局势进行中、沦陷区汉人、士族
+hd_yiguan_gt_nanqian_shown_trigger = {
+	hd_yiguan_active_trigger = yes
+	hd_yiguan_is_occupied_han_trigger = yes
+	hd_yiguan_is_shizu_trigger = yes
+}
+
+# 角色（候选目的地）。$MIGRANT$ 为迁徙者。独立的南方政权或北方汉人；玩家只能投天朝制（§6 第 17 条）
+hd_yiguan_gt_nanqian_dest_trigger = {
+	is_alive = yes
+	is_landed = yes
+	is_independent_ruler = yes
+	NOT = { this = $MIGRANT$ }
+	hd_yiguan_gt_han_group_trigger = yes
+	NOT = { is_at_war_with = $MIGRANT$ }
+	trigger_if = {
+		limit = { $MIGRANT$ = { is_ai = no } }
+		custom_tooltip = {
+			text = hd_yiguan_gt_nanqian_dest_celestial_tt
+			government_has_flag = government_is_celestial
+		}
+		# 改投须主君高一级：持公国级世族（如行政制下）者只能投王国级以上
+		trigger_if = {
+			limit = {
+				$MIGRANT$ = {
+					any_held_title = {
+						is_noble_family_title = yes
+						tier >= tier_duchy
+					}
+				}
+			}
+			custom_tooltip = {
+				text = hd_yiguan_gt_nanqian_dest_tier_tt
+				any_held_title = {
+					tier >= tier_kingdom
+					is_landless_type_title = no
+				}
+			}
+		}
+	}
+}
+
+# 角色（迁徙者）。至少有一个可去的目的地
+hd_yiguan_gt_has_nanqian_dest_trigger = {
+	situation:hd_yiguan_nandu ?= {
+		any_situation_participant = {
+			hd_yiguan_gt_nanqian_dest_trigger = { MIGRANT = $MIGRANT$ }
+		}
+	}
+}
+
+# 角色（迁徙者）。玩家没有世族头衔时须能新建世族，否则到天朝制君主处会成为不可玩的廷臣
+hd_yiguan_gt_nanqian_player_nf_trigger = {
+	trigger_if = {
+		limit = {
+			is_ai = no
+			NOT = { any_held_title = { is_noble_family_title = yes } }
+		}
+		NOT = { has_game_rule = never_noble_family_title }
+	}
+}
+
+# 角色（迁徙者，决议 is_valid）。逐项带提示
+hd_yiguan_gt_nanqian_valid_trigger = {
+	is_imprisoned = no
+	is_at_war = no
+	custom_tooltip = {
+		text = hd_yiguan_gt_no_office_tt
+		hd_yiguan_gt_no_office_trigger = yes
+	}
+	custom_tooltip = {
+		text = hd_yiguan_gt_nanqian_tier_tt
+		NOT = {
+			any_held_title = {
+				tier >= tier_kingdom
+				is_landless_type_title = no
+			}
+		}
+	}
+	custom_tooltip = {
+		text = hd_yiguan_gt_nanqian_pending_tt
+		NOT = { has_variable = hd_yiguan_gt_nanqian_pending }
+	}
+	custom_tooltip = {
+		text = hd_yiguan_gt_nanqian_refused_tt
+		NOT = { has_variable = hd_yiguan_gt_nanqian_refused }
+	}
+	custom_tooltip = {
+		text = hd_yiguan_gt_nanqian_no_dest_tt
+		hd_yiguan_gt_has_nanqian_dest_trigger = { MIGRANT = root }
+	}
+	custom_tooltip = {
+		text = hd_yiguan_gt_nanqian_player_nf_tt
+		hd_yiguan_gt_nanqian_player_nf_trigger = yes
+	}
+	trigger_if = {
+		limit = { is_ai = yes }
+		hd_yiguan_gt_counter_below_trigger = { NAME = nanqian MAX = 4 }
+	}
+}
+
+# 角色（迁徙者，事件执行前复核）。scope:hd_yiguan_gt_migrant 为迁徙者，scope:hd_yiguan_gt_dest 为目的地
+# 会在目的地的事件里对迁徙者求值，故不用 root
+hd_yiguan_gt_nanqian_still_valid_trigger = {
+	is_alive = yes
+	is_imprisoned = no
+	is_at_war = no
+	hd_yiguan_gt_nanqian_shown_trigger = yes
+	hd_yiguan_gt_no_office_trigger = yes
+	exists = scope:hd_yiguan_gt_migrant
+	exists = scope:hd_yiguan_gt_dest
+	scope:hd_yiguan_gt_dest = {
+		hd_yiguan_is_han_regime_trigger = yes
+		hd_yiguan_gt_nanqian_dest_trigger = { MIGRANT = scope:hd_yiguan_gt_migrant }
+	}
+	hd_yiguan_gt_nanqian_player_nf_trigger = yes
+}
+
+############################
+# 起兵北还
+############################
+
+# 角色（候选守方）。胡人政权（不含汉化王朝，见 hd_yiguan_is_hu_regime_trigger）、非牧户、
+# 眼下没有以其为守方的义军 / 举兵起义 / 起兵北还战争（hd_yiguan_no_active_uprising_trigger）
+# 州选项可见性与守方选取共用本触发器
+hd_yiguan_gt_bh_def_ok_trigger = {
+	is_alive = yes
+	hd_yiguan_is_hu_regime_trigger = yes
+	NOT = { government_has_flag = government_is_herder }	# 原版 herders_and_tributary_constraints（00_war_and_peace_triggers.txt:1152）
+	hd_yiguan_no_active_uprising_trigger = yes
+}
+
+# 任意作用域。$REGION$ 州内有县归属可作守方的胡人政权
+# 北方八州一律按汉代原州的静态地理区域（uuii_han_*_region）判定，不看 k_uuii_* 的运行时法理：
+# 南北朝剧本 280.1.1 起（zz_hd_nbc_dejure.txt）河南、洛阳、河内等郡改挂洛州、司州等新州，而地理区域不随法理改挂变化
+# （原版 map_data/geographical_regions/_geographical_regions.info）
+hd_yiguan_gt_zhou_has_hu_trigger = {
+	any_county_in_region = {	# 写法同原版 03_dlc_fp2_script_values.txt:710
+		region = $REGION$
+		holder ?= {
+			top_liege = { hd_yiguan_gt_bh_def_ok_trigger = yes }
+		}
+	}
+}
+
+# 任意作用域。北方八州中至少一州可打
+hd_yiguan_gt_any_zhou_has_hu_trigger = {
+	OR = {
+		hd_yiguan_gt_zhou_has_hu_trigger = { REGION = uuii_han_sili_region }
+		hd_yiguan_gt_zhou_has_hu_trigger = { REGION = uuii_han_jizhou_region }
+		hd_yiguan_gt_zhou_has_hu_trigger = { REGION = uuii_han_youzhou_region }
+		hd_yiguan_gt_zhou_has_hu_trigger = { REGION = uuii_han_bingzhou_region }
+		hd_yiguan_gt_zhou_has_hu_trigger = { REGION = uuii_han_qingzhou_region }
+		hd_yiguan_gt_zhou_has_hu_trigger = { REGION = uuii_han_yanzhou_region }
+		hd_yiguan_gt_zhou_has_hu_trigger = { REGION = uuii_han_xuzhou_region }
+		hd_yiguan_gt_zhou_has_hu_trigger = { REGION = uuii_han_yuzhou_region }
+	}
+}
+
+# 角色（流亡者）。籍贯县属 $REGION$ 州（AI 择州优先籍贯州）；籍贯变量存的是县头衔（hd_yiguan_gt_mark_qiao_effect / hd_yiguan_ev_mark_qiao_effect）
+hd_yiguan_gt_origin_in_zhou_trigger = {
+	house ?= {
+		var:hd_yiguan_qiao_origin ?= {
+			title_province ?= { geographical_region = $REGION$ }	# 写法同 zz_hd_yiguan_triggers.txt:hd_yiguan_county_in_north_trigger
+		}
+	}
+}
+
+# 角色。流亡者基础资格：成年侨姓、无实地、非冒险者、尚未起兵过、身在汉人政权治下（§6 第 20 条）
+hd_yiguan_gt_exile_base_trigger = {
+	is_alive = yes
+	is_adult = yes
+	hd_yiguan_is_qiaoxing_trigger = yes
+	is_landed = no
+	NOT = { government_has_flag = government_is_landless_adventurer }
+	NOT = { has_variable = hd_yiguan_gt_beihuan_done }
+	hd_yiguan_gt_under_han_regime_trigger = yes
+}
+
+# 角色（流亡者）。此刻可以起兵北还（决议 is_valid 与 AI 资助路线共用）
+hd_yiguan_gt_beihuan_can_start_trigger = {
+	hd_yiguan_gt_exile_base_trigger = yes
+	is_imprisoned = no
+	is_at_war = no
+	custom_tooltip = {
+		text = hd_yiguan_gt_beihuan_phase_tt
+		situation:hd_yiguan_nandu ?= { has_situation_top_phase_parameter = hd_yiguan_beihuan_open }
+	}
+	custom_tooltip = {
+		text = hd_yiguan_gt_no_office_tt
+		hd_yiguan_gt_no_office_trigger = yes
+	}
+	custom_tooltip = {
+		text = hd_yiguan_gt_beihuan_target_tt
+		hd_yiguan_gt_any_zhou_has_hu_trigger = yes
+	}
+	custom_tooltip = {
+		text = hd_yiguan_gt_beihuan_cap_tt
+		hd_yiguan_gt_counter_below_trigger = { NAME = beihuan MAX = 3 }
+	}
+}
+
+# 角色（资助者候选）。独立的南方政权或北方汉人
+hd_yiguan_gt_funder_base_trigger = {
+	is_alive = yes
+	is_landed = yes
+	is_independent_ruler = yes
+	hd_yiguan_is_han_regime_trigger = yes
+}
+
+# 角色（流亡者）。可受资助：流亡者基础资格、未在交战，且未受过 $FUNDER$ 资助
+hd_yiguan_gt_fundable_trigger = {
+	hd_yiguan_gt_exile_base_trigger = yes
+	is_at_war = no
+	custom_tooltip = {
+		text = hd_yiguan_gt_already_funded_tt
+		NOT = {
+			is_target_in_variable_list = { name = hd_yiguan_gt_funders target = $FUNDER$ }
+		}
+	}
+}
+
+# 角色（北还胜利后可归附的资助者）。$EXILE$ 为已得地的流亡者；对方须高于流亡者一级以上
+hd_yiguan_gt_patron_valid_trigger = {
+	is_alive = yes
+	is_landed = yes
+	is_independent_ruler = yes
+	hd_yiguan_is_han_regime_trigger = yes
+	NOT = { this = $EXILE$ }
+	highest_held_title_tier > $EXILE$.highest_held_title_tier
+	NOT = { is_at_war_with = $EXILE$ }
+}
+
+# 角色（同伴候选）。$EXILE$ 为流亡者：本家族或门下的成年男子，AI，非统治者，可调遣
+# 不动别家的人：别家议会成员、其他玩家宫廷里的人、其他玩家的配偶近亲与继承人（流亡者本人是玩家时，他自己的门下与家人照常可选）
+hd_yiguan_gt_companion_ok_trigger = {
+	is_alive = yes
+	is_ai = yes
+	is_adult = yes
+	is_male = yes
+	is_ruler = no
+	is_imprisoned = no
+	is_hostage = no
+	age <= 60
+	NOT = { this = $EXILE$ }
+	NOT = { is_spouse_of = $EXILE$ }
+	NOT = { has_variable = hd_yiguan_gt_beihuan_done }
+	is_available = yes
+	trigger_if = {
+		limit = { is_councillor = yes }
+		is_councillor_of = $EXILE$
+	}
+	NOT = {
+		liege_or_court_owner ?= {
+			is_ai = no
+			NOT = { this = $EXILE$ }
+		}
+	}
+	NOT = {
+		any_spouse = {
+			is_ai = no
+			NOT = { this = $EXILE$ }
+		}
+	}
+	NOT = {
+		any_close_family_member = {
+			is_ai = no
+			NOT = { this = $EXILE$ }
+		}
+	}
+	NOT = {
+		any_player = {
+			NOT = { this = $EXILE$ }
+			player_heir ?= prev	# prev 指候选人：先例 原版 00_cultural_triggers.txt:329（any_player = { culture = prev }）；player_heir ?= 见 feast.txt
+		}
+	}
+}
+
+############################
+# 侨置授地
+############################
+
+# 角色（侨姓）。可受侨置授地：成年侨姓、最高至伯爵级（无地官职头衔不计）、非冒险者
+hd_yiguan_gt_qiaozhi_gentry_trigger = {
+	is_alive = yes
+	is_adult = yes
+	is_imprisoned = no
+	hd_yiguan_is_qiaoxing_trigger = yes
+	NOT = { government_has_flag = government_is_landless_adventurer }
+	NOT = {
+		any_held_title = {
+			tier >= tier_duchy
+			is_landless_type_title = no
+		}
+	}
+}
+
+# 角色（君主作用域）。$GENTRY$ 是 $LORD$ 的廷臣或封臣，且君主是汉人政权治下的汉人有地统治者
+hd_yiguan_gt_qiaozhi_lord_trigger = {
+	is_landed = yes
+	hd_yiguan_is_han_trigger = yes
+	top_liege ?= { hd_yiguan_is_han_regime_trigger = yes }
+	$GENTRY$ = { liege_or_court_owner ?= $LORD$ }
+}
+
+# 县。可授出：在 $LORD$ 直辖、不是其都城县
+hd_yiguan_gt_grantable_county_trigger = {
+	holder ?= $LORD$
+	NOT = { this = $LORD$.capital_county }
+}
+
+# 角色（君主）。有可授出的直辖县
+hd_yiguan_gt_has_grantable_county_trigger = {
+	any_held_county = {
+		hd_yiguan_gt_grantable_county_trigger = { LORD = $LORD$ }
+	}
+}
+
+# 授县一项可用
+hd_yiguan_gt_qiaozhi_county_ok_trigger = {
+	$LORD$ = { hd_yiguan_gt_has_grantable_county_trigger = { LORD = $LORD$ } }
+}
+
+# 立侨州一项可用：君主有实地王国级以上头衔、有可立侨州；受者已有地，或君主还能另授一县（无地者侨州连县一并授）
+hd_yiguan_gt_qiaozhi_qiao_ok_trigger = {
+	$LORD$ = {
+		any_held_title = {
+			tier >= tier_kingdom
+			is_landless_type_title = no
+		}
+	}
+	hd_yiguan_any_qiao_available_trigger = yes
+	OR = {
+		$GENTRY$ = { is_landed = yes }
+		$LORD$ = { hd_yiguan_gt_has_grantable_county_trigger = { LORD = $LORD$ } }
+	}
+}
+
+############################
+# 联姻吴姓
+############################
+
+# 角色。可被安排联姻的族人：成年、未婚、AI、非统治者、未囚、可婚
+hd_yiguan_gt_marriage_candidate_trigger = {
+	is_alive = yes
+	is_adult = yes
+	is_ai = yes
+	is_ruler = no
+	is_married = no
+	is_imprisoned = no
+	can_marry_trigger = yes
+}
+
+# 任意。$A$、$B$ 两家各有一名可成婚的族人，且一男一女（粗查：各家逐一过一遍，不做两家人两两配对）
+# 精确配对（血亲、信仰等，原版 can_marry_character_trigger）只在 hd_yiguan_gt_qiaowu_marry_effect 里做一次；配不成对时效果里给玩家提示
+# 互动 is_valid 会被 AI 定期求值、玩家右键时也求值，大族上百人时两两配对太重，故此处只粗查
+hd_yiguan_gt_qiaowu_pair_exists_trigger = {
+	OR = {
+		AND = {
+			$A$.house ?= {
+				any_house_member = {
+					is_male = yes
+					hd_yiguan_gt_marriage_candidate_trigger = yes
+				}
+			}
+			$B$.house ?= {
+				any_house_member = {
+					is_female = yes
+					hd_yiguan_gt_marriage_candidate_trigger = yes
+				}
+			}
+		}
+		AND = {
+			$A$.house ?= {
+				any_house_member = {
+					is_female = yes
+					hd_yiguan_gt_marriage_candidate_trigger = yes
+				}
+			}
+			$B$.house ?= {
+				any_house_member = {
+					is_male = yes
+					hd_yiguan_gt_marriage_candidate_trigger = yes
+				}
+			}
+		}
+	}
+}
+
+############################
+# 求取官职
+############################
+
+# 角色（君主）。有空缺的议会席位（宰相、管家、元帅、密探）
+hd_yiguan_gt_council_vacancy_trigger = {
+	OR = {
+		NOT = { exists = cp:councillor_chancellor }
+		NOT = { exists = cp:councillor_steward }
+		NOT = { exists = cp:councillor_marshal }
+		NOT = { exists = cp:councillor_spymaster }
+	}
+}
+
+# 角色（侨姓）。可求官：成年侨姓、非冒险者、尚未在议会
+hd_yiguan_gt_office_seeker_trigger = {
+	is_alive = yes
+	is_adult = yes
+	is_imprisoned = no
+	hd_yiguan_is_qiaoxing_trigger = yes
+	NOT = { government_has_flag = government_is_landless_adventurer }
+	is_councillor = no
+}
