@@ -216,7 +216,8 @@ LEADERS = [
     ('ren_qi', ['d_qianwei'], 'k_uuii_yizhou'),     # 任岐，犍为太守
     # 2026-10-24 boki：徐州、襄阳、济阴
     ('ze_rong', ['d_xiapei', 'd_pencheng'], 'k_uuii_xuzhou'),   # 笮融，下邳、彭城太守（陶谦部属；军阀契约由开局脚本写入）
-    ('zang_ba', ['d_langya', 'd_donghai'], 'k_uuii_xuzhou'),    # 臧霸，琅琊、东海太守（陶谦部属；军阀契约；郯另归陶谦，见 KING_CAPITAL）
+    ('zang_ba', ['d_langya', 'd_donghai', 'd_dongguan'], 'k_uuii_xuzhou'),    # 臧霸，琅琊、东海、东莞（陶谦部属；军阀契约；郯另归陶谦，见 KING_CAPITAL）。2026-10-28 boki 加东莞
+    ('tao_qian', ['d_lanling'], 'k_uuii_xuzhou'),   # 2026-10-28 boki：陶谦领兰陵郡（7 县），都城仍在郯
     ('zhang_hu_2', ['d_xiangyang'], '0'),           # 张虎，据襄阳整郡（开局给农民领袖特质）
     ('chen_sheng', ['d_nanxiang'], '0'),            # 陈生（boki 原话「张生」），南乡太守，开局与张虎结盟
     ('zhang_chong', ['d_jiyin'], '0'),              # 张充，济阴郡独立（原隶刘岱）；郡内县主收归直辖
@@ -444,6 +445,16 @@ for k in list(name_pool):
     name_pool[k] = sorted(n for n in set(name_pool[k])
                           if n in loc_keys and n not in hist_name_keys and loc_text.get(n) not in hist_name_text)
 default_names = name_pool.get('yanzhou', []) or ['qi']
+# 2026-10-28：已生成过的占位人物沿用上次的名字。别的改动往人物库里加史实人物后，上面的排除规则会把池子削到只剩一两个名字
+# （10-28 重跑时多个文化的占位首领全变成「副侖」），不能因重跑落位就给已有人物改名。
+prev_filler_names = {}
+_prev_fill = ROOT + '/history/characters/zz_hd_190_fill_characters.txt'
+if os.path.exists(_prev_fill):
+    for k, o, v in pdx.load(_prev_fill):
+        if k and isinstance(v, list):
+            for ek, eo, ev in v:
+                if ek == 'name' and not isinstance(ev, list):
+                    prev_filler_names[k] = ev.strip('"')
 
 
 def hseed(s):
@@ -462,7 +473,7 @@ def make_filler(title, culture_hint):
     else:
         rite = 'jingxue'
     pool = name_pool.get(culture) or default_names
-    name = pool[hseed(title) % len(pool)]
+    name = prev_filler_names.get(cid) or pool[hseed(title) % len(pool)]
     y = 138 + hseed(title + 'y') % 24
     mo = 1 + hseed(title + 'm') % 12
     dd = 1 + hseed(title + 'd') % 28

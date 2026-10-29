@@ -1,0 +1,1541 @@
+﻿# 两晋十六国统一史实线 · E3（349.5–370.12）× 370 节（04_370王猛伐燕.md）。入口 hd_j16_e3_370_effect，由 hd_j16_pulse_effect 按时代粗筛后调用。
+# 写入者：第 1 期（迁入块）→ 第 5 期 5-A（08 §1.1）。节点写法见 01 §2.2 与 stage/p1-S_TEMPLATE.md。
+
+hd_j16_e3_370_effect = {
+	hd_j16_node_zhu_surrender_effect = yes  # E3-Q60 慕容筑出降（洛阳之战的子步骤，先于结局判定）
+	hd_j16_node_luoyang_effect = yes    # E3-Q60 洛阳之战
+	hd_j16_node_dongzheng_effect = yes  # E3-Q70 王猛东征
+	hd_j16_node_yanfall_effect = yes    # E3-M90 前燕亡
+	hd_j16_node_ping_return_effect = yes    # E3-M91 慕容评归秦
+	hd_j16_node_jindao_effect = yes     # E3-M85 金刀计（第 5 期新节点）
+	hd_j16_node_yuanzhen_shouchun_effect = yes  # E3-J80 前置·袁真据寿春（304/346 局，获咎后；第 5 期自拟）
+	hd_j16_node_yuanzhen_x_effect = yes # 袁真 X 特例在 304/346 局的放开（获咎后转调 hd_370_yuanzhen_death_effect）
+	hd_j16_node_shouchun_effect = yes   # E3-J80 寿春之役
+}
+
+############################################################
+# E3-Q60 洛阳之战（D9：由 370 开局播种改为心跳节点；01 §2.3、§5）
+# 窗口 369.12.1 – 370.7.9。秦主（长安 c_uuii_p_867 的 top_liege，独立，苻氏）与燕主（河南郡 d_henan 的 top_liege，独立，慕容氏）
+#   都在；金墉（c_uuii_p_786）属燕。当事人一律按位置解析（370 以外的开局里苻坚、慕容暐未必是秦燕之主）。
+# 战争本身无分支（同现状）。开战成功才给事件兵：王猛所部 1.5 万在陕（给秦主），乐安王援军 8000 在荥阳（给燕主）。
+# 宣战失败不设 done，下一跳重试；到 370.7.9 仍未开战即跳过。
+# 结局：双方都已没有这一场次的战争，金墉归秦一系即秦胜（变量沿用旧名，370 线下游 E3-Q70 等读它们）。
+# 慕容筑出降由下方 hd_j16_node_zhu_surrender_effect 判定（1-A 迁入，入口里排在本节点之前）；过渡期 370 局旧 hd_370_check_luoyang_effect
+# 仍在过渡桥里同时判定出降与结局，两边以 hd_370_zhu_checked、hd_370_luoyang_done 去重。
+# 变量：hd_370_luoyang_started（已开战，fire 结果）、hd_370_luoyang_done、hd_370_luoyang_qin_won/_qin_lost；
+#       新增 hd_j16_luoyang_qin/_yan（秦燕之主）、hd_j16_luoyang_skip、hd_j16_luoyang_wlog
+############################################################
+hd_j16_node_luoyang_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_370_luoyang_done } }
+		if = {
+			limit = { has_global_variable = hd_370_luoyang_started }
+			hd_j16_luoyang_result_effect = yes
+		}
+		else_if = {
+			limit = { current_date >= 370.7.9 }
+			set_global_variable = hd_370_luoyang_done
+			set_global_variable = hd_j16_luoyang_skip
+			debug_log = "HD_J16 e3_q60 SKIP window_closed"
+		}
+		else_if = {
+			limit = { current_date >= 369.12.1 }
+			if = {
+				limit = { exists = scope:hd_j16_ly_qin }
+				clear_saved_scope = hd_j16_ly_qin
+			}
+			if = {
+				limit = { exists = scope:hd_j16_ly_yan }
+				clear_saved_scope = hd_j16_ly_yan
+			}
+			title:c_uuii_p_867.holder.top_liege ?= {
+				if = {
+					limit = {
+						is_independent_ruler = yes
+						dynasty ?= dynasty:fu_1
+					}
+					save_scope_as = hd_j16_ly_qin
+				}
+			}
+			title:d_henan.holder.top_liege ?= {
+				if = {
+					limit = {
+						is_independent_ruler = yes
+						dynasty ?= dynasty:murong
+					}
+					save_scope_as = hd_j16_ly_yan
+				}
+			}
+			if = {
+				limit = {
+					exists = scope:hd_j16_ly_qin
+					exists = scope:hd_j16_ly_yan
+					NOT = { scope:hd_j16_ly_qin = scope:hd_j16_ly_yan }
+					title:c_uuii_p_786.holder ?= {
+						OR = {
+							this = scope:hd_j16_ly_yan
+							top_liege = scope:hd_j16_ly_yan
+						}
+					}
+				}
+				hd_j16_luoyang_war_effect = yes
+			}
+			else_if = {
+				limit = { NOT = { has_global_variable = hd_j16_luoyang_wlog } }
+				set_global_variable = hd_j16_luoyang_wlog
+				debug_log = "HD_J16 e3_q60 WAIT not_ready"
+			}
+		}
+	}
+	# 结局判定后清掉永不自清的 hd_nbc_luoyang_active（01 §5）
+	if = {
+		limit = {
+			has_global_variable = hd_370_luoyang_done
+			has_global_variable = hd_nbc_luoyang_active
+		}
+		remove_global_variable = hd_nbc_luoyang_active
+	}
+}
+
+# 开战。scope:hd_j16_ly_qin、scope:hd_j16_ly_yan 已存好
+hd_j16_luoyang_war_effect = {
+	hd_nbc_start_war_effect = { ATTACKER = scope:hd_j16_ly_qin DEFENDER = scope:hd_j16_ly_yan TARGET = title:d_henan KIND = luoyang }
+	if = {
+		limit = { exists = scope:hd_nbc_war_luoyang }
+		set_global_variable = hd_370_luoyang_started
+		set_global_variable = { name = hd_j16_luoyang_qin value = scope:hd_j16_ly_qin }
+		set_global_variable = { name = hd_j16_luoyang_yan value = scope:hd_j16_ly_yan }
+		scope:hd_j16_ly_qin = {
+			hd_nbc_spawn_army_effect = { SIZE = 15000 WHERE = title:c_uuii_p_842 NAME = hd_370_wangmeng_army_name }
+		}
+		scope:hd_j16_ly_yan = {
+			hd_nbc_spawn_army_effect = { SIZE = 8000 WHERE = title:c_uuii_p_761 NAME = hd_370_murongzang_army_name }
+		}
+		debug_log = "HD_J16 e3_q60 FIRE war_started"
+	}
+	else_if = {
+		limit = { NOT = { has_global_variable = hd_j16_luoyang_wlog } }
+		set_global_variable = hd_j16_luoyang_wlog
+		debug_log = "HD_J16 e3_q60 WAIT war_start_failed"
+	}
+}
+
+# 结局：双方都已没有这一场次的战争，再看金墉归谁
+hd_j16_luoyang_result_effect = {
+	# 旧 370 档：战争是旧开局效果打响的，没存秦燕之主，按旧当事人 ID 补存
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_luoyang_qin } }
+		if = {
+			limit = { exists = scope:hd_j16_ly_qin }
+			clear_saved_scope = hd_j16_ly_qin
+		}
+		if = {
+			limit = { exists = scope:hd_j16_ly_yan }
+			clear_saved_scope = hd_j16_ly_yan
+		}
+		hd_j16_resolve_effect = { ID = lueyang_fu_020 AS = hd_j16_ly_qin }
+		hd_j16_resolve_effect = { ID = changli_murong_077 AS = hd_j16_ly_yan }
+		if = {
+			limit = {
+				exists = scope:hd_j16_ly_qin
+				exists = scope:hd_j16_ly_yan
+			}
+			set_global_variable = { name = hd_j16_luoyang_qin value = scope:hd_j16_ly_qin }
+			set_global_variable = { name = hd_j16_luoyang_yan value = scope:hd_j16_ly_yan }
+			debug_log = "HD_J16 e3_q60 WAIT oldsave_backfill"
+		}
+		# 苻坚或慕容暐已死、补存不成：按位置兜底（与开战时的解析方式一致）。长安、河南郡、金墉三处的 top_liege 都已没有
+		# 这一场次的战争，就按金墉归属判定：金墉的 top_liege 是苻氏即秦胜。不能只设 done 不给结果，下游 E3-Q70 等读 _qin_won/_qin_lost。
+		# 战争还在打（被继承人接手）就等下一跳。1-B 删过渡桥后靠这里收尾
+		else = {
+			if = {
+				limit = {
+					NOT = { title:c_uuii_p_867.holder.top_liege ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:luoyang } } }
+					NOT = { title:d_henan.holder.top_liege ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:luoyang } } }
+					NOT = { title:c_uuii_p_786.holder.top_liege ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:luoyang } } }
+				}
+				set_global_variable = hd_370_luoyang_done
+				if = {
+					limit = { title:c_uuii_p_786.holder.top_liege ?= { dynasty ?= dynasty:fu_1 } }
+					set_global_variable = hd_370_luoyang_qin_won
+					debug_log = "HD_J16 e3_q60 FIRE result_qin_won oldsave_actor_gone"
+				}
+				else = {
+					set_global_variable = hd_370_luoyang_qin_lost
+					debug_log = "HD_J16 e3_q60 FIRE result_qin_lost oldsave_actor_gone"
+				}
+			}
+		}
+	}
+	if = {
+		limit = {
+			has_global_variable = hd_j16_luoyang_qin
+			has_global_variable = hd_j16_luoyang_yan
+			NOT = { global_var:hd_j16_luoyang_qin ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:luoyang } } }
+			NOT = { global_var:hd_j16_luoyang_yan ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:luoyang } } }
+			# 存下的秦燕之主战中死去、战争由继承人接着打时，只看存下的人会提前判定：再按位置查一遍
+			NOT = { title:c_uuii_p_867.holder.top_liege ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:luoyang } } }
+			NOT = { title:c_uuii_p_786.holder.top_liege ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:luoyang } } }
+		}
+		set_global_variable = hd_370_luoyang_done
+		if = {
+			limit = {
+				title:c_uuii_p_786.holder ?= {
+					OR = {
+						this = global_var:hd_j16_luoyang_qin
+						top_liege = global_var:hd_j16_luoyang_qin
+						top_liege ?= { dynasty ?= dynasty:fu_1 }    # 秦主战中死去、继承人接手的情形
+					}
+				}
+			}
+			set_global_variable = hd_370_luoyang_qin_won
+			debug_log = "HD_J16 e3_q60 FIRE result_qin_won"
+		}
+		else = {
+			set_global_variable = hd_370_luoyang_qin_lost
+			debug_log = "HD_J16 e3_q60 FIRE result_qin_lost"
+		}
+	}
+}
+
+############################################################
+# 以下为 1-A 迁入的旧 370 节点（原 zz_hd_370_history_effects.txt 的 S1 慕容筑出降、S2 东征、S3 燕亡、慕容评归秦、S4 寿春；01 §2.3）。
+# 写法：秦主、燕主一律按位置解析（hd_j16_get_qin_ruler_effect / hd_j16_get_yan_ruler_effect），304、346 局里苻坚、慕容暐
+# 只有 hbirth 指针，不能写 character:ID。旧执行体里写死 character:ID 的，在本文件另写 scope 版（hd_j16_*），
+# hd_370 事件的选项改指这些新执行体；新执行体开头都自己重新解析，旧过渡桥弹出的事件里没有本文件存的 scope 也能用。
+# 变量沿用旧名 hd_370_*。404 局由 hd_j16_mark_before_start_effect 前标；304、346、370 局真正判定。
+# 过渡期（1-B 删过渡桥前）370 局每跳先跑旧 hd_370_pulse_effect，再跑这里，旧逻辑先设同名变量，两边自然去重。
+############################################################
+
+############################################################
+# 秦主、燕主解析（01 §4.1 按位置解析）。参数 AS：存成的 scope 名（调用方保证本跳内不与别处重名）
+############################################################
+# 秦主：长安（c_uuii_p_867）的 top_liege，独立、苻氏；取不到再试苻坚本人（由调用方再判独立、有地等条件）
+hd_j16_get_qin_ruler_effect = {
+	if = {
+		limit = { exists = scope:$AS$ }
+		clear_saved_scope = $AS$
+	}
+	title:c_uuii_p_867.holder.top_liege ?= {
+		if = {
+			limit = {
+				is_independent_ruler = yes
+				dynasty ?= dynasty:fu_1
+			}
+			save_scope_as = $AS$
+		}
+	}
+	if = {
+		limit = { NOT = { exists = scope:$AS$ } }
+		hd_j16_resolve_effect = { ID = lueyang_fu_020 AS = $AS$ }
+	}
+}
+
+# 燕主（照旧 S3 的回退方式，R4 §3.1）：慕容暐在世且有地就是他（被俘也算）；否则取燕蓟帝国 e_youyan 的持有者
+# （有地、独立、dynasty:murong，R6）。取不到则不存
+hd_j16_get_yan_ruler_effect = {
+	if = {
+		limit = { exists = scope:$AS$ }
+		clear_saved_scope = $AS$
+	}
+	hd_j16_resolve_effect = { ID = changli_murong_077 AS = $AS$ }
+	if = {
+		limit = {
+			exists = scope:$AS$
+			scope:$AS$ = { is_landed = no }
+		}
+		clear_saved_scope = $AS$
+	}
+	if = {
+		limit = { NOT = { exists = scope:$AS$ } }
+		title:e_youyan.holder ?= {
+			if = {
+				limit = {
+					is_landed = yes
+					is_independent_ruler = yes
+					dynasty ?= dynasty:murong
+				}
+				save_scope_as = $AS$
+			}
+		}
+	}
+}
+
+############################################################
+# 慕容筑出降（原 S1 出降分支；计划复核必改 1 甲）。洛阳之战本身与结局见上方 E3-Q60（hd_j16_luoyang_*），这里不重复。
+# 窗口 370.3.14 – 370.7.9。洛阳之战已开打、未了结；慕容筑 hd_370_murong_zhu 未被囚、持河南郡、是燕臣（非独立，top_liege 是慕容氏）；
+#   秦主正在打洛阳之战。AI 慕容筑直接出降；玩家收 hd_370.0110：a 出降 / b 死守。
+# 变量（旧名）：hd_370_zhu_checked（了结）、hd_370_zhu_surrendered（fire 结果）；新增 hd_j16_zhu_skip、_wlog
+############################################################
+hd_j16_node_zhu_surrender_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_370_zhu_checked }
+			has_global_variable = hd_370_luoyang_started
+			NOT = { has_global_variable = hd_370_luoyang_done }
+			current_date >= 370.3.14
+		}
+		if = {
+			limit = { current_date >= 370.7.9 }
+			set_global_variable = hd_370_zhu_checked
+			set_global_variable = hd_j16_zhu_skip
+			debug_log = "HD_J16 e3_q60 SKIP zhu_window_closed"
+		}
+		else_if = {
+			limit = { hd_j16_dead_trigger = { ID = hd_370_murong_zhu } }
+			set_global_variable = hd_370_zhu_checked
+			set_global_variable = hd_j16_zhu_skip
+			debug_log = "HD_J16 e3_q60 SKIP zhu_actor_dead"
+		}
+		else = {
+			if = {
+				limit = { exists = scope:hd_j16_zs_zhu }
+				clear_saved_scope = hd_j16_zs_zhu
+			}
+			hd_j16_resolve_effect = { ID = hd_370_murong_zhu AS = hd_j16_zs_zhu }
+			hd_j16_zhu_qin_effect = yes
+			if = {
+				limit = {
+					exists = scope:hd_j16_zs_zhu
+					scope:hd_j16_zs_zhu = {
+						is_imprisoned = no
+						has_title = title:d_henan
+						is_independent_ruler = no
+						top_liege ?= { dynasty ?= dynasty:murong }
+					}
+					scope:hd_j16_zs_qin ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:luoyang } }
+				}
+				set_global_variable = hd_370_zhu_checked
+				scope:hd_j16_zs_zhu = {
+					if = {
+						limit = { is_ai = yes }
+						hd_j16_zhu_surrender_effect = yes
+					}
+					else = {
+						trigger_event = hd_370.0110
+						debug_log = "HD_J16 e3_q60 WAIT zhu_player_asked"
+					}
+				}
+			}
+			else_if = {
+				limit = { NOT = { has_global_variable = hd_j16_zhu_wlog } }
+				set_global_variable = hd_j16_zhu_wlog
+				debug_log = "HD_J16 e3_q60 WAIT zhu_not_ready"
+			}
+		}
+	}
+}
+
+# 洛阳之战的秦主：E3-Q60 开战时存下的 hd_j16_luoyang_qin（在世），否则按位置。存为 scope:hd_j16_zs_qin
+hd_j16_zhu_qin_effect = {
+	if = {
+		limit = { exists = scope:hd_j16_zs_qin }
+		clear_saved_scope = hd_j16_zs_qin
+	}
+	if = {
+		limit = { global_var:hd_j16_luoyang_qin ?= { is_alive = yes } }
+		global_var:hd_j16_luoyang_qin = { save_scope_as = hd_j16_zs_qin }
+	}
+	else = {
+		hd_j16_get_qin_ruler_effect = { AS = hd_j16_zs_qin }
+	}
+}
+
+# 慕容筑出降（照旧 hd_370_zhu_surrender_effect，人物改用解析）：秦主身上的洛阳之战白和；河南郡交王猛（王猛是秦臣、有地），
+# 否则交秦主；慕容筑入秦主宫廷。scope:hd_j16_zs_zhu 由节点或 hd_370.0110 选项 a 存好
+hd_j16_zhu_surrender_effect = {
+	if = {
+		limit = { NOT = { exists = scope:hd_j16_zs_zhu } }
+		hd_j16_resolve_effect = { ID = hd_370_murong_zhu AS = hd_j16_zs_zhu }
+	}
+	hd_j16_zhu_qin_effect = yes
+	if = {
+		limit = {
+			exists = scope:hd_j16_zs_zhu
+			exists = scope:hd_j16_zs_qin
+			scope:hd_j16_zs_qin = { is_landed = yes }
+		}
+		scope:hd_j16_zs_qin = {
+			every_character_war = {
+				limit = { var:hd_nbc_war_kind ?= flag:luoyang }
+				end_war = white_peace
+			}
+		}
+		if = {
+			limit = { exists = scope:hd_j16_zs_wm }
+			clear_saved_scope = hd_j16_zs_wm
+		}
+		hd_j16_resolve_effect = { ID = wang_meng_3 AS = hd_j16_zs_wm }
+		if = {
+			limit = {
+				scope:hd_j16_zs_wm ?= {
+					is_landed = yes
+					top_liege = scope:hd_j16_zs_qin
+				}
+			}
+			hd_370_take_realm_effect = { NEW = scope:hd_j16_zs_wm OLD = scope:hd_j16_zs_zhu }
+		}
+		else = {
+			hd_370_take_realm_effect = { NEW = scope:hd_j16_zs_qin OLD = scope:hd_j16_zs_zhu }
+		}
+		scope:hd_j16_zs_qin = {
+			if = {
+				limit = {
+					scope:hd_j16_zs_zhu = {
+						is_alive = yes
+						is_landed = no
+					}
+				}
+				add_courtier = scope:hd_j16_zs_zhu
+			}
+		}
+		set_global_variable = hd_370_zhu_surrendered
+		debug_log = "HD_J16 e3_q60 FIRE zhu_surrendered"
+	}
+}
+
+############################################################
+# E3-Q70 王猛东征【软】（原 S2；R3 不得退化）
+# 窗口 370.7.21 – 371.6.1。上游 E3-Q60 洛阳之战已开打或已了结（东征会先白和未完的洛阳之战，D13）；
+#   秦主（按位置）独立、未被囚；燕主（S3 回退方式）独立；邺城 c_uuii_p_1172 在燕主一系。
+# AI 秦主直接出兵；玩家秦主收 hd_370.0120：a 出兵 / b 不出（设 done）。R3 三处：
+#   ① 宣战目标魏郡，另加上党、阳阿两郡入连通筛选（D13，王猛出壶关路线），先白和洛阳之战，免停战惩罚；
+#   ② 秦败后休整 180 天、一年内再伐一次；③ 燕亡放宽（见 E3-M90）。
+# 宣战失败清 started，下一跳重试。结局：双方都已没有东征场次的战争，邺城的 top_liege 是苻氏即秦胜。
+# 变量（旧名）：hd_370_dongzheng_started、_decided（已开战，fire 结果）、_done、_qin_won/_qin_lost、_retry_started/_retry_cooldown/_retry_window；
+#   新增 hd_j16_dongzheng_qin/_yan（开战时的秦燕之主）、hd_j16_dongzheng_skip、_wlog
+############################################################
+hd_j16_node_dongzheng_effect = {
+	if = {
+		limit = {
+			current_date >= 370.7.21
+			NOT = { has_global_variable = hd_370_dongzheng_started }
+		}
+		if = {
+			limit = { current_date >= 371.6.1 }
+			set_global_variable = hd_370_dongzheng_started
+			set_global_variable = hd_370_dongzheng_done
+			set_global_variable = hd_j16_dongzheng_skip
+			debug_log = "HD_J16 e3_q70 SKIP window_closed"
+		}
+		else = {
+			hd_j16_dongzheng_sides_effect = yes
+			if = {
+				limit = {
+					OR = {
+						has_global_variable = hd_370_luoyang_started
+						has_global_variable = hd_370_luoyang_done
+					}
+					exists = scope:hd_j16_dz_qin
+					exists = scope:hd_j16_dz_yan
+					NOT = { scope:hd_j16_dz_qin = scope:hd_j16_dz_yan }
+					scope:hd_j16_dz_qin = {
+						is_independent_ruler = yes
+						is_imprisoned = no
+					}
+					scope:hd_j16_dz_yan = { is_independent_ruler = yes }
+					title:c_uuii_p_1172.holder ?= {
+						OR = {
+							this = scope:hd_j16_dz_yan
+							top_liege = scope:hd_j16_dz_yan
+						}
+					}
+				}
+				if = {
+					limit = { scope:hd_j16_dz_qin = { is_ai = yes } }
+					hd_j16_dongzheng_war_effect = yes
+				}
+				else = {
+					# 旧语义：started 表示已发事件、等玩家回复；选 a 开战（失败清 started 重问），选 b 设 done
+					set_global_variable = hd_370_dongzheng_started
+					scope:hd_j16_dz_qin = { trigger_event = hd_370.0120 }
+					debug_log = "HD_J16 e3_q70 WAIT player_asked"
+				}
+			}
+			else_if = {
+				limit = { NOT = { has_global_variable = hd_j16_dongzheng_wlog } }
+				set_global_variable = hd_j16_dongzheng_wlog
+				debug_log = "HD_J16 e3_q70 WAIT not_ready"
+			}
+		}
+	}
+	# 战后
+	else_if = {
+		limit = {
+			has_global_variable = hd_370_dongzheng_decided
+			NOT = { has_global_variable = hd_370_dongzheng_done }
+		}
+		hd_j16_dongzheng_result_effect = yes
+	}
+	# 玩家秦主收 hd_370.0120 后一直没回复（或事件被丢弃），started 已设、decided 未设：
+	#   首次出兵按截止日 371.6.1 宽限 90 天了结；再伐（会删 done、decided，保留 started）改看再伐窗口（一年）是否已过
+	else_if = {
+		limit = {
+			has_global_variable = hd_370_dongzheng_started
+			NOT = { has_global_variable = hd_370_dongzheng_decided }
+			NOT = { has_global_variable = hd_370_dongzheng_done }
+			OR = {
+				AND = {
+					NOT = { has_global_variable = hd_370_dongzheng_retry_started }
+					current_date >= 371.9.1
+				}
+				AND = {
+					has_global_variable = hd_370_dongzheng_retry_started
+					NOT = { has_global_variable = hd_370_dongzheng_retry_window }
+				}
+			}
+		}
+		set_global_variable = hd_370_dongzheng_done
+		if = {
+			limit = { NOT = { has_global_variable = hd_370_dongzheng_retry_started } }
+			set_global_variable = hd_j16_dongzheng_skip
+		}
+		debug_log = "HD_J16 e3_q70 SKIP player_no_reply"
+	}
+	# 再伐（boki 10-26，只一次；R3 ②）：秦败后 180 天起、一年内，双方仍在、邺仍属燕，燕未亡
+	if = {
+		limit = {
+			has_global_variable = hd_370_dongzheng_qin_lost
+			NOT = { has_global_variable = hd_370_dongzheng_retry_started }
+			NOT = { has_global_variable = hd_370_dongzheng_retry_cooldown }
+			has_global_variable = hd_370_dongzheng_retry_window
+			NOT = { has_global_variable = hd_370_yanfall_done }
+		}
+		hd_j16_dongzheng_sides_effect = yes
+		if = {
+			limit = {
+				exists = scope:hd_j16_dz_qin
+				exists = scope:hd_j16_dz_yan
+				NOT = { scope:hd_j16_dz_qin = scope:hd_j16_dz_yan }
+				scope:hd_j16_dz_qin = {
+					is_independent_ruler = yes
+					is_imprisoned = no
+				}
+				scope:hd_j16_dz_yan = { is_independent_ruler = yes }
+				title:c_uuii_p_1172.holder ?= {
+					OR = {
+						this = scope:hd_j16_dz_yan
+						top_liege = scope:hd_j16_dz_yan
+					}
+				}
+			}
+			set_global_variable = hd_370_dongzheng_retry_started
+			remove_global_variable = hd_370_dongzheng_qin_lost
+			remove_global_variable = hd_370_dongzheng_done
+			if = {
+				limit = { has_global_variable = hd_370_dongzheng_decided }
+				remove_global_variable = hd_370_dongzheng_decided
+			}
+			debug_log = "HD_J16 e3_q70 FIRE retry"
+			scope:hd_j16_dz_qin = {
+				if = {
+					limit = { is_ai = yes }
+					hd_j16_dongzheng_war_effect = yes
+				}
+				else = { trigger_event = hd_370.0120 }
+			}
+		}
+	}
+}
+
+# 秦燕双方：scope:hd_j16_dz_qin（秦主，按位置）、scope:hd_j16_dz_yan（燕主，S3 回退方式）
+hd_j16_dongzheng_sides_effect = {
+	hd_j16_get_qin_ruler_effect = { AS = hd_j16_dz_qin }
+	hd_j16_get_yan_ruler_effect = { AS = hd_j16_dz_yan }
+}
+
+# 秦主出兵（照旧 hd_370_dongzheng_war_effect，人物改用解析；节点、hd_370.0120 选项 a、再伐都调它，开头自己重新解析）。
+# 洛阳之战未完先白和（计划复核必改 1 乙作兜底）；免停战惩罚旗（执行后复核必改 2）；目标魏郡（邺），加上党、阳阿入连通筛选（D13）。
+# 开战成功才给事件兵：王猛所部 25,000 在蒲阪，燕慕容评 15,000 在潞城。失败清 started，下一跳由主分支重试或按截止日收尾
+hd_j16_dongzheng_war_effect = {
+	if = {
+		limit = { has_global_variable = hd_370_dongzheng_done }
+		debug_log = "HD_J16 e3_q70 SKIP player_late_reply"
+	}
+	else = { hd_j16_dongzheng_war_body_effect = yes }
+}
+
+# 正文（原 hd_j16_dongzheng_war_effect）。外壳在节点已了结（截止宽限后才回复）时不再开战，免得开出一场永不结算的战争
+hd_j16_dongzheng_war_body_effect = {
+	hd_j16_dongzheng_sides_effect = yes
+	if = {
+		limit = {
+			exists = scope:hd_j16_dz_qin
+			exists = scope:hd_j16_dz_yan
+			NOT = { scope:hd_j16_dz_qin = scope:hd_j16_dz_yan }
+		}
+		if = {
+			limit = {
+				has_global_variable = hd_370_luoyang_started
+				NOT = { has_global_variable = hd_370_luoyang_done }
+			}
+			scope:hd_j16_dz_qin = {
+				every_character_war = {
+					limit = { var:hd_nbc_war_kind ?= flag:luoyang }
+					end_war = white_peace
+				}
+			}
+			debug_log = "HD_J16 e3_q70 FIRE luoyang_ended_for_dongzheng"
+		}
+		scope:hd_j16_dz_qin = { add_character_flag = { flag = allowed_war_declaration_sans_truce_penalties days = 1 } }
+		# 苻坚伐燕走吞并 CB，胜即全取前燕（boki 10-28；原按上党、魏郡经连通筛选只夺所争之地）
+		hd_tb_annex_start_war_effect = { ATTACKER = scope:hd_j16_dz_qin DEFENDER = scope:hd_j16_dz_yan KIND = dongzheng }
+	}
+	if = {
+		limit = { exists = scope:hd_nbc_war_dongzheng }
+		set_global_variable = hd_370_dongzheng_started
+		set_global_variable = hd_370_dongzheng_decided
+		set_global_variable = { name = hd_j16_dongzheng_qin value = scope:hd_j16_dz_qin }
+		set_global_variable = { name = hd_j16_dongzheng_yan value = scope:hd_j16_dz_yan }
+		scope:hd_j16_dz_qin = {
+			hd_nbc_spawn_army_effect = { SIZE = 25000 WHERE = title:c_uuii_p_980 NAME = hd_370_wangmeng_army_name }
+		}
+		scope:hd_j16_dz_yan = {
+			hd_nbc_spawn_army_effect = { SIZE = 15000 WHERE = title:c_uuii_p_1163 NAME = hd_370_murongping_army_name }
+		}
+		debug_log = "HD_J16 e3_q70 FIRE war_started"
+	}
+	else = {
+		if = {
+			limit = { has_global_variable = hd_370_dongzheng_started }
+			remove_global_variable = hd_370_dongzheng_started
+		}
+		if = {
+			limit = { NOT = { has_global_variable = hd_j16_dongzheng_wlog } }
+			set_global_variable = hd_j16_dongzheng_wlog
+			debug_log = "HD_J16 e3_q70 WAIT war_start_failed"
+		}
+	}
+}
+
+# 结局：存下的秦燕之主与按位置的秦燕之主都已没有东征场次的战争；邺城的 top_liege 是苻氏即秦胜（覆盖秦主战中死去、继承人接手）。
+# 秦败：设再伐的冷却 180 天与窗口 365 天（只在还没再伐过时）
+hd_j16_dongzheng_result_effect = {
+	hd_j16_dongzheng_sides_effect = yes
+	if = {
+		limit = {
+			NOT = { global_var:hd_j16_dongzheng_qin ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:dongzheng } } }
+			NOT = { global_var:hd_j16_dongzheng_yan ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:dongzheng } } }
+			NOT = { scope:hd_j16_dz_qin ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:dongzheng } } }
+			NOT = { scope:hd_j16_dz_yan ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:dongzheng } } }
+		}
+		set_global_variable = hd_370_dongzheng_done
+		if = {
+			limit = { title:c_uuii_p_1172.holder.top_liege ?= { dynasty ?= dynasty:fu_1 } }
+			set_global_variable = hd_370_dongzheng_qin_won
+			debug_log = "HD_J16 e3_q70 FIRE result_qin_won"
+		}
+		else = {
+			set_global_variable = hd_370_dongzheng_qin_lost
+			if = {
+				limit = { NOT = { has_global_variable = hd_370_dongzheng_retry_started } }
+				set_global_variable = { name = hd_370_dongzheng_retry_cooldown value = yes days = 180 }
+				set_global_variable = { name = hd_370_dongzheng_retry_window value = yes days = 365 }
+			}
+			debug_log = "HD_J16 e3_q70 FIRE result_qin_lost"
+		}
+	}
+}
+
+############################################################
+# E3-M90 前燕亡【软】（原 S3）
+# 窗口 369.12.1 – 372.1.1（起点为自拟：旧节点只在 370 局 370.2.13 起跑，统一心跳下须防 346 局早年误判；止日沿用旧跳过日）。
+# 条件：东征秦胜；或（放宽，R3 ③）371.6.1 前邺城已在秦主一系、东征没在打。燕主按 S3 回退方式解析（存旧名 hd_370_yan_ruler），
+#   燕主在世有地，秦主在世有地。AI 燕主直接出降；玩家燕主收 hd_370.0130：a 出降 / b 北走龙城。
+# 变量（旧名）：hd_370_yanfall_done、hd_370_yan_ruler、hd_370_yan_fallen（fire 结果）；新增 hd_j16_yanfall_qin（秦主）、_skip、_wlog
+############################################################
+hd_j16_node_yanfall_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_370_yanfall_done }
+			current_date >= 369.12.1
+		}
+		if = {
+			limit = { current_date >= 372.1.1 }
+			set_global_variable = hd_370_yanfall_done
+			set_global_variable = hd_j16_yanfall_skip
+			debug_log = "HD_J16 e3_m90 SKIP window_closed"
+		}
+		else = {
+			hd_j16_get_qin_ruler_effect = { AS = hd_j16_yf_qin }
+			if = {
+				limit = {
+					OR = {
+						has_global_variable = hd_370_dongzheng_qin_won
+						AND = {
+							current_date < 371.6.1
+							exists = scope:hd_j16_yf_qin
+							NOT = { scope:hd_j16_yf_qin = { any_character_war = { var:hd_nbc_war_kind ?= flag:dongzheng } } }
+							title:c_uuii_p_1172.holder ?= {
+								OR = {
+									this = scope:hd_j16_yf_qin
+									top_liege = scope:hd_j16_yf_qin
+								}
+							}
+						}
+					}
+				}
+				hd_j16_get_yan_ruler_effect = { AS = hd_j16_yf_yan }
+				# 2026-10-28 东征改走吞并 CB：秦胜即全取前燕，燕主已无地、解析不到，改取开战时存的燕主
+				if = {
+					limit = {
+						NOT = { exists = scope:hd_j16_yf_yan }
+						has_global_variable = hd_370_dongzheng_qin_won
+					}
+					global_var:hd_j16_dongzheng_yan ?= {
+						if = {
+							limit = { is_alive = yes }
+							save_scope_as = hd_j16_yf_yan
+						}
+					}
+				}
+				if = {
+					limit = {
+						exists = scope:hd_j16_yf_yan
+						OR = {
+							NOT = { exists = scope:hd_j16_yf_qin }
+							NOT = { scope:hd_j16_yf_yan = scope:hd_j16_yf_qin }
+						}
+					}
+					set_global_variable = { name = hd_370_yan_ruler value = scope:hd_j16_yf_yan }
+				}
+				if = {
+					limit = {
+						global_var:hd_370_yan_ruler ?= {
+							is_alive = yes
+							OR = {
+								is_landed = yes
+								has_global_variable = hd_370_dongzheng_qin_won	# 吞并后无地也照样善后（10-28）
+							}
+						}
+						scope:hd_j16_yf_qin ?= {
+							is_alive = yes
+							is_landed = yes
+						}
+						NOT = { global_var:hd_370_yan_ruler = scope:hd_j16_yf_qin }
+					}
+					set_global_variable = hd_370_yanfall_done
+					set_global_variable = { name = hd_j16_yanfall_qin value = scope:hd_j16_yf_qin }
+					global_var:hd_370_yan_ruler = {
+						if = {
+							limit = {
+								OR = {
+									is_ai = yes
+									is_landed = no	# 已被吞并，无可出降或北走，直接善后（hd_370.0130 要求有地）
+								}
+							}
+							hd_j16_yan_fall_effect = yes
+						}
+						else = {
+							trigger_event = hd_370.0130
+							debug_log = "HD_J16 e3_m90 WAIT player_asked"
+						}
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_yanfall_wlog } }
+					set_global_variable = hd_j16_yanfall_wlog
+					debug_log = "HD_J16 e3_m90 WAIT no_yan_ruler"
+				}
+			}
+			else_if = {
+				limit = { NOT = { has_global_variable = hd_j16_yanfall_wlog } }
+				set_global_variable = hd_j16_yanfall_wlog
+				debug_log = "HD_J16 e3_m90 WAIT not_ready"
+			}
+		}
+	}
+}
+
+# 燕亡时的秦主：节点存下的 hd_j16_yanfall_qin（在世），否则按位置。存为 scope:hd_j16_yf_qin
+hd_j16_yanfall_qin_effect = {
+	if = {
+		limit = { exists = scope:hd_j16_yf_qin }
+		clear_saved_scope = hd_j16_yf_qin
+	}
+	if = {
+		limit = { global_var:hd_j16_yanfall_qin ?= { is_alive = yes } }
+		global_var:hd_j16_yanfall_qin = { save_scope_as = hd_j16_yf_qin }
+	}
+	else = {
+		hd_j16_get_qin_ruler_effect = { AS = hd_j16_yf_qin }
+	}
+}
+
+# 燕亡（照旧 hd_370_yan_fall_effect，人物改用解析；节点与 hd_370.0130 选项 a 调用）：燕主（hd_370_yan_ruler）的头衔与封臣全归秦主；
+# 冀州、司州两个王国与魏郡交王猛（王猛为冀州牧，镇邺）；燕主入秦主宫廷；慕容评奔高句丽（AI 直接，玩家弹 hd_370.0135）
+hd_j16_yan_fall_effect = {
+	hd_j16_yanfall_qin_effect = yes
+	if = {
+		limit = { exists = scope:hd_370_yan_old }
+		clear_saved_scope = hd_370_yan_old
+	}
+	global_var:hd_370_yan_ruler ?= {
+		save_scope_as = hd_370_yan_old
+		if = {
+			limit = { is_imprisoned = yes }
+			release_from_prison = yes
+		}
+	}
+	if = {
+		limit = {
+			exists = scope:hd_j16_yf_qin
+			exists = scope:hd_370_yan_old
+			scope:hd_j16_yf_qin = { is_landed = yes }
+			NOT = { scope:hd_j16_yf_qin = scope:hd_370_yan_old }
+		}
+		hd_370_take_realm_effect = { NEW = scope:hd_j16_yf_qin OLD = scope:hd_370_yan_old }
+		scope:hd_j16_yf_qin = {
+			if = {
+				limit = {
+					scope:hd_370_yan_old = {
+						is_alive = yes
+						is_landed = no
+					}
+				}
+				add_courtier = scope:hd_370_yan_old
+			}
+		}
+		if = {
+			limit = { exists = scope:hd_j16_yf_wm }
+			clear_saved_scope = hd_j16_yf_wm
+		}
+		hd_j16_resolve_effect = { ID = wang_meng_3 AS = hd_j16_yf_wm }
+		if = {
+			limit = {
+				scope:hd_j16_yf_wm ?= {
+					is_landed = yes
+					top_liege = scope:hd_j16_yf_qin
+				}
+			}
+			create_title_and_vassal_change = { type = granted save_scope_as = hd_370_wm_change add_claim_on_loss = no }
+			title:k_uuii_jizhou = {
+				if = {
+					limit = { holder ?= scope:hd_j16_yf_qin }
+					change_title_holder = { holder = scope:hd_j16_yf_wm change = scope:hd_370_wm_change }
+				}
+			}
+			title:k_sizhou = {
+				if = {
+					limit = { holder ?= scope:hd_j16_yf_qin }
+					change_title_holder = { holder = scope:hd_j16_yf_wm change = scope:hd_370_wm_change }
+				}
+			}
+			title:d_weijun = {
+				if = {
+					limit = { holder ?= scope:hd_j16_yf_qin }
+					change_title_holder = { holder = scope:hd_j16_yf_wm change = scope:hd_370_wm_change }
+				}
+				every_de_jure_county = {
+					limit = { holder ?= scope:hd_j16_yf_qin }
+					change_title_holder = { holder = scope:hd_j16_yf_wm change = scope:hd_370_wm_change take_baronies = yes }
+				}
+			}
+			resolve_title_and_vassal_change = scope:hd_370_wm_change
+			debug_log = "HD_J16 e3_m90 FIRE jizhou_to_wangmeng"
+		}
+		if = {
+			limit = { exists = scope:hd_j16_yf_ping }
+			clear_saved_scope = hd_j16_yf_ping
+		}
+		hd_j16_resolve_effect = { ID = changli_murong_014 AS = hd_j16_yf_ping }
+		scope:hd_j16_yf_ping ?= {
+			if = {
+				limit = { is_imprisoned = no }
+				if = {
+					limit = { is_ai = yes }
+					hd_j16_ping_flee_effect = yes
+				}
+				else = { trigger_event = hd_370.0135 }
+			}
+		}
+		set_global_variable = hd_370_yan_fallen
+		if = {
+			limit = { scope:hd_370_yan_old = { NOT = { any_vassal = { always = yes } } } }
+			debug_log = "HD_J16 e3_m90 FIRE yanfall_ok"
+		}
+		else = { debug_log = "HD_J16 e3_m90 FIRE yanfall_check_failed" }
+	}
+}
+
+# 慕容评奔高句丽（照旧 hd_370_ping_flee_effect，秦主改用解析）：领地交秦主，入高句丽王宫廷；三个月后由 E3-M91 送秦。Scope：慕容评
+hd_j16_ping_flee_effect = {
+	save_scope_as = hd_370_ping
+	hd_j16_yanfall_qin_effect = yes
+	if = {
+		limit = {
+			is_landed = yes
+			scope:hd_j16_yf_qin ?= { is_landed = yes }
+			NOT = { scope:hd_j16_yf_qin = scope:hd_370_ping }
+		}
+		hd_370_take_realm_effect = { NEW = scope:hd_j16_yf_qin OLD = scope:hd_370_ping }
+	}
+	if = {
+		limit = {
+			is_landed = no
+			title:k_uuii_goguryeo_region.holder ?= { is_alive = yes }
+		}
+		title:k_uuii_goguryeo_region.holder = { add_courtier = scope:hd_370_ping }
+		set_global_variable = hd_370_ping_fled
+		set_global_variable = { name = hd_370_ping_wait value = yes days = 90 }
+		debug_log = "HD_J16 e3_m90 FIRE ping_fled"
+	}
+}
+
+############################################################
+# E3-M91 慕容评归秦（原 hd_370_ping_return_effect）
+# 慕容评奔高句丽满 90 天（hd_370_ping_fled 已设、hd_370_ping_wait 已过期）：慕容评是 AI、无地，秦主有地，即送入秦主宫廷。
+# 变量（旧名）：hd_370_ping_returned（了结）；新增 hd_j16_ping_returned_result（fire 结果）
+############################################################
+hd_j16_node_ping_return_effect = {
+	if = {
+		limit = {
+			has_global_variable = hd_370_ping_fled
+			NOT = { has_global_variable = hd_370_ping_wait }
+			NOT = { has_global_variable = hd_370_ping_returned }
+		}
+		set_global_variable = hd_370_ping_returned
+		if = {
+			limit = { exists = scope:hd_j16_pr_ping }
+			clear_saved_scope = hd_j16_pr_ping
+		}
+		hd_j16_resolve_effect = { ID = changli_murong_014 AS = hd_j16_pr_ping }
+		hd_j16_yanfall_qin_effect = yes
+		if = {
+			limit = {
+				scope:hd_j16_pr_ping ?= {
+					is_landed = no
+					is_ai = yes
+				}
+				scope:hd_j16_yf_qin ?= { is_landed = yes }
+			}
+			scope:hd_j16_yf_qin = { add_courtier = scope:hd_j16_pr_ping }
+			set_global_variable = hd_j16_ping_returned_result
+			debug_log = "HD_J16 e3_m91 FIRE ping_sent_to_qin"
+		}
+		else = { debug_log = "HD_J16 e3_m91 SKIP not_ready" }
+	}
+}
+
+############################################################
+# E3-M85 金刀计【软】（04 §1.2；审查 10-26 由 E3-M80 改号）
+# 窗口 369.11.1 – 370.3.1。慕容垂 changli_murong_038、慕容令 changli_murong_039 都在世，都在秦主（按位置）一系（宫廷或领内）；
+#   王猛 wang_meng_3 在世、是秦臣；洛阳之战（E3-Q60）已开始或已了结（hd_370_luoyang_started / _done）。
+#   上游 E3-M80 慕容垂奔秦（346 节）只按状态读（垂已在秦），不读其结果变量。370 开局：慕容令开局前已死，自保护只设 done。
+# 王猛 AI：行金刀计（史实）；玩家王猛收 hd_j16.4000：a 行金刀计 / b 不行。
+# 金刀计：慕容令 AI 信金刀奔燕（史实）；玩家慕容令收 hd_j16.4001：a 奔燕 / b 识破留秦。
+# 慕容令奔燕：入燕主宫廷（AI、无地时），加 5 年「疑叛」，设 hd_j16_jindao_ling_fled；随后慕容垂 AI 闻变出奔、被追回，秦主宽宥（史实）；
+#   玩家慕容垂收 hd_j16.4002：a 出奔被追回（史实）/ b 束身待罪。两者都由秦主宽宥：秦主对垂 +20（10 年）、秦主威望 +100【自拟：威望归秦主】。
+# 慕容令之死交卒年表（die 370.1.1，无 PRE）。
+# 变量：hd_j16_jindao_done、_result（fire 结果，行计时设）、_skip、_wlog、_declined、_settled（整条走完，E4-M05 读）、hd_j16_jindao_ling_fled、hd_j16_jindao_ling_stayed
+############################################################
+hd_j16_node_jindao_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_jindao_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 370 }
+			set_global_variable = hd_j16_jindao_done
+			debug_log = "HD_J16 e3_m85 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 369.11.1 }
+			if = {
+				limit = { current_date >= 370.3.2 }
+				set_global_variable = hd_j16_jindao_done
+				set_global_variable = hd_j16_jindao_skip
+				debug_log = "HD_J16 e3_m85 SKIP window_closed"
+			}
+			else_if = {
+				limit = {
+					OR = {
+						hd_j16_dead_trigger = { ID = changli_murong_038 }
+						hd_j16_dead_trigger = { ID = changli_murong_039 }
+						hd_j16_dead_trigger = { ID = wang_meng_3 }
+					}
+				}
+				set_global_variable = hd_j16_jindao_done
+				set_global_variable = hd_j16_jindao_skip
+				debug_log = "HD_J16 e3_m85 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_jindao_resolve_effect = yes
+				if = {
+					limit = {
+						OR = {
+							has_global_variable = hd_370_luoyang_started
+							has_global_variable = hd_370_luoyang_done
+						}
+						scope:hd_j16_m85_qin ?= { is_independent_ruler = yes }
+						scope:hd_j16_m85_wm ?= {
+							NOT = { this = scope:hd_j16_m85_qin }
+							hd_j16_n370_in_realm_trigger = { QIN = scope:hd_j16_m85_qin }
+						}
+						scope:hd_j16_m85_chui ?= {
+							NOT = { this = scope:hd_j16_m85_qin }
+							hd_j16_n370_in_realm_trigger = { QIN = scope:hd_j16_m85_qin }
+						}
+						scope:hd_j16_m85_ling ?= {
+							is_imprisoned = no
+							hd_j16_n370_in_realm_trigger = { QIN = scope:hd_j16_m85_qin }
+						}
+					}
+					set_global_variable = hd_j16_jindao_done
+					scope:hd_j16_m85_wm = {
+						if = {
+							limit = { is_ai = yes }
+							hd_j16_jindao_effect = yes
+						}
+						else = {
+							trigger_event = hd_j16.4000
+							debug_log = "HD_J16 e3_m85 WAIT player_asked"
+						}
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_jindao_wlog } }
+					set_global_variable = hd_j16_jindao_wlog
+					debug_log = "HD_J16 e3_m85 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+# 解析：秦主 scope:hd_j16_m85_qin（按位置）、王猛 _wm、慕容垂 _chui、慕容令 _ling。各执行体开头都调它（事件里也能用）
+hd_j16_jindao_resolve_effect = {
+	hd_j16_get_qin_ruler_effect = { AS = hd_j16_m85_qin }
+	if = {
+		limit = { exists = scope:hd_j16_m85_wm }
+		clear_saved_scope = hd_j16_m85_wm
+	}
+	if = {
+		limit = { exists = scope:hd_j16_m85_chui }
+		clear_saved_scope = hd_j16_m85_chui
+	}
+	if = {
+		limit = { exists = scope:hd_j16_m85_ling }
+		clear_saved_scope = hd_j16_m85_ling
+	}
+	hd_j16_resolve_effect = { ID = wang_meng_3 AS = hd_j16_m85_wm }
+	hd_j16_resolve_effect = { ID = changli_murong_038 AS = hd_j16_m85_chui }
+	hd_j16_resolve_effect = { ID = changli_murong_039 AS = hd_j16_m85_ling }
+}
+
+# 王猛行金刀计（AI 王猛由节点调；玩家王猛 hd_j16.4000 a）：慕容令 AI 直接奔燕，玩家慕容令弹 hd_j16.4001。Scope：任意
+hd_j16_jindao_effect = {
+	hd_j16_jindao_resolve_effect = yes
+	set_global_variable = hd_j16_jindao_result
+	scope:hd_j16_m85_ling ?= {
+		if = {
+			limit = { is_ai = yes }
+			hd_j16_jindao_ling_flee_effect = yes
+		}
+		else = {
+			trigger_event = hd_j16.4001
+			debug_log = "HD_J16 e3_m85 WAIT ling_player_asked"
+		}
+	}
+	debug_log = "HD_J16 e3_m85 FIRE jindao"
+}
+
+# 慕容令信金刀奔燕（AI 由上面调；玩家慕容令 hd_j16.4001 a）：入燕主宫廷、「疑叛」5 年；随后慕容垂出奔被追回。Scope：任意
+hd_j16_jindao_ling_flee_effect = {
+	hd_j16_jindao_resolve_effect = yes
+	hd_j16_get_yan_ruler_effect = { AS = hd_j16_m85_yan }
+	set_global_variable = hd_j16_jindao_ling_fled
+	scope:hd_j16_m85_ling ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = no
+				is_ruler = no
+				exists = scope:hd_j16_m85_yan
+				NOT = { this = scope:hd_j16_m85_yan }
+				NOT = { employer ?= scope:hd_j16_m85_yan }
+			}
+			scope:hd_j16_m85_yan = { add_courtier = scope:hd_j16_m85_ling }
+		}
+		if = {
+			limit = { is_alive = yes }
+			add_character_modifier = { modifier = hd_j16_jindao_yipan_modifier years = 5 }
+		}
+	}
+	scope:hd_j16_m85_chui ?= {
+		if = {
+			limit = { is_ai = yes }
+			hd_j16_jindao_chui_a_effect = yes
+		}
+		else = {
+			trigger_event = hd_j16.4002
+			debug_log = "HD_J16 e3_m85 WAIT chui_player_asked"
+		}
+	}
+	debug_log = "HD_J16 e3_m85 FIRE ling_fled"
+}
+
+# 慕容令识破留秦（玩家慕容令 hd_j16.4001 b）。Scope：任意
+hd_j16_jindao_ling_stay_effect = {
+	set_global_variable = hd_j16_jindao_ling_stayed
+	set_global_variable = hd_j16_jindao_settled    # M85 走完（E4-M05 读）
+	debug_log = "HD_J16 e3_m85 FIRE ling_stayed"
+}
+
+# 慕容垂闻变出奔、被追回，秦主宽宥（AI 垂；玩家垂 hd_j16.4002 a）。Scope：任意
+hd_j16_jindao_chui_a_effect = {
+	hd_j16_jindao_resolve_effect = yes
+	hd_j16_jindao_pardon_effect = yes
+	debug_log = "HD_J16 e3_m85 FIRE chui_recaptured_pardoned"
+}
+
+# 慕容垂束身待罪（玩家垂 hd_j16.4002 b）：同样宽宥，垂威望 +50。Scope：任意
+hd_j16_jindao_chui_b_effect = {
+	hd_j16_jindao_resolve_effect = yes
+	hd_j16_jindao_pardon_effect = yes
+	scope:hd_j16_m85_chui ?= { add_prestige = 50 }
+	debug_log = "HD_J16 e3_m85 FIRE chui_awaits_judgment"
+}
+
+# 秦主宽宥：秦主对垂 +20（10 年）、秦主威望 +100。scope 已由调用方解析
+hd_j16_jindao_pardon_effect = {
+	set_global_variable = hd_j16_jindao_settled    # M85 走完（E4-M05 读）
+	if = {
+		limit = {
+			scope:hd_j16_m85_qin ?= { is_alive = yes }
+			scope:hd_j16_m85_chui ?= {
+				is_alive = yes
+				NOT = { this = scope:hd_j16_m85_qin }
+			}
+		}
+		scope:hd_j16_m85_qin = {
+			add_opinion = { target = scope:hd_j16_m85_chui modifier = hd_j16_jindao_pardon_opinion years = 10 }
+			add_prestige = 100
+		}
+	}
+}
+
+############################################################
+# E3-J80 前置·袁真据寿春【自拟，D16；第 5 期修 346→370 串联断点（00 §6）】
+# 304、346 局（开局年 < 370）里，枋头之战晋败（E3-J60 设 hd_j16_yuanzhen_blamed）后，袁真 chenjun_yuan_zhen 若在世、AI、无地、
+#   在晋天子一系，而寿春郡 d_anfeng 由晋臣（AI，或天子本人且是 AI）持有：把寿春郡授袁真（1 郡，同一政权内，D16），作天子直属之臣；
+#   袁瑾 chenjun_yuan_jin（AI、无地）随父入其宫廷。窗口：获咎后到 370.4.10（袁真 X 卒年，见下方转发）。370 开局袁真本就持寿春、独立，不用本节点。
+# 袁真据寿春叛晋由 X 特例 hd_370_yuanzhen_death_effect 体现（死时寿春交袁瑾并独立），E3-J80 再按「寿春之主独立、陈郡袁氏」开打。
+# 变量：hd_j16_yzsc_done、_result、_skip、_wlog
+############################################################
+hd_j16_node_yuanzhen_shouchun_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_j16_yzsc_done }
+			global_var:hd_j16_start_year < 370
+			has_global_variable = hd_j16_yuanzhen_blamed
+		}
+		if = {
+			limit = { current_date >= 370.4.10 }
+			set_global_variable = hd_j16_yzsc_done
+			set_global_variable = hd_j16_yzsc_skip
+			debug_log = "HD_J16 e3_j80p SKIP window_closed"
+		}
+		else_if = {
+			limit = { hd_j16_dead_trigger = { ID = chenjun_yuan_zhen } }
+			set_global_variable = hd_j16_yzsc_done
+			set_global_variable = hd_j16_yzsc_skip
+			debug_log = "HD_J16 e3_j80p SKIP actor_dead"
+		}
+		else = {
+			if = {
+				limit = { exists = scope:hd_j16_yzsc_zhen }
+				clear_saved_scope = hd_j16_yzsc_zhen
+			}
+			if = {
+				limit = { exists = scope:hd_j16_yzsc_jin }
+				clear_saved_scope = hd_j16_yzsc_jin
+			}
+			if = {
+				limit = { exists = scope:hd_j16_yzsc_from }
+				clear_saved_scope = hd_j16_yzsc_from
+			}
+			if = {
+				limit = { exists = scope:hd_j16_yzsc_emp }
+				clear_saved_scope = hd_j16_yzsc_emp
+			}
+			hd_j16_resolve_effect = { ID = chenjun_yuan_zhen AS = hd_j16_yzsc_zhen }
+			hd_j16_resolve_effect = { ID = chenjun_yuan_jin AS = hd_j16_yzsc_jin }
+			title:d_anfeng.holder ?= { save_scope_as = hd_j16_yzsc_from }
+			title:h_china.holder ?= { save_scope_as = hd_j16_yzsc_emp }
+			if = {
+				limit = { scope:hd_j16_yzsc_zhen ?= { has_title = title:d_anfeng } }
+				set_global_variable = hd_j16_yzsc_done
+				debug_log = "HD_J16 e3_j80p SKIP already_holds"
+			}
+			else_if = {
+				limit = {
+					hd_j16_n370_jin_emperor_trigger = yes
+					scope:hd_j16_yzsc_zhen ?= {
+						is_ai = yes
+						is_landed = no
+						is_imprisoned = no
+						top_liege ?= scope:hd_j16_yzsc_emp
+					}
+					scope:hd_j16_yzsc_from ?= {
+						is_ai = yes
+						OR = {
+							this = scope:hd_j16_yzsc_emp
+							top_liege ?= scope:hd_j16_yzsc_emp
+						}
+					}
+				}
+				set_global_variable = hd_j16_yzsc_done
+				set_global_variable = hd_j16_yzsc_result
+				hd_j16_n370_grant_duchy_effect = { DUCHY = title:d_anfeng FROM = scope:hd_j16_yzsc_from TO = scope:hd_j16_yzsc_zhen LIEGE = scope:hd_j16_yzsc_emp TAG = e3_j80p }
+				hd_j16_n370_to_court_effect = { WHO = scope:hd_j16_yzsc_jin COURT = scope:hd_j16_yzsc_zhen }
+				debug_log = "HD_J16 e3_j80p FIRE yuanzhen_shouchun"
+			}
+			else_if = {
+				limit = { NOT = { has_global_variable = hd_j16_yzsc_wlog } }
+				set_global_variable = hd_j16_yzsc_wlog
+				debug_log = "HD_J16 e3_j80p WAIT not_ready"
+			}
+		}
+	}
+}
+
+# 袁真 X 特例放开（00 §6）：卒年生成物只在 370 局调 hd_370_yuanzhen_death_effect（tsv「开局限制」=370）；
+# 304、346 局在获咎（hd_j16_yuanzhen_blamed）后由这里转调同一个效果（效果自带 370.4.10 日期判断与 hd_370_yuanzhen_death_done 去重）。
+# 若汇总人改 tsv 让生成物直接放开，删掉这里即可，二者择一
+hd_j16_node_yuanzhen_x_effect = {
+	if = {
+		limit = {
+			global_var:hd_j16_start_year < 370
+			has_global_variable = hd_j16_yuanzhen_blamed
+			NOT = { has_global_variable = hd_370_yuanzhen_death_done }
+			current_date >= 370.4.10
+		}
+		hd_370_yuanzhen_death_effect = yes
+	}
+}
+
+############################################################
+# E3-J80 寿春之役【软】（原 S4；第 5 期改读 A3 E3-J60 袁真获咎旗标，00 §6）
+# 窗口 370.9.6 – 371.6.1。寿春郡 d_anfeng 的持有者独立、陈郡袁氏；天子在世、未被囚、河内司马氏。
+# 第 5 期（346→370 断点）：另要求 A3 E3-J60 枋头晋败、袁真获咎（hd_j16_yuanzhen_blamed），或开局年 ≥ 370（370 局枋头只由自保护设 done，
+#   获咎旗标永远设不上，按原条件判）。304、346 局里枋头已了结而袁真未获咎：跳过（deviated）。
+# AI 天子直接出兵（天子开不出改由桓温自宣，都不成下跳重试）；玩家天子收 hd_370.0140：a 讨袁 / b 交桓温。
+# 桓温 longkang_huan_017 经 hd_j16_resolve_effect 解析（304 局里只有 hbirth 指针）。结局：寿春 c_uuii_p_1961 归天子一系即晋胜，AI 袁氏被斩。
+# 变量（旧名）：hd_370_shouchun_started、_decided（已开战，fire 结果）、_done、_defender、_jin_won/_jin_lost；新增 hd_j16_shouchun_skip、_wlog
+############################################################
+hd_j16_node_shouchun_effect = {
+	if = {
+		limit = {
+			current_date >= 370.9.6
+			NOT = { has_global_variable = hd_370_shouchun_started }
+		}
+		if = {
+			limit = { current_date >= 371.6.1 }
+			set_global_variable = hd_370_shouchun_started
+			set_global_variable = hd_370_shouchun_done
+			set_global_variable = hd_j16_shouchun_skip
+			debug_log = "HD_J16 e3_j80 SKIP window_closed"
+		}
+		else_if = {
+			limit = {
+				global_var:hd_j16_start_year < 370
+				has_global_variable = hd_j16_fangtou_done
+				NOT = { has_global_variable = hd_j16_yuanzhen_blamed }
+			}
+			set_global_variable = hd_370_shouchun_started
+			set_global_variable = hd_370_shouchun_done
+			set_global_variable = hd_j16_shouchun_skip
+			debug_log = "HD_J16 e3_j80 SKIP deviated"
+		}
+		else_if = {
+			limit = {
+				OR = {
+					has_global_variable = hd_j16_yuanzhen_blamed
+					global_var:hd_j16_start_year >= 370
+				}
+				title:d_anfeng.holder ?= {
+					is_alive = yes
+					is_independent_ruler = yes
+					house ?= house:chenjun_yuan
+				}
+				title:h_china.holder ?= {
+					is_alive = yes
+					is_imprisoned = no
+					house ?= house:henei_sima
+				}
+			}
+			if = {
+				limit = { title:h_china.holder = { is_ai = yes } }
+				set_global_variable = hd_370_shouchun_started
+				hd_j16_shouchun_war_effect = yes
+			}
+			else = {
+				set_global_variable = hd_370_shouchun_started
+				title:h_china.holder = { trigger_event = hd_370.0140 }
+				debug_log = "HD_J16 e3_j80 WAIT player_asked"
+			}
+		}
+		else_if = {
+			limit = { NOT = { has_global_variable = hd_j16_shouchun_wlog } }
+			set_global_variable = hd_j16_shouchun_wlog
+			debug_log = "HD_J16 e3_j80 WAIT not_ready"
+		}
+	}
+	# 战后
+	else_if = {
+		limit = {
+			has_global_variable = hd_370_shouchun_decided
+			NOT = { has_global_variable = hd_370_shouchun_done }
+		}
+		hd_j16_shouchun_result_effect = yes
+	}
+	# 玩家天子收 hd_370.0140 后一直没回复（或选 b 交桓温而桓温也开不出）：截止日 371.6.1 宽限 90 天了结
+	else_if = {
+		limit = {
+			has_global_variable = hd_370_shouchun_started
+			NOT = { has_global_variable = hd_370_shouchun_decided }
+			NOT = { has_global_variable = hd_370_shouchun_done }
+			current_date >= 371.9.1
+		}
+		set_global_variable = hd_370_shouchun_done
+		set_global_variable = hd_j16_shouchun_skip
+		debug_log = "HD_J16 e3_j80 SKIP player_no_reply"
+	}
+}
+
+# 桓温：scope:hd_j16_sc_huan（在世才有）
+hd_j16_shouchun_huan_effect = {
+	if = {
+		limit = { exists = scope:hd_j16_sc_huan }
+		clear_saved_scope = hd_j16_sc_huan
+	}
+	hd_j16_resolve_effect = { ID = longkang_huan_017 AS = hd_j16_sc_huan }
+}
+
+# 天子对袁氏宣战，目标寿春郡；桓温为攻方同盟（照旧 hd_370_shouchun_war_effect）。节点与 hd_370.0140 选项 a 调用
+hd_j16_shouchun_war_effect = {
+	if = {
+		limit = { has_global_variable = hd_370_shouchun_done }
+		debug_log = "HD_J16 e3_j80 SKIP player_late_reply"
+	}
+	else = { hd_j16_shouchun_war_body_effect = yes }
+}
+
+# 正文（原 hd_j16_shouchun_war_effect）。外壳在节点已了结（截止宽限后才回复）时不再开战，免得开出一场永不结算的战争
+hd_j16_shouchun_war_body_effect = {
+	hd_j16_shouchun_huan_effect = yes
+	if = {
+		limit = { exists = scope:hd_370_shouchun_def }
+		clear_saved_scope = hd_370_shouchun_def
+	}
+	if = {
+		limit = { exists = scope:hd_370_shouchun_att }
+		clear_saved_scope = hd_370_shouchun_att
+	}
+	title:d_anfeng.holder ?= { save_scope_as = hd_370_shouchun_def }
+	title:h_china.holder ?= { save_scope_as = hd_370_shouchun_att }
+	if = {
+		limit = {
+			exists = scope:hd_370_shouchun_def
+			exists = scope:hd_370_shouchun_att
+		}
+		hd_nbc_start_war_effect = { ATTACKER = scope:hd_370_shouchun_att DEFENDER = scope:hd_370_shouchun_def TARGET = title:d_anfeng KIND = shouchun }
+	}
+	if = {
+		limit = { exists = scope:hd_nbc_war_shouchun }
+		set_global_variable = hd_370_shouchun_decided
+		set_global_variable = { name = hd_370_shouchun_defender value = scope:hd_370_shouchun_def }
+		hd_j16_huanwen_join_shouchun_effect = yes
+		scope:hd_370_shouchun_def = {
+			if = {
+				limit = { is_ai = no }
+				trigger_event = hd_370.0148
+			}
+		}
+		debug_log = "HD_J16 e3_j80 FIRE war_started"
+	}
+	else = {
+		# 天子开不出（例如作为傀儡），改由桓温自己宣战；桓温也开不出才下跳重试
+		hd_j16_huanwen_own_shouchun_effect = yes
+		if = {
+			limit = { NOT = { has_global_variable = hd_370_shouchun_decided } }
+			if = {
+				limit = { has_global_variable = hd_370_shouchun_started }
+				remove_global_variable = hd_370_shouchun_started
+			}
+			if = {
+				limit = { has_global_variable = hd_370_shouchun_done }
+				remove_global_variable = hd_370_shouchun_done
+			}
+			if = {
+				limit = { NOT = { has_global_variable = hd_j16_shouchun_wlog } }
+				set_global_variable = hd_j16_shouchun_wlog
+				debug_log = "HD_J16 e3_j80 WAIT war_start_failed"
+			}
+		}
+	}
+}
+
+# 桓温参战：AI 直接加入、在广陵得 1 万；玩家弹 hd_370.0145；桓温不在或不是天子之臣时兵给天子
+hd_j16_huanwen_join_shouchun_effect = {
+	if = {
+		limit = {
+			scope:hd_j16_sc_huan ?= {
+				is_landed = yes
+				is_imprisoned = no
+				NOT = { this = scope:hd_370_shouchun_att }
+				top_liege = scope:hd_370_shouchun_att
+			}
+		}
+		scope:hd_j16_sc_huan = {
+			if = {
+				limit = { is_ai = yes }
+				hd_j16_huanwen_joins_effect = yes
+			}
+			else = { trigger_event = hd_370.0145 }
+		}
+	}
+	else = {
+		scope:hd_370_shouchun_att ?= {
+			hd_nbc_spawn_army_effect = { SIZE = 10000 WHERE = title:c_uuii_p_7062 NAME = hd_370_jin_army_name }
+		}
+	}
+}
+
+# Scope：桓温（节点里的 AI 桓温，或 hd_370.0145 选项 a 的 root）。加入寿春场次的战争；加入成功给桓温 1 万，否则给天子
+hd_j16_huanwen_joins_effect = {
+	save_scope_as = hd_j16_sc_huan
+	if = {
+		limit = { exists = scope:hd_nbc_war_shouchun }
+		scope:hd_nbc_war_shouchun = {
+			if = {
+				limit = {
+					scope:hd_j16_sc_huan = {
+						is_alive = yes
+						is_landed = yes
+						is_at_war = no
+					}
+				}
+				add_attacker = scope:hd_j16_sc_huan
+			}
+		}
+	}
+	else = {
+		title:h_china.holder ?= {
+			random_character_war = {
+				limit = { var:hd_nbc_war_kind ?= flag:shouchun }
+				if = {
+					limit = {
+						scope:hd_j16_sc_huan = {
+							is_alive = yes
+							is_landed = yes
+							is_at_war = no
+						}
+					}
+					add_attacker = scope:hd_j16_sc_huan
+				}
+			}
+		}
+	}
+	if = {
+		limit = { any_character_war = { var:hd_nbc_war_kind ?= flag:shouchun } }
+		hd_nbc_spawn_army_effect = { SIZE = 10000 WHERE = title:c_uuii_p_7062 NAME = hd_370_huanwen_army_name }
+		debug_log = "HD_J16 e3_j80 FIRE huanwen_joined"
+	}
+	else = {
+		title:h_china.holder ?= {
+			hd_nbc_spawn_army_effect = { SIZE = 10000 WHERE = title:c_uuii_p_7062 NAME = hd_370_jin_army_name }
+		}
+		debug_log = "HD_J16 e3_j80 FIRE huanwen_join_failed_troops_to_emperor"
+	}
+}
+
+# 桓温自己出兵（天子开不出，或玩家天子不讨，hd_370.0140 选项 b）：只由桓温宣战，宣不成就作罢，不把玩家天子拖进去
+hd_j16_huanwen_own_shouchun_effect = {
+	if = {
+		limit = { has_global_variable = hd_370_shouchun_done }
+		debug_log = "HD_J16 e3_j80 SKIP player_late_reply"
+	}
+	else = { hd_j16_huanwen_own_shouchun_body_effect = yes }
+}
+
+# 正文（原 hd_j16_huanwen_own_shouchun_effect）。外壳在节点已了结（截止宽限后才回复）时不再开战，免得开出一场永不结算的战争
+hd_j16_huanwen_own_shouchun_body_effect = {
+	hd_j16_shouchun_huan_effect = yes
+	if = {
+		limit = {
+			scope:hd_j16_sc_huan ?= {
+				is_landed = yes
+				is_ai = yes
+				is_imprisoned = no
+			}
+			title:d_anfeng.holder ?= { is_alive = yes }
+		}
+		if = {
+			limit = { exists = scope:hd_370_shouchun_def }
+			clear_saved_scope = hd_370_shouchun_def
+		}
+		title:d_anfeng.holder = { save_scope_as = hd_370_shouchun_def }
+		hd_nbc_start_war_effect = { ATTACKER = scope:hd_j16_sc_huan DEFENDER = scope:hd_370_shouchun_def TARGET = title:d_anfeng KIND = shouchun }
+		if = {
+			limit = { exists = scope:hd_nbc_war_shouchun }
+			set_global_variable = hd_370_shouchun_decided
+			set_global_variable = { name = hd_370_shouchun_defender value = scope:hd_370_shouchun_def }
+			scope:hd_j16_sc_huan = {
+				hd_nbc_spawn_army_effect = { SIZE = 10000 WHERE = title:c_uuii_p_7062 NAME = hd_370_huanwen_army_name }
+			}
+			debug_log = "HD_J16 e3_j80 FIRE huanwen_own_war"
+		}
+		else = {
+			set_global_variable = hd_370_shouchun_done
+			debug_log = "HD_J16 e3_j80 WAIT huanwen_own_war_failed"
+		}
+	}
+	else = {
+		set_global_variable = hd_370_shouchun_done
+		debug_log = "HD_J16 e3_j80 SKIP declined"
+	}
+}
+
+# 结局（照旧 S4 战后分支，桓温改用解析）
+hd_j16_shouchun_result_effect = {
+	hd_j16_shouchun_huan_effect = yes
+	if = {
+		limit = {
+			NOT = { global_var:hd_370_shouchun_defender ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:shouchun } } }
+			NOT = { title:h_china.holder ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:shouchun } } }
+			NOT = { scope:hd_j16_sc_huan ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:shouchun } } }
+		}
+		set_global_variable = hd_370_shouchun_done
+		if = {
+			limit = {
+				title:c_uuii_p_1961.holder ?= {
+					OR = {
+						this = title:h_china.holder
+						top_liege = title:h_china.holder
+					}
+				}
+			}
+			set_global_variable = hd_370_shouchun_jin_won
+			global_var:hd_370_shouchun_defender ?= {
+				if = {
+					limit = {
+						is_alive = yes
+						is_ai = yes
+						is_landed = no
+					}
+					if = {
+						limit = { exists = scope:hd_j16_sc_huan }
+						death = { death_reason = death_execution killer = scope:hd_j16_sc_huan }
+					}
+					else = { death = { death_reason = death_execution } }
+					debug_log = "HD_J16 e3_j80 FIRE yuan_executed"
+				}
+			}
+			debug_log = "HD_J16 e3_j80 FIRE result_jin_won"
+		}
+		else = {
+			set_global_variable = hd_370_shouchun_jin_lost
+			debug_log = "HD_J16 e3_j80 FIRE result_jin_lost"
+		}
+	}
+}

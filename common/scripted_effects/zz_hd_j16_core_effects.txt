@@ -1,0 +1,282 @@
+﻿# 两晋十六国统一史实线（j16）心跳本体。设计：docs/两晋十六国统一史实线/01_架构.md §1–§4；分工与命名：08_实施约定.md。
+# 只由 common/on_action/zz_hd_j16_history_on_actions.txt 与旧 pulse 转发壳调用。Root：title:h_china（启动时）或不限。
+# 本文件第 1 期定稿后冻结；各节节点写在各自的「时代×节」文件里（08 §1.1）。
+
+############################################################
+# 启动：start、yearly_rescue、旧 pulse 转发壳共用（01 §1.2、§1.4）。可重复调用，只有第一次生效
+############################################################
+hd_j16_bootstrap_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_j16_pulse_started }
+			hd_j16_start_trigger = yes
+		}
+		set_global_variable = hd_j16_pulse_started
+		if = {
+			limit = { game_start_date = 304.11.20 }
+			set_global_variable = { name = hd_j16_start_year value = 304 }
+		}
+		else_if = {
+			limit = { game_start_date = 346.12.10 }
+			set_global_variable = { name = hd_j16_start_year value = 346 }
+		}
+		else_if = {
+			limit = { game_start_date = 370.2.13 }
+			set_global_variable = { name = hd_j16_start_year value = 370 }
+		}
+		else = {
+			set_global_variable = { name = hd_j16_start_year value = 404 }
+		}
+		hd_j16_mark_before_start_effect = yes
+		title:h_china = { trigger_event = { on_action = hd_j16_pulse days = 1 } }
+		debug_log = "HD_J16 boot FIRE pulse_started"
+	}
+}
+
+############################################################
+# 心跳（01 §2.1、§2.2；08 §1.1）
+# 每段粗筛写成「日期区间，或本段还没扫过」：开局晚于某段时，首跳也要把该段完整走一遍，
+# 让段内节点的自保护与截止跳过分支把 done 设上（hd_j16_eN_swept）。节点内部都有截止跳过，全段扫不会误触发
+############################################################
+hd_j16_pulse_effect = {
+	# 卒年（内部按十年分段，见 zz_hd_j16_deaths_effects.txt）
+	hd_j16_deaths_effect = yes
+	# （370 过渡桥已由 1-B 删除：洛阳出降与结局、东征、燕亡、慕容评归秦、寿春迁入 hd_j16_e3_370_effect，废立迁入 hd_j16_e4_370_effect，
+	#  370 卒年表与结局卒年、袁真特例改由上面的卒年文件调用；旧 hd_370_pulse_effect 保留定义，不再被调用）
+	# E1：304.11 – 316.12
+	if = {
+		limit = {
+			OR = {
+				current_date < 327.1.1
+				NOT = { has_global_variable = hd_j16_e1_swept }
+			}
+		}
+		set_global_variable = hd_j16_e1_swept
+		hd_j16_e1_304_effect = yes
+	}
+	# E2：317.1 – 349.4
+	if = {
+		limit = {
+			OR = {
+				AND = {
+					current_date >= 316.1.1
+					current_date < 354.1.1
+				}
+				NOT = { has_global_variable = hd_j16_e2_swept }
+			}
+		}
+		set_global_variable = hd_j16_e2_swept
+		hd_j16_e2_304_effect = yes
+		hd_j16_e2_346_effect = yes
+	}
+	# E3：349.5 – 370.12
+	if = {
+		limit = {
+			OR = {
+				AND = {
+					current_date >= 349.1.1
+					current_date < 374.1.1
+				}
+				NOT = { has_global_variable = hd_j16_e3_swept }
+				# 370 年代三场战争（洛阳、东征、寿春）拖过 374 年仍未了结时，继续跑本段直到结局判定（汇总人 10-27，回归 minor-1）
+				AND = {
+					has_global_variable = hd_370_luoyang_started
+					NOT = { has_global_variable = hd_370_luoyang_done }
+				}
+				AND = {
+					has_global_variable = hd_370_dongzheng_decided
+					NOT = { has_global_variable = hd_370_dongzheng_done }
+				}
+				AND = {
+					has_global_variable = hd_370_shouchun_decided
+					NOT = { has_global_variable = hd_370_shouchun_done }
+				}
+			}
+		}
+		set_global_variable = hd_j16_e3_swept
+		hd_j16_e3_346_effect = yes
+		hd_j16_e3_370_effect = yes
+	}
+	# E4：371.1 – 394.12
+	if = {
+		limit = {
+			OR = {
+				AND = {
+					current_date >= 370.1.1
+					current_date < 400.1.1
+				}
+				NOT = { has_global_variable = hd_j16_e4_swept }
+				# 10-27 汇总人：400 年后 E4 段继续跑的两类情形——6-E4 三场战争（西燕、铁弗、苻登余部）已开未了结时出结局；前秦瓦解月计数未满 120 时继续累加（入侵条目收尾）
+				AND = {
+					has_global_variable = hd_j16_xiyan_started
+					NOT = { has_global_variable = hd_j16_xiyan_done }
+				}
+				AND = {
+					has_global_variable = hd_j16_tiefu_started
+					NOT = { has_global_variable = hd_j16_tiefu_done }
+				}
+				AND = {
+					has_global_variable = hd_j16_fudeng_end_started
+					NOT = { has_global_variable = hd_j16_fudeng_end_done }
+				}
+				AND = {
+					has_global_variable = hd_j16_qin_collapse_m
+					global_var:hd_j16_qin_collapse_m < 120
+					current_date < 421.1.1
+				}
+			}
+		}
+		set_global_variable = hd_j16_e4_swept
+		hd_j16_e4_370_effect = yes
+		hd_j16_e4_395_effect = yes
+	}
+	# E5：395.1 – 421.1
+	if = {
+		limit = {
+			OR = {
+				current_date >= 395.1.1
+				NOT = { has_global_variable = hd_j16_e5_swept }
+			}
+		}
+		set_global_variable = hd_j16_e5_swept
+		hd_j16_e5_370_effect = yes
+		hd_j16_e5_395_effect = yes
+	}
+	# 场次 _active 清理（01 §5；1-B）
+	hd_j16_active_cleanup_effect = yes
+}
+
+############################################################
+# 场次 _active 清理（01 §5，1-B）：hd_nbc_start_war_effect 开战成功即设 hd_nbc_<KIND>_active，只有进 hd_nbc_war_result_effect
+# 分发表的 8 个场次（fashu、yannan、beifa、feishui、restore、luxun、nanyan、houqin）由 CB 结算清掉。表外场次：
+#   daling、luoyang 由迁入节点结局时自清（e1_304、e3_370），feishui 兜底也自清（e4_370）——这里不重复；
+#   dongzheng（E3-Q70）、shouchun（E3-J80）节点了结（done）后清；feili（E4-J10 司马奕拒绝逊位时的讨伐战）在两方都已不在该场次战争时清。
+# 东征再伐会删 done 再开战，hd_nbc_start_war_effect 会重设 _active，下次了结再清。无人读这些变量（面板读的是分发表内的场次），只做收尾
+############################################################
+hd_j16_active_cleanup_effect = {
+	if = {
+		limit = {
+			has_global_variable = hd_nbc_dongzheng_active
+			has_global_variable = hd_370_dongzheng_done
+		}
+		remove_global_variable = hd_nbc_dongzheng_active
+		debug_log = "HD_J16 e3_q70 FIRE active_cleared"
+	}
+	if = {
+		limit = {
+			has_global_variable = hd_nbc_shouchun_active
+			has_global_variable = hd_370_shouchun_done
+		}
+		remove_global_variable = hd_nbc_shouchun_active
+		debug_log = "HD_J16 e3_j80 FIRE active_cleared"
+	}
+	if = {
+		limit = { has_global_variable = hd_nbc_feili_active }
+		if = {
+			limit = { exists = scope:hd_j16_ac_huan }
+			clear_saved_scope = hd_j16_ac_huan
+		}
+		hd_j16_resolve_effect = { ID = longkang_huan_017 AS = hd_j16_ac_huan }
+		if = {
+			limit = {
+				NOT = { scope:hd_j16_ac_huan ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:feili } } }
+				NOT = { title:h_china.holder ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:feili } } }
+			}
+			remove_global_variable = hd_nbc_feili_active
+			debug_log = "HD_J16 e4_j10 FIRE active_cleared"
+		}
+	}
+}
+
+############################################################
+# 人物解析（01 §4.1）：先取 history 原生人物，再取 hbirth 指针；只存在世的人。
+# 用法：hd_j16_resolve_effect = { ID = si_ma_rui AS = hd_j16_jw_rui }，之后用 scope:hd_j16_jw_rui ?= { ... }。
+# 同一次心跳里存过的 scope 会一直留着，取不到时不会自动清空：调用方在解析前先 clear_saved_scope（见各节点写法）
+############################################################
+hd_j16_resolve_effect = {
+	if = {
+		limit = { character:$ID$ ?= { is_alive = yes } }
+		character:$ID$ = { save_scope_as = $AS$ }
+	}
+	else_if = {
+		limit = { hd_hb_alive = { ID = $ID$ } }
+		global_var:hd_hb_p_$ID$ = { save_scope_as = $AS$ }
+	}
+}
+
+############################################################
+# 开局前节点的「已发生」标记（01 §3.1、§3.2）。只设旧节点的 done/started/checked，
+# 不设结果变量（_won、_qin_won、_west 等），不设 hd_hev_*。可重复执行（转发壳也调）。
+# 新节点不登记在这里：它们在节点内部按 global_var:hd_j16_start_year 自保护
+############################################################
+hd_j16_mark_before_start_effect = {
+	# 346 开局起：E1 全部 + E2 中早于 346.12.10 的旧节点
+	if = {
+		limit = { global_var:hd_j16_start_year >= 346 }
+		set_global_variable = hd_j16_daling_done            # E1-H10 大陵
+		set_global_variable = hd_304_jianye_done            # E1-J20 出镇建邺
+		set_global_variable = hd_304_shile_done             # E1-H20 石勒归汉
+		set_global_variable = hd_304_emperor_done           # E1-H30 刘渊称帝
+		set_global_variable = hd_304_liu_cong_heir_done     # E1-H40 刘聪立储
+		set_global_variable = hd_304_yongjia_started        # E1-H50 永嘉（缺 done 时战后分支会被反复判断）
+		set_global_variable = hd_304_yongjia_done
+		# E1-W10 乱世锁：不设 hd_304_mandate_lock；E1-W20 衣冠兜底：开局脚本已设 hd_yiguan_started
+	}
+	# 370 开局起：再加 E2-J90/J91 与 E3 中早于 370.2.13 的旧节点（E3-Q60 洛阳不标，本开局首跳开打）
+	if = {
+		limit = { global_var:hd_j16_start_year >= 370 }
+		set_global_variable = hd_nbc_fashu_done             # E2-J90/J91 伐蜀与封赏（不设 _won，否则面板 346_01 会亮）
+		set_global_variable = hd_nbc_ranmin_done            # E3-R10 冉闵建魏
+		set_global_variable = hd_nbc_fujian_done            # E3-Q10 苻健入关
+		set_global_variable = hd_nbc_yannan_done            # E3-M10 前燕南下
+		set_global_variable = hd_nbc_beifa_done             # E3-J30 桓温北伐
+		set_global_variable = hd_nbc_fujian_coup_done       # E3-Q20 苻坚夺位
+	}
+	# 404 开局起：再加 E3、E4 的旧节点（E5-J50 京口不标，本开局首跳开打）
+	if = {
+		limit = { global_var:hd_j16_start_year >= 404 }
+		set_global_variable = hd_370_luoyang_done           # E3-Q60 洛阳
+		set_global_variable = hd_370_zhu_checked
+		set_global_variable = hd_370_dongzheng_started      # E3-Q70 东征
+		set_global_variable = hd_370_dongzheng_done
+		set_global_variable = hd_370_yanfall_done           # E3-M90 燕亡
+		set_global_variable = hd_370_ping_returned          # E3-M91 慕容评归秦
+		set_global_variable = hd_370_shouchun_started       # E3-J80 寿春
+		set_global_variable = hd_370_shouchun_done
+		set_global_variable = hd_370_feili_started          # E4-J10 废立
+		set_global_variable = hd_370_yuanzhen_death_done    # 袁真特例
+		set_global_variable = hd_370_death_tuoba_005_done   # 结局卒年：什翼犍
+		set_global_variable = hd_370_death_murong_wei_done  # 结局卒年：慕容暐
+		set_global_variable = hd_370_death_fu_jian_done     # 结局卒年：苻坚
+		set_global_variable = hd_nbc_feishui_done           # E4-Q50 淝水
+		set_global_variable = hd_nbc_feishui_result_done    # E4-Q51 前秦瓦解（只设前者会进兜底分支）
+	}
+	# ---- 旧档补设（1-B；不是前标，只在旧档切进新心跳时生效）----
+	# 346 旧档若在切到新心跳之前已由旧 nbc 淝水逻辑了结（设了 hd_nbc_feishui_result_done、发过 hd_nbc.0161），新节点 E4-Q51 会被跳过，
+	# 前秦瓦解标记 hd_j16_qin_collapse（p1-A 新增，入侵与 E4-W50 读它）漏设。以「秦败或白和已设」为守卫：新档里 lost/white 只由 E4-Q51 之前的
+	# 战争结算设、E4-Q51 自己设标记，404 前标不设 lost/white，都不会走到这里
+	if = {
+		limit = {
+			has_global_variable = hd_nbc_feishui_result_done
+			OR = {
+				has_global_variable = hd_nbc_feishui_lost
+				has_global_variable = hd_nbc_feishui_white
+			}
+			NOT = { has_global_variable = hd_j16_qin_collapse }
+		}
+		set_global_variable = hd_j16_qin_collapse
+		set_global_variable = { name = hd_j16_qin_collapse_m value = 0 }
+		debug_log = "HD_J16 e4_q51 FIRE oldsave_qin_collapse"
+	}
+	# 304 旧档若已由旧逻辑设了刘聪立储 done（只有旧变量），补设新的 fire 结果，刘和卒年（PRE）才不会被顺延（汇总人 10-27，回归 minor-2）
+	if = {
+		limit = {
+			global_var:hd_j16_start_year = 304
+			has_global_variable = hd_304_liu_cong_heir_done
+			NOT = { has_global_variable = hd_j16_liu_cong_heir_skip }
+			NOT = { has_global_variable = hd_j16_liu_cong_heir_result }
+		}
+		set_global_variable = hd_j16_liu_cong_heir_result
+		debug_log = "HD_J16 e1_h40 FIRE oldsave_result"
+	}
+}

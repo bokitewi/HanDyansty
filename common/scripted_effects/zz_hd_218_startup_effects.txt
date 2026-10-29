@@ -409,11 +409,19 @@ hd218_friend_effect = {
 }
 
 # 孙权开局持江东法理帝国 e_jiangdong（boki 10-12 19:28 选"江东吴王"），和刘备一样按实封二级王号处理，称号显示"吴王"；
-# 称帝走 hd218_wang_proclaim_emperor_decision。扬州、交州仍由他持有，挂在帝国之下。
+# 称帝走 hd218_wang_proclaim_emperor_decision。交州仍由他持有，挂在帝国之下。
+# 2026-10-28 boki：江东帝国改为直接写在 history（孙权持有），扬州王国归吕蒙（见 hd218_lv_meng_district_effect）；
+# 这里只补吴王显示与主头衔，已持帝国时不再授予。
 hd218_sun_quan_titles_effect = {
 	character:sun_quan ?= {
 		if = {
-			limit = { is_alive = yes has_title = title:k_uuii_yangzhou }
+			limit = {
+				is_alive = yes
+				OR = {
+					has_title = title:e_jiangdong
+					has_title = title:k_uuii_jiaozhou
+				}
+			}
 			save_scope_as = hd218_sun_quan
 			# 必须在拿到帝国头衔之前设，免得 WJ_cr 建国结算加正统、弹建国提示
 			set_variable = wj_cr_empire_settled
@@ -426,18 +434,21 @@ hd218_sun_quan_titles_effect = {
 				set_variable = hd218_wang_display
 				set_title_name = hd218_wu_name
 			}
-			create_title_and_vassal_change = { type = granted save_scope_as = hd218_wu_change add_claim_on_loss = no }
-			scope:hd218_wu_title = {
-				change_title_holder = { holder = scope:hd218_sun_quan change = scope:hd218_wu_change }
+			if = {
+				limit = { NOT = { scope:hd218_wu_title.holder ?= scope:hd218_sun_quan } }
+				create_title_and_vassal_change = { type = granted save_scope_as = hd218_wu_change add_claim_on_loss = no }
+				scope:hd218_wu_title = {
+					change_title_holder = { holder = scope:hd218_sun_quan change = scope:hd218_wu_change }
+				}
+				resolve_title_and_vassal_change = scope:hd218_wu_change
 			}
-			resolve_title_and_vassal_change = scope:hd218_wu_change
 			if = {
 				limit = { scope:hd218_wu_title.holder ?= scope:hd218_sun_quan }
 				set_primary_title_to = scope:hd218_wu_title
 				debug_log = "HD218 WU_TITLE GRANTED"
 			}
 			else = {
-				set_primary_title_to = title:k_uuii_yangzhou
+				set_primary_title_to = title:k_uuii_jiaozhou
 				debug_log = "HD218 WU_TITLE FAILED"
 			}
 			set_realm_capital = title:c_uuii_p_4389 # 建业
@@ -718,6 +729,7 @@ hd218_cadet_house_effect = {
 hd218_after_lobby_effect = {
 	hd218_regency_effect = yes
 	hd218_liu_bei_district_effect = yes
+	hd218_lv_meng_district_effect = yes
 	hd218_era_effect = yes
 	hd218_employer_check_effect = yes
 	hd218_three_rulers_effect = yes
@@ -839,6 +851,42 @@ hd218_liu_bei_district_effect = {
 	else = {
 		debug_log = "HD218 DISTRICT SKIPPED"
 	}
+}
+
+# 2026-10-28 boki：吕蒙开局为大都督。扬州王国、长沙及吴国内荆州法理诸郡、与荆州接壤的扬州诸郡已在 history 里归他
+# （孙皎、吕范、甘宁保留原地作他的封臣）；这里设军事行省契约（王国级军事行省显示为「大都督」），建使持节都督区（JIE = 3，同 253 姜维）。
+hd218_lv_meng_district_effect = {
+	if = {
+		limit = {
+			character:sun_quan ?= { is_alive = yes is_independent_ruler = yes }
+			character:hd218_lv_meng ?= {
+				is_alive = yes
+				has_title = title:k_uuii_yangzhou
+				liege ?= character:sun_quan
+			}
+		}
+		character:hd218_lv_meng = {
+			set_primary_title_to = title:k_uuii_yangzhou
+			# 治所放在长沙郡首府（history 不指定时引擎会随便挑一县）
+			if = {
+				limit = { title:d_changsha.title_capital_county.holder ?= this }
+				set_realm_capital = title:d_changsha.title_capital_county
+			}
+			vassal_contract_set_obligation_level = { type = celestial_provinces level = 3 }
+			WJ_mr_initialize_rank = yes
+		}
+		character:sun_quan = { save_scope_as = actor }
+		character:hd218_lv_meng = { save_scope_as = recipient }
+		WJ_dd_create_effect = { JIE = 3 }
+		clear_saved_scope = actor
+		clear_saved_scope = recipient
+		if = {
+			limit = { title:k_uuii_yangzhou = { has_variable = wj_dd_core } }
+			debug_log = "HD218 DISTRICT LV_MENG OK"
+		}
+		else = { debug_log = "HD218 DISTRICT LV_MENG BAD" }
+	}
+	else = { debug_log = "HD218 DISTRICT LV_MENG SKIPPED" }
 }
 
 hd218_military_contract_effect = {
@@ -1103,12 +1151,12 @@ hd218_verify_effect = {
 		debug_log = "HD218 CHECK GOVERNORS_STATE OK"
 	}
 	else = { debug_log = "HD218 CHECK GOVERNORS_STATE BAD" }
-	# 生成数与施工前实算对照：曹 108（雕阴独立后）、刘 4（原 11；boki 10-19 218官职 江阳、汉嘉、新都、邛都、巴东、广汉、梓潼改授史实太守）、孙 28
+	# 生成数与施工前实算对照：曹 108（雕阴独立后）、刘 4（原 11；boki 10-19 218官职 江阳、汉嘉、新都、邛都、巴东、广汉、梓潼改授史实太守）、孙 22（原 28；2026-10-28 桂阳、湘东、蕲春、庐江、豫章、安成改归吕蒙直辖，boki 定不补郡守）
 	if = {
 		limit = {
 			global_var:hd218_gov_count_cao_cao ?= 108
 			global_var:hd218_gov_count_liu_bei ?= 4
-			global_var:hd218_gov_count_sun_quan ?= 28
+			global_var:hd218_gov_count_sun_quan ?= 22
 		}
 		debug_log = "HD218 CHECK GOVERNORS_COUNT OK"
 	}

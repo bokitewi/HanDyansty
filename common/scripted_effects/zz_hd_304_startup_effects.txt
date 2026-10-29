@@ -136,12 +136,16 @@ hd_304_after_lobby_effect = {
 	hd_304_realm_display_effect = yes
 	hd_304_liu_family_effect = yes
 	hd_304_heir_effect = yes
-	hd_304_daling_war_effect = yes
+	# 大陵之战已改为统一心跳节点 E1-H10（D9，zz_hd_j16_e1_304_effects.txt），受史实事件开关控制，开局第 1 天的首跳开打
 	# 天意青睐（名单在 zz_hd_rise_triggers.txt，带 304 闸门）
 	character:xiongnu_liu_020 ?= { hd_rise_ensure_story_effect = yes }
 	title:h_china = { trigger_event = { on_action = hd_304_tianjia_history_delayed days = 1 } }
 	debug_log = "HD_304 STAGE AFTER_LOBBY"
 	hd_recommended_starting_resources_effect = yes
+	# 两晋十六国统一史实线的 304 开局内容（zz_hd_j16_startup_304_effects.txt）
+	hd_j16_startup_304_effect = yes
+	# 2026-10-28 boki：司马氏诸王走封爵系统（王爵），不再显示成牧、太守。放在最后，等朝官、宫廷摆位都完成
+	hd304_peerage_effect = yes
 }
 
 # 年号：晋建武元年（七月庚申改元建武，十一月丙午才复为永安，《晋书·惠帝纪》），汉元熙元年，成建兴元年
@@ -155,13 +159,37 @@ hd_304_era_effect = {
 hd_304_realm_display_effect = {
 	hd_nbc_realm_name_effect = { WHO = si_ma_zhong NAME = dynn_title_jin FIXED = yes }
 	hd_nbc_realm_name_effect = { WHO = xiongnu_liu_020 NAME = dynn_title_han FIXED = no }
-	hd_nbc_realm_name_effect = { WHO = bacong_li_009 NAME = dynn_title_cheng FIXED = yes }
+	hd_nbc_realm_name_effect = { WHO = bacong_li_009 NAME = dynn_title_hd_nbc_chenghan FIXED = yes }	# 2026-10-28 boki：成汉，不是「成」
 	hd_nbc_style_effect = { WHO = xiongnu_liu_020 STYLE = wang }       # 汉王
-	hd_nbc_style_effect = { WHO = bacong_li_009 STYLE = wang }         # 成都王
+	hd_nbc_style_effect = { WHO = bacong_li_009 STYLE = wang }         # 成汉王（史实：成都王）
 	hd_nbc_style_effect = { WHO = si_ma_yong STYLE = wang }            # 河间王
 	hd_nbc_style_effect = { WHO = si_ma_ying STYLE = wang }            # 成都王（皇太弟）
 	hd_nbc_style_effect = { WHO = hd_304_si_ma_yue STYLE = wang }      # 东海王
-	hd_nbc_style_effect = { WHO = si_ma_teng STYLE = gong }            # 东嬴公
+	# 司马腾原标「东嬴公」称谓，10-28 改封爵泰山王后删掉（否则郡级头衔的称谓片段会叠出「建兴公」）
+	# 2026-10-28 boki：hd_nbc_style 只是标记，名字管线（WJ_NameBasicOffice）不认，刘渊会显示成「汉牧」。
+	# 异姓独立君主（刘渊、李雄）改写游戏自带的「已称王」标记，走 WJ_cr_crowned_king 的显示与判定；
+	# 司马氏宗室王走封爵系统，见 hd304_peerage_effect（after_lobby 末尾）。
+	hd_304_crowned_king_effect = { WHO = xiongnu_liu_020 }             # 汉王
+	hd_304_crowned_king_effect = { WHO = bacong_li_009 }               # 成汉王
+}
+
+# 开局「已称王」：WJ_cr_advance_king 的静默版（不弹国号事件、不置 wj_cr_allow_naming 以免日后误开国号选择）。
+# 只对独立、有实地的州级君主生效；on_game_start 时政体判定可能未到位，after_lobby 会再调一次（幂等）。
+hd_304_crowned_king_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				exists = primary_title
+				WJ_cr_king = yes
+				primary_title = { NOT = { has_variable = wj_cr_hereditary_king } }
+			}
+			primary_title = { set_variable = wj_cr_hereditary_king }
+			WJ_miaoshi_initialize_effect = yes
+			WJ_title_style_reconcile = yes
+			debug_log = "HD_304 CROWNED_KING $WHO$"
+		}
+	}
 }
 
 # 刘渊"师事上党崔游，习毛诗、京氏易、马氏尚书"：刘渊及其在世子孙、刘曜改奉经学（只在 304 开局，history 不改）
@@ -204,18 +232,72 @@ hd_304_heir_effect = {
 	}
 }
 
-# 大陵之战：史实是司马腾遣聂玄击刘渊，战于大陵，玄兵大败。这里让刘渊作攻方，目标太原郡（含大陵），胜方才有所得。
-# 刘渊另得 15,000 事件兵（史载其众五万，数字是计划拟定的）
-hd_304_daling_war_effect = {
+############################################################
+# 2026-10-28 boki：司马氏诸王开局走封爵系统（WJ_peerage），不再显示成牧、太守。
+# 写法照 190 的 hd190_peerage_effect / hd190_peer_wang_effect（zz_hd_190_startup_effects.txt）：宗室王爵（4 级个人爵位），
+# 王号取郡（成都王取成都县，照 190 阜陵王取县），食邑取该郡首县；直接写入并登记，不走册封界面、不扣授爵花费、不发册封事件。
+# 王爵不要求在天子治下（WJ_peer_personal_valid），朝贡国、独立诸侯的王爵照样保留。授爵人为 h_china 持有者（惠帝）。
+# 规则只放行男性宗室的 4 级王爵，3 级公爵会被判无效，所以东嬴公司马腾改王爵（boki 10-28 拍板：泰山王，东嬴县属泰山郡）。
+# 司马略（越弟、青州）史实爵位存疑，不封；其余未列出的宗室开局无爵位。
+############################################################
+hd304_peerage_effect = {
+	title:h_china.holder ?= { save_scope_as = hd304_peer_issuer }
 	if = {
 		limit = {
-			character:xiongnu_liu_020 ?= { is_alive = yes is_independent_ruler = yes }
-			character:si_ma_teng ?= { is_alive = yes }
-			title:d_taiyuan.holder ?= character:si_ma_teng
+			exists = scope:hd304_peer_issuer
+			scope:hd304_peer_issuer = { WJ_peer_realm_head = yes }
 		}
-		character:xiongnu_liu_020 = {
-			hd_nbc_spawn_army_effect = { SIZE = 15000 WHERE = title:c_uuii_p_1385 NAME = hd_304_wubu_army_name }
+		hd304_peer_wang_effect = { WHO = si_ma_yong NAME = d_hejian }		# 河间王
+		hd304_peer_wang_effect = { WHO = si_ma_ying NAME = c_uuii_p_4282 }	# 成都王（成都县）
+		hd304_peer_wang_effect = { WHO = hd_304_si_ma_yue NAME = d_donghai }	# 东海王
+		hd304_peer_wang_effect = { WHO = si_ma_teng NAME = d_taishan }		# 泰山王（史实东嬴公）
+		hd304_peer_wang_effect = { WHO = si_ma_xiao NAME = d_fanyang }		# 范阳王
+		hd304_peer_wang_effect = { WHO = si_ma_rui NAME = d_langya }		# 琅琊王
+		hd304_peer_wang_effect = { WHO = si_ma_mao NAME = d_dongping }		# 东平王
+		hd304_peer_wang_effect = { WHO = si_ma_chi NAME = d_yuzhang }		# 豫章王（皇太弟）
+		debug_log = "HD_304 PEERAGE DONE"
+	}
+	else = { debug_log = "HD_304 PEERAGE NO_ISSUER" }
+	clear_saved_scope = hd304_peer_issuer
+}
+
+# 宗室王爵。NAME：王号头衔（郡或县），食邑取其首县（县则取本身）。Scope：任意；需 scope:hd304_peer_issuer
+hd304_peer_wang_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_male = yes
+				NOT = { has_variable = wj_peer_rank }
+				NOT = { has_trait = WJ_peerage_trait }
+				title:$NAME$ = { WJ_peer_name_free = yes }
+			}
+			title:$NAME$ = {
+				if = {
+					limit = { tier = tier_county }
+					save_scope_as = hd304_peer_food
+				}
+				else = {
+					title_capital_county ?= { save_scope_as = hd304_peer_food }
+				}
+			}
+			if = {
+				limit = {
+					exists = scope:hd304_peer_food
+					scope:hd304_peer_food = { WJ_peer_county_free = yes }
+				}
+				set_variable = { name = wj_peer_personal value = yes }
+				set_variable = { name = wj_peer_rank value = 4 }
+				set_variable = { name = wj_peer_name value = title:$NAME$ }
+				set_variable = { name = wj_peer_food value = scope:hd304_peer_food }
+				set_variable = { name = wj_peer_realm value = scope:hd304_peer_issuer.primary_title }
+				set_variable = { name = wj_peer_last_paid value = current_year }
+				WJ_peer_bind_personal = yes
+				debug_log = "HD_304 PEERAGE WANG $WHO$ $NAME$"
+			}
+			else = { debug_log = "HD_304 PEERAGE WANG_NO_FOOD $WHO$ $NAME$" }
+			clear_saved_scope = hd304_peer_food
 		}
-		hd_nbc_start_war_effect = { ATTACKER = character:xiongnu_liu_020 DEFENDER = character:si_ma_teng TARGET = title:d_taiyuan KIND = daling }
+		else = { debug_log = "HD_304 PEERAGE WANG_SKIPPED $WHO$" }
 	}
 }

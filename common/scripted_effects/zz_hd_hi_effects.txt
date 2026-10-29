@@ -11,6 +11,7 @@
 hd_hi_begin_effect = {
 	save_scope_as = hd_hi_leader
 	set_global_variable = { name = hd_hi_done_$KEY$ value = yes }
+	set_global_variable = { name = hd_hi_started_$KEY$ value = yes }    # 真正开始过（done 在本人死亡、到期时也会设）；秦况排程 ③ 读西燕（p5-C）
 	set_variable = { name = hd_hi_key value = flag:$KEY$ }
 	create_story = {
 		type = story_hd_hi_invasion
@@ -63,76 +64,86 @@ hd_hi_load_stage_effect = {
 # 不合适 = 盛世且目标在汉地；或治世中目标由天子直辖；或目标七成以上归一家、且其兵力超过本人（含起事兵马）两倍。
 ############################
 hd_hi_eval_env_effect = {
-	scope:hd_hi_story = {
-		hd_hi_load_stage_effect = yes
-		set_variable = { name = hd_hi_total value = 0 }
-		every_in_list = {
-			variable = hd_hi_cur
-			every_de_jure_county = {
-				limit = { exists = holder }
-				scope:hd_hi_story = { change_variable = { name = hd_hi_total add = 1 } }
-				holder.top_liege = {
-					if = {
-						limit = { NOT = { is_in_list = hd_hi_env_lieges } }
-						add_to_temporary_list = hd_hi_env_lieges
-						set_variable = { name = hd_hi_cnt value = 0 }
+	# j16 短路（04 §2.2-3；06 §3.2-4 扩展；p5-C）：秦况 ①–⑤ 在前秦正式瓦解后、或本 KEY 已由心跳开闸时，直接判「合适」并返回。
+	# 三个蛰伏入口（hd_hi_go_effect、hd_hi.0200 b/c、hd_hi.2003）都以 env = bad 为前提，因此都不会走到；有地封臣起兵带原有封地（hd_hi_rise_effect）。
+	# 判定只在 j16 心跳运行时成立（hd_j16_hi_mode_trigger），非 j16 局照旧评估
+	if = {
+		limit = { hd_j16_hi_env_ok_trigger = yes }
+		scope:hd_hi_story = { set_variable = { name = hd_hi_env value = flag:ok } }
+		debug_log = "hd_hi: env ok (j16 short-circuit)"
+	}
+	else = {
+		scope:hd_hi_story = {
+			hd_hi_load_stage_effect = yes
+			set_variable = { name = hd_hi_total value = 0 }
+			every_in_list = {
+				variable = hd_hi_cur
+				every_de_jure_county = {
+					limit = { exists = holder }
+					scope:hd_hi_story = { change_variable = { name = hd_hi_total add = 1 } }
+					holder.top_liege = {
+						if = {
+							limit = { NOT = { is_in_list = hd_hi_env_lieges } }
+							add_to_temporary_list = hd_hi_env_lieges
+							set_variable = { name = hd_hi_cnt value = 0 }
+						}
+						change_variable = { name = hd_hi_cnt add = 1 }
 					}
-					change_variable = { name = hd_hi_cnt add = 1 }
 				}
 			}
 		}
-	}
-	ordered_in_list = {
-		list = hd_hi_env_lieges
-		limit = { NOT = { this = scope:hd_hi_leader } }
-		order_by = var:hd_hi_cnt
-		save_scope_as = hd_hi_strongest
-	}
-	scope:hd_hi_story = {
-		set_variable = { name = hd_hi_env value = flag:ok }
-		if = {
-			limit = { exists = scope:hd_hi_strongest }
-			# 份额 = 最强者所占伯爵领 / 总数
-			set_variable = { name = hd_hi_share value = scope:hd_hi_strongest.var:hd_hi_cnt }
+		ordered_in_list = {
+			list = hd_hi_env_lieges
+			limit = { NOT = { this = scope:hd_hi_leader } }
+			order_by = var:hd_hi_cnt
+			save_scope_as = hd_hi_strongest
+		}
+		scope:hd_hi_story = {
+			set_variable = { name = hd_hi_env value = flag:ok }
 			if = {
-				limit = { var:hd_hi_total > 0 }
-				change_variable = { name = hd_hi_share divide = var:hd_hi_total }
-			}
-			set_variable = { name = hd_hi_enemy value = scope:hd_hi_strongest.max_military_strength }
-			set_variable = { name = hd_hi_power value = scope:hd_hi_leader.max_military_strength }
-			change_variable = { name = hd_hi_power add = var:hd_hi_army_est }
-			change_variable = { name = hd_hi_power multiply = 2 }
-			if = {
-				limit = {
-					OR = {
-						AND = {
-							hd_hi_shengshi_trigger = yes
-							any_in_list = {
-								variable = hd_hi_cur
-								target_is_de_jure_liege_or_above = title:h_china
+				limit = { exists = scope:hd_hi_strongest }
+				# 份额 = 最强者所占伯爵领 / 总数
+				set_variable = { name = hd_hi_share value = scope:hd_hi_strongest.var:hd_hi_cnt }
+				if = {
+					limit = { var:hd_hi_total > 0 }
+					change_variable = { name = hd_hi_share divide = var:hd_hi_total }
+				}
+				set_variable = { name = hd_hi_enemy value = scope:hd_hi_strongest.max_military_strength }
+				set_variable = { name = hd_hi_power value = scope:hd_hi_leader.max_military_strength }
+				change_variable = { name = hd_hi_power add = var:hd_hi_army_est }
+				change_variable = { name = hd_hi_power multiply = 2 }
+				if = {
+					limit = {
+						OR = {
+							AND = {
+								hd_hi_shengshi_trigger = yes
+								any_in_list = {
+									variable = hd_hi_cur
+									target_is_de_jure_liege_or_above = title:h_china
+								}
+							}
+							AND = {
+								hd_cycle_is_zhishi_trigger = yes
+								scope:hd_hi_strongest = { has_title = title:h_china }
+							}
+							AND = {
+								var:hd_hi_share >= 0.7
+								var:hd_hi_enemy > var:hd_hi_power
 							}
 						}
-						AND = {
-							hd_cycle_is_zhishi_trigger = yes
-							scope:hd_hi_strongest = { has_title = title:h_china }
-						}
-						AND = {
-							var:hd_hi_share >= 0.7
-							var:hd_hi_enemy > var:hd_hi_power
-						}
 					}
+					set_variable = { name = hd_hi_env value = flag:bad }
 				}
-				set_variable = { name = hd_hi_env value = flag:bad }
+				remove_variable = hd_hi_share
+				remove_variable = hd_hi_enemy
+				remove_variable = hd_hi_power
 			}
-			remove_variable = hd_hi_share
-			remove_variable = hd_hi_enemy
-			remove_variable = hd_hi_power
+			remove_variable = hd_hi_total
 		}
-		remove_variable = hd_hi_total
-	}
-	every_in_list = {
-		list = hd_hi_env_lieges
-		remove_variable = hd_hi_cnt
+		every_in_list = {
+			list = hd_hi_env_lieges
+			remove_variable = hd_hi_cnt
+		}
 	}
 }
 
@@ -212,6 +223,16 @@ hd_hi_rise_effect = {
 	if = {
 		limit = { scope:hd_hi_story.var:hd_hi_key ?= flag:qiaozong }
 		set_global_variable = hd_hev_404_qiaozong
+	}
+	# 西燕：慕容泓在世时入慕容冲宫廷作同军将领（04 §2.2 ②；p5-C）
+	if = {
+		limit = { scope:hd_hi_story.var:hd_hi_key ?= flag:murongchong }
+		hd_hi_murongchong_rise_effect = yes
+	}
+	# 两晋十六国面板：孙恩起事（04 §1.5 E5 东晋组；行本身由 F-1 写）
+	if = {
+		limit = { scope:hd_hi_story.var:hd_hi_key ?= flag:sunen }
+		set_global_variable = hd_hev_j16_sunen
 	}
 	scope:hd_hi_leader.location ?= { save_scope_as = hd_news_place }
 	# 通知其他玩家
@@ -531,24 +552,28 @@ hd_hi_declare_effect = {
 ### Story：把下一阶段的公爵领装入 hd_hi_next（已是最后阶段则为空）
 hd_hi_load_next_stage_effect = {
 	clear_variable_list = hd_hi_next
+	# j16 阶段闸门（06 §3.2-5；p5-C）：下一阶段的闸门未开时不装，宣战就不会从下一阶段挑守方。非 j16 局触发器恒假，照旧
 	if = {
-		limit = {
-			var:hd_hi_stage = 1
-			var:hd_hi_stage_count >= 2
+		limit = { NOT = { hd_j16_hi_next_stage_closed_trigger = yes } }
+		if = {
+			limit = {
+				var:hd_hi_stage = 1
+				var:hd_hi_stage_count >= 2
+			}
+			every_in_list = {
+				variable = hd_hi_stage_2
+				scope:hd_hi_story = { add_to_variable_list = { name = hd_hi_next target = prev } }
+			}
 		}
-		every_in_list = {
-			variable = hd_hi_stage_2
-			scope:hd_hi_story = { add_to_variable_list = { name = hd_hi_next target = prev } }
-		}
-	}
-	else_if = {
-		limit = {
-			var:hd_hi_stage = 2
-			var:hd_hi_stage_count >= 3
-		}
-		every_in_list = {
-			variable = hd_hi_stage_3
-			scope:hd_hi_story = { add_to_variable_list = { name = hd_hi_next target = prev } }
+		else_if = {
+			limit = {
+				var:hd_hi_stage = 2
+				var:hd_hi_stage_count >= 3
+			}
+			every_in_list = {
+				variable = hd_hi_stage_3
+				scope:hd_hi_story = { add_to_variable_list = { name = hd_hi_next target = prev } }
+			}
 		}
 	}
 }
@@ -643,16 +668,36 @@ hd_hi_stage_check_effect = {
 	}
 	if = {
 		limit = { scope:hd_hi_story.var:hd_hi_own >= scope:hd_hi_story.var:hd_hi_total }
+		# 取王冠只做一次（j16 阶段闸门会让本阶段反复判完成；非 j16 局第一阶段完成后即推进，行为不变）
 		if = {
-			limit = { scope:hd_hi_story.var:hd_hi_stage = 1 }
+			limit = {
+				scope:hd_hi_story.var:hd_hi_stage = 1
+				NOT = { scope:hd_hi_story = { has_variable = hd_hi_crowned } }
+			}
+			scope:hd_hi_story = { set_variable = { name = hd_hi_crowned value = yes } }
 			hd_hi_crown_effect = yes
 		}
 		if = {
 			limit = { scope:hd_hi_story.var:hd_hi_stage >= scope:hd_hi_story.var:hd_hi_stage_count }
 			scope:hd_hi_story = { end_story = yes }
 		}
+		# j16 阶段闸门（06 §3.2-5、§3.3；p5-C）：下一阶段闸门未开时停在本阶段完成状态，不推进 hd_hi_stage；电脑也不再宣战，等闸门
+		else_if = {
+			limit = {
+				scope:hd_hi_story = { hd_j16_hi_next_stage_closed_trigger = yes }
+			}
+			if = {
+				limit = { NOT = { scope:hd_hi_story = { has_variable = hd_hi_gate_wlog } } }
+				scope:hd_hi_story = { set_variable = { name = hd_hi_gate_wlog value = yes } }
+				debug_log = "HD_J16 hi_stage WAIT gate_closed"
+				debug_log_scopes = yes
+			}
+		}
 		else = {
-			scope:hd_hi_story = { change_variable = { name = hd_hi_stage add = 1 } }
+			scope:hd_hi_story = {
+				change_variable = { name = hd_hi_stage add = 1 }
+				remove_variable = hd_hi_gate_wlog
+			}
 		}
 	}
 	else_if = {
@@ -702,6 +747,7 @@ hd_hi_apply_government_effect = {
 # 王冠与国号（Character = 本人，ROOT 必须是本人；照 hd_wuhu_chanyu_crown_effect）
 ############################
 hd_hi_crown_effect = {
+	hd_hi_j16_mark_leaders_effect = yes    # j16：先补首领标记，供王冠不篡夺判定（只在 j16 模式下设；p5-C）
 	if = {
 		limit = { exists = scope:hd_hi_story.var:hd_hi_crown }
 		scope:hd_hi_story.var:hd_hi_crown = { save_scope_as = hd_hi_crown }
@@ -731,6 +777,8 @@ hd_hi_crown_effect = {
 						is_ai = yes
 						NOT = { has_title = title:h_china }
 					}
+					# j16：持有者或其 top_liege 是 hd_hi 首领（含首领王朝）时不篡夺（06 §3.2-6，A6-F5；p5-C）
+					NOT = { hd_j16_hi_crown_protected_trigger = yes }
 				}
 				create_title_and_vassal_change = {
 					type = usurped
@@ -770,6 +818,33 @@ hd_hi_crown_effect = {
 				}
 				remove_variable = new_realm_title_name
 			}
+		}
+		# j16 不篡夺时只改国号：国号改在本人的主头衔上（郡级及以上才改），并照常记到王朝上（06 §3.2-6，A6-F5；p5-C）
+		else_if = {
+			limit = {
+				hd_j16_hi_crown_protected_trigger = yes
+				exists = scope:hd_hi_story.var:hd_hi_name
+				is_landed = yes
+			}
+			if = {
+				limit = { highest_held_title_tier >= tier_duchy }
+				set_variable = {
+					name = new_realm_title_name
+					value = scope:hd_hi_story.var:hd_hi_name
+				}
+				primary_title = {
+					set_title_name_dynamic = new_realm_title_name_from_var
+				}
+				remove_variable = new_realm_title_name
+			}
+			dynasty ?= {
+				remove_variable = hd_fixed_realm_title
+				set_variable = {
+					name = hd_fixed_realm_name
+					value = scope:hd_hi_story.var:hd_hi_name
+				}
+			}
+			debug_log = "HD_J16 hi_crown SKIP protected_rename_only"
 		}
 	}
 }

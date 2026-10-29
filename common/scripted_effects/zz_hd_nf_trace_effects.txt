@@ -1,0 +1,157 @@
+﻿# 临时诊断（2026-10-28）：查南北朝剧本第一年家族头衔批量创建是谁触发的。
+# 由 07_dlc_ep3_scripted_effects.txt 的 create_noble_family_effect 在真正创建家族头衔前调用；只在开局后 3 年内记日志。
+# 作用域：即将获得家族头衔的人（scope:new_noble_family_holder）。日志里搜 HD_NF；同一次创建的几行连在一起。
+# 查清后：删本文件，并删 create_noble_family_effect 里的 hd_nf_trace_effect 调用。
+hd_nf_trace_effect = {
+	if = {
+		limit = { years_from_game_start < 3 }
+		# 来源：靠调用链上保存的作用域区分
+		if = {
+			limit = { exists = scope:title }
+			debug_log = "HD_NF src=title_gain"
+			if = {
+				limit = { scope:transfer_type = flag:granted }
+				debug_log = "HD_NF tg_type=granted"
+			}
+			else_if = {
+				limit = { scope:transfer_type = flag:appointment }
+				debug_log = "HD_NF tg_type=appointment"
+			}
+			else_if = {
+				limit = { scope:transfer_type = flag:appointment_succession }
+				debug_log = "HD_NF tg_type=appointment_succession"
+			}
+			else_if = {
+				limit = { scope:transfer_type = flag:inheritance }
+				debug_log = "HD_NF tg_type=inheritance"
+			}
+			else_if = {
+				limit = { scope:transfer_type = flag:created }
+				debug_log = "HD_NF tg_type=created"
+			}
+			else_if = {
+				limit = {
+					OR = {
+						scope:transfer_type = flag:conquest
+						scope:transfer_type = flag:conquest_claim
+						scope:transfer_type = flag:conquest_holy_war
+						scope:transfer_type = flag:conquest_populist
+					}
+				}
+				debug_log = "HD_NF tg_type=conquest"
+			}
+			else_if = {
+				limit = { scope:transfer_type = flag:usurped }
+				debug_log = "HD_NF tg_type=usurped"
+			}
+			else_if = {
+				limit = { scope:transfer_type = flag:swear_fealty }
+				debug_log = "HD_NF tg_type=swear_fealty"
+			}
+			else_if = {
+				limit = { scope:transfer_type = flag:independency }
+				debug_log = "HD_NF tg_type=independency"
+			}
+			else = {
+				debug_log = "HD_NF tg_type=other"
+			}
+			# 获得的头衔档次
+			scope:title = {
+				if = {
+					limit = { tier = tier_county }
+					debug_log = "HD_NF tg_title=county"
+				}
+				else_if = {
+					limit = { tier = tier_duchy }
+					debug_log = "HD_NF tg_title=duchy"
+				}
+				else_if = {
+					limit = { tier = tier_kingdom }
+					debug_log = "HD_NF tg_title=kingdom"
+				}
+				else_if = {
+					limit = { tier = tier_empire }
+					debug_log = "HD_NF tg_title=empire"
+				}
+				else = {
+					debug_log = "HD_NF tg_title=barony_or_other"
+				}
+			}
+		}
+		else_if = {
+			limit = { exists = scope:old_liege }
+			debug_log = "HD_NF src=vassal_change"
+		}
+		else_if = {
+			limit = { exists = scope:governor_liege }
+			debug_log = "HD_NF src=governor"
+		}
+		else_if = {
+			limit = { exists = scope:actor }
+			debug_log = "HD_NF src=actor"
+		}
+		else = {
+			debug_log = "HD_NF src=other"
+			# 来源不明的前 60 次多打一份作用域，免得日志过大
+			if = {
+				limit = { NOT = { has_global_variable = hd_nf_other_n } }
+				set_global_variable = { name = hd_nf_other_n value = 0 }
+			}
+			change_global_variable = { name = hd_nf_other_n add = 1 }
+			if = {
+				limit = { global_var:hd_nf_other_n < 60 }
+				debug_log_scopes = yes
+			}
+		}
+		# 持有人
+		if = {
+			limit = { is_ai = yes }
+			debug_log = "HD_NF holder=ai"
+		}
+		else = {
+			debug_log = "HD_NF holder=player"
+		}
+		if = {
+			limit = { is_landed = yes }
+			debug_log = "HD_NF holder_landed=yes"
+		}
+		else = {
+			debug_log = "HD_NF holder_landed=no"
+		}
+		if = {
+			limit = { highest_held_title_tier = tier_empire }
+			debug_log = "HD_NF holder_tier=empire"
+		}
+		else_if = {
+			limit = { highest_held_title_tier = tier_kingdom }
+			debug_log = "HD_NF holder_tier=kingdom"
+		}
+		else_if = {
+			limit = { highest_held_title_tier = tier_duchy }
+			debug_log = "HD_NF holder_tier=duchy"
+		}
+		else_if = {
+			limit = { highest_held_title_tier = tier_county }
+			debug_log = "HD_NF holder_tier=county"
+		}
+		else = {
+			debug_log = "HD_NF holder_tier=below_county"
+		}
+		# 授予人是自己还是别人（任命总督、封臣变动时通常是顶级领主）
+		if = {
+			limit = { scope:government_giver = this }
+			debug_log = "HD_NF giver=self"
+		}
+		else = {
+			debug_log = "HD_NF giver=other"
+		}
+		# 史实人物还是引擎生成的人
+		if = {
+			limit = { has_trait = historical_character }
+			debug_log = "HD_NF holder_hist=yes"
+		}
+		else = {
+			debug_log = "HD_NF holder_hist=no"
+		}
+	}
+}

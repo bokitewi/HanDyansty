@@ -10,6 +10,8 @@
 ID 只用作全局指针 hd_fo_p_<id> 和本地化键。改数据后重跑：python -I tools/hd_fo/gen_hd_fo_monks.py
 """
 import os
+import re
+import sys
 
 MOD = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -81,7 +83,8 @@ SPAWN = {
     'bo_yuan': (290, 'c_uuii_p_867', None), 'fo_tu_cheng': (310, 'c_luoyang', None),
     'zhu_dao_qian': (304, 'c_luoyang', None), 'dao_an': (335, 'c_uuii_p_1172', None),
     'zhi_dun': (338, 'c_uuii_p_6471', None), 'hui_yuan': (354, 'c_uuii_p_1172', 'follow:dao_an'),
-    'jiu_mo_luo_shi': (351, 'c_uuii_p_2766', None), 'seng_zhao': (400, 'c_uuii_p_1564', 'follow:jiu_mo_luo_shi'),
+    # 鸠摩罗什：西域龟兹 c_uuii_p_6216（d_qiuci_tianshanbeilu），不是同名的上郡龟兹 c_uuii_p_2766（两晋十六国 04 §4，2026-10-27）
+    'jiu_mo_luo_shi': (351, 'c_uuii_p_6216', None), 'seng_zhao': (400, 'c_uuii_p_1564', 'follow:jiu_mo_luo_shi'),
     'fa_xian': (357, 'c_uuii_p_867', None), 'dao_sheng': (370, 'c_uuii_p_4389', None),
     'tan_wu_chen': (412, 'c_uuii_p_1564', None), 'tan_yao': (452, 'c_uuii_p_1265', None),
     'ba_tuo': (490, 'c_uuii_p_1265', None), 'pu_ti_liu_zhi': (508, 'c_luoyang', None),
@@ -109,7 +112,8 @@ START = {
     '346.12.10': [('fo_tu_cheng', 'c_uuii_p_1172', 114, None), ('dao_an', 'c_uuii_p_1172', 34, None),
                   ('zhu_dao_qian', 'c_uuii_p_6471', 60, None), ('zhi_dun', 'c_uuii_p_6471', 32, None)],
     '370.2.13': [('zhu_dao_qian', 'c_uuii_p_6471', 84, None), ('dao_an', 'c_uuii_p_1788', 58, None),
-                 ('hui_yuan', 'c_uuii_p_1788', 36, None), ('jiu_mo_luo_shi', 'c_uuii_p_2766', 26, None),
+                 # 鸠摩罗什在西域龟兹 c_uuii_p_6216，非上郡龟兹 c_uuii_p_2766（04 §4）；404 开局的长安 c_uuii_p_867 不变
+                 ('hui_yuan', 'c_uuii_p_1788', 36, None), ('jiu_mo_luo_shi', 'c_uuii_p_6216', 26, None),
                  ('fa_xian', 'c_uuii_p_867', 33, None), ('dao_sheng', 'c_uuii_p_4389', 15, None)],
     '404.3.24': [('hui_yuan', 'c_uuii_p_6364', 70, None), ('jiu_mo_luo_shi', 'c_uuii_p_867', 60, None),
                  ('seng_zhao', 'c_uuii_p_867', 20, None), ('dao_sheng', 'c_uuii_p_6364', 49, None)],
@@ -192,6 +196,101 @@ def preset(p, ind):
     raise ValueError(p)
 
 
+# 同名县（简中本地化名相同的县）中已核对过的用法：县 ID -> 是哪一个。
+# check_places() 对未登记的同名县报 WARNING（不中断）；核对后在这里登记一行写明是哪一个（两晋十六国 04 §4 第 4 步）。
+HOMONYM_OK = {
+    'c_uuii_p_6216': '西域龟兹（d_qiuci_tianshanbeilu，龟兹国），非上郡龟兹 c_uuii_p_2766（d_shangjun）；鸠摩罗什 351 出场、370 开局所在',
+}
+
+
+def load_counties():
+    """读 mod 的 common/landed_titles（descriptor 有 replace_path，不回落原版）：县 ID -> (所属郡, 文件名, 行号)。"""
+    tok = re.compile(r'([A-Za-z0-9_.\-]+)\s*=\s*\{|\{|\}')
+    folder = os.path.join(MOD, 'common', 'landed_titles')
+    county = {}
+    for fn in sorted(os.listdir(folder)):
+        if not fn.endswith('.txt'):
+            continue
+        with open(os.path.join(folder, fn), encoding='utf-8-sig', errors='replace') as f:
+            lines = f.readlines()
+        stack = []
+        for ln, line in enumerate(lines, 1):
+            for m in tok.finditer(line.split('#', 1)[0]):
+                t = m.group(0)
+                if t == '}':
+                    if stack:
+                        stack.pop()
+                elif t == '{':
+                    stack.append(None)
+                else:
+                    key = m.group(1)
+                    stack.append(key)
+                    if key.startswith('c_'):
+                        duchy = next((s for s in reversed(stack[:-1]) if s and s.startswith('d_')), None)
+                        if key in county:
+                            print(f'WARNING 县 {key} 重复定义：{county[key][1]}:{county[key][2]} 与 {fn}:{ln}')
+                        county[key] = (duchy, fn, ln)
+    return county
+
+
+def load_title_names():
+    """简中本地化里县、郡的名字：先读 simp_chinese，再读 replace/simp_chinese（后者覆盖前者）。"""
+    pat = re.compile(r'^\s*([cd]_[A-Za-z0-9_.\-]+):\d*\s*"(.*)"')
+    names = {}
+    for sub in (('localization', 'simp_chinese'), ('localization', 'replace', 'simp_chinese')):
+        for root, _, files in os.walk(os.path.join(MOD, *sub)):
+            for fn in sorted(files):
+                if not fn.endswith('.yml'):
+                    continue
+                with open(os.path.join(root, fn), encoding='utf-8-sig', errors='replace') as f:
+                    for line in f:
+                        m = pat.match(line)
+                        if m:
+                            names[m.group(1)] = m.group(2)
+    return names
+
+
+def check_places():
+    """县 ID 校验（04 §4 第 4 步）：SPAWN、START 用到的每个县都必须存在于 landed_titles（不存在即中断）；
+    打印「县 ID → 本地化名 → 所属郡」对照表；同名县未在 HOMONYM_OK 登记的报 WARNING。"""
+    county = load_counties()
+    names = load_title_names()
+    byname = {}
+    for c in county:
+        n = names.get(c)
+        if n:  # 没有本地化名的县不参加同名分组，免得成批误报
+            byname.setdefault(n, []).append(c)
+    used = {}
+    for mid, (y, place, _) in SPAWN.items():
+        used.setdefault(place, []).append(f'出场 {mid} {y}')
+    for date, lst in START.items():
+        for mid, place, _, _ in lst:
+            used.setdefault(place, []).append(f'开局 {date} {mid}')
+    missing = sorted(p for p in used if p not in county)
+    assert not missing, ('landed_titles 里没有这些县', missing)
+    print('县 ID → 本地化名 → 所属郡（用处）')
+    warns = 0
+    for place in sorted(used):
+        duchy = county[place][0]
+        n = names.get(place)
+        if n is None:
+            warns += 1
+            print(f'WARNING 县 {place} 没有简中本地化名')
+        print(f'  {place} → {n or "?"} → {duchy or "—"}（{names.get(duchy, "?")}）  [{"；".join(used[place])}]')
+        same = [c for c in byname.get(n, []) if c != place] if n else []
+        if same:
+            others = '、'.join(f'{c}（{county[c][0] or "—"} {names.get(county[c][0], "?")}）' for c in same)
+            if place in HOMONYM_OK:
+                print(f'    同名县 {others}；已核对：{HOMONYM_OK[place]}')
+            else:
+                warns += 1
+                print(f'WARNING 县 {place}「{n}」与 {others} 同名：请核对用的是哪一个，并登记到 HOMONYM_OK')
+    for place in HOMONYM_OK:
+        if place not in used:
+            print(f'注：HOMONYM_OK 里的 {place} 已不再使用，可以删去')
+    print(f'县 ID 校验：{len(used)} 个县，WARNING {warns} 条')
+
+
 def check():
     ids = [m[0] for m in MONKS]
     assert len(ids) == len(set(ids)) == 45, len(ids)
@@ -204,6 +303,7 @@ def check():
         assert len(p) == 3, m[0]
         for o in OPPOSITES:
             assert not o <= p, (m[0], o)
+    check_places()
 
 
 def write(rel, text):
@@ -214,6 +314,9 @@ def write(rel, text):
 
 
 def main():
+    # 校验表含中文县名：Windows 控制台（GBK）遇到编不出的字不抛错，免得校验没跑完就中断重生成
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(errors='replace')
     check()
     names = ('diplomacy', 'martial', 'stewardship', 'intrigue', 'learning', 'prowess')
     eff = ['# 自动生成：tools/hd_fo/gen_hd_fo_monks.py（数据见 docs/佛教东传_高僧属性表.md）。不要手改，改生成器后重跑。\n',

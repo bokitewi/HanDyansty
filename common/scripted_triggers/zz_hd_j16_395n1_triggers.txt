@@ -1,0 +1,221 @@
+﻿# 两晋十六国统一史实线 · 395 节北线一（后燕、北燕、南燕、北魏、后秦）触发器（06 §1.1–§1.4；08 §1.2）。
+# 写入者：第 6 期 6-N1（第 6 期五路并行，本路自建文件；6-S 用 zz_hd_j16_395_triggers.txt，6-N2 用 395n2）。
+# 接壤判定（any_neighboring_county）只在节点窗口内被调用（清单：时代段外不做 neighboring）。
+
+############################################################
+# 通用
+############################################################
+
+# Character：属 $R$ 一系（本人，或其 top_liege 是 $R$；廷臣按雇主一系算）
+hd_j16_n1_in_realm_trigger = {
+	OR = {
+		this = $R$
+		top_liege ?= $R$
+	}
+}
+
+# Character：燕系之主（M35/M50/M60/M65 换主时的现任、M45 燕主须满足）：慕容氏、长乐冯氏（冯跋）、昌黎兰氏（兰汗），
+#   或持有高云即位时记下的主头衔 global_var:hd_j16_n1_yan_title（高云 1415976 属 korean_go_goguryeo 王朝，与高句丽王同王朝同家族，
+#   不能按王朝或家族认；按头衔认，高云死后由其继承人接位时仍能通过）。防止龙城被北魏、高句丽等外人取得时把外国整个转给史实之人
+hd_j16_n1_yan_system_trigger = {
+	OR = {
+		dynasty ?= dynasty:murong
+		house ?= house:house_changle_feng
+		house ?= house:changli_lan
+		AND = {
+			exists = global_var:hd_j16_n1_yan_title
+			has_title = global_var:hd_j16_n1_yan_title
+		}
+	}
+}
+
+# Character：hd_j16_n1_seat_effect 的现任可受换主：燕系之主（M35/M50/M60/M65），或拓跋氏（T60 拓跋嗣）
+hd_j16_n1_seat_cur_ok_trigger = {
+	OR = {
+		hd_j16_n1_yan_system_trigger = yes
+		dynasty ?= dynasty:tuoba
+	}
+}
+
+# Character（5590 的玩家现任，读人物变量 hd_j16_n1_abd_tag）：该换主节点已了结（已换主或已关窗），迟到的「逊位 / 拒之」不再生效
+hd_j16_n1_abd_closed_trigger = {
+	OR = {
+		AND = {
+			var:hd_j16_n1_abd_tag ?= flag:lanhan
+			OR = {
+				has_global_variable = hd_j16_lanhan_seated
+				has_global_variable = hd_j16_lanhan_seat_skip
+			}
+		}
+		AND = {
+			var:hd_j16_n1_abd_tag ?= flag:sheng
+			OR = {
+				has_global_variable = hd_j16_sheng_seated
+				has_global_variable = hd_j16_lanhan_sheng_skip
+			}
+		}
+		AND = {
+			var:hd_j16_n1_abd_tag ?= flag:xi
+			OR = {
+				has_global_variable = hd_j16_xi_seated
+				has_global_variable = hd_j16_xi_done
+			}
+		}
+		AND = {
+			var:hd_j16_n1_abd_tag ?= flag:gaoyun
+			OR = {
+				has_global_variable = hd_j16_gaoyun_seated
+				has_global_variable = hd_j16_gaoyun_seat_skip
+			}
+		}
+		AND = {
+			var:hd_j16_n1_abd_tag ?= flag:fengba
+			OR = {
+				has_global_variable = hd_j16_fengba_seated
+				has_global_variable = hd_j16_beiyan_done
+			}
+		}
+		AND = {
+			var:hd_j16_n1_abd_tag ?= flag:tuobasi
+			OR = {
+				has_global_variable = hd_j16_tuobasi_seated
+				has_global_variable = hd_j16_mingyuan_done
+			}
+		}
+	}
+}
+
+# $A$ 一系的国土与 $B$ 一系的国土接壤（$A$、$B$ 为独立君主 scope，各调用处都是 top_liege）。无 scope 要求
+# 用引擎的邻国表 any_neighboring_top_liege_realm_owner（原版 183 处），不再逐县扫描 $B$ 全境 × 邻县（窗口内每跳求值，大国开销过高）。
+hd_j16_n1_borders_realm_trigger = {
+	$A$ ?= {
+		any_neighboring_top_liege_realm_owner = { this = $B$ }
+	}
+}
+
+# $SIDE$ 一系与郡 $DUCHY$ 接壤：郡内有不属 $SIDE$ 一系的县，与 $SIDE$ 一系的县相邻。无 scope 要求
+hd_j16_n1_borders_duchy_trigger = {
+	$DUCHY$ = {
+		any_de_jure_county = {
+			NOT = { holder ?= { target_is_same_character_or_above = $SIDE$ } }
+			any_neighboring_county = {
+				holder ?= { target_is_same_character_or_above = $SIDE$ }
+			}
+		}
+	}
+}
+
+# 称藩战可以开打（E5-Y20、E5-Y30）：$A$（攻方）、$B$ 都在、不是同一人、未交战、接壤
+hd_j16_n1_vassal_war_ready_trigger = {
+	exists = $A$
+	exists = $B$
+	NOT = { $A$ = $B$ }
+	$A$ = {
+		is_imprisoned = no
+		NOT = { is_at_war_with = $B$ }
+	}
+	hd_j16_n1_borders_realm_trigger = { A = $A$ B = $B$ }
+}
+
+# 西燕已不存在：慕容永 changli_murong_064 不再是有地的独立君主（原生或 hbirth 指针）
+hd_j16_n1_xiyan_gone_trigger = {
+	NOT = {
+		character:changli_murong_064 ?= {
+			is_alive = yes
+			is_landed = yes
+			is_independent_ruler = yes
+		}
+	}
+	NOT = {
+		global_var:hd_hb_p_changli_murong_064 ?= {
+			is_alive = yes
+			is_landed = yes
+			is_independent_ruler = yes
+		}
+	}
+}
+
+############################################################
+# 各战争节点可以开打（读调用方已存的 scope）
+############################################################
+
+# E5-M10：燕主 scope:hd_j16_e5m10_yan、魏主 scope:hd_j16_e5m10_wei
+hd_j16_canhe_ready_trigger = {
+	exists = scope:hd_j16_e5m10_yan
+	exists = scope:hd_j16_e5m10_wei
+	NOT = { scope:hd_j16_e5m10_yan = scope:hd_j16_e5m10_wei }
+	scope:hd_j16_e5m10_yan = {
+		is_imprisoned = no
+		NOT = { is_at_war_with = scope:hd_j16_e5m10_wei }
+	}
+	OR = {
+		has_global_variable = hd_j16_xiyan_done
+		hd_j16_n1_xiyan_gone_trigger = yes
+	}
+	hd_j16_n1_borders_realm_trigger = { A = scope:hd_j16_e5m10_yan B = scope:hd_j16_e5m10_wei }
+}
+
+# E5-M15：燕主须为慕容垂 scope:hd_j16_e5m15_chui；魏主 scope:hd_j16_e5m15_wei
+hd_j16_pingcheng_ready_trigger = {
+	has_global_variable = hd_j16_canhe_yan_lost
+	exists = scope:hd_j16_e5m15_yan
+	exists = scope:hd_j16_e5m15_chui
+	exists = scope:hd_j16_e5m15_wei
+	scope:hd_j16_e5m15_yan = scope:hd_j16_e5m15_chui
+	scope:hd_j16_e5m15_yan = {
+		is_imprisoned = no
+		NOT = { is_at_war_with = scope:hd_j16_e5m15_wei }
+	}
+	hd_j16_n1_borders_realm_trigger = { A = scope:hd_j16_e5m15_yan B = scope:hd_j16_e5m15_wei }
+}
+
+# E5-T30：魏主 scope:hd_j16_e5t30_wei、守方（邺的 top_liege）scope:hd_j16_e5t30_def，守方不是晋天子
+hd_j16_weiye_ready_trigger = {
+	exists = scope:hd_j16_e5t30_wei
+	exists = scope:hd_j16_e5t30_def
+	NOT = { scope:hd_j16_e5t30_wei = scope:hd_j16_e5t30_def }
+	NOT = { title:h_china.holder ?= scope:hd_j16_e5t30_def }
+	scope:hd_j16_e5t30_wei = {
+		is_imprisoned = no
+		NOT = { is_at_war_with = scope:hd_j16_e5t30_def }
+	}
+	hd_j16_n1_borders_duchy_trigger = { DUCHY = title:d_weijun SIDE = scope:hd_j16_e5t30_wei }
+}
+
+# E5-T50：魏主 scope:hd_j16_e5t50_wei、秦主 scope:hd_j16_e5t50_qin，在平阳或河东接壤（两郡内秦一系之县与魏一系之县相邻）
+hd_j16_chaibi_ready_trigger = {
+	exists = scope:hd_j16_e5t50_wei
+	exists = scope:hd_j16_e5t50_qin
+	NOT = { scope:hd_j16_e5t50_wei = scope:hd_j16_e5t50_qin }
+	scope:hd_j16_e5t50_wei = {
+		is_imprisoned = no
+		NOT = { is_at_war_with = scope:hd_j16_e5t50_qin }
+	}
+	OR = {
+		title:d_pingyang = {
+			any_de_jure_county = {
+				holder ?= { target_is_same_character_or_above = scope:hd_j16_e5t50_qin }
+				any_neighboring_county = { holder ?= { target_is_same_character_or_above = scope:hd_j16_e5t50_wei } }
+			}
+		}
+		title:d_hedong = {
+			any_de_jure_county = {
+				holder ?= { target_is_same_character_or_above = scope:hd_j16_e5t50_qin }
+				any_neighboring_county = { holder ?= { target_is_same_character_or_above = scope:hd_j16_e5t50_wei } }
+			}
+		}
+	}
+}
+
+# E5-Y10：秦主 scope:hd_j16_e5y10_qin、晋天子 scope:hd_j16_e5y10_jin；洛阳的 top_liege 是晋天子
+hd_j16_yaoluo_ready_trigger = {
+	exists = scope:hd_j16_e5y10_qin
+	exists = scope:hd_j16_e5y10_jin
+	NOT = { scope:hd_j16_e5y10_qin = scope:hd_j16_e5y10_jin }
+	title:c_luoyang.holder.top_liege ?= scope:hd_j16_e5y10_jin
+	scope:hd_j16_e5y10_qin = {
+		is_imprisoned = no
+		NOT = { is_at_war_with = scope:hd_j16_e5y10_jin }
+	}
+	hd_j16_n1_borders_duchy_trigger = { DUCHY = title:d_henan SIDE = scope:hd_j16_e5y10_qin }
+}

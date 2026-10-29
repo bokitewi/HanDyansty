@@ -1,0 +1,1477 @@
+﻿# 两晋十六国统一史实线 · E4（371–394）× 370 节·东晋段（04_370王猛伐燕.md §3.1、§3.2、§6）。
+# 入口 hd_j16_e4_370b_effect，由 5-A1 在 hd_j16_e4_370_effect 入口末尾加一行调用（10-27 汇总人定：370 节三路并行，东晋段自建 370b 文件）。
+# 本文件另放东晋段（E4 与 E5）共用的小工具（前缀 hd_j16_370b_），E5 段节点在 zz_hd_j16_e5_370_effects.txt。
+# 写入者：5-A2。节点写法照 j16tools/TEMPLATE.md（p1-S 模板）；新节点自保护只比较 global_var:hd_j16_start_year（本段全部节点早于 404 开局）。
+# 设计要点（04 §3、00 A4-G4/G5、D16）：
+#   - 谢安、王坦之、司马道子只授朝官，不装 hd_court 权臣（G4）；桓冲解扬州只做事件（G5）。
+#   - 授郡每次 1 郡，只从 AI 手里取，同在晋天子政权内（D16；受郡者不持郡，无地或只有县）。
+#   - 卒年：节点只设卒年表 PRE（fire 时），处死由 zz_hd_j16_deaths_effects.txt 的表行执行（TEMPLATE §5-15）。
+# 节点内 saved scope 一律 hd_j16_k<节点缩写>_，解析前先清。
+
+hd_j16_e4_370b_effect = {
+	hd_j16_node_xiaowu_li_effect = yes        # E4-J15 简文崩·孝武立
+	hd_j16_node_xinting_effect = yes          # E4-J20 新亭之会
+	hd_j16_node_jiuxi_effect = yes            # E4-J25 求九锡·拖延
+	hd_j16_node_huanwen_dead_effect = yes     # E4-J30 桓温卒·遗命（卒年本身在 zz_hd_j16_deaths_special_effects.txt）
+	hd_j16_node_xiewang_effect = yes          # E4-J40 谢王秉政·桓冲解扬州
+	hd_j16_xiewang_guangling_effect = yes     # E4-J40 第二步：广陵授王坦之（AI 路径同一跳内紧随授官；玩家事件路径下一跳）
+	hd_j16_node_qinzheng_effect = yes         # E4-J50 孝武亲政
+	hd_j16_node_beifu_effect = yes            # E4-J60 北府兵
+	hd_j16_node_xiebeifa_effect = yes         # E4-J80 谢玄北伐
+	hd_j16_node_xiean_chuzhen_effect = yes    # E4-J90 谢安出镇广陵
+	hd_j16_node_daozi_effect = yes            # E4-J95 道子专政
+	hd_j16_node_wanggong_jingkou_effect = yes # E4-J97 王恭出镇京口
+}
+
+############################################################
+# 小工具（东晋段 E4、E5 共用）
+############################################################
+
+# 解析当事人：先清旧 scope，再按 ID 解析（TEMPLATE §2）
+hd_j16_370b_res_effect = {
+	if = {
+		limit = { exists = scope:$AS$ }
+		clear_saved_scope = $AS$
+	}
+	hd_j16_resolve_effect = { ID = $ID$ AS = $AS$ }
+}
+
+# 授郡（D16 / A1 §7.1）：把 $DUCHY$ 郡头衔及原持有者在该郡直辖的县一并授给 $TO$（granted，不加宣称）。
+# 调用方先判 hd_j16_370b_grantable_trigger（或自行确认持有者是同政权的 AI）。授完若受郡者的主君不是原持有者的主君（原持有者独立时即其本人），改投之。
+hd_j16_370b_grant_duchy_effect = {
+	if = {
+		limit = { exists = scope:hd_j16_kgd_from }
+		clear_saved_scope = hd_j16_kgd_from
+	}
+	if = {
+		limit = { exists = scope:hd_j16_kgd_lg }
+		clear_saved_scope = hd_j16_kgd_lg
+	}
+	if = {
+		limit = { exists = scope:hd_j16_kgd_to }
+		clear_saved_scope = hd_j16_kgd_to
+	}
+	$TO$ = { save_scope_as = hd_j16_kgd_to }
+	$DUCHY$.holder ?= {
+		save_scope_as = hd_j16_kgd_from
+		if = {
+			limit = { exists = liege }
+			liege = { save_scope_as = hd_j16_kgd_lg }
+		}
+		else = { save_scope_as = hd_j16_kgd_lg }
+	}
+	if = {
+		limit = {
+			exists = scope:hd_j16_kgd_from
+			exists = scope:hd_j16_kgd_to
+		}
+		create_title_and_vassal_change = {
+			type = granted
+			save_scope_as = hd_j16_kgd_change
+			add_claim_on_loss = no
+		}
+		$DUCHY$ = {
+			every_de_jure_county = {
+				limit = { holder ?= scope:hd_j16_kgd_from }
+				change_title_holder = {
+					holder = scope:hd_j16_kgd_to
+					change = scope:hd_j16_kgd_change
+					take_baronies = yes
+				}
+			}
+			change_title_holder = {
+				holder = scope:hd_j16_kgd_to
+				change = scope:hd_j16_kgd_change
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_j16_kgd_change
+		scope:hd_j16_kgd_to = {
+			if = {
+				limit = {
+					is_landed = yes
+					NOT = { this = scope:hd_j16_kgd_lg }
+					NOT = { liege ?= scope:hd_j16_kgd_lg }
+				}
+				hd_nbc_swear_fealty_effect = { LIEGE = scope:hd_j16_kgd_lg }
+			}
+		}
+		debug_log = "HD_J16 $LOG$ FIRE grant_duchy"
+	}
+}
+
+# 授朝官 $TITLE$（$POS$ 为原版席位键）给 $WHO$（人物 scope），天子为授官者。
+# 有地者走 granted（appointment 会让有地者辞去实土：10-16 讨董修复同因），并补朝官继承法与议会席位；无地者照 hd_nbc_minister_effect 走原版 got_minister_position_effect。
+hd_j16_370b_office_effect = {
+	if = {
+		limit = { exists = scope:hd_j16_kof_who }
+		clear_saved_scope = hd_j16_kof_who
+	}
+	$WHO$ ?= { save_scope_as = hd_j16_kof_who }
+	if = {
+		limit = {
+			exists = title:h_china.holder
+			scope:hd_j16_kof_who ?= {
+				is_alive = yes
+				is_imprisoned = no
+				NOT = { has_title = title:$TITLE$ }
+				NOT = { this = title:h_china.holder }
+			}
+		}
+		if = {
+			limit = { scope:hd_j16_kof_who = { is_landed = yes } }
+			create_title_and_vassal_change = {
+				type = granted
+				save_scope_as = hd_j16_kof_change
+				add_claim_on_loss = no
+			}
+			title:$TITLE$ = {
+				change_title_holder = {
+					holder = scope:hd_j16_kof_who
+					change = scope:hd_j16_kof_change
+				}
+			}
+			resolve_title_and_vassal_change = scope:hd_j16_kof_change
+			# granted 不加继承法：照 WJ got_minister_position_effect（WJ_ministry_override_effects.txt 第 110–137 行）补上，免朝官头衔按普通继承传给继承人
+			if = {
+				limit = {
+					title:$TITLE$ = title:e_minister_grand_marshal
+					NOT = { title:$TITLE$ = { has_title_law = celestial_grand_marshal_appointment_succession_law } }
+				}
+				title:$TITLE$ = { add_title_law = celestial_grand_marshal_appointment_succession_law }
+			}
+			else_if = {
+				limit = {
+					NOR = {
+						title:$TITLE$ = title:e_minister_grand_marshal
+						title:$TITLE$ = { has_title_law = celestial_ministry_appointment_succession_law }
+					}
+				}
+				title:$TITLE$ = { add_title_law = celestial_ministry_appointment_succession_law }
+			}
+			# 补议会席位（不调 got_minister_position_effect：它第 153–179 行会把无 WJ_rf 实封者的封臣全转给天子）。
+			# 只在他是天子的直属封臣或廷臣时占席；否则只持头衔（实测项）
+			if = {
+				limit = {
+					scope:hd_j16_kof_who = {
+						NOT = { has_council_position = $POS$ }
+						OR = {
+							liege ?= title:h_china.holder
+							employer ?= title:h_china.holder
+						}
+					}
+				}
+				title:h_china.holder = {
+					assign_councillor_type = {
+						type = $POS$
+						target = scope:hd_j16_kof_who
+						remove_existing_councillor = yes
+					}
+				}
+			}
+		}
+		else = {
+			title:h_china.holder = { save_scope_as = councillor_liege }
+			scope:hd_j16_kof_who = {
+				if = {
+					limit = {
+						NOT = { employer ?= scope:councillor_liege }
+						is_councillor = no
+					}
+					scope:councillor_liege = { add_courtier = scope:hd_j16_kof_who }
+				}
+				got_minister_position_effect = { MINISTER_TITLE = $TITLE$ MINISTER_POSITION = $POS$ }
+			}
+		}
+		debug_log = "HD_J16 $LOG$ FIRE office"
+	}
+}
+
+# 召入宫廷：$WHO$ 是 AI、无地、非议会成员时 set_employer 到 $TO$（报错清单第 29 条；排除议员是 04 E4-J60 的要求）
+hd_j16_370b_employ_effect = {
+	$WHO$ ?= {
+		if = {
+			limit = { hd_j16_370b_can_employ_trigger = { TO = $TO$ } }
+			set_employer = $TO$
+		}
+	}
+}
+
+# 召入宫廷（不排除议员）：$WHO$ 是 AI、无地、不持任何头衔时 set_employer 到 $TO$（E4-J97 刘牢之入王恭宫廷、E5-J20 倒戈用）
+hd_j16_370b_employ_council_effect = {
+	$WHO$ ?= {
+		if = {
+			limit = { hd_j16_370b_can_employ_council_trigger = { TO = $TO$ } }
+			set_employer = $TO$
+		}
+	}
+}
+
+# 史实事件兵：$WHO$ 有地时在其首府县起兵（不可继承）
+hd_j16_370b_army_effect = {
+	$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = yes
+				exists = capital_county
+			}
+			hd_nbc_spawn_army_effect = { SIZE = $SIZE$ WHERE = capital_county NAME = $NAME$ }
+		}
+	}
+}
+
+# 新闻：$WHO$ 作主事人（hd_news_a），其余玩家收 $EVENT$
+hd_j16_370b_news_effect = {
+	if = {
+		limit = { exists = $WHO$ }
+		$WHO$ = { save_scope_as = hd_news_a }
+		hd_world_news_send_effect = { EVENT = $EVENT$ }
+	}
+}
+
+############################################################
+# E4-J15 简文崩·孝武立【软】（04 §3.1）
+# 窗口 372.6.1 – 373.6.1。司马昱 si_ma_yu_2 是天子、司马曜 si_ma_yao 在世（304/346 局靠早出场名单）。
+# 软摆位：窗口一开即在司马昱身上 set_designated_heir = 司马曜（只做一次，hd_j16_xiaowu_heir_set）；司马昱的卒年 372.9.12 照表。
+# fire：司马曜已持 h_china——发新闻「褚太后临朝」，桓温得「望绝」（1 年，压力）；桓温是玩家时弹 hd_j16.4500（a 怏怏 / b 入朝问罪，把 E4-J20 窗口提前到 372.12.1）。
+# 上游 E4-J10（5-A1）不硬读：司马昱不在位时本节点等到窗口关闭跳过。
+# 变量：hd_j16_xiaowu_li_done/_skip/_wlog/_result、hd_j16_xiaowu_heir_set、hd_j16_xinting_early；面板 hd_hev_j16_xiaowu_li
+############################################################
+hd_j16_node_xiaowu_li_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_xiaowu_li_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_xiaowu_li_done
+			debug_log = "HD_J16 e4_j15 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 372.6.1 }
+			if = {
+				limit = { current_date >= 373.6.2 }
+				set_global_variable = hd_j16_xiaowu_li_done
+				set_global_variable = hd_j16_xiaowu_li_skip
+				debug_log = "HD_J16 e4_j15 SKIP window_closed"
+			}
+			else_if = {
+				limit = { hd_j16_dead_trigger = { ID = si_ma_yao } }
+				set_global_variable = hd_j16_xiaowu_li_done
+				set_global_variable = hd_j16_xiaowu_li_skip
+				debug_log = "HD_J16 e4_j15 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_370b_res_effect = { ID = si_ma_yu_2 AS = hd_j16_kxw_yu }
+				hd_j16_370b_res_effect = { ID = si_ma_yao AS = hd_j16_kxw_yao }
+				if = {
+					limit = { scope:hd_j16_kxw_yao ?= { has_title = title:h_china } }
+					set_global_variable = hd_j16_xiaowu_li_done
+					hd_j16_xiaowu_li_effect = yes
+				}
+				else_if = {
+					limit = {
+						NOT = { has_global_variable = hd_j16_xiaowu_heir_set }
+						exists = scope:hd_j16_kxw_yao
+						scope:hd_j16_kxw_yu ?= { has_title = title:h_china }
+					}
+					set_global_variable = hd_j16_xiaowu_heir_set
+					# R-继统先例（3-B1）：只给 AI 天子指定储君，玩家天子只记日志
+					if = {
+						limit = { scope:hd_j16_kxw_yu = { is_ai = yes } }
+						scope:hd_j16_kxw_yu = { set_designated_heir = scope:hd_j16_kxw_yao }
+						debug_log = "HD_J16 e4_j15 FIRE designated_heir"
+					}
+					else = {
+						debug_log = "HD_J16 e4_j15 WAIT player_heir_untouched"
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_xiaowu_li_wlog } }
+					set_global_variable = hd_j16_xiaowu_li_wlog
+					if = {
+						limit = { NOT = { exists = scope:hd_j16_kxw_yao } }
+						debug_log = "HD_J16 e4_j15 WAIT no_actor"
+					}
+					else = {
+						debug_log = "HD_J16 e4_j15 WAIT not_ready"
+					}
+				}
+			}
+		}
+	}
+}
+
+# 孝武即位（fire）。Root：任意
+hd_j16_xiaowu_li_effect = {
+	set_global_variable = hd_j16_xiaowu_li_result
+	set_global_variable = hd_hev_j16_xiaowu_li
+	hd_j16_370b_res_effect = { ID = si_ma_yao AS = hd_j16_kxw_yao }
+	hd_j16_370b_res_effect = { ID = longkang_huan_017 AS = hd_j16_kxw_huan }
+	scope:hd_j16_kxw_yao ?= {
+		add_prestige = 100
+		hd_j16_370b_news_effect = { WHO = scope:hd_j16_kxw_yao EVENT = hd_j16.4501 }
+	}
+	scope:hd_j16_kxw_huan ?= {
+		add_character_modifier = { modifier = hd_j16_wangjue_modifier years = 1 }
+		add_stress = minor_stress_gain
+		if = {
+			limit = { is_ai = no }
+			trigger_event = hd_j16.4500
+		}
+	}
+	debug_log = "HD_J16 e4_j15 FIRE xiaowu_li"
+}
+
+############################################################
+# E4-J20 新亭之会【软】（04 §3.1、§6）
+# 窗口 373.2.1 – 373.5.1（玩家桓温在 E4-J15 选「入朝问罪」时提前到 372.12.1）。上游 E4-J15（读 done）。
+# 桓温 longkang_huan_017 在世、是权臣（hd_court_is_regent_trigger）；谢安 chenjun_xie_030 在世、在晋天子政权内；王坦之 taiyuan_wang_055 可缺。
+# 谢安是玩家：hd_j16.4510（a 赋洛生咏，检定 / b 依附桓氏 / c 称疾不往）；否则桓温是玩家：hd_j16.4511（a 解兵还镇 / b 欲诛王谢）；全是 AI：照史实（从容）。
+# 变量：hd_j16_xinting_done/_skip/_wlog/_result、hd_j16_xinting_calm（谢安卡 xan_feishui b3 读）、hd_j16_xinting_yifu；面板 hd_hev_j16_xinting
+############################################################
+hd_j16_node_xinting_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_xinting_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_xinting_done
+			debug_log = "HD_J16 e4_j20 SKIP prestart"
+		}
+		else_if = {
+			limit = {
+				OR = {
+					current_date >= 373.2.1
+					AND = {
+						has_global_variable = hd_j16_xinting_early
+						current_date >= 372.12.1
+					}
+				}
+			}
+			if = {
+				limit = { current_date >= 373.5.2 }
+				set_global_variable = hd_j16_xinting_done
+				set_global_variable = hd_j16_xinting_skip
+				debug_log = "HD_J16 e4_j20 SKIP window_closed"
+			}
+			else_if = {
+				limit = {
+					OR = {
+						hd_j16_dead_trigger = { ID = longkang_huan_017 }
+						hd_j16_dead_trigger = { ID = chenjun_xie_030 }
+					}
+				}
+				set_global_variable = hd_j16_xinting_done
+				set_global_variable = hd_j16_xinting_skip
+				debug_log = "HD_J16 e4_j20 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_370b_res_effect = { ID = longkang_huan_017 AS = hd_j16_kxt_huan }
+				hd_j16_370b_res_effect = { ID = chenjun_xie_030 AS = hd_j16_kxt_xie }
+				if = {
+					limit = {
+						has_global_variable = hd_j16_xiaowu_li_done
+						scope:hd_j16_kxt_huan ?= {
+							is_imprisoned = no
+							hd_court_is_regent_trigger = yes
+						}
+						scope:hd_j16_kxt_xie ?= {
+							is_imprisoned = no
+							hd_j16_370b_in_jin_trigger = yes
+						}
+					}
+					set_global_variable = hd_j16_xinting_done
+					if = {
+						limit = { scope:hd_j16_kxt_xie = { is_ai = no } }
+						scope:hd_j16_kxt_xie = { trigger_event = hd_j16.4510 }
+						debug_log = "HD_J16 e4_j20 WAIT player_asked"
+					}
+					else_if = {
+						limit = { scope:hd_j16_kxt_huan = { is_ai = no } }
+						scope:hd_j16_kxt_huan = { trigger_event = hd_j16.4511 }
+						debug_log = "HD_J16 e4_j20 WAIT player_asked"
+					}
+					else = {
+						hd_j16_xinting_calm_effect = yes
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_xinting_wlog } }
+					set_global_variable = hd_j16_xinting_wlog
+					debug_log = "HD_J16 e4_j20 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+# 新亭之会三人（执行体开头都调）
+hd_j16_xinting_res_effect = {
+	hd_j16_370b_res_effect = { ID = longkang_huan_017 AS = hd_j16_kxt_huan }
+	hd_j16_370b_res_effect = { ID = chenjun_xie_030 AS = hd_j16_kxt_xie }
+	hd_j16_370b_res_effect = { ID = taiyuan_wang_055 AS = hd_j16_kxt_wang }
+}
+
+# 史实：谢安从容，桓温解兵（AI 默认；4510 a 检定成功；4511 a）
+hd_j16_xinting_calm_effect = {
+	hd_j16_xinting_res_effect = yes
+	set_global_variable = hd_j16_xinting_result
+	set_global_variable = hd_hev_j16_xinting
+	set_global_variable = hd_j16_xinting_calm
+	scope:hd_j16_kxt_xie ?= { add_prestige = 150 }
+	scope:hd_j16_kxt_wang ?= { add_prestige = 50 }
+	scope:hd_j16_kxt_huan ?= {
+		if = {
+			limit = { exists = scope:hd_j16_kxt_xie }
+			add_opinion = { target = scope:hd_j16_kxt_xie modifier = hd_j16_xinting_calm_opinion }
+		}
+	}
+	debug_log = "HD_J16 e4_j20 FIRE calm"
+}
+
+# 4510 a 检定失败：神色稍动，桓温不以为意
+hd_j16_xinting_fail_effect = {
+	hd_j16_xinting_res_effect = yes
+	set_global_variable = hd_j16_xinting_result
+	set_global_variable = hd_hev_j16_xinting
+	scope:hd_j16_kxt_xie ?= { add_stress = minor_stress_gain }
+	debug_log = "HD_J16 e4_j20 FIRE uneasy"
+}
+
+# 4510 b 依附桓氏
+hd_j16_xinting_yifu_effect = {
+	hd_j16_xinting_res_effect = yes
+	set_global_variable = hd_j16_xinting_result
+	set_global_variable = hd_hev_j16_xinting
+	set_global_variable = hd_j16_xinting_yifu
+	scope:hd_j16_kxt_huan ?= {
+		if = {
+			limit = { exists = scope:hd_j16_kxt_xie }
+			add_opinion = { target = scope:hd_j16_kxt_xie modifier = hd_j16_xinting_yifu_opinion }
+		}
+	}
+	debug_log = "HD_J16 e4_j20 FIRE yifu"
+}
+
+# 4510 c 称疾不往
+hd_j16_xinting_bingbu_effect = {
+	hd_j16_xinting_res_effect = yes
+	set_global_variable = hd_j16_xinting_result
+	set_global_variable = hd_hev_j16_xinting
+	scope:hd_j16_kxt_xie ?= { add_prestige = -100 }
+	debug_log = "HD_J16 e4_j20 FIRE bingbu"
+}
+
+# 4511 b 桓温欲诛王谢：桓温得「杀心」（谋略 +2，2 年；04 自拟的「关押、谋杀便利」近似）；
+#   晋廷世族好感 −30：谢安、王坦之、天子各一次，另加天子的廷臣与直属封臣中的世族（hd_party_is_shizu_trigger；排除桓温本人、龙亢桓氏、谢安、王坦之，免重复）；
+#   开放现成的 hd_court 篡位条件、不强制：去掉桓温的 hd_court_regent_tenure 旗标（370 开局挂 12 年），「废为礼仪君主」决议即可用（仍需和平、威望等级 3、500 威望）
+hd_j16_xinting_shaxin_effect = {
+	hd_j16_xinting_res_effect = yes
+	set_global_variable = hd_j16_xinting_result
+	set_global_variable = hd_hev_j16_xinting
+	scope:hd_j16_kxt_huan ?= {
+		add_character_modifier = { modifier = hd_j16_shaxin_modifier years = 2 }
+		if = {
+			limit = { has_character_flag = hd_court_regent_tenure }
+			remove_character_flag = hd_court_regent_tenure
+		}
+		save_scope_as = hd_j16_kxt_tgt
+		scope:hd_j16_kxt_xie ?= { add_opinion = { target = scope:hd_j16_kxt_tgt modifier = hd_j16_shaxin_opinion } }
+		scope:hd_j16_kxt_wang ?= { add_opinion = { target = scope:hd_j16_kxt_tgt modifier = hd_j16_shaxin_opinion } }
+		title:h_china.holder ?= {
+			if = {
+				limit = { NOT = { this = scope:hd_j16_kxt_tgt } }
+				add_opinion = { target = scope:hd_j16_kxt_tgt modifier = hd_j16_shaxin_opinion }
+				every_courtier = {
+					limit = { hd_j16_370b_shaxin_shizu_trigger = yes }
+					add_opinion = { target = scope:hd_j16_kxt_tgt modifier = hd_j16_shaxin_opinion }
+				}
+				every_vassal = {
+					limit = { hd_j16_370b_shaxin_shizu_trigger = yes }
+					add_opinion = { target = scope:hd_j16_kxt_tgt modifier = hd_j16_shaxin_opinion }
+				}
+			}
+		}
+	}
+	debug_log = "HD_J16 e4_j20 FIRE shaxin"
+}
+
+############################################################
+# E4-J25 求九锡·拖延【软】（04 §3.1、§6）
+# 窗口 373.3.1 – 373.8.18（桓温卒即止）。上游 E4-J20（读 done）。桓温在世、是权臣。袁宏 yuan_hong 只出现在文案。
+# 谢安是玩家：hd_j16.4521（a 屡改其文，拖延 / b 速予九锡）；否则桓温是玩家：hd_j16.4520（a 催促：谢安、王坦之都不是玩家时 40% 得九锡 / b 作罢）；全是 AI：拖延。
+# 得九锡：不新建头衔、不动 WJ 爵制（wj_peer_rank 牵涉封国绑定），只给桓温人物变量 hd_j16_jiuxi 与修正「九锡」；
+#   志向卡 hd_asp_jiuxi_or_peer_trigger 不认它，交 3-D 的写入者在该触发器加一支 has_variable = hd_j16_jiuxi（报告「需汇总人处理」）。
+# 变量：hd_j16_jiuxi_done/_skip/_wlog/_result、hd_j16_jiuxi_granted；面板 hd_hev_j16_jiuxi
+############################################################
+hd_j16_node_jiuxi_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_jiuxi_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_jiuxi_done
+			debug_log = "HD_J16 e4_j25 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 373.3.1 }
+			if = {
+				limit = { current_date >= 373.8.19 }
+				set_global_variable = hd_j16_jiuxi_done
+				set_global_variable = hd_j16_jiuxi_skip
+				debug_log = "HD_J16 e4_j25 SKIP window_closed"
+			}
+			else_if = {
+				limit = { hd_j16_dead_trigger = { ID = longkang_huan_017 } }
+				set_global_variable = hd_j16_jiuxi_done
+				set_global_variable = hd_j16_jiuxi_skip
+				debug_log = "HD_J16 e4_j25 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_xinting_res_effect = yes
+				if = {
+					limit = {
+						has_global_variable = hd_j16_xinting_done
+						scope:hd_j16_kxt_huan ?= {
+							is_imprisoned = no
+							hd_court_is_regent_trigger = yes
+						}
+					}
+					set_global_variable = hd_j16_jiuxi_done
+					if = {
+						limit = {
+							scope:hd_j16_kxt_xie ?= {
+								is_ai = no
+								hd_j16_370b_in_jin_trigger = yes
+							}
+						}
+						scope:hd_j16_kxt_xie = { trigger_event = hd_j16.4521 }
+						debug_log = "HD_J16 e4_j25 WAIT player_asked"
+					}
+					else_if = {
+						limit = { scope:hd_j16_kxt_huan = { is_ai = no } }
+						scope:hd_j16_kxt_huan = { trigger_event = hd_j16.4520 }
+						debug_log = "HD_J16 e4_j25 WAIT player_asked"
+					}
+					else = {
+						hd_j16_jiuxi_delay_effect = yes
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_jiuxi_wlog } }
+					set_global_variable = hd_j16_jiuxi_wlog
+					debug_log = "HD_J16 e4_j25 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+# 史实：九锡之文屡改不成，拖到桓温病笃
+hd_j16_jiuxi_delay_effect = {
+	hd_j16_xinting_res_effect = yes
+	set_global_variable = hd_j16_jiuxi_result
+	set_global_variable = hd_hev_j16_jiuxi
+	scope:hd_j16_kxt_xie ?= { add_prestige = 100 }
+	scope:hd_j16_kxt_wang ?= { add_prestige = 100 }
+	scope:hd_j16_kxt_huan ?= { add_stress = minor_stress_gain }
+	debug_log = "HD_J16 e4_j25 FIRE delay"
+}
+
+# 得九锡
+hd_j16_jiuxi_grant_effect = {
+	hd_j16_xinting_res_effect = yes
+	set_global_variable = hd_j16_jiuxi_result
+	set_global_variable = hd_hev_j16_jiuxi
+	set_global_variable = hd_j16_jiuxi_granted
+	scope:hd_j16_kxt_huan ?= {
+		set_variable = hd_j16_jiuxi
+		add_character_modifier = hd_j16_jiuxi_modifier
+		add_prestige = 300
+	}
+	debug_log = "HD_J16 e4_j25 FIRE granted"
+}
+
+############################################################
+# E4-J30 桓温卒·遗命【软】（04 §3.1、§3.2）
+# 卒年本身是特殊卒年 hd_j16_death_huanwen_effect（2-D：先设权臣交接阻断 hd_j16_handoff_block，再按 N 类病逝）；本节点只补节点侧。
+# 窗口 373.3.1 – 384.1.1（桓温玩家强撑可拖到 DATE10 383.8.18）。窗口内首跳桓温在世即记 hd_j16_huanwen_dead_open；
+#   之后桓温已死 → fire。首跳时桓温已死（死在窗口前，304/346 局偏离）→ 跳过。
+# fire：① 遗命风味：桓冲 longkang_huan_021 统其众（威望）、桓玄 longkang_huan_027 袭南郡公（威望，只发新闻）；
+#   ② 桓熙 longkang_huan_022 谋害桓冲（在世且是 AI）：事泄被徙，桓冲对他 −50，桓熙得「流徙」10 年；
+#   ③ 设 hd_j16_huanwen_dead_done（04 原名，即本节点 done）。
+# 变量：hd_j16_huanwen_dead_done/_skip/_result/_open；面板 hd_hev_j16_huanwen_dead（04 §1.5 第 09 行「桓温卒」）
+############################################################
+hd_j16_node_huanwen_dead_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_huanwen_dead_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_huanwen_dead_done
+			debug_log = "HD_J16 e4_j30 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 373.3.1 }
+			if = {
+				limit = { current_date >= 384.1.1 }
+				set_global_variable = hd_j16_huanwen_dead_done
+				set_global_variable = hd_j16_huanwen_dead_skip
+				debug_log = "HD_J16 e4_j30 SKIP window_closed"
+			}
+			else_if = {
+				limit = { hd_j16_dead_trigger = { ID = longkang_huan_017 } }
+				set_global_variable = hd_j16_huanwen_dead_done
+				if = {
+					limit = { has_global_variable = hd_j16_huanwen_dead_open }
+					hd_j16_huanwen_dead_effect = yes
+				}
+				else = {
+					set_global_variable = hd_j16_huanwen_dead_skip
+					debug_log = "HD_J16 e4_j30 SKIP actor_dead"
+				}
+			}
+			else_if = {
+				limit = { NOT = { has_global_variable = hd_j16_huanwen_dead_open } }
+				# 桓温在世（或尚未出场）：记下窗口已开，等卒年执行
+				set_global_variable = hd_j16_huanwen_dead_open
+				debug_log = "HD_J16 e4_j30 WAIT not_ready"
+			}
+		}
+	}
+}
+
+hd_j16_huanwen_dead_effect = {
+	set_global_variable = hd_j16_huanwen_dead_result
+	set_global_variable = hd_hev_j16_huanwen_dead
+	hd_j16_370b_res_effect = { ID = longkang_huan_021 AS = hd_j16_khw_chong }
+	hd_j16_370b_res_effect = { ID = longkang_huan_022 AS = hd_j16_khw_xi }
+	hd_j16_370b_res_effect = { ID = longkang_huan_027 AS = hd_j16_khw_xuan }
+	scope:hd_j16_khw_chong ?= { add_prestige = 150 }
+	scope:hd_j16_khw_xuan ?= { add_prestige = 50 }
+	# ② 桓熙谋害桓冲，事泄被徙
+	if = {
+		limit = {
+			exists = scope:hd_j16_khw_chong
+			scope:hd_j16_khw_xi ?= { is_ai = yes }
+		}
+		scope:hd_j16_khw_xi = {
+			add_character_modifier = { modifier = hd_j16_liufang_modifier years = 10 }
+		}
+		scope:hd_j16_khw_chong = {
+			add_opinion = { target = scope:hd_j16_khw_xi modifier = hd_j16_huanxi_plot_opinion }
+		}
+		debug_log = "HD_J16 e4_j30 FIRE huanxi_exiled"
+	}
+	# 新闻主事人：桓冲（缺则天子）
+	if = {
+		limit = { exists = scope:hd_j16_khw_chong }
+		hd_j16_370b_news_effect = { WHO = scope:hd_j16_khw_chong EVENT = hd_j16.4530 }
+	}
+	else_if = {
+		limit = { exists = title:h_china.holder }
+		hd_j16_370b_news_effect = { WHO = title:h_china.holder EVENT = hd_j16.4530 }
+	}
+	debug_log = "HD_J16 e4_j30 FIRE huanwen_dead"
+}
+
+############################################################
+# E4-J40 谢王秉政·桓冲解扬州【软】（04 §3.1、§3.2 第 5 步；G4、G5 ★A）
+# 窗口 373.9.1 – 376.1.1。窗口内每跳先兜底删 title:h_china 上的 hd_j16_handoff_block（repair 已用后即删，见 p3-A 报告）。
+# 条件：上游 E4-J30 done；桓温已死；天子是司马氏；h_china 上没有桓氏权臣；谢安在世、在晋天子政权内。
+# 天子是玩家：hd_j16.4540（a 委政谢安 / b 亲揽，不任命）；否则直接执行。桓冲是玩家：hd_j16.4541（a 解扬州出镇 / b 据位不让，谢安对他 −30）；AI 桓冲照 a。
+# 执行：只授朝官，不装 hd_court 权臣——谢安 e_minister_of_personnel（尚书令，谢安卡 b2 hd_asp2_shangshuling_trigger 认它）、
+#   王坦之 e_minister_chancellor（中书令，借原版司徒席位；有地无地都授，有地走 granted）；之后由 hd_j16_xiewang_guangling_effect 把广陵 d_guangling 授王坦之
+#   （D16，1 郡；AI 路径同一跳内先授官后授郡，玩家事件路径下一跳）。
+#   「桓冲解扬州」不转头衔（扬州由天子直辖，G5 ★A），只给桓冲威望与对天子、谢安的好感。
+# 变量：hd_j16_xiewang_done/_skip/_wlog/_result、hd_j16_xiewang_gl_pending；面板 hd_hev_j16_xiewang
+############################################################
+hd_j16_node_xiewang_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_xiewang_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_xiewang_done
+			debug_log = "HD_J16 e4_j40 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 373.9.1 }
+			# 04 §3.2 第 5 步：兜底删阻断（头衔变量）
+			if = {
+				limit = {
+					title:h_china = { has_variable = hd_j16_handoff_block }
+					hd_j16_dead_trigger = { ID = longkang_huan_017 }
+				}
+				title:h_china = { remove_variable = hd_j16_handoff_block }
+				debug_log = "HD_J16 e4_j40 FIRE handoff_block_cleared"
+			}
+			if = {
+				limit = { current_date >= 376.1.2 }
+				set_global_variable = hd_j16_xiewang_done
+				set_global_variable = hd_j16_xiewang_skip
+				debug_log = "HD_J16 e4_j40 SKIP window_closed"
+			}
+			else_if = {
+				limit = { hd_j16_dead_trigger = { ID = chenjun_xie_030 } }
+				set_global_variable = hd_j16_xiewang_done
+				set_global_variable = hd_j16_xiewang_skip
+				debug_log = "HD_J16 e4_j40 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_xinting_res_effect = yes
+				if = {
+					limit = {
+						has_global_variable = hd_j16_huanwen_dead_done
+						hd_j16_dead_trigger = { ID = longkang_huan_017 }
+						hd_j16_370b_jin_sima_trigger = yes
+						NOT = { hd_j16_370b_huan_regent_trigger = yes }
+						scope:hd_j16_kxt_xie ?= {
+							is_imprisoned = no
+							hd_j16_370b_in_jin_trigger = yes
+						}
+					}
+					set_global_variable = hd_j16_xiewang_done
+					# 桓冲解扬州（与天子的决定无关）
+					hd_j16_370b_res_effect = { ID = longkang_huan_021 AS = hd_j16_kxa_chong }
+					scope:hd_j16_kxa_chong ?= {
+						if = {
+							limit = { is_ai = yes }
+							hd_j16_xiewang_rang_effect = yes
+						}
+						else = { trigger_event = hd_j16.4541 }
+					}
+					title:h_china.holder = {
+						if = {
+							limit = { is_ai = yes }
+							hd_j16_xiewang_effect = yes
+						}
+						else = {
+							trigger_event = hd_j16.4540
+							debug_log = "HD_J16 e4_j40 WAIT player_asked"
+						}
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_xiewang_wlog } }
+					set_global_variable = hd_j16_xiewang_wlog
+					debug_log = "HD_J16 e4_j40 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+# 委政谢安、王坦之（AI 天子；4540 a）
+hd_j16_xiewang_effect = {
+	hd_j16_xinting_res_effect = yes
+	set_global_variable = hd_j16_xiewang_result
+	set_global_variable = hd_hev_j16_xiewang
+	hd_j16_370b_office_effect = { WHO = scope:hd_j16_kxt_xie TITLE = e_minister_of_personnel POS = minister_personnel LOG = e4_j40 }
+	hd_j16_370b_office_effect = { WHO = scope:hd_j16_kxt_wang TITLE = e_minister_chancellor POS = councillor_chancellor LOG = e4_j40 }
+	# 广陵授王坦之由入口里紧随其后的 hd_j16_xiewang_guangling_effect 执行：AI 路径同一跳内先授官、后授郡（免无地者授官走 appointment 时
+	#   已持郡而辞地）；玩家天子经 4540 a 执行本效果时，授郡在下一跳。
+	if = {
+		limit = { exists = scope:hd_j16_kxt_wang }
+		set_global_variable = hd_j16_xiewang_gl_pending
+	}
+	scope:hd_j16_kxt_xie ?= { add_prestige = 100 }
+	debug_log = "HD_J16 e4_j40 FIRE xiewang"
+}
+
+# 4540 b 天子亲揽：节点了结，不任命
+hd_j16_xiewang_qinlan_effect = {
+	set_global_variable = hd_j16_xiewang_result
+	set_global_variable = hd_hev_j16_xiewang
+	debug_log = "HD_J16 e4_j40 FIRE qinlan"
+}
+
+# 桓冲解扬州出镇（AI 桓冲；4541 a）
+hd_j16_xiewang_rang_effect = {
+	hd_j16_370b_res_effect = { ID = longkang_huan_021 AS = hd_j16_kxa_chong }
+	hd_j16_370b_res_effect = { ID = chenjun_xie_030 AS = hd_j16_kxa_xie }
+	scope:hd_j16_kxa_chong ?= {
+		add_prestige = 150
+		save_scope_as = hd_j16_kxa_tgt
+		title:h_china.holder ?= {
+			if = {
+				limit = { NOT = { this = scope:hd_j16_kxa_tgt } }
+				add_opinion = { target = scope:hd_j16_kxa_tgt modifier = hd_j16_huanchong_rang_opinion }
+			}
+		}
+		scope:hd_j16_kxa_xie ?= { add_opinion = { target = scope:hd_j16_kxa_tgt modifier = hd_j16_huanchong_rang_opinion } }
+	}
+	debug_log = "HD_J16 e4_j40 FIRE huanchong_rang"
+}
+
+# 4541 b 桓冲据位不让：谢安对他 −30，之后不强制
+hd_j16_xiewang_juwei_effect = {
+	hd_j16_370b_res_effect = { ID = longkang_huan_021 AS = hd_j16_kxa_chong }
+	hd_j16_370b_res_effect = { ID = chenjun_xie_030 AS = hd_j16_kxa_xie }
+	scope:hd_j16_kxa_chong ?= {
+		save_scope_as = hd_j16_kxa_tgt
+		scope:hd_j16_kxa_xie ?= { add_opinion = { target = scope:hd_j16_kxa_tgt modifier = hd_j16_huanchong_juwei_opinion } }
+	}
+	debug_log = "HD_J16 e4_j40 FIRE huanchong_juwei"
+}
+
+# E4-J40 第二步：广陵 d_guangling 授王坦之（D16，1 郡，持有者须是同政权的 AI；04 写「取自桓温继承人」，这里放宽为任何同政权 AI）。
+# 每跳试一次，成功、王坦之已死或已持郡、窗口过了（376.1.2）即清 pending
+hd_j16_xiewang_guangling_effect = {
+	if = {
+		limit = { has_global_variable = hd_j16_xiewang_gl_pending }
+		hd_j16_370b_res_effect = { ID = taiyuan_wang_055 AS = hd_j16_kxa_wang }
+		if = {
+			limit = {
+				exists = scope:hd_j16_kxa_wang
+				current_date < 376.1.2
+				hd_j16_370b_grantable_trigger = { DUCHY = title:d_guangling TO = scope:hd_j16_kxa_wang }
+			}
+			hd_j16_370b_grant_duchy_effect = { DUCHY = title:d_guangling TO = scope:hd_j16_kxa_wang LOG = e4_j40 }
+			remove_global_variable = hd_j16_xiewang_gl_pending
+		}
+		else_if = {
+			limit = {
+				OR = {
+					NOT = { exists = scope:hd_j16_kxa_wang }
+					current_date >= 376.1.2
+					scope:hd_j16_kxa_wang = { hd_j16_370b_no_duchy_trigger = no }
+				}
+			}
+			remove_global_variable = hd_j16_xiewang_gl_pending
+			debug_log = "HD_J16 e4_j40 SKIP guangling_not_granted"
+		}
+	}
+}
+
+############################################################
+# E4-J50 孝武亲政【软，风味】（04 §3.1）
+# 窗口 376.1.1 – 377.1.1。天子是司马曜、年满 14（CK3 摄政随成年自动结束，本节点只做风味）。上游 E4-J15（读 done）。
+# fire：新闻「太后归政」，天子威望 +100。无分支。
+# 变量：hd_j16_qinzheng_done/_skip/_wlog/_result；面板 hd_hev_j16_qinzheng
+############################################################
+hd_j16_node_qinzheng_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_qinzheng_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_qinzheng_done
+			debug_log = "HD_J16 e4_j50 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 376.1.1 }
+			if = {
+				limit = { current_date >= 377.1.2 }
+				set_global_variable = hd_j16_qinzheng_done
+				set_global_variable = hd_j16_qinzheng_skip
+				debug_log = "HD_J16 e4_j50 SKIP window_closed"
+			}
+			else_if = {
+				limit = { hd_j16_dead_trigger = { ID = si_ma_yao } }
+				set_global_variable = hd_j16_qinzheng_done
+				set_global_variable = hd_j16_qinzheng_skip
+				debug_log = "HD_J16 e4_j50 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_370b_res_effect = { ID = si_ma_yao AS = hd_j16_kqz_yao }
+				if = {
+					limit = {
+						has_global_variable = hd_j16_xiaowu_li_done
+						scope:hd_j16_kqz_yao ?= {
+							has_title = title:h_china
+							age >= 14
+						}
+					}
+					set_global_variable = hd_j16_qinzheng_done
+					set_global_variable = hd_j16_qinzheng_result
+					set_global_variable = hd_hev_j16_qinzheng
+					scope:hd_j16_kqz_yao = { add_prestige = 100 }
+					hd_j16_370b_news_effect = { WHO = scope:hd_j16_kqz_yao EVENT = hd_j16.4550 }
+					debug_log = "HD_J16 e4_j50 FIRE qinzheng"
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_qinzheng_wlog } }
+					set_global_variable = hd_j16_qinzheng_wlog
+					debug_log = "HD_J16 e4_j50 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+############################################################
+# E4-J60 北府兵【软】（04 §3.1、§6）
+# 窗口 377.6.1 – 380.1.1（史实 377.10）。上游 E4-J40（读 done）。
+# 谢玄 chenjun_xie_017 在世、在晋天子政权内、不持郡；广陵 d_guangling 由同政权的 AI 持有（hd_j16_370b_grantable_trigger）。
+#   自拟收窄：04 写「持有者是 AI 或空缺」，空缺一支不做——空缺的郡头衔下没有随授的县，谢玄会持郡而无 capital_county，
+#   J80 的事件兵（hd_j16_370b_army_effect）与北伐开战都要 capital_county，反把链条弄断；空缺时等到窗口关闭跳过。
+# 谢安是玩家：hd_j16.4560（a 举贤不避亲 / b 另荐他人，节点了结无效果）；谢安非玩家而天子是玩家：hd_j16.4561（a 准 / b 不准）；全是 AI：执行。
+# 执行：广陵授谢玄（D16，1 郡）；谢玄得「北府兵」10 年（重步兵战力、补员；mod 的北府兵种 hd_yiguan_beifu 只在衣冠南渡局势进行中可招，不给团）；
+#   刘牢之 congtingli_liu_043、何谦 donghai_he_qian 是 AI、无地、非议员时入谢玄宫廷。
+# 变量：hd_j16_beifu_done/_skip/_wlog/_result、hd_j16_beifu_refused；面板 hd_hev_j16_beifu（04 §1.5 第 10 行）
+############################################################
+hd_j16_node_beifu_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_beifu_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_beifu_done
+			debug_log = "HD_J16 e4_j60 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 377.6.1 }
+			if = {
+				limit = { current_date >= 380.1.2 }
+				set_global_variable = hd_j16_beifu_done
+				set_global_variable = hd_j16_beifu_skip
+				debug_log = "HD_J16 e4_j60 SKIP window_closed"
+			}
+			else_if = {
+				limit = { hd_j16_dead_trigger = { ID = chenjun_xie_017 } }
+				set_global_variable = hd_j16_beifu_done
+				set_global_variable = hd_j16_beifu_skip
+				debug_log = "HD_J16 e4_j60 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_beifu_res_effect = yes
+				if = {
+					limit = {
+						has_global_variable = hd_j16_xiewang_done
+						exists = scope:hd_j16_kbf_xuan
+						hd_j16_370b_grantable_trigger = { DUCHY = title:d_guangling TO = scope:hd_j16_kbf_xuan }
+					}
+					set_global_variable = hd_j16_beifu_done
+					if = {
+						limit = {
+							scope:hd_j16_kbf_an ?= {
+								is_ai = no
+								hd_j16_370b_in_jin_trigger = yes
+							}
+						}
+						scope:hd_j16_kbf_an = { trigger_event = hd_j16.4560 }
+						debug_log = "HD_J16 e4_j60 WAIT player_asked"
+					}
+					else_if = {
+						limit = { title:h_china.holder = { is_ai = no } }
+						title:h_china.holder = { trigger_event = hd_j16.4561 }
+						debug_log = "HD_J16 e4_j60 WAIT player_asked"
+					}
+					else = {
+						hd_j16_beifu_effect = yes
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_beifu_wlog } }
+					set_global_variable = hd_j16_beifu_wlog
+					debug_log = "HD_J16 e4_j60 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+hd_j16_beifu_res_effect = {
+	hd_j16_370b_res_effect = { ID = chenjun_xie_017 AS = hd_j16_kbf_xuan }
+	hd_j16_370b_res_effect = { ID = chenjun_xie_030 AS = hd_j16_kbf_an }
+}
+
+# 执行（AI；4560 a 且天子 AI；4561 a）。事件里执行时重新判一次可授
+hd_j16_beifu_effect = {
+	hd_j16_beifu_res_effect = yes
+	if = {
+		limit = {
+			exists = scope:hd_j16_kbf_xuan
+			hd_j16_370b_grantable_trigger = { DUCHY = title:d_guangling TO = scope:hd_j16_kbf_xuan }
+		}
+		set_global_variable = hd_j16_beifu_result
+		set_global_variable = hd_hev_j16_beifu
+		hd_j16_370b_grant_duchy_effect = { DUCHY = title:d_guangling TO = scope:hd_j16_kbf_xuan LOG = e4_j60 }
+		scope:hd_j16_kbf_xuan = {
+			add_character_modifier = { modifier = hd_j16_beifu_modifier years = 10 }
+			add_prestige = 100
+		}
+		hd_j16_370b_res_effect = { ID = congtingli_liu_043 AS = hd_j16_kbf_liu }
+		hd_j16_370b_res_effect = { ID = donghai_he_qian AS = hd_j16_kbf_he }
+		hd_j16_370b_employ_effect = { WHO = scope:hd_j16_kbf_liu TO = scope:hd_j16_kbf_xuan }
+		hd_j16_370b_employ_effect = { WHO = scope:hd_j16_kbf_he TO = scope:hd_j16_kbf_xuan }
+		debug_log = "HD_J16 e4_j60 FIRE beifu"
+	}
+	else = {
+		set_global_variable = hd_j16_beifu_refused
+		debug_log = "HD_J16 e4_j60 SKIP player_late_reply"
+	}
+}
+
+############################################################
+# E4-J80 谢玄北伐【软，战争】（04 §1.3、§3.1）
+# 窗口 384.1.1 – 386.1.1。上游 E4-Q50/Q51 淝水：hd_nbc_feishui_lost 或 _white（秦败或白和，以攻方前秦论）。
+# 谢玄有地、在晋天子政权内；淮北目标：先试彭城 d_pencheng、下邳 d_xiapei，再按汉代徐、兖、青、豫四州静态区域找一县——不归晋、与晋接壤、
+#   其郡治也不归晋（hd_j16_370b_beifa_county_trigger）。守方取该县持有者的最高领主，目标为该县所在郡，关键县为郡治。
+# 宣战：hd_nbc_start_war_effect（连通筛选，D24 豁免内），先由谢玄本人宣战，不成再由天子宣战、谢玄入攻方（照 hd_nbc_vassal_war_effect，人物改 scope）。
+#   开战成功才设 _started/_result、给谢玄 1 万事件兵；失败下一跳重试。谢玄是玩家：hd_j16.4580（a 北伐 / b 守境，节点了结）。
+# 结局：攻守双方都已不在 KIND=xiebeifa 的战争里 → 关键县归晋一方为 _won（谢安卡 xan_huandu b2 读），否则 _lost；清 hd_nbc_xiebeifa_active。
+# 变量：hd_j16_xiebeifa_done/_skip/_wlog/_wsf_wlog/_result/_started/_won/_lost/_att/_def/_key/_asked/_go；面板 hd_hev_j16_xiebeifa
+############################################################
+hd_j16_node_xiebeifa_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_xiebeifa_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_xiebeifa_done
+			debug_log = "HD_J16 e4_j80 SKIP prestart"
+		}
+		else_if = {
+			limit = { has_global_variable = hd_j16_xiebeifa_started }
+			hd_j16_xiebeifa_judge_effect = yes
+		}
+		else_if = {
+			limit = { current_date >= 384.1.1 }
+			if = {
+				limit = { current_date >= 386.1.2 }
+				set_global_variable = hd_j16_xiebeifa_done
+				set_global_variable = hd_j16_xiebeifa_skip
+				debug_log = "HD_J16 e4_j80 SKIP window_closed"
+			}
+			else_if = {
+				limit = { hd_j16_dead_trigger = { ID = chenjun_xie_017 } }
+				set_global_variable = hd_j16_xiebeifa_done
+				set_global_variable = hd_j16_xiebeifa_skip
+				debug_log = "HD_J16 e4_j80 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_370b_res_effect = { ID = chenjun_xie_017 AS = hd_j16_kxb_xie }
+				if = {
+					limit = {
+						OR = {
+							has_global_variable = hd_nbc_feishui_lost
+							has_global_variable = hd_nbc_feishui_white
+						}
+						scope:hd_j16_kxb_xie ?= {
+							is_landed = yes
+							is_imprisoned = no
+							hd_j16_370b_in_jin_trigger = yes
+						}
+					}
+					hd_j16_xiebeifa_pick_effect = yes
+				}
+				if = {
+					limit = {
+						exists = scope:hd_j16_kxb_tgt
+						exists = scope:hd_j16_kxb_def
+						scope:hd_j16_kxb_xie ?= { is_landed = yes }
+					}
+					if = {
+						limit = {
+							OR = {
+								scope:hd_j16_kxb_xie = { is_ai = yes }
+								has_global_variable = hd_j16_xiebeifa_go
+							}
+						}
+						hd_j16_xiebeifa_war_effect = yes
+					}
+					else_if = {
+						limit = { NOT = { has_global_variable = hd_j16_xiebeifa_asked } }
+						set_global_variable = { name = hd_j16_xiebeifa_asked value = yes days = 60 }
+						scope:hd_j16_kxb_xie = { trigger_event = hd_j16.4580 }
+						debug_log = "HD_J16 e4_j80 WAIT player_asked"
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_xiebeifa_wlog } }
+					set_global_variable = hd_j16_xiebeifa_wlog
+					debug_log = "HD_J16 e4_j80 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+# 选目标：存 scope:hd_j16_kxb_cty（接壤县）、hd_j16_kxb_tgt（其郡）、hd_j16_kxb_def（守方：该县持有者的最高领主）
+hd_j16_xiebeifa_pick_effect = {
+	if = {
+		limit = { exists = scope:hd_j16_kxb_cty }
+		clear_saved_scope = hd_j16_kxb_cty
+	}
+	if = {
+		limit = { exists = scope:hd_j16_kxb_tgt }
+		clear_saved_scope = hd_j16_kxb_tgt
+	}
+	if = {
+		limit = { exists = scope:hd_j16_kxb_def }
+		clear_saved_scope = hd_j16_kxb_def
+	}
+	if = {
+		limit = { title:d_pencheng = { any_de_jure_county = { hd_j16_370b_beifa_county_trigger = yes } } }
+		title:d_pencheng = {
+			random_de_jure_county = {
+				limit = { hd_j16_370b_beifa_county_trigger = yes }
+				save_scope_as = hd_j16_kxb_cty
+			}
+		}
+	}
+	else_if = {
+		limit = { title:d_xiapei = { any_de_jure_county = { hd_j16_370b_beifa_county_trigger = yes } } }
+		title:d_xiapei = {
+			random_de_jure_county = {
+				limit = { hd_j16_370b_beifa_county_trigger = yes }
+				save_scope_as = hd_j16_kxb_cty
+			}
+		}
+	}
+	else = {
+		random_county_in_region = {
+			region = uuii_han_xuzhou_region
+			limit = { hd_j16_370b_beifa_county_trigger = yes }
+			save_scope_as = hd_j16_kxb_cty
+		}
+		if = {
+			limit = { NOT = { exists = scope:hd_j16_kxb_cty } }
+			random_county_in_region = {
+				region = uuii_han_yanzhou_region
+				limit = { hd_j16_370b_beifa_county_trigger = yes }
+				save_scope_as = hd_j16_kxb_cty
+			}
+		}
+		if = {
+			limit = { NOT = { exists = scope:hd_j16_kxb_cty } }
+			random_county_in_region = {
+				region = uuii_han_qingzhou_region
+				limit = { hd_j16_370b_beifa_county_trigger = yes }
+				save_scope_as = hd_j16_kxb_cty
+			}
+		}
+		if = {
+			limit = { NOT = { exists = scope:hd_j16_kxb_cty } }
+			random_county_in_region = {
+				region = uuii_han_yuzhou_region
+				limit = { hd_j16_370b_beifa_county_trigger = yes }
+				save_scope_as = hd_j16_kxb_cty
+			}
+		}
+	}
+	scope:hd_j16_kxb_cty ?= {
+		duchy ?= { save_scope_as = hd_j16_kxb_tgt }
+		holder ?= {
+			top_liege = { save_scope_as = hd_j16_kxb_def }
+		}
+	}
+}
+
+# 开战。scope:hd_j16_kxb_xie / _tgt / _def 已存好（节点或 4580 a）
+hd_j16_xiebeifa_war_effect = {
+	if = {
+		limit = { exists = scope:hd_nbc_war_xiebeifa }
+		clear_saved_scope = hd_nbc_war_xiebeifa
+	}
+	hd_nbc_start_war_effect = { ATTACKER = scope:hd_j16_kxb_xie DEFENDER = scope:hd_j16_kxb_def TARGET = scope:hd_j16_kxb_tgt KIND = xiebeifa }
+	if = {
+		limit = { exists = scope:hd_nbc_war_xiebeifa }
+		set_global_variable = { name = hd_j16_xiebeifa_att value = scope:hd_j16_kxb_xie }
+	}
+	else_if = {
+		limit = {
+			scope:hd_j16_kxb_xie = { is_independent_ruler = no }
+			exists = title:h_china.holder
+		}
+		if = {
+			limit = { exists = scope:hd_j16_kxb_tz }
+			clear_saved_scope = hd_j16_kxb_tz
+		}
+		title:h_china.holder = { save_scope_as = hd_j16_kxb_tz }
+		hd_nbc_start_war_effect = { ATTACKER = scope:hd_j16_kxb_tz DEFENDER = scope:hd_j16_kxb_def TARGET = scope:hd_j16_kxb_tgt KIND = xiebeifa }
+		if = {
+			limit = { exists = scope:hd_nbc_war_xiebeifa }
+			set_global_variable = { name = hd_j16_xiebeifa_att value = scope:hd_j16_kxb_tz }
+			scope:hd_nbc_war_xiebeifa = {
+				if = {
+					limit = { scope:hd_j16_kxb_xie = { is_at_war = no } }
+					add_attacker = scope:hd_j16_kxb_xie
+				}
+			}
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_nbc_war_xiebeifa }
+		set_global_variable = hd_j16_xiebeifa_started
+		set_global_variable = hd_j16_xiebeifa_result
+		set_global_variable = hd_hev_j16_xiebeifa
+		set_global_variable = { name = hd_j16_xiebeifa_def value = scope:hd_j16_kxb_def }
+		scope:hd_j16_kxb_tgt = {
+			title_capital_county = { save_scope_as = hd_j16_kxb_key }
+		}
+		set_global_variable = { name = hd_j16_xiebeifa_key value = scope:hd_j16_kxb_key }
+		if = {
+			limit = { has_global_variable = hd_j16_xiebeifa_go }
+			remove_global_variable = hd_j16_xiebeifa_go
+		}
+		hd_j16_370b_army_effect = { WHO = scope:hd_j16_kxb_xie SIZE = 10000 NAME = hd_j16_370b_beifu_army_name }
+		debug_log = "HD_J16 e4_j80 FIRE war_started"
+	}
+	else_if = {
+		limit = { NOT = { has_global_variable = hd_j16_xiebeifa_wsf_wlog } }
+		set_global_variable = hd_j16_xiebeifa_wsf_wlog
+		debug_log = "HD_J16 e4_j80 WAIT war_start_failed"
+	}
+}
+
+# 结局自判（新 KIND 不进 hd_nbc_war_result_effect，00 §6）
+hd_j16_xiebeifa_judge_effect = {
+	if = {
+		limit = {
+			NOT = { global_var:hd_j16_xiebeifa_att ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:xiebeifa } } }
+			NOT = { global_var:hd_j16_xiebeifa_def ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:xiebeifa } } }
+		}
+		set_global_variable = hd_j16_xiebeifa_done
+		if = {
+			limit = {
+				global_var:hd_j16_xiebeifa_key ?= {
+					holder ?= { hd_j16_370b_in_jin_trigger = yes }
+				}
+			}
+			set_global_variable = hd_j16_xiebeifa_won
+			debug_log = "HD_J16 e4_j80 FIRE result_won"
+		}
+		else = {
+			set_global_variable = hd_j16_xiebeifa_lost
+			debug_log = "HD_J16 e4_j80 FIRE result_lost"
+		}
+		if = {
+			limit = { has_global_variable = hd_nbc_xiebeifa_active }
+			remove_global_variable = hd_nbc_xiebeifa_active
+		}
+	}
+}
+
+############################################################
+# E4-J90 谢安出镇广陵【软】（04 §3.1、§6）
+# 窗口 385.3.1 – 385.10.12。上游 E4-J40（读 done）。谢安在世；司马道子 si_ma_dao_zi 在世、成年。
+# 谢安是 AI：出镇（史实）；谢安是玩家：hd_j16.4590（a 出镇广陵 / b 留朝相争，道子对谢安 −40）。
+# 出镇：谢安无地时 set_location 到广陵郡治 d_guangling 首府县（不转头衔）；人物变量 hd_j16_xiean_chuzhen。谢安卒年 385.10.12 照表。
+# 变量：hd_j16_xiean_chuzhen_done/_skip/_wlog/_result；面板 hd_hev_j16_xiean_chuzhen
+############################################################
+hd_j16_node_xiean_chuzhen_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_xiean_chuzhen_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_xiean_chuzhen_done
+			debug_log = "HD_J16 e4_j90 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 385.3.1 }
+			if = {
+				limit = { current_date >= 385.10.13 }
+				set_global_variable = hd_j16_xiean_chuzhen_done
+				set_global_variable = hd_j16_xiean_chuzhen_skip
+				debug_log = "HD_J16 e4_j90 SKIP window_closed"
+			}
+			else_if = {
+				limit = {
+					OR = {
+						hd_j16_dead_trigger = { ID = chenjun_xie_030 }
+						hd_j16_dead_trigger = { ID = si_ma_dao_zi }
+					}
+				}
+				set_global_variable = hd_j16_xiean_chuzhen_done
+				set_global_variable = hd_j16_xiean_chuzhen_skip
+				debug_log = "HD_J16 e4_j90 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_xiean_res_effect = yes
+				if = {
+					limit = {
+						has_global_variable = hd_j16_xiewang_done
+						scope:hd_j16_kgl_an ?= {
+							is_imprisoned = no
+							hd_j16_370b_in_jin_trigger = yes
+						}
+						scope:hd_j16_kgl_dz ?= {
+							is_adult = yes
+							hd_j16_370b_in_jin_trigger = yes
+						}
+					}
+					set_global_variable = hd_j16_xiean_chuzhen_done
+					scope:hd_j16_kgl_an = {
+						if = {
+							limit = { is_ai = yes }
+							hd_j16_xiean_chuzhen_effect = yes
+						}
+						else = {
+							trigger_event = hd_j16.4590
+							debug_log = "HD_J16 e4_j90 WAIT player_asked"
+						}
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_xiean_chuzhen_wlog } }
+					set_global_variable = hd_j16_xiean_chuzhen_wlog
+					debug_log = "HD_J16 e4_j90 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+hd_j16_xiean_res_effect = {
+	hd_j16_370b_res_effect = { ID = chenjun_xie_030 AS = hd_j16_kgl_an }
+	hd_j16_370b_res_effect = { ID = si_ma_dao_zi AS = hd_j16_kgl_dz }
+}
+
+# 出镇广陵（AI；4590 a）
+hd_j16_xiean_chuzhen_effect = {
+	hd_j16_xiean_res_effect = yes
+	set_global_variable = hd_j16_xiean_chuzhen_result
+	set_global_variable = hd_hev_j16_xiean_chuzhen
+	scope:hd_j16_kgl_an ?= {
+		set_variable = hd_j16_xiean_chuzhen
+		add_prestige = 50
+		if = {
+			limit = {
+				is_landed = no
+				exists = title:d_guangling.title_capital_county.title_province
+			}
+			set_location = title:d_guangling.title_capital_county.title_province
+		}
+	}
+	debug_log = "HD_J16 e4_j90 FIRE chuzhen"
+}
+
+# 4590 b 留朝相争：道子对谢安 −40；谢安卡「门户永昌」b1（年满 65 时人在建康）仍可达
+hd_j16_xiean_liuchao_effect = {
+	hd_j16_xiean_res_effect = yes
+	set_global_variable = hd_j16_xiean_chuzhen_result
+	set_global_variable = hd_hev_j16_xiean_chuzhen
+	scope:hd_j16_kgl_dz ?= {
+		if = {
+			limit = { exists = scope:hd_j16_kgl_an }
+			add_opinion = { target = scope:hd_j16_kgl_an modifier = hd_j16_daozi_xiang_opinion }
+		}
+	}
+	debug_log = "HD_J16 e4_j90 FIRE liuchao"
+}
+
+############################################################
+# E4-J95 道子专政【软】（04 §3.1；G4 ★A：只授朝官，不装 hd_court 权臣）
+# 窗口 385.3.1 – 387.1.1，谢安已死时才判（04「谢安卒后 0–180 天，止于 387.1.1」）。上游 E4-J90（读 done）。
+# 司马道子在世、成年、是天子的兄弟、在晋天子政权内。天子是玩家：hd_j16.4595（a 委政道子 / b 不委）；AI：委政。
+# 执行：道子授 e_minister_of_personnel（录尚书事，谢安原任）；头衔不动。
+# 变量：hd_j16_daozi_done/_skip/_wlog/_result；面板 hd_hev_j16_daozi
+############################################################
+hd_j16_node_daozi_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_daozi_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_daozi_done
+			debug_log = "HD_J16 e4_j95 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 385.3.1 }
+			if = {
+				limit = { current_date >= 387.1.2 }
+				set_global_variable = hd_j16_daozi_done
+				set_global_variable = hd_j16_daozi_skip
+				debug_log = "HD_J16 e4_j95 SKIP window_closed"
+			}
+			else_if = {
+				limit = { hd_j16_dead_trigger = { ID = si_ma_dao_zi } }
+				set_global_variable = hd_j16_daozi_done
+				set_global_variable = hd_j16_daozi_skip
+				debug_log = "HD_J16 e4_j95 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_370b_res_effect = { ID = si_ma_dao_zi AS = hd_j16_kdz_dz }
+				if = {
+					limit = {
+						has_global_variable = hd_j16_xiean_chuzhen_done
+						hd_j16_dead_trigger = { ID = chenjun_xie_030 }
+						hd_j16_370b_jin_sima_trigger = yes
+						scope:hd_j16_kdz_dz ?= {
+							is_adult = yes
+							is_imprisoned = no
+							hd_j16_370b_in_jin_trigger = yes
+							NOT = { this = title:h_china.holder }
+							is_sibling_of = title:h_china.holder
+						}
+					}
+					set_global_variable = hd_j16_daozi_done
+					title:h_china.holder = {
+						if = {
+							limit = { is_ai = yes }
+							hd_j16_daozi_effect = yes
+						}
+						else = {
+							trigger_event = hd_j16.4595
+							debug_log = "HD_J16 e4_j95 WAIT player_asked"
+						}
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_daozi_wlog } }
+					set_global_variable = hd_j16_daozi_wlog
+					debug_log = "HD_J16 e4_j95 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+# 委政道子（AI 天子；4595 a）
+hd_j16_daozi_effect = {
+	hd_j16_370b_res_effect = { ID = si_ma_dao_zi AS = hd_j16_kdz_dz }
+	set_global_variable = hd_j16_daozi_result
+	set_global_variable = hd_hev_j16_daozi
+	hd_j16_370b_office_effect = { WHO = scope:hd_j16_kdz_dz TITLE = e_minister_of_personnel POS = minister_personnel LOG = e4_j95 }
+	scope:hd_j16_kdz_dz ?= { add_prestige = 100 }
+	debug_log = "HD_J16 e4_j95 FIRE daozi"
+}
+
+############################################################
+# E4-J97 王恭出镇京口【软摆位】（04 §3.1；原编 E5-J12）
+# 窗口 392.1.1 – 397.4.1。王恭 taiyuan_wang_023 在世、在晋天子政权内、不持郡（04「无地或只有县」）；
+#   京口 c_uuii_p_2086 所在的毗陵郡 d_piling 由同政权的 AI 持有（370 开局为 hd_370_gov_piling）。无分支。
+# 执行：毗陵授王恭（D16 / A1 §7.1，1 郡）；刘牢之是 AI、无地、不持头衔时入王恭宫廷（为 E5-J20 倒戈铺垫；04 只写「AI 且无郡」，议员也召，
+#   用 hd_j16_370b_employ_council_effect；搬不动时 E5-J20 照样开战，见该节点注释）。
+# 变量：hd_j16_wanggong_jingkou_done/_skip/_wlog/_result（04 原名 hd_j16_wanggong_jingkou → _result）；面板 hd_hev_j16_wanggong_jingkou
+############################################################
+hd_j16_node_wanggong_jingkou_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_wanggong_jingkou_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_wanggong_jingkou_done
+			debug_log = "HD_J16 e4_j97 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 392.1.1 }
+			if = {
+				limit = { current_date >= 397.4.2 }
+				set_global_variable = hd_j16_wanggong_jingkou_done
+				set_global_variable = hd_j16_wanggong_jingkou_skip
+				debug_log = "HD_J16 e4_j97 SKIP window_closed"
+			}
+			else_if = {
+				limit = { hd_j16_dead_trigger = { ID = taiyuan_wang_023 } }
+				set_global_variable = hd_j16_wanggong_jingkou_done
+				set_global_variable = hd_j16_wanggong_jingkou_skip
+				debug_log = "HD_J16 e4_j97 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_370b_res_effect = { ID = taiyuan_wang_023 AS = hd_j16_kwj_gong }
+				if = {
+					limit = {
+						exists = scope:hd_j16_kwj_gong
+						hd_j16_370b_grantable_trigger = { DUCHY = title:d_piling TO = scope:hd_j16_kwj_gong }
+					}
+					set_global_variable = hd_j16_wanggong_jingkou_done
+					set_global_variable = hd_j16_wanggong_jingkou_result
+					set_global_variable = hd_hev_j16_wanggong_jingkou
+					hd_j16_370b_grant_duchy_effect = { DUCHY = title:d_piling TO = scope:hd_j16_kwj_gong LOG = e4_j97 }
+					hd_j16_370b_res_effect = { ID = congtingli_liu_043 AS = hd_j16_kwj_liu }
+					hd_j16_370b_employ_council_effect = { WHO = scope:hd_j16_kwj_liu TO = scope:hd_j16_kwj_gong }
+					debug_log = "HD_J16 e4_j97 FIRE wanggong_jingkou"
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_wanggong_jingkou_wlog } }
+					set_global_variable = hd_j16_wanggong_jingkou_wlog
+					debug_log = "HD_J16 e4_j97 WAIT not_ready"
+				}
+			}
+		}
+	}
+}

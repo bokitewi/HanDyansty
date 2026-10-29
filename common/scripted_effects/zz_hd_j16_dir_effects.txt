@@ -1,0 +1,900 @@
+﻿# 两晋十六国统一史实线（j16）前秦导演 hd_j16_dir（D8：泛化版，只打北方；D18：关中、陇右属北方）。
+# 设计：docs/两晋十六国统一史实线/03_346戡定岷峨.md §1（文首覆盖表优先）；分工：08 §1.2（4-A）；接口：04 §1.1。
+# 照 190 导演 zz_hd184r_director_effects.txt 的 collect / declare / check 三段改写，不改 190 的任何文件。与 190 版的差别：
+#   - 状态全部放全局变量（换人不丢）：hd_j16_dir_qin_stage、_idle、_gated_n、列表 hd_j16_dir_qin_targets、_cand；
+#   - 执行人（秦主）每跳按位置重解析：长安 c_uuii_p_867 的 top_liege，苻氏 dynasty:fu_1，独立；是玩家时不托管（不加旗标、不动阶段）；
+#   - 只打本阶段目标郡（无「州外」开放模式）；候选郡直接从目标表里筛「有前线县」的郡，结果与 190 先列前线再求交集相同，省去全境扫描；
+#   - 进攻上限 3、每跳新开 1；节点战争计入名额；宣战走连通筛选 hd_wct + hd_dc_tunbing_cb（KIND = historical）；
+#   - 369.12.1 起到 E3-M90 前燕亡 done（或 372.1.1）整段暂停；秦主正被晋攻时本跳不新开；382.6.1 起不再开新战；
+#     383.1.1、淝水 done、hd_j16_qin_collapse、hd_j16_dir_qin_off（E4-W40 设）任一成立即停止续期。
+# 另含：E3-W30 导演启动节点（由 hd_j16_e3_346_effect 调用），边境战争 hd_j16_border_cb 的宣战工具（4-C 的 E2-L90/L91、6-A 的柴壁调用）。
+# 日志：HD_J16 e3_w30 …；HD_J16 dir_s<N> FIRE|WAIT|SKIP <原因>（N 为当前阶段，0 表示与阶段无关）；HD_J16 border …
+
+############################################################
+# 小工具
+############################################################
+
+# 清掉可能随 trigger_event 带过来的保存作用域（不存在时不清，免报错）
+hd_j16_dir_clear_scope_effect = {
+	if = {
+		limit = { exists = scope:$S$ }
+		clear_saved_scope = $S$
+	}
+}
+
+# 目标州：把汉代某州（静态区域 uuii_han_<州>_region，不随 280.1.1 法理改挂变化；报错清单「汉代州归属别用 k_uuii_* 法理」）
+# 全部县所属的郡加入 hd_j16_dir_qin_targets（去重）。280.1.1 只改「郡挂在哪个州」、郡下的县不动，故县 → duchy 即汉代原郡。Scope：任意
+hd_j16_dir_dr = {
+	every_county_in_region = {
+		region = $R$
+		limit = { exists = duchy }
+		duchy = {
+			if = {
+				limit = { NOT = { is_target_in_global_variable_list = { name = hd_j16_dir_qin_targets target = this } } }
+				add_to_global_variable_list = { name = hd_j16_dir_qin_targets target = this }
+			}
+		}
+	}
+}
+
+# 单个目标郡（去重）。Scope：任意
+hd_j16_dir_dd = {
+	if = {
+		limit = { NOT = { is_target_in_global_variable_list = { name = hd_j16_dir_qin_targets target = title:$D$ } } }
+		add_to_global_variable_list = { name = hd_j16_dir_qin_targets target = title:$D$ }
+	}
+}
+
+# 从目标表移除一个郡（在表里才移）。Scope：任意
+hd_j16_dir_dx = {
+	if = {
+		limit = { is_target_in_global_variable_list = { name = hd_j16_dir_qin_targets target = title:$D$ } }
+		remove_list_global_variable = { name = hd_j16_dir_qin_targets target = title:$D$ }
+	}
+}
+
+# 当前阶段的 hd_j16_dir_qin_s<N>_$WHAT$（done / skip / noticed / 各 wlog）
+hd_j16_dir_stage_set_effect = {
+	if = {
+		limit = { global_var:hd_j16_dir_qin_stage = 1 }
+		set_global_variable = hd_j16_dir_qin_s1_$WHAT$
+	}
+	else_if = {
+		limit = { global_var:hd_j16_dir_qin_stage = 2 }
+		set_global_variable = hd_j16_dir_qin_s2_$WHAT$
+	}
+	else_if = {
+		limit = { global_var:hd_j16_dir_qin_stage = 3 }
+		set_global_variable = hd_j16_dir_qin_s3_$WHAT$
+	}
+	else_if = {
+		limit = { global_var:hd_j16_dir_qin_stage = 4 }
+		set_global_variable = hd_j16_dir_qin_s4_$WHAT$
+	}
+	else_if = {
+		limit = { global_var:hd_j16_dir_qin_stage = 6 }
+		set_global_variable = hd_j16_dir_qin_s6_$WHAT$
+	}
+	else_if = {
+		limit = { global_var:hd_j16_dir_qin_stage = 7 }
+		set_global_variable = hd_j16_dir_qin_s7_$WHAT$
+	}
+}
+
+# 面板行变量 hd_hev_j16_dir_qin_s<N>（只在阶段真正完成时设；行本身由 F-1 写）
+hd_j16_dir_stage_hev_effect = {
+	if = {
+		limit = { global_var:hd_j16_dir_qin_stage = 1 }
+		set_global_variable = hd_hev_j16_dir_qin_s1
+	}
+	else_if = {
+		limit = { global_var:hd_j16_dir_qin_stage = 2 }
+		set_global_variable = hd_hev_j16_dir_qin_s2
+	}
+	else_if = {
+		limit = { global_var:hd_j16_dir_qin_stage = 3 }
+		set_global_variable = hd_hev_j16_dir_qin_s3
+	}
+	else_if = {
+		limit = { global_var:hd_j16_dir_qin_stage = 4 }
+		set_global_variable = hd_hev_j16_dir_qin_s4
+	}
+	else_if = {
+		limit = { global_var:hd_j16_dir_qin_stage = 6 }
+		set_global_variable = hd_hev_j16_dir_qin_s6
+	}
+	else_if = {
+		limit = { global_var:hd_j16_dir_qin_stage = 7 }
+		set_global_variable = hd_hev_j16_dir_qin_s7
+	}
+}
+
+# 日志：HD_J16 dir_s<N> $TYPE$ $REASON$
+hd_j16_dir_log_effect = {
+	if = {
+		limit = { global_var:hd_j16_dir_qin_stage = 1 }
+		debug_log = "HD_J16 dir_s1 $TYPE$ $REASON$"
+	}
+	else_if = {
+		limit = { global_var:hd_j16_dir_qin_stage = 2 }
+		debug_log = "HD_J16 dir_s2 $TYPE$ $REASON$"
+	}
+	else_if = {
+		limit = { global_var:hd_j16_dir_qin_stage = 3 }
+		debug_log = "HD_J16 dir_s3 $TYPE$ $REASON$"
+	}
+	else_if = {
+		limit = { global_var:hd_j16_dir_qin_stage = 4 }
+		debug_log = "HD_J16 dir_s4 $TYPE$ $REASON$"
+	}
+	else_if = {
+		limit = { global_var:hd_j16_dir_qin_stage = 6 }
+		debug_log = "HD_J16 dir_s6 $TYPE$ $REASON$"
+	}
+	else_if = {
+		limit = { global_var:hd_j16_dir_qin_stage = 7 }
+		debug_log = "HD_J16 dir_s7 $TYPE$ $REASON$"
+	}
+	else = {
+		debug_log = "HD_J16 dir_s0 $TYPE$ $REASON$"
+	}
+}
+
+# 等待类日志每阶段只记一次（$WLOG$ 为 hd_j16_dir_qin_s<N>_ 后缀）
+hd_j16_dir_log_once_effect = {
+	if = {
+		limit = { NOT = { hd_j16_dir_stage_has_trigger = { WHAT = $WLOG$ } } }
+		hd_j16_dir_stage_set_effect = { WHAT = $WLOG$ }
+		hd_j16_dir_log_effect = { TYPE = $TYPE$ REASON = $REASON$ }
+	}
+}
+
+############################################################
+# E3-W30 导演启动【机制】（03 §1.1「启用条件」「启动」；01 §2.3 预留号）
+# 由 hd_j16_e3_346_effect 调用（入口那一行由 4-B 加）。因此实际能启动的日期只在 E3 粗筛内（349.1.1 – 374.1.1，及首跳全段扫）。
+# 窗口 351.1.1 – 382.6.1；条件：史实事件规则开；E3-Q10 苻健入关已 done（hd_nbc_fujian_done；370 开局由开局前标设）；
+#   能解析出秦主（长安之主，苻氏，独立；玩家也算，导演对玩家只空转）；未设 hd_j16_qin_collapse / hd_j16_dir_qin_off。
+# 首次满足时在 title:h_china 上排 hd_j16_dir_bootstrap（不依赖开局日期，304、346、370 一样）。
+# 跨开局：304、346 心跳（351 起）；370 首跳即启动（开局直接从 S3 起，见 bootstrap）；404 前标（开局年 ≥ 404 只设 done）。
+# 变量：hd_j16_dir_w30_done、_result（fire）、_skip、_wlog；面板 hd_hev_j16_dir_qin_start
+############################################################
+hd_j16_dir_w30_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_dir_w30_done } }
+		# ① 自保护：404 开局窗口已过
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_dir_w30_done
+			debug_log = "HD_J16 e3_w30 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 351.1.1 }
+			# ② 截止跳过
+			if = {
+				limit = { current_date >= 382.6.1 }
+				set_global_variable = hd_j16_dir_w30_done
+				set_global_variable = hd_j16_dir_w30_skip
+				debug_log = "HD_J16 e3_w30 SKIP window_closed"
+			}
+			# ③ 前秦已瓦解或导演已下线
+			else_if = {
+				limit = {
+					OR = {
+						has_global_variable = hd_j16_qin_collapse
+						has_global_variable = hd_j16_dir_qin_off
+					}
+				}
+				set_global_variable = hd_j16_dir_w30_done
+				set_global_variable = hd_j16_dir_w30_skip
+				debug_log = "HD_J16 e3_w30 SKIP qin_collapse"
+			}
+			else = {
+				# ④ 解析秦主（按位置）
+				hd_j16_dir_clear_scope_effect = { S = hd_j16_w30_qin }
+				title:c_uuii_p_867.holder.top_liege ?= {
+					if = {
+						limit = {
+							is_independent_ruler = yes
+							dynasty ?= dynasty:fu_1
+						}
+						save_scope_as = hd_j16_w30_qin
+					}
+				}
+				# ⑤ 条件
+				if = {
+					limit = {
+						hd_history_events_enabled_trigger = yes
+						has_global_variable = hd_nbc_fujian_done
+						exists = scope:hd_j16_w30_qin
+					}
+					set_global_variable = hd_j16_dir_w30_done
+					set_global_variable = hd_j16_dir_w30_result
+					set_global_variable = hd_hev_j16_dir_qin_start
+					title:h_china = { trigger_event = { on_action = hd_j16_dir_bootstrap days = 1 } }
+					debug_log = "HD_J16 e3_w30 FIRE bootstrap_scheduled"
+				}
+				# ⑥ 等待
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_dir_w30_wlog } }
+					set_global_variable = hd_j16_dir_w30_wlog
+					debug_log = "HD_J16 e3_w30 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+############################################################
+# 启动（on_action hd_j16_dir_bootstrap，Root：title:h_china）。只生效一次
+############################################################
+hd_j16_dir_bootstrap_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_dir_qin_active } }
+		set_global_variable = hd_j16_dir_qin_active
+		set_global_variable = { name = hd_j16_dir_qin_idle value = 0 }
+		set_global_variable = { name = hd_j16_dir_qin_gated_n value = 0 }
+		# 370 开局：苻坚已据关中、陇右，S1、S2 不必再判，直接从 S3 起（03 §1.4）
+		if = {
+			limit = { global_var:hd_j16_start_year >= 370 }
+			set_global_variable = { name = hd_j16_dir_qin_stage value = 3 }
+			debug_log = "HD_J16 dir_s3 FIRE start370_from_s3"
+		}
+		else = {
+			set_global_variable = { name = hd_j16_dir_qin_stage value = 1 }
+		}
+		title:h_china = { trigger_event = { on_action = hd_j16_dir_pulse days = 1 } }
+		debug_log = "HD_J16 dir_s0 FIRE bootstrap"
+	}
+}
+
+############################################################
+# 脉冲（on_action hd_j16_dir_pulse，Root：title:h_china；61 天一次，续期在 on_action 里）
+############################################################
+hd_j16_dir_pulse_effect = {
+	if = {
+		limit = {
+			has_global_variable = hd_j16_dir_qin_active
+			NOT = { has_global_variable = hd_j16_dir_qin_stopped }
+		}
+		# 每跳开头清掉随 trigger_event 带过来的保存作用域（照 hd184r :84-86；10-23 作用域串人修复）
+		hd_j16_dir_clear_scope_effect = { S = hd_j16_dir_actor }
+		hd_j16_dir_clear_scope_effect = { S = hd_j16_dir_tgt }
+		hd_j16_dir_clear_scope_effect = { S = hd_j16_dir_def }
+		hd_j16_dir_clear_scope_effect = { S = hd_j16_dir_newwar }
+		hd_j16_dir_clear_scope_effect = { S = hd_news_a }
+		hd_j16_dir_clear_scope_effect = { S = hd_news_b }
+		if = {
+			limit = { hd_j16_dir_stop_trigger = yes }
+			hd_j16_dir_stop_effect = yes
+		}
+		else = {
+			# 按位置解析秦主
+			title:c_uuii_p_867.holder.top_liege ?= {
+				if = {
+					limit = {
+						is_independent_ruler = yes
+						dynasty ?= dynasty:fu_1
+					}
+					save_scope_as = hd_j16_dir_actor
+				}
+			}
+			# 秦主换人：旧秦主在世就当场摘掉旗标（死者不动，报错清单第 28 条）
+			if = {
+				limit = {
+					has_global_variable = hd_j16_dir_qin_actor
+					global_var:hd_j16_dir_qin_actor ?= {
+						is_alive = yes
+						has_character_flag = hd_j16_dir_member
+						trigger_if = {
+							limit = { exists = scope:hd_j16_dir_actor }
+							NOT = { this = scope:hd_j16_dir_actor }
+						}
+					}
+				}
+				global_var:hd_j16_dir_qin_actor = { remove_character_flag = hd_j16_dir_member }
+				debug_log = "HD_J16 dir_s0 FIRE actor_changed"
+			}
+			if = {
+				limit = { exists = scope:hd_j16_dir_actor }
+				set_global_variable = { name = hd_j16_dir_qin_actor value = scope:hd_j16_dir_actor }
+				# 旗标：AI 秦主每跳重给 75 天（长于 61 天的脉冲），导演停下后自然过期；玩家秦主不托管
+				scope:hd_j16_dir_actor = {
+					if = {
+						limit = {
+							is_alive = yes
+							is_ai = yes
+						}
+						if = {
+							limit = { has_character_flag = hd_j16_dir_member }
+							remove_character_flag = hd_j16_dir_member
+						}
+						add_character_flag = { flag = hd_j16_dir_member days = 75 }
+					}
+					else_if = {
+						limit = {
+							is_alive = yes
+							has_character_flag = hd_j16_dir_member
+						}
+						remove_character_flag = hd_j16_dir_member
+					}
+				}
+				# 整段暂停：只续旗标（保护洛阳、东征等节点战争不被天意青睐、战略 AI 抢名额）
+				if = {
+					limit = { hd_j16_dir_paused_trigger = yes }
+					if = {
+						limit = { NOT = { has_global_variable = hd_j16_dir_pause_wlog } }
+						set_global_variable = hd_j16_dir_pause_wlog
+						hd_j16_dir_log_effect = { TYPE = WAIT REASON = paused_yan_war }
+					}
+				}
+				# 阶段已走完（hd_j16_dir_qin_done）：不再进入下面这段，只续旗标，直到停止续期
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_dir_qin_done } }
+					if = {
+						limit = { scope:hd_j16_dir_actor = { hd_j16_dir_actor_ready_trigger = yes } }
+						scope:hd_j16_dir_actor = { hd_j16_dir_tick_effect = yes }
+					}
+					else = {
+						hd_j16_dir_log_once_effect = { TYPE = WAIT REASON = actor_not_ready WLOG = notready_wlog }
+					}
+				}
+			}
+			else_if = {
+				limit = { NOT = { has_global_variable = hd_j16_dir_noactor_wlog } }
+				set_global_variable = hd_j16_dir_noactor_wlog
+				hd_j16_dir_log_effect = { TYPE = WAIT REASON = no_actor }
+			}
+		}
+	}
+}
+
+############################################################
+# 停止续期（03 §1.1 下线；04 §1.1 E4-W40）。已开的战照打
+# 旗标：前秦已瓦解或淝水已 done 时当场摘掉；其余（383.1.1 到期、E4-W40 下线）改给 730 天，
+# 让淝水（383.6 起，要求秦主不与晋交战）前后天意青睐、战略 AI 不替秦主开新战【自拟】
+############################################################
+hd_j16_dir_stop_effect = {
+	set_global_variable = hd_j16_dir_qin_stopped
+	if = {
+		limit = { has_global_variable = hd_j16_dir_qin_actor }
+		global_var:hd_j16_dir_qin_actor ?= {
+			if = {
+				limit = {
+					is_alive = yes
+					has_character_flag = hd_j16_dir_member
+				}
+				remove_character_flag = hd_j16_dir_member
+				if = {
+					limit = {
+						is_ai = yes
+						NOT = { has_global_variable = hd_j16_qin_collapse }
+						NOT = { has_global_variable = hd_nbc_feishui_done }
+					}
+					add_character_flag = { flag = hd_j16_dir_member days = 730 }
+				}
+			}
+		}
+	}
+	clear_global_variable_list = hd_j16_dir_qin_targets
+	clear_global_variable_list = hd_j16_dir_qin_cand
+	debug_log = "HD_J16 dir_s0 FIRE stopped"
+}
+
+# 摘掉秦主的 hd_j16_dir_member（停止续期后脉冲不再跑，后来才设的 hd_j16_qin_collapse 没人摘旗标）。
+# 供 5-A 在设 hd_j16_qin_collapse 处紧接着调一行：hd_j16_dir_release_member_effect = yes。Scope：任意。只动在世者（报错清单第 28 条）
+hd_j16_dir_release_member_effect = {
+	if = {
+		limit = { has_global_variable = hd_j16_dir_qin_actor }
+		global_var:hd_j16_dir_qin_actor ?= {
+			if = {
+				limit = {
+					is_alive = yes
+					has_character_flag = hd_j16_dir_member
+				}
+				remove_character_flag = hd_j16_dir_member
+				debug_log = "HD_J16 dir_s0 FIRE member_released"
+			}
+		}
+	}
+}
+
+############################################################
+# 单跳处理。Scope：秦主（scope:hd_j16_dir_actor）
+############################################################
+hd_j16_dir_tick_effect = {
+	hd_j16_dir_build_effect = yes
+	# 一、阶段转换（作废、闸门下跳过、节点完成、控制率/空转）
+	hd_j16_dir_transition_effect = yes
+	if = {
+		limit = { has_global_variable = hd_j16_dir_rebuild }
+		remove_global_variable = hd_j16_dir_rebuild
+		hd_j16_dir_build_effect = yes
+	}
+	# 二、找目标、开战（被门挡住的阶段不计空转）
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_dir_qin_done } }
+		if = {
+			limit = { has_global_variable = hd_j16_dir_gated }
+			hd_j16_dir_log_once_effect = { TYPE = WAIT REASON = gated WLOG = gated_wlog }
+		}
+		else = {
+			hd_j16_dir_collect_effect = yes
+			if = {
+				limit = { NOT = { any_in_global_list = { variable = hd_j16_dir_qin_cand always = yes } } }
+				# 空转 +1；本阶段的导演战争还在打时不计（免得战中因「无新目标」提前判完成）【自拟】
+				if = {
+					limit = { NOT = { hd_j16_dir_stage_war_ongoing_trigger = yes } }
+					change_global_variable = { name = hd_j16_dir_qin_idle add = 1 }
+					hd_j16_dir_log_once_effect = { TYPE = WAIT REASON = idle WLOG = idle_wlog }
+				}
+			}
+			else = {
+				set_global_variable = { name = hd_j16_dir_qin_idle value = 0 }
+				if = {
+					limit = { current_date >= 382.6.1 }
+					hd_j16_dir_log_once_effect = { TYPE = WAIT REASON = no_new_war_after_382_6 WLOG = late_wlog }
+				}
+				else_if = {
+					limit = { hd_j16_dir_qin_under_jin_attack_trigger = yes }
+					hd_j16_dir_log_once_effect = { TYPE = WAIT REASON = jin_attacking WLOG = jin_wlog }
+				}
+				else = {
+					hd_j16_dir_declare_effect = yes
+				}
+			}
+		}
+	}
+	clear_global_variable_list = hd_j16_dir_qin_targets
+	clear_global_variable_list = hd_j16_dir_qin_cand
+}
+
+# 按当前阶段重建目标表与门槛
+hd_j16_dir_build_effect = {
+	hd_j16_dir_data_effect = { KEY = qin }
+}
+
+# 阶段转换。Scope：秦主
+hd_j16_dir_transition_effect = {
+	# S3 被前燕门挡住，而仇池闸门已开：满 1 年（6 跳）就跳过 S3、进 S4（03 §1.2 S4 门槛「S3 完成或 gated 满 1 年」）
+	if = {
+		limit = {
+			global_var:hd_j16_dir_qin_stage = 3
+			has_global_variable = hd_j16_dir_gated
+			has_global_variable = hd_j16_dir_qin_gate_qiuchi
+		}
+		change_global_variable = { name = hd_j16_dir_qin_gated_n add = 1 }
+		if = {
+			limit = { global_var:hd_j16_dir_qin_gated_n >= 6 }
+			hd_j16_dir_stage_set_effect = { WHAT = skip }
+			hd_j16_dir_log_effect = { TYPE = SKIP REASON = gated_1y }
+			hd_j16_dir_advance_effect = yes
+		}
+	}
+	# S4 仇池：E4-Q10 已 done。开过闸且武都已归秦（d_wudou 首府县持有者的 top_liege 是秦主，同 04 E4-Q10 善后条件）
+	# → 判本阶段完成（03 §1.2「节点 done 后直接判本阶段完成」）；
+	# 没开闸（杨纂是玩家选称藩、节点跳过）或开了闸而武都未归秦（善后窗口 374.1.1 超时跳过也设 done）→ 本阶段作废，不亮「仇池平定」
+	else_if = {
+		limit = {
+			global_var:hd_j16_dir_qin_stage = 4
+			has_global_variable = hd_j16_qiuchi_done
+		}
+		if = {
+			limit = {
+				has_global_variable = hd_j16_dir_qin_gate_qiuchi
+				title:d_wudou.title_capital_county.holder ?= { top_liege = scope:hd_j16_dir_actor }
+			}
+			hd_j16_dir_complete_effect = { REASON = node_done }
+		}
+		else_if = {
+			limit = { has_global_variable = hd_j16_dir_qin_gate_qiuchi }
+			hd_j16_dir_stage_set_effect = { WHAT = skip }
+			hd_j16_dir_log_effect = { TYPE = SKIP REASON = node_done_not_taken }
+			hd_j16_dir_advance_effect = yes
+		}
+		else = {
+			hd_j16_dir_stage_set_effect = { WHAT = skip }
+			hd_j16_dir_log_effect = { TYPE = SKIP REASON = voided }
+			hd_j16_dir_advance_effect = yes
+		}
+	}
+	# S6 前凉：E4-Q30 已 done 而闸门未开（张天锡入朝称藩、节点跳过）→ 作废
+	else_if = {
+		limit = {
+			global_var:hd_j16_dir_qin_stage = 6
+			has_global_variable = hd_j16_liang_done
+			NOT = { has_global_variable = hd_j16_dir_qin_gate_liang }
+		}
+		hd_j16_dir_stage_set_effect = { WHAT = skip }
+		hd_j16_dir_log_effect = { TYPE = SKIP REASON = voided }
+		hd_j16_dir_advance_effect = yes
+	}
+	# S7 代：E4-T10（或 E4-T20）已 done 而闸门未开（什翼犍称藩、节点跳过）→ 作废
+	else_if = {
+		limit = {
+			global_var:hd_j16_dir_qin_stage = 7
+			OR = {
+				has_global_variable = hd_j16_weichen_done
+				has_global_variable = hd_j16_dai_done
+			}
+			NOT = { has_global_variable = hd_j16_dir_qin_gate_dai }
+		}
+		hd_j16_dir_stage_set_effect = { WHAT = skip }
+		hd_j16_dir_log_effect = { TYPE = SKIP REASON = voided }
+		hd_j16_dir_advance_effect = yes
+	}
+	# 其余：未被门挡住时按控制率或空转判完成
+	else_if = {
+		limit = {
+			NOT = { has_global_variable = hd_j16_dir_gated }
+			NOT = { has_global_variable = hd_j16_dir_qin_done }
+		}
+		hd_j16_dir_check_effect = yes
+	}
+}
+
+# 本阶段完成：设 hd_j16_dir_qin_s<N>_done（370 节善后节点与面板读）、面板变量，进下一阶段
+hd_j16_dir_complete_effect = {
+	hd_j16_dir_stage_set_effect = { WHAT = done }
+	hd_j16_dir_stage_hev_effect = yes
+	hd_j16_dir_log_effect = { TYPE = FIRE REASON = stage_done_$REASON$ }
+	hd_j16_dir_advance_effect = yes
+}
+
+# 进下一阶段（S5 空号，4 之后直接到 6）
+hd_j16_dir_advance_effect = {
+	change_global_variable = { name = hd_j16_dir_qin_stage add = 1 }
+	if = {
+		limit = { global_var:hd_j16_dir_qin_stage = 5 }
+		change_global_variable = { name = hd_j16_dir_qin_stage add = 1 }
+	}
+	set_global_variable = { name = hd_j16_dir_qin_idle value = 0 }
+	set_global_variable = { name = hd_j16_dir_qin_gated_n value = 0 }
+	set_global_variable = hd_j16_dir_rebuild
+}
+
+# 阶段表走完：不进开放模式（D8），停新战，只续旗标到停止续期
+hd_j16_dir_stage_end_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_dir_qin_done } }
+		set_global_variable = hd_j16_dir_qin_done
+		set_global_variable = hd_hev_j16_dir_qin_done
+		debug_log = "HD_J16 dir_s0 FIRE all_stages_done"
+	}
+}
+
+############################################################
+# check：本阶段目标郡的法理县 ≥ 70% 在秦主 sub_realm，或连续 6 跳空转，即完成（照 hd184r_director_check_stage_effect :296-342）。Scope：秦主
+############################################################
+hd_j16_dir_check_effect = {
+	set_global_variable = { name = hd_j16_dir_tot value = 0 }
+	set_global_variable = { name = hd_j16_dir_own value = 0 }
+	every_in_global_list = {
+		variable = hd_j16_dir_qin_targets
+		every_de_jure_county = {
+			change_global_variable = { name = hd_j16_dir_tot add = 1 }
+			if = {
+				limit = {
+					holder ?= {
+						OR = {
+							this = scope:hd_j16_dir_actor
+							is_vassal_or_below_of = scope:hd_j16_dir_actor
+						}
+					}
+				}
+				change_global_variable = { name = hd_j16_dir_own add = 1 }
+			}
+		}
+	}
+	set_global_variable = { name = hd_j16_dir_need value = global_var:hd_j16_dir_tot }
+	change_global_variable = { name = hd_j16_dir_need multiply = 0.7 }
+	if = {
+		limit = {
+			OR = {
+				global_var:hd_j16_dir_tot <= 0
+				global_var:hd_j16_dir_own >= global_var:hd_j16_dir_need
+				global_var:hd_j16_dir_qin_idle >= 6
+			}
+		}
+		if = {
+			limit = {
+				global_var:hd_j16_dir_qin_idle >= 6
+				global_var:hd_j16_dir_tot > 0
+				global_var:hd_j16_dir_own < global_var:hd_j16_dir_need
+			}
+			hd_j16_dir_complete_effect = { REASON = idle }
+		}
+		else = {
+			hd_j16_dir_complete_effect = { REASON = control }
+		}
+	}
+	remove_global_variable = hd_j16_dir_tot
+	remove_global_variable = hd_j16_dir_own
+	remove_global_variable = hd_j16_dir_need
+}
+
+############################################################
+# collect：目标表里有前线县（合法守方）的郡 → hd_j16_dir_qin_cand（照 hd184r :346-400 的 scand）。Scope：秦主
+############################################################
+hd_j16_dir_collect_effect = {
+	clear_global_variable_list = hd_j16_dir_qin_cand
+	every_in_global_list = {
+		variable = hd_j16_dir_qin_targets
+		limit = { hd_j16_dir_duchy_has_front_trigger = yes }
+		add_to_global_variable_list = { name = hd_j16_dir_qin_cand target = this }
+	}
+}
+
+############################################################
+# declare：有进攻名额时挑一个候选郡开战（照 hd184r :403-484，每跳 1 场）。Scope：秦主
+############################################################
+hd_j16_dir_declare_effect = {
+	if = {
+		limit = { hd_j16_dir_war_slot_trigger = yes }
+		hd_j16_dir_clear_scope_effect = { S = hd_j16_dir_tgt }
+		hd_j16_dir_clear_scope_effect = { S = hd_j16_dir_def }
+		hd_j16_dir_clear_scope_effect = { S = hd_j16_dir_newwar }
+		random_in_global_list = {
+			variable = hd_j16_dir_qin_cand
+			limit = { hd_j16_dir_duchy_has_front_trigger = yes }
+			save_scope_as = hd_j16_dir_tgt
+		}
+		scope:hd_j16_dir_tgt ?= {
+			random_de_jure_county = {
+				limit = { hd_j16_dir_county_front_trigger = yes }
+				holder = { top_liege = { save_scope_as = hd_j16_dir_def } }
+			}
+		}
+		# 宣战前复核（10-23 作用域串人修复，照 hd184r :430-446）：只认本跳候选里、仍合法的郡与守方
+		if = {
+			limit = {
+				exists = scope:hd_j16_dir_tgt
+				exists = scope:hd_j16_dir_def
+				is_target_in_global_variable_list = { name = hd_j16_dir_qin_cand target = scope:hd_j16_dir_tgt }
+				scope:hd_j16_dir_tgt = {
+					any_de_jure_county = {
+						hd_j16_dir_county_front_trigger = yes
+						holder.top_liege ?= scope:hd_j16_dir_def
+					}
+				}
+			}
+			# 宣战前临时解除和平锁（照 hd184r :448-463），宣战后恢复
+			if = {
+				limit = { has_character_flag = sworn_peace }
+				remove_character_flag = sworn_peace
+				add_character_flag = { flag = hd_j16_dir_restore_sworn_peace days = 1 }
+			}
+			# 2026-10-28 boki：S4 仇池、S6 前凉、S7 代是灭国，走吞并 CB 的 annex 情境，胜即全取守方（目标只是占位：主头衔或首府县，不做连通筛选）；
+			# 其余阶段（关中、陇右、燕残），或守方不是该阶段要灭的那一家（夹在目标郡里的第三方），照旧 historical 情境，只取目标郡
+			if = {
+				limit = {
+					scope:hd_j16_dir_def = {
+						OR = {
+							AND = {
+								global_var:hd_j16_dir_qin_stage = 4
+								house ?= house:chouchi_yang	# 仇池杨氏
+							}
+							AND = {
+								global_var:hd_j16_dir_qin_stage = 6
+								house ?= house:anding_zhang	# 前凉张氏
+							}
+							AND = {
+								global_var:hd_j16_dir_qin_stage = 7
+								dynasty ?= dynasty:tuoba	# 代拓跋氏
+							}
+						}
+					}
+				}
+				hd_j16_dir_clear_scope_effect = { S = hd_j16_dir_annex_tgt }
+				scope:hd_j16_dir_def.primary_title ?= {
+					if = {
+						limit = { hd_tb_primary_title_target_trigger = { DEF = scope:hd_j16_dir_def } }
+						save_scope_as = hd_j16_dir_annex_tgt
+					}
+				}
+				if = {
+					limit = { NOT = { exists = scope:hd_j16_dir_annex_tgt } }
+					scope:hd_j16_dir_def.capital_county ?= { save_scope_as = hd_j16_dir_annex_tgt }
+				}
+				if = {
+					limit = { exists = scope:hd_j16_dir_annex_tgt }
+					hd_tb_arm_effect = { KIND = annex }
+					start_war = {
+						cb = hd_dc_tunbing_cb
+						target = scope:hd_j16_dir_def
+						target_title = scope:hd_j16_dir_annex_tgt
+					}
+					hd_tb_disarm_effect = yes
+				}
+			}
+			else = {
+				hd_tb_arm_effect = { KIND = historical }
+				hd_wct_clear_input_effect = yes
+				hd_wct_add_input_effect = { TARGET = scope:hd_j16_dir_tgt }
+				hd_wct_start_war_effect = { CB = hd_dc_tunbing_cb ATTACKER = scope:hd_j16_dir_actor DEFENDER = scope:hd_j16_dir_def }
+				hd_wct_clear_input_effect = yes
+			}
+			if = {
+				limit = { has_character_flag = hd_j16_dir_restore_sworn_peace }
+				remove_character_flag = hd_j16_dir_restore_sworn_peace
+				add_character_flag = sworn_peace
+			}
+			random_character_war = {
+				limit = {
+					using_cb = hd_dc_tunbing_cb
+					primary_attacker = scope:hd_j16_dir_actor
+					primary_defender = scope:hd_j16_dir_def
+					NOT = { has_variable = hd_j16_dir_war }
+				}
+				save_scope_as = hd_j16_dir_newwar
+			}
+			if = {
+				limit = { exists = scope:hd_j16_dir_newwar }
+				scope:hd_j16_dir_newwar = { hd_j16_dir_tag_war_effect = yes }
+				hd_j16_dir_log_effect = { TYPE = FIRE REASON = war_started }
+				hd_j16_dir_notice_effect = yes
+			}
+			else = {
+				hd_j16_dir_log_once_effect = { TYPE = WAIT REASON = war_start_failed WLOG = fail_wlog }
+			}
+		}
+		else_if = {
+			limit = { exists = scope:hd_j16_dir_tgt }
+			hd_j16_dir_log_once_effect = { TYPE = WAIT REASON = stale_target_skipped WLOG = stale_wlog }
+		}
+	}
+}
+
+# 战争标签 hd_j16_dir_war = flag:<阶段名>（04 §1.1：E4-Q10/Q30/T10 按 qiuchi / liang / dai 找导演战争）。Scope：战争
+hd_j16_dir_tag_war_effect = {
+	if = {
+		limit = { global_var:hd_j16_dir_qin_stage = 1 }
+		set_variable = { name = hd_j16_dir_war value = flag:guanzhong }
+	}
+	else_if = {
+		limit = { global_var:hd_j16_dir_qin_stage = 2 }
+		set_variable = { name = hd_j16_dir_war value = flag:longyou }
+	}
+	else_if = {
+		limit = { global_var:hd_j16_dir_qin_stage = 3 }
+		set_variable = { name = hd_j16_dir_war value = flag:yancan }
+	}
+	else_if = {
+		limit = { global_var:hd_j16_dir_qin_stage = 4 }
+		set_variable = { name = hd_j16_dir_war value = flag:qiuchi }
+	}
+	else_if = {
+		limit = { global_var:hd_j16_dir_qin_stage = 6 }
+		set_variable = { name = hd_j16_dir_war value = flag:liang }
+	}
+	else_if = {
+		limit = { global_var:hd_j16_dir_qin_stage = 7 }
+		set_variable = { name = hd_j16_dir_war value = flag:dai }
+	}
+}
+
+# 阶段开始的天下通报（每阶段首场导演战争开打时发一次，hd_j16.1420）。Scope：秦主
+hd_j16_dir_notice_effect = {
+	if = {
+		limit = { NOT = { hd_j16_dir_stage_has_trigger = { WHAT = noticed } } }
+		hd_j16_dir_stage_set_effect = { WHAT = noticed }
+		scope:hd_j16_dir_actor = { save_scope_as = hd_news_a }
+		scope:hd_j16_dir_def = { save_scope_as = hd_news_b }
+		save_scope_value_as = { name = hd_j16_dir_news_stage value = global_var:hd_j16_dir_qin_stage }
+		hd_world_news_send_all_effect = { EVENT = hd_j16.1420 }
+	}
+}
+
+############################################################
+# 边境战争宣战工具（A3-F2★A；03 §4.1 末「麻秋压境的 CB」）。CB 见 common/casus_belli_types/zz_hd_j16_border_cb.txt。
+# 用法：hd_j16_border_start_war_effect = { ATTACKER = <角色> DEFENDER = <角色> TARGET = <县或郡头衔> KIND = <场次> }
+# - 只打一县：原定县须由守方或其下属持有、且与攻方最高领主的领土接壤；不接壤时改取同郡内满足条件的一县；仍无则不宣战。
+#   不走 hd_wct：连通筛选在连不到时会改成「守方所有接壤郡」，与「胜只取一县」不合。
+# - 成功判据同 hd_nbc_start_war_effect：exists = scope:hd_nbc_war_$KIND$；战争上设 hd_nbc_war_kind = flag:$KIND$，全局设 hd_nbc_$KIND$_active，
+#   另存全局 hd_j16_border_$KIND$_target（实际所争的县，节点判结局用）。
+# - CB 结算不分发 KIND（00 §6）：胜负由节点按该县归属自判，_active 由节点结局时自清。
+############################################################
+hd_j16_border_start_war_effect = {
+	# 成功判据是 scope:hd_nbc_war_$KIND$，先清掉随心跳带来的同名旧作用域，免得宣战失败也被当成成功
+	hd_j16_dir_clear_scope_effect = { S = hd_nbc_war_$KIND$ }
+	hd_j16_dir_clear_scope_effect = { S = hd_j16_bd_me }
+	hd_j16_dir_clear_scope_effect = { S = hd_j16_bd_att }
+	hd_j16_dir_clear_scope_effect = { S = hd_j16_bd_def }
+	hd_j16_dir_clear_scope_effect = { S = hd_j16_bd_tgt }
+	$ATTACKER$ = {
+		save_scope_as = hd_j16_bd_me
+		top_liege = { save_scope_as = hd_j16_bd_att }
+	}
+	$DEFENDER$ = { save_scope_as = hd_j16_bd_def }
+	# TARGET 可传县或郡：县先试本县，不行再取同郡内一县；郡直接取郡内一县
+	$TARGET$ = {
+		if = {
+			limit = {
+				tier = tier_county
+				hd_j16_border_county_ok_trigger = yes
+			}
+			save_scope_as = hd_j16_bd_tgt
+		}
+		else_if = {
+			limit = { tier = tier_county }
+			duchy ?= {
+				random_de_jure_county = {
+					limit = { hd_j16_border_county_ok_trigger = yes }
+					save_scope_as = hd_j16_bd_tgt
+				}
+			}
+		}
+		else_if = {
+			limit = { tier = tier_duchy }
+			random_de_jure_county = {
+				limit = { hd_j16_border_county_ok_trigger = yes }
+				save_scope_as = hd_j16_bd_tgt
+			}
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_j16_bd_tgt }
+		scope:hd_j16_bd_me = {
+			if = {
+				limit = { is_allied_to = scope:hd_j16_bd_def }
+				break_alliance_due_to_attack_effect = { TARGET = scope:hd_j16_bd_def }
+			}
+			start_war = {
+				cb = hd_j16_border_cb
+				target = scope:hd_j16_bd_def
+				target_title = scope:hd_j16_bd_tgt
+			}
+			random_character_war = {
+				limit = {
+					using_cb = hd_j16_border_cb
+					primary_attacker = scope:hd_j16_bd_me
+					primary_defender = scope:hd_j16_bd_def
+					NOT = { has_variable = hd_nbc_war_kind }
+				}
+				set_variable = { name = hd_nbc_war_kind value = flag:$KIND$ }
+				save_scope_as = hd_nbc_war_$KIND$
+			}
+		}
+		if = {
+			limit = { exists = scope:hd_nbc_war_$KIND$ }
+			set_global_variable = hd_nbc_$KIND$_active
+			set_global_variable = { name = hd_j16_border_$KIND$_target value = scope:hd_j16_bd_tgt }
+			debug_log = "HD_J16 border FIRE war_started $KIND$"
+		}
+		else = {
+			debug_log = "HD_J16 border WAIT war_start_failed $KIND$"
+		}
+	}
+	else = {
+		debug_log = "HD_J16 border WAIT not_adjacent $KIND$"
+	}
+}
+
+# 边境战争结算的 3 年停战（hd_j16_border_cb 三处结局调用；$RESULT$ = victory / white_peace / defeat）。Root：战争理由（root.war 为该战争）
+# 攻方与守方互订；守方的顶层领主另有其人时，攻方与其也互订（03 §4.1「攻方与守方及守方 top_liege 3 年停战」）
+hd_j16_border_truce_effect = {
+	scope:attacker = {
+		add_truce_both_ways = {
+			character = scope:defender
+			years = 3
+			war = root.war
+			result = $RESULT$
+		}
+	}
+	scope:defender.top_liege ?= {
+		if = {
+			limit = {
+				NOT = { this = scope:defender }
+				NOT = { this = scope:attacker }
+			}
+			save_scope_as = hd_j16_border_def_top
+			scope:attacker = {
+				add_truce_both_ways = {
+					character = scope:hd_j16_border_def_top
+					years = 3
+					war = root.war
+					result = $RESULT$
+				}
+			}
+		}
+	}
+}

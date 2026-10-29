@@ -1,0 +1,671 @@
+# -----------------------------------------------------------------------------
+# Proposal state
+# -----------------------------------------------------------------------------
+
+hd_peace_clear_treaty_state_effect = {
+	remove_variable = hd_peace_special_objective_type
+	remove_variable = hd_peace_engine_end_returned
+	remove_variable = hd_peace_objective_artifact_claims
+	remove_variable = hd_peace_objective_artifact_count
+	remove_variable = hd_peace_objective_raze_province
+	remove_variable = hd_peace_migration_domain
+	remove_variable = hd_peace_migration_target
+	remove_variable = hd_peace_migration_nonce
+	if = { limit = { has_variable_list = hd_peace_objective_artifacts } clear_variable_list = hd_peace_objective_artifacts }
+	remove_variable = hd_peace_objective_kind
+	remove_variable = hd_peace_offer_annual_tribute
+	remove_variable = hd_peace_demand_annual_tribute
+	remove_variable = hd_peace_signed_demand_cost
+	remove_variable = hd_peace_signed_offer_cost
+	remove_variable = hd_peace_objective
+	remove_variable = hd_peace_objective_claimant
+	if = { limit = { has_variable_list = hd_peace_objective_display_titles } clear_variable_list = hd_peace_objective_display_titles }
+	remove_variable = hd_peace_cb_confirmed
+	remove_variable = hd_peace_offer_result
+	remove_variable = hd_peace_offer_expiry_nonce
+ remove_variable = hd_peace_locked_net
+ if = { limit = { has_variable_list = hd_peace_cb_reserved_counties } clear_variable_list = hd_peace_cb_reserved_counties }
+	if = { limit = { has_variable_list = hd_peace_offer_released_vassals } clear_variable_list = hd_peace_offer_released_vassals }
+	if = { limit = { has_variable_list = hd_peace_offer_release_candidates } clear_variable_list = hd_peace_offer_release_candidates }
+	if = { limit = { has_variable_list = hd_peace_demand_released_vassals } clear_variable_list = hd_peace_demand_released_vassals }
+	if = { limit = { has_variable_list = hd_peace_demand_release_candidates } clear_variable_list = hd_peace_demand_release_candidates }
+	remove_variable = hd_peace_treaty_war
+	remove_variable = hd_peace_treaty_opponent
+	remove_variable = hd_peace_offer_gold
+	remove_variable = hd_peace_demand_gold
+	remove_variable = hd_peace_offer_herd
+	remove_variable = hd_peace_demand_herd
+	remove_variable = hd_peace_offer_tribute
+	remove_variable = hd_peace_demand_tribute
+	remove_variable = hd_peace_offer_suzerainty
+	remove_variable = hd_peace_demand_suzerainty
+	remove_variable = hd_peace_offer_claims
+	remove_variable = hd_peace_demand_claims
+	remove_variable = hd_peace_offer_hostage
+	remove_variable = hd_peace_demand_hostage
+	remove_variable = hd_peace_offer_break_alliances
+	remove_variable = hd_peace_demand_break_alliances
+	remove_variable = hd_peace_offer_humiliation
+	remove_variable = hd_peace_demand_humiliation
+	remove_variable = hd_peace_offer_prisoner_release
+	remove_variable = hd_peace_demand_prisoner_release
+	remove_variable = hd_peace_offer_conversion
+	remove_variable = hd_peace_demand_conversion
+	remove_variable = hd_peace_offer_disarmament
+	remove_variable = hd_peace_demand_disarmament
+	remove_variable = hd_peace_forced_alliance
+	remove_variable = hd_peace_long_truce
+	remove_variable = hd_peace_extended_truce
+	remove_variable = hd_peace_consent_war
+	remove_variable = hd_peace_consent_recipient
+	remove_variable = hd_peace_consent_nonce
+	remove_variable = hd_peace_treaty_locked
+	remove_variable = hd_peace_treaty_resolution_in_progress
+	remove_variable = hd_peace_land_selection_mode
+	if = {
+		limit = { has_variable_list = hd_peace_offer_candidates }
+		clear_variable_list = hd_peace_offer_candidates
+	}
+	if = {
+		limit = { has_variable_list = hd_peace_demand_candidates }
+		clear_variable_list = hd_peace_demand_candidates
+	}
+	if = {
+		limit = { has_variable_list = hd_peace_offer_counties }
+		clear_variable_list = hd_peace_offer_counties
+	}
+	if = {
+		limit = { has_variable_list = hd_peace_demand_counties }
+		clear_variable_list = hd_peace_demand_counties
+	}
+	if = { limit = { has_variable_list = hd_peace_demand_titles } clear_variable_list = hd_peace_demand_titles }
+	if = { limit = { has_variable_list = hd_peace_demand_title_candidates } clear_variable_list = hd_peace_demand_title_candidates }
+}
+
+# Remove an offer pointer whose proposer, opponent, or war no longer matches.
+# ROOT is the recipient of the pending offer.
+hd_peace_clear_stale_pending_treaty_effect = {
+	if = {
+		limit = {
+			has_variable = hd_peace_pending_treaty_proposer
+			NOT = {
+				var:hd_peace_pending_treaty_proposer = {
+					is_alive = yes
+					has_variable = hd_peace_offer_nonce
+					has_variable = hd_peace_treaty_locked
+					exists = var:hd_peace_treaty_war
+					exists = var:hd_peace_treaty_opponent
+					var:hd_peace_treaty_opponent = root
+					var:hd_peace_treaty_war = {
+						OR = {
+							AND = { primary_attacker = prev primary_defender = root }
+							AND = { primary_defender = prev primary_attacker = root }
+						}
+					}
+					trigger_if = {
+						limit = { is_ai = yes }
+						var:hd_peace_treaty_war = { has_variable = hd_peace_ai_offer_pending }
+					}
+				}
+			}
+		}
+		remove_variable = hd_peace_pending_treaty_proposer
+	}
+}
+
+# Safe to call whenever a character enters a new war or opens the treaty tab.
+hd_peace_clear_stale_treaty_state_effect = {
+	hd_peace_clear_stale_pending_treaty_effect = yes
+	if = {
+		limit = {
+			has_variable = hd_peace_treaty_war
+			NOT = { exists = var:hd_peace_treaty_war }
+		}
+		hd_peace_clear_treaty_state_effect = yes
+	}
+}
+
+# ROOT is one of the two primary leaders and scope:war is ending this tick.
+hd_peace_cleanup_ended_war_treaty_effect = {
+	if = {
+		limit = {
+			has_variable = hd_peace_pending_treaty_proposer
+			var:hd_peace_pending_treaty_proposer = {
+				exists = var:hd_peace_treaty_war
+				var:hd_peace_treaty_war = scope:war
+			}
+		}
+		remove_variable = hd_peace_pending_treaty_proposer
+	}
+	if = {
+		limit = {
+			has_variable = hd_peace_treaty_war
+			var:hd_peace_treaty_war = scope:war
+			NOT = { has_variable = hd_peace_treaty_resolution_in_progress }
+		}
+		scope:war = { remove_variable = hd_peace_ai_offer_pending }
+		hd_peace_clear_treaty_state_effect = yes
+	}
+}
+
+# Called with ROOT = player and scope:war supplied by the war overview GUI.
+hd_peace_open_treaty_effect = {
+	# Clear weak references and rejected/invalid offers left by an older war.
+	hd_peace_clear_stale_treaty_state_effect = yes
+	if = {
+		limit = { NOT = { exists = var:hd_peace_treaty_war } }
+		hd_peace_clear_treaty_state_effect = yes
+	}
+	else_if = {
+		limit = { var:hd_peace_treaty_war != scope:war }
+		hd_peace_clear_treaty_state_effect = yes
+	}
+
+	set_variable = { name = hd_peace_treaty_war value = scope:war }
+	scope:war = {
+		if = {
+			limit = { primary_attacker = root }
+			primary_defender = { save_scope_as = hd_peace_opening_opponent }
+		}
+		else_if = {
+			limit = { primary_defender = root }
+			primary_attacker = { save_scope_as = hd_peace_opening_opponent }
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_peace_opening_opponent }
+		set_variable = {
+			name = hd_peace_treaty_opponent
+			value = scope:hd_peace_opening_opponent
+		}
+	}
+	if = { limit = { NOT = { exists = var:hd_peace_offer_gold } } set_variable = { name = hd_peace_offer_gold value = 0 } }
+	if = { limit = { NOT = { exists = var:hd_peace_demand_gold } } set_variable = { name = hd_peace_demand_gold value = 0 } }
+	if = { limit = { NOT = { exists = var:hd_peace_offer_herd } } set_variable = { name = hd_peace_offer_herd value = 0 } }
+	if = { limit = { NOT = { exists = var:hd_peace_demand_herd } } set_variable = { name = hd_peace_demand_herd value = 0 } }
+
+	# Candidate lists follow the current realms on the Han map.
+	if = {
+		limit = { has_variable_list = hd_peace_offer_candidates }
+		clear_variable_list = hd_peace_offer_candidates
+	}
+	if = {
+		limit = { has_variable_list = hd_peace_demand_candidates }
+		clear_variable_list = hd_peace_demand_candidates
+	}
+	hd_peace_populate_alphabetical_treaty_candidates_effect = yes
+	# AI authors do not compose independence clauses yet; avoid building unused
+	# sub-realm pickers during the periodic AI assessment.
+	hd_peace_cache_cb_territories_effect = yes
+	set_variable = { name = hd_peace_objective_claimant value = root }
+	hd_peace_cache_special_objective_effect = yes
+	if = { limit = { has_variable_list = hd_peace_objective_display_titles } clear_variable_list = hd_peace_objective_display_titles }
+	var:hd_peace_treaty_war = {
+		claimant ?= { root = { set_variable = { name = hd_peace_objective_claimant value = prev } } }
+		casus_belli = { every_target_title = { root = { add_to_variable_list = { name = hd_peace_objective_display_titles target = prev } } } }
+	}
+	if = {
+		limit = { is_ai = no }
+		hd_peace_populate_release_candidates_effect = yes
+		# The AI builds whole-title candidates only when composing a full-score deal.
+		hd_peace_populate_demand_title_candidates_effect = yes
+	}
+}
+
+# -----------------------------------------------------------------------------
+# Gold controls. Values are clamped after every change.
+# -----------------------------------------------------------------------------
+
+hd_peace_clamp_offer_gold_effect = {
+	if = { limit = { var:hd_peace_offer_gold < 0 } set_variable = { name = hd_peace_offer_gold value = 0 } }
+	if = { limit = { var:hd_peace_offer_gold > hd_peace_max_offer_gold_value } set_variable = { name = hd_peace_offer_gold value = hd_peace_max_offer_gold_value } }
+}
+
+hd_peace_clamp_demand_gold_effect = {
+	if = { limit = { var:hd_peace_demand_gold < 0 } set_variable = { name = hd_peace_demand_gold value = 0 } }
+	if = { limit = { var:hd_peace_demand_gold > hd_peace_max_demand_gold_value } set_variable = { name = hd_peace_demand_gold value = hd_peace_max_demand_gold_value } }
+}
+
+hd_peace_offer_gold_add_1_effect = { change_variable = { name = hd_peace_offer_gold add = 1 } hd_peace_clamp_offer_gold_effect = yes }
+hd_peace_offer_gold_add_10_effect = { change_variable = { name = hd_peace_offer_gold add = 10 } hd_peace_clamp_offer_gold_effect = yes }
+hd_peace_offer_gold_add_100_effect = { change_variable = { name = hd_peace_offer_gold add = 100 } hd_peace_clamp_offer_gold_effect = yes }
+hd_peace_offer_gold_subtract_1_effect = { change_variable = { name = hd_peace_offer_gold subtract = 1 } hd_peace_clamp_offer_gold_effect = yes }
+hd_peace_offer_gold_subtract_10_effect = { change_variable = { name = hd_peace_offer_gold subtract = 10 } hd_peace_clamp_offer_gold_effect = yes }
+hd_peace_offer_gold_subtract_100_effect = { change_variable = { name = hd_peace_offer_gold subtract = 100 } hd_peace_clamp_offer_gold_effect = yes }
+hd_peace_offer_gold_max_effect = { set_variable = { name = hd_peace_offer_gold value = hd_peace_max_offer_gold_value } }
+hd_peace_offer_gold_clear_effect = { set_variable = { name = hd_peace_offer_gold value = 0 } }
+
+hd_peace_demand_gold_add_1_effect = { change_variable = { name = hd_peace_demand_gold add = 1 } hd_peace_clamp_demand_gold_effect = yes }
+hd_peace_demand_gold_add_10_effect = { change_variable = { name = hd_peace_demand_gold add = 10 } hd_peace_clamp_demand_gold_effect = yes }
+hd_peace_demand_gold_add_100_effect = { change_variable = { name = hd_peace_demand_gold add = 100 } hd_peace_clamp_demand_gold_effect = yes }
+hd_peace_demand_gold_subtract_1_effect = { change_variable = { name = hd_peace_demand_gold subtract = 1 } hd_peace_clamp_demand_gold_effect = yes }
+hd_peace_demand_gold_subtract_10_effect = { change_variable = { name = hd_peace_demand_gold subtract = 10 } hd_peace_clamp_demand_gold_effect = yes }
+hd_peace_demand_gold_subtract_100_effect = { change_variable = { name = hd_peace_demand_gold subtract = 100 } hd_peace_clamp_demand_gold_effect = yes }
+hd_peace_demand_gold_max_effect = { set_variable = { name = hd_peace_demand_gold value = hd_peace_max_demand_gold_value } }
+hd_peace_demand_gold_clear_effect = { set_variable = { name = hd_peace_demand_gold value = 0 } }
+
+# -----------------------------------------------------------------------------
+# Herd controls. Only nomadic rulers may exchange herd, and herd cannot be owed.
+# -----------------------------------------------------------------------------
+
+hd_peace_clamp_offer_herd_effect = {
+	if = { limit = { var:hd_peace_offer_herd < 0 } set_variable = { name = hd_peace_offer_herd value = 0 } }
+	if = { limit = { var:hd_peace_offer_herd > hd_peace_max_offer_herd_value } set_variable = { name = hd_peace_offer_herd value = hd_peace_max_offer_herd_value } }
+}
+
+hd_peace_clamp_demand_herd_effect = {
+	if = { limit = { var:hd_peace_demand_herd < 0 } set_variable = { name = hd_peace_demand_herd value = 0 } }
+	if = { limit = { var:hd_peace_demand_herd > hd_peace_max_demand_herd_value } set_variable = { name = hd_peace_demand_herd value = hd_peace_max_demand_herd_value } }
+}
+
+hd_peace_offer_herd_add_10_effect = { change_variable = { name = hd_peace_offer_herd add = 10 } hd_peace_clamp_offer_herd_effect = yes }
+hd_peace_offer_herd_add_100_effect = { change_variable = { name = hd_peace_offer_herd add = 100 } hd_peace_clamp_offer_herd_effect = yes }
+hd_peace_offer_herd_subtract_10_effect = { change_variable = { name = hd_peace_offer_herd subtract = 10 } hd_peace_clamp_offer_herd_effect = yes }
+hd_peace_offer_herd_subtract_100_effect = { change_variable = { name = hd_peace_offer_herd subtract = 100 } hd_peace_clamp_offer_herd_effect = yes }
+hd_peace_offer_herd_max_effect = { set_variable = { name = hd_peace_offer_herd value = hd_peace_max_offer_herd_value } }
+hd_peace_offer_herd_clear_effect = { set_variable = { name = hd_peace_offer_herd value = 0 } }
+hd_peace_toggle_offer_herd_effect = {
+	if = { limit = { var:hd_peace_offer_herd > 0 } hd_peace_offer_herd_clear_effect = yes }
+	else = { set_variable = { name = hd_peace_offer_herd value = hd_peace_default_offer_herd_value } hd_peace_clamp_offer_herd_effect = yes }
+}
+
+hd_peace_demand_herd_add_10_effect = { change_variable = { name = hd_peace_demand_herd add = 10 } hd_peace_clamp_demand_herd_effect = yes }
+hd_peace_demand_herd_add_100_effect = { change_variable = { name = hd_peace_demand_herd add = 100 } hd_peace_clamp_demand_herd_effect = yes }
+hd_peace_demand_herd_subtract_10_effect = { change_variable = { name = hd_peace_demand_herd subtract = 10 } hd_peace_clamp_demand_herd_effect = yes }
+hd_peace_demand_herd_subtract_100_effect = { change_variable = { name = hd_peace_demand_herd subtract = 100 } hd_peace_clamp_demand_herd_effect = yes }
+hd_peace_demand_herd_max_effect = { set_variable = { name = hd_peace_demand_herd value = hd_peace_max_demand_herd_value } }
+hd_peace_demand_herd_clear_effect = { set_variable = { name = hd_peace_demand_herd value = 0 } }
+hd_peace_toggle_demand_herd_effect = {
+	if = { limit = { var:hd_peace_demand_herd > 0 } hd_peace_demand_herd_clear_effect = yes }
+	else = { set_variable = { name = hd_peace_demand_herd value = hd_peace_default_demand_herd_value } hd_peace_clamp_demand_herd_effect = yes }
+}
+# -----------------------------------------------------------------------------
+# Clause toggles
+# -----------------------------------------------------------------------------
+
+hd_peace_toggle_offer_tribute_effect = {
+	if = { limit = { has_variable = hd_peace_offer_tribute } remove_variable = hd_peace_offer_tribute }
+	else = { set_variable = { name = hd_peace_offer_tribute value = 1 } remove_variable = hd_peace_offer_suzerainty }
+}
+hd_peace_toggle_demand_tribute_effect = {
+	if = { limit = { has_variable = hd_peace_demand_tribute } remove_variable = hd_peace_demand_tribute }
+	else = { set_variable = { name = hd_peace_demand_tribute value = 1 } remove_variable = hd_peace_demand_suzerainty }
+}
+hd_peace_toggle_offer_suzerainty_effect = {
+	if = { limit = { has_variable = hd_peace_offer_suzerainty } remove_variable = hd_peace_offer_suzerainty }
+	else = { set_variable = { name = hd_peace_offer_suzerainty value = 1 } remove_variable = hd_peace_offer_tribute remove_variable = hd_peace_demand_suzerainty }
+}
+hd_peace_toggle_demand_suzerainty_effect = {
+	if = { limit = { has_variable = hd_peace_demand_suzerainty } remove_variable = hd_peace_demand_suzerainty }
+	else = { set_variable = { name = hd_peace_demand_suzerainty value = 1 } remove_variable = hd_peace_demand_tribute remove_variable = hd_peace_offer_suzerainty }
+}
+
+hd_peace_toggle_offer_claims_effect = { if = { limit = { has_variable = hd_peace_offer_claims } remove_variable = hd_peace_offer_claims } else = { set_variable = { name = hd_peace_offer_claims value = 1 } } }
+hd_peace_toggle_demand_claims_effect = { if = { limit = { has_variable = hd_peace_demand_claims } remove_variable = hd_peace_demand_claims } else = { set_variable = { name = hd_peace_demand_claims value = 1 } } }
+hd_peace_toggle_offer_hostage_effect = { if = { limit = { has_variable = hd_peace_offer_hostage } remove_variable = hd_peace_offer_hostage } else = { set_variable = { name = hd_peace_offer_hostage value = 1 } } }
+hd_peace_toggle_demand_hostage_effect = { if = { limit = { has_variable = hd_peace_demand_hostage } remove_variable = hd_peace_demand_hostage } else = { set_variable = { name = hd_peace_demand_hostage value = 1 } } }
+hd_peace_toggle_offer_break_alliances_effect = {
+	if = { limit = { has_variable = hd_peace_offer_break_alliances } remove_variable = hd_peace_offer_break_alliances }
+	else = {
+		set_variable = { name = hd_peace_offer_break_alliances value = 1 }
+		remove_variable = hd_peace_forced_alliance
+	}
+}
+hd_peace_toggle_demand_break_alliances_effect = {
+	if = { limit = { has_variable = hd_peace_demand_break_alliances } remove_variable = hd_peace_demand_break_alliances }
+	else = {
+		set_variable = { name = hd_peace_demand_break_alliances value = 1 }
+		remove_variable = hd_peace_forced_alliance
+	}
+}
+hd_peace_toggle_offer_humiliation_effect = { if = { limit = { has_variable = hd_peace_offer_humiliation } remove_variable = hd_peace_offer_humiliation } else = { set_variable = { name = hd_peace_offer_humiliation value = 1 } } }
+hd_peace_toggle_demand_humiliation_effect = { if = { limit = { has_variable = hd_peace_demand_humiliation } remove_variable = hd_peace_demand_humiliation } else = { set_variable = { name = hd_peace_demand_humiliation value = 1 } } }
+hd_peace_toggle_offer_prisoner_release_effect = { if = { limit = { has_variable = hd_peace_offer_prisoner_release } remove_variable = hd_peace_offer_prisoner_release } else = { set_variable = { name = hd_peace_offer_prisoner_release value = 1 } } }
+hd_peace_toggle_demand_prisoner_release_effect = { if = { limit = { has_variable = hd_peace_demand_prisoner_release } remove_variable = hd_peace_demand_prisoner_release } else = { set_variable = { name = hd_peace_demand_prisoner_release value = 1 } } }
+hd_peace_toggle_offer_conversion_effect = {
+	if = { limit = { has_variable = hd_peace_offer_conversion } remove_variable = hd_peace_offer_conversion }
+	else = {
+		set_variable = { name = hd_peace_offer_conversion value = 1 }
+		remove_variable = hd_peace_demand_conversion
+	}
+}
+hd_peace_toggle_demand_conversion_effect = {
+	if = { limit = { has_variable = hd_peace_demand_conversion } remove_variable = hd_peace_demand_conversion }
+	else = {
+		set_variable = { name = hd_peace_demand_conversion value = 1 }
+		remove_variable = hd_peace_offer_conversion
+	}
+}
+hd_peace_toggle_offer_disarmament_effect = { if = { limit = { has_variable = hd_peace_offer_disarmament } remove_variable = hd_peace_offer_disarmament } else = { set_variable = { name = hd_peace_offer_disarmament value = 1 } } }
+hd_peace_toggle_demand_disarmament_effect = { if = { limit = { has_variable = hd_peace_demand_disarmament } remove_variable = hd_peace_demand_disarmament } else = { set_variable = { name = hd_peace_demand_disarmament value = 1 } } }
+hd_peace_toggle_forced_alliance_effect = {
+	if = { limit = { has_variable = hd_peace_forced_alliance } remove_variable = hd_peace_forced_alliance }
+	else = {
+		set_variable = { name = hd_peace_forced_alliance value = 1 }
+		remove_variable = hd_peace_offer_break_alliances
+		remove_variable = hd_peace_demand_break_alliances
+	}
+}
+hd_peace_toggle_long_truce_effect = {
+	if = { limit = { has_variable = hd_peace_long_truce } remove_variable = hd_peace_long_truce }
+	else = {
+		set_variable = { name = hd_peace_long_truce value = 1 }
+		remove_variable = hd_peace_extended_truce
+	}
+}
+hd_peace_toggle_extended_truce_effect = {
+	if = { limit = { has_variable = hd_peace_extended_truce } remove_variable = hd_peace_extended_truce }
+	else = {
+		set_variable = { name = hd_peace_extended_truce value = 1 }
+		remove_variable = hd_peace_long_truce
+	}
+}
+
+hd_peace_clear_offer_counties_effect = { if = { limit = { has_variable_list = hd_peace_offer_counties } clear_variable_list = hd_peace_offer_counties } }
+hd_peace_clear_demand_counties_effect = { if = { limit = { has_variable_list = hd_peace_demand_counties } clear_variable_list = hd_peace_demand_counties } }
+
+# -----------------------------------------------------------------------------
+# Treaty execution
+# -----------------------------------------------------------------------------
+
+hd_peace_start_money_tribute_effect = {
+	set_variable = { name = hd_peace_tribute_receiver value = scope:hd_peace_tribute_receiver }
+	set_variable = { name = hd_peace_tribute_years value = 10 }
+	set_variable = { name = hd_peace_tribute_annual_amount value = $AMOUNT$ }
+	add_character_modifier = { modifier = hd_peace_paying_tribute_modifier years = 10 }
+	trigger_event = { id = hd_peace.0100 years = 1 }
+}
+
+hd_peace_end_money_tribute_effect = {
+	remove_character_modifier = hd_peace_paying_tribute_modifier
+	remove_variable = hd_peace_tribute_receiver
+	remove_variable = hd_peace_tribute_years
+	remove_variable = hd_peace_tribute_annual_amount
+}
+
+hd_peace_apply_humiliation_effect = {
+	save_scope_as = hd_peace_humiliated_ruler
+	add_prestige = -250
+	if = { limit = { has_legitimacy = yes } add_legitimacy = -100 }
+	add_stress = 40
+	add_character_modifier = { modifier = hd_peace_humiliated_modifier years = 5 }
+	every_vassal = {
+		add_opinion = { target = scope:hd_peace_humiliated_ruler modifier = hd_peace_humiliating_peace_opinion }
+	}
+}
+
+# The engine records the result and closes the war. Ordinary CB callbacks only
+# acknowledge this transaction; selected terms alone change the realms.
+hd_peace_end_negotiated_war_effect = {
+	if = {
+		limit = {
+			hd_peace_all_clauses_valid_trigger = yes
+			hd_peace_has_any_treaty_clause_trigger = yes
+			has_variable = hd_peace_offer_nonce
+			NOT = { has_variable = hd_peace_treaty_resolution_in_progress }
+			var:hd_peace_treaty_war = { NOT = { has_variable = hd_peace_resolution_started } }
+		}
+		remove_variable = hd_peace_cb_confirmed
+		remove_variable = hd_peace_engine_end_returned
+		set_variable = { name = hd_peace_treaty_resolution_in_progress value = 1 }
+		set_variable = { name = hd_peace_signed_demand_cost value = hd_peace_demand_cost_value }
+		set_variable = { name = hd_peace_signed_offer_cost value = hd_peace_offer_cost_value }
+		# Freeze annual payments before land or vassal changes alter income.
+		set_variable = { name = hd_peace_offer_annual_tribute value = hd_peace_actor_annual_tribute_value }
+		set_variable = { name = hd_peace_demand_annual_tribute value = hd_peace_opponent_annual_tribute_value }
+		hd_peace_snapshot_objective_effect = yes
+		# Only an explicit war-objective clause or full military victory records
+		# a winner. An ordinary negotiated exchange records an agreed peace.
+		set_variable = { name = hd_peace_offer_result value = 0 }
+		if = {
+			limit = { OR = { has_variable = hd_peace_objective hd_peace_actor_warscore_value >= 100 } }
+			set_variable = { name = hd_peace_offer_result value = 1 }
+		}
+		var:hd_peace_treaty_war = {
+			set_variable = { name = hd_peace_resolution_started value = 1 }
+			set_variable = { name = hd_peace_signatory value = root }
+			set_variable = { name = hd_peace_signed_nonce value = root.var:hd_peace_offer_nonce }
+			remove_variable = hd_peace_ai_offer_pending
+			if = {
+				limit = { root.var:hd_peace_offer_result = 1 }
+				if = { limit = { primary_attacker = root } end_war = attacker }
+				else = { end_war = defender }
+			}
+			else = { end_war = white_peace }
+		}
+		# Resume with the original proposer as ROOT. CB callbacks only acknowledge
+		# this exact resolution; executing proposer effects in CB ROOT is invalid.
+		set_variable = { name = hd_peace_engine_end_returned value = 1 }
+		if = {
+			limit = { has_variable = hd_peace_cb_confirmed var:hd_peace_cb_confirmed = var:hd_peace_offer_nonce }
+			hd_peace_finish_signed_treaty_effect = yes
+		}
+		else = { hd_peace_clear_treaty_state_effect = yes }
+	}
+}
+
+# ROOT = proposer. A native migration callback may precede or follow the normal
+# war callback. Both paths can reach this gate; only the matching receipt wins.
+hd_peace_finish_signed_treaty_effect = {
+	if = {
+		limit = {
+			has_variable = hd_peace_treaty_resolution_in_progress
+			has_variable = hd_peace_engine_end_returned
+			has_variable = hd_peace_cb_confirmed
+			var:hd_peace_cb_confirmed = var:hd_peace_offer_nonce
+			trigger_if = {
+				limit = { has_variable = hd_peace_objective var:hd_peace_objective_kind = 7 }
+				exists = var:hd_peace_migration_domain
+				exists = var:hd_peace_migration_target
+				var:hd_peace_migration_nonce = var:hd_peace_offer_nonce
+			}
+		}
+		remove_variable = hd_peace_cb_confirmed
+		hd_peace_apply_objective_effect = yes
+		hd_peace_apply_negotiated_treaty_effect = yes
+	}
+}
+# ROOT = proposer. The opposing war leader and every selected clause are read
+# from ROOT's variables. The war is ended before this effect is called.
+hd_peace_apply_negotiated_treaty_effect = {
+	save_scope_as = hd_peace_actor
+	var:hd_peace_treaty_opponent = { save_scope_as = hd_peace_opponent }
+
+	# Territorial transfers in both directions.
+	if = {
+		limit = { OR = { has_variable_list = hd_peace_demand_counties has_variable_list = hd_peace_demand_titles } }
+		create_title_and_vassal_change = { type = conquest save_scope_as = hd_peace_demand_title_change add_claim_on_loss = yes }
+		if = {
+			limit = { has_variable_list = hd_peace_demand_counties }
+			every_in_list = {
+				variable = hd_peace_demand_counties
+				change_title_holder = { holder = scope:hd_peace_actor change = scope:hd_peace_demand_title_change take_baronies = yes }
+			}
+		}
+		if = {
+			limit = { has_variable_list = hd_peace_demand_titles }
+			hd_peace_transfer_demand_titles_effect = { CHANGE = scope:hd_peace_demand_title_change }
+		}
+		resolve_title_and_vassal_change = scope:hd_peace_demand_title_change
+	}
+	if = {
+		limit = { has_variable_list = hd_peace_offer_counties }
+		create_title_and_vassal_change = { type = conquest save_scope_as = hd_peace_offer_title_change add_claim_on_loss = yes }
+		every_in_list = {
+			variable = hd_peace_offer_counties
+			change_title_holder = { holder = scope:hd_peace_opponent change = scope:hd_peace_offer_title_change take_baronies = yes }
+		}
+		resolve_title_and_vassal_change = scope:hd_peace_offer_title_change
+	}
+
+	# Independence applies to the complete selected sub-realms.
+	if = { limit = { has_variable_list = hd_peace_demand_released_vassals } every_in_list = { variable = hd_peace_demand_released_vassals hd_peace_release_selected_vassal_effect = yes } }
+	if = { limit = { has_variable_list = hd_peace_offer_released_vassals } every_in_list = { variable = hd_peace_offer_released_vassals hd_peace_release_selected_vassal_effect = yes } }
+
+	# Immediate money transfers. pay_short_term_gold permits the negotiated debt.
+	if = {
+		limit = { var:hd_peace_offer_gold > 0 }
+		pay_short_term_gold = { target = scope:hd_peace_opponent gold = var:hd_peace_offer_gold }
+	}
+	if = {
+		limit = { var:hd_peace_demand_gold > 0 }
+		scope:hd_peace_opponent = { pay_short_term_gold = { target = scope:hd_peace_actor gold = root.var:hd_peace_demand_gold } }
+	}
+
+	# Immediate herd transfer. Both rulers must still be nomadic at signature.
+	if = {
+		limit = {
+			var:hd_peace_offer_herd > 0
+			hd_peace_nomadic_herd_exchange_available_trigger = yes
+		}
+		pay_herd = { target = scope:hd_peace_opponent value = var:hd_peace_offer_herd }
+	}
+	if = {
+		limit = {
+			var:hd_peace_demand_herd > 0
+			hd_peace_nomadic_herd_exchange_available_trigger = yes
+		}
+		scope:hd_peace_opponent = { pay_herd = { target = scope:hd_peace_actor value = root.var:hd_peace_demand_herd } }
+	}
+	# Fixed annual cash tribute for ten years.
+	if = {
+		limit = { has_variable = hd_peace_offer_tribute }
+		save_scope_as = hd_peace_tribute_payer
+		scope:hd_peace_opponent = { save_scope_as = hd_peace_tribute_receiver }
+		scope:hd_peace_tribute_payer = { hd_peace_start_money_tribute_effect = { AMOUNT = root.var:hd_peace_offer_annual_tribute } }
+	}
+	if = {
+		limit = { has_variable = hd_peace_demand_tribute }
+		scope:hd_peace_opponent = { save_scope_as = hd_peace_tribute_payer }
+		save_scope_as = hd_peace_tribute_receiver
+		scope:hd_peace_tribute_payer = { hd_peace_start_money_tribute_effect = { AMOUNT = root.var:hd_peace_demand_annual_tribute } }
+	}
+
+	# Tributary contracts use the game's subjugated-tributary relationship.
+	if = {
+		limit = { has_variable = hd_peace_offer_suzerainty hd_peace_can_become_tributary_of_opponent_trigger = yes }
+		save_scope_value_as = { name = high_obligations value = yes }
+		start_tributary_interaction_effect = { TRIBUTARY = scope:hd_peace_actor SUZERAIN = scope:hd_peace_opponent }
+	}
+	if = {
+		limit = { has_variable = hd_peace_demand_suzerainty hd_peace_opponent_can_become_tributary_trigger = yes }
+		save_scope_value_as = { name = high_obligations value = yes }
+		start_tributary_interaction_effect = { TRIBUTARY = scope:hd_peace_opponent SUZERAIN = scope:hd_peace_actor }
+	}
+
+	# Claim renunciation concerns all explicit claims against the other realm.
+	if = {
+		limit = { has_variable = hd_peace_offer_claims }
+		every_claim = {
+			explicit = yes
+			limit = { holder = { OR = { this = scope:hd_peace_opponent is_vassal_or_below_of = scope:hd_peace_opponent } } }
+			scope:hd_peace_actor = { remove_claim = prev }
+		}
+	}
+	if = {
+		limit = { has_variable = hd_peace_demand_claims }
+		scope:hd_peace_opponent = {
+			every_claim = {
+				explicit = yes
+				limit = { holder = { OR = { this = scope:hd_peace_actor is_vassal_or_below_of = scope:hd_peace_actor } } }
+				scope:hd_peace_opponent = { remove_claim = prev }
+			}
+		}
+	}
+
+	# One eligible close relative is selected from the side providing the hostage.
+	if = {
+		limit = { has_variable = hd_peace_offer_hostage }
+		random_close_family_member = {
+			limit = { bp2_valid_to_offer_as_hostage_trigger = { SENDER = scope:hd_peace_actor } }
+			save_scope_as = hd_peace_selected_hostage
+		}
+		if = { limit = { exists = scope:hd_peace_selected_hostage } scope:hd_peace_opponent = { take_hostage = scope:hd_peace_selected_hostage } }
+	}
+	if = {
+		limit = { has_variable = hd_peace_demand_hostage }
+		clear_saved_scope = hd_peace_selected_hostage
+		scope:hd_peace_opponent = {
+			random_close_family_member = {
+				limit = { bp2_valid_to_offer_as_hostage_trigger = { SENDER = scope:hd_peace_opponent } }
+				save_scope_as = hd_peace_selected_hostage
+			}
+		}
+		if = { limit = { exists = scope:hd_peace_selected_hostage } scope:hd_peace_actor = { take_hostage = scope:hd_peace_selected_hostage } }
+	}
+
+	if = { limit = { has_variable = hd_peace_offer_break_alliances } every_ally = { break_alliance = scope:hd_peace_actor } }
+	if = { limit = { has_variable = hd_peace_demand_break_alliances } scope:hd_peace_opponent = { every_ally = { break_alliance = scope:hd_peace_opponent } } }
+
+	if = { limit = { has_variable = hd_peace_offer_humiliation } hd_peace_apply_humiliation_effect = yes scope:hd_peace_opponent = { add_prestige = 100 } }
+	if = { limit = { has_variable = hd_peace_demand_humiliation } scope:hd_peace_opponent = { hd_peace_apply_humiliation_effect = yes } add_prestige = 100 }
+
+	# Close relatives held by the conceding side are returned without ransom.
+	if = {
+		limit = { has_variable = hd_peace_offer_prisoner_release }
+		every_prisoner = {
+			limit = { is_close_family_of = scope:hd_peace_opponent }
+			release_from_prison = yes
+		}
+	}
+	if = {
+		limit = { has_variable = hd_peace_demand_prisoner_release }
+		scope:hd_peace_opponent = {
+			every_prisoner = {
+				limit = { is_close_family_of = scope:hd_peace_actor }
+				release_from_prison = yes
+			}
+		}
+	}
+
+	# A ruler may accept the other ruler's faith as a personal peace term.
+	if = {
+		limit = { has_variable = hd_peace_offer_conversion }
+		set_character_faith = scope:hd_peace_opponent.faith
+	}
+	if = {
+		limit = { has_variable = hd_peace_demand_conversion }
+		scope:hd_peace_opponent = { set_character_faith = scope:hd_peace_actor.faith }
+	}
+
+	# Military restrictions are represented by a ten-year realm-wide modifier.
+	if = {
+		limit = { has_variable = hd_peace_offer_disarmament }
+		add_character_modifier = { modifier = hd_peace_disarmed_by_treaty_modifier years = 10 }
+	}
+	if = {
+		limit = { has_variable = hd_peace_demand_disarmament }
+		scope:hd_peace_opponent = { add_character_modifier = { modifier = hd_peace_disarmed_by_treaty_modifier years = 10 } }
+	}
+
+	# War cleanup can invalidate an alliance created on the same day. Formation is
+	# therefore delayed by one day; the ten-year timer starts when it truly exists.
+	if = {
+		limit = {
+			has_variable = hd_peace_forced_alliance
+			NOT = { is_allied_to = scope:hd_peace_opponent }
+		}
+		trigger_event = { id = hd_peace.0301 days = 1 }
+	}
+
+	if = {
+		limit = { NOT = { has_variable = hd_peace_extended_truce } }
+		add_truce_both_ways = { character = scope:hd_peace_opponent years = 10 name = hd_peace_long_truce }
+	}
+	if = {
+		limit = { has_variable = hd_peace_extended_truce }
+		add_truce_both_ways = { character = scope:hd_peace_opponent years = 20 name = hd_peace_extended_truce }
+	}
+
+	# Both sides remember coercive clauses; the opinion effect is directional.
+	if = {
+		limit = { var:hd_peace_signed_demand_cost > 0 }
+		scope:hd_peace_opponent = { add_opinion = { target = scope:hd_peace_actor modifier = hd_peace_treaty_grudge_opinion } }
+	}
+	if = {
+		limit = { var:hd_peace_signed_offer_cost > 0 }
+		add_opinion = { target = scope:hd_peace_opponent modifier = hd_peace_treaty_grudge_opinion }
+	}
+
+	hd_peace_clear_treaty_state_effect = yes
+}

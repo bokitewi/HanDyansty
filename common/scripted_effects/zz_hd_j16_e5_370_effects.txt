@@ -1,0 +1,1351 @@
+﻿# 两晋十六国统一史实线 · E5（395.1–421.1）× 370 节（04_370王猛伐燕.md §3.1、§3.3）。入口 hd_j16_e5_370_effect，由 hd_j16_pulse_effect 按时代粗筛后调用。
+# 写入者：第 1 期（空入口）→ 第 5 期 5-A2（10-27 汇总人定：370 节三路并行，E5 东晋段归 5-A2）。节点写法照 j16tools/TEMPLATE.md。
+# 共用小工具（hd_j16_370b_res/grant_duchy/employ/army/news_effect）与触发器（hd_j16_370b_*_trigger）在 zz_hd_j16_370b_effects.txt、zz_hd_j16_370b_triggers.txt。
+# 设计要点：
+#   - 王恭两举、桓玄入建康都是「藩镇举兵向阙、以诛君侧为名」，用现成的清君侧 CB（hd_dc_kit_ten_start_qingjunce_effect，王敦之乱 E2-J20 的先例）：
+#     攻方须是晋天子的直属封臣；胜则君侧下狱、攻方次日成终身辅政（hd_dc_ten.0032）；败则攻方被天子所囚（CB on_defeat）。04 写的 KIND=wanggong/huanxuan 因此不进 hd_nbc_war_cb。
+#   - 刘牢之倒戈：开战 45 天后（04「30–60 天」取中），刘牢之是 AI 就倒戈——改投天子一方并以 end_war 结束清君侧战争（J20 守方胜 / J30 攻方胜）；玩家刘牢之弹事件。
+#   - 卒年：节点只设卒年表 PRE（只在史实结果出现时设，见各节点注释），处死由 zz_hd_j16_deaths_effects.txt 的表行执行。
+#   - 自保护：全部窗口早于 404 开局，开局年 ≥ 404 时只设 done。
+# 节点 saved scope 前缀 hd_j16_k<缩写>_，解析前先清（hd_j16_370b_res_effect 内已清）。
+
+hd_j16_e5_370_effect = {
+	hd_j16_node_andi_effect = yes              # E5-J10 孝武被弑·安帝立
+	hd_j16_node_wanggong1_effect = yes         # E5-J15 王恭初举
+	hd_j16_node_wanggong2_effect = yes         # E5-J20 王恭再举·刘牢之倒戈
+	hd_j16_wanggong2_jingkou_effect = yes      # E5-J20 战后：京口（毗陵）郡授刘牢之
+	hd_j16_wanggong2_xunyang_effect = yes      # E5-J20 软加强：桓玄得寻阳所在郡
+	hd_j16_node_sunen_effect = yes             # E5-J22 孙恩之乱（节点侧；起兵归历史入侵 sunen）
+	hd_j16_node_huanxuan_jing_effect = yes     # E5-J25 桓玄据荆江
+	hd_j16_node_huanxuan_effect = yes          # E5-J30 桓玄入建康·秉政
+	hd_j16_node_cuanchu_effect = yes           # E5-J40 桓玄篡楚
+	hd_j16_node_liuyu_jingkou_effect = yes     # E5-J42 刘裕据京口
+}
+
+############################################################
+# E5-J10 孝武被弑·安帝立【软】（04 §3.1）
+# 窗口 396.6.1 – 397.6.1。天子是司马曜 si_ma_yao；司马德宗 si_ma_de_zong 在世（304/346 局靠早出场名单）。
+# 软摆位：窗口一开即给 AI 天子司马曜 set_designated_heir = 司马德宗（一次，hd_j16_andi_heir_set；玩家天子只记日志）。
+# 司马曜之死由卒年表执行（K 396.11.6，凶手张贵人 hd_j16_zhang_guiren，无 PRE）。fire：司马德宗已持 h_china——新闻、威望。
+# 变量：hd_j16_andi_done/_skip/_wlog/_result、hd_j16_andi_heir_set；面板 hd_hev_j16_andi
+############################################################
+hd_j16_node_andi_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_andi_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_andi_done
+			debug_log = "HD_J16 e5_j10 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 396.6.1 }
+			if = {
+				limit = { current_date >= 397.6.2 }
+				set_global_variable = hd_j16_andi_done
+				set_global_variable = hd_j16_andi_skip
+				debug_log = "HD_J16 e5_j10 SKIP window_closed"
+			}
+			else_if = {
+				limit = { hd_j16_dead_trigger = { ID = si_ma_de_zong } }
+				set_global_variable = hd_j16_andi_done
+				set_global_variable = hd_j16_andi_skip
+				debug_log = "HD_J16 e5_j10 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_370b_res_effect = { ID = si_ma_yao AS = hd_j16_kad_yao }
+				hd_j16_370b_res_effect = { ID = si_ma_de_zong AS = hd_j16_kad_dz }
+				if = {
+					limit = { scope:hd_j16_kad_dz ?= { has_title = title:h_china } }
+					set_global_variable = hd_j16_andi_done
+					hd_j16_andi_effect = yes
+				}
+				else_if = {
+					limit = {
+						NOT = { has_global_variable = hd_j16_andi_heir_set }
+						exists = scope:hd_j16_kad_dz
+						scope:hd_j16_kad_yao ?= { has_title = title:h_china }
+					}
+					set_global_variable = hd_j16_andi_heir_set
+					if = {
+						limit = { scope:hd_j16_kad_yao = { is_ai = yes } }
+						scope:hd_j16_kad_yao = { set_designated_heir = scope:hd_j16_kad_dz }
+						debug_log = "HD_J16 e5_j10 FIRE designated_heir"
+					}
+					else = {
+						debug_log = "HD_J16 e5_j10 WAIT player_heir_untouched"
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_andi_wlog } }
+					set_global_variable = hd_j16_andi_wlog
+					debug_log = "HD_J16 e5_j10 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+hd_j16_andi_effect = {
+	set_global_variable = hd_j16_andi_result
+	set_global_variable = hd_hev_j16_andi
+	hd_j16_370b_res_effect = { ID = si_ma_de_zong AS = hd_j16_kad_dz }
+	scope:hd_j16_kad_dz ?= {
+		add_prestige = 50
+		hd_j16_370b_news_effect = { WHO = scope:hd_j16_kad_dz EVENT = hd_j16.5000 }
+	}
+	debug_log = "HD_J16 e5_j10 FIRE andi"
+}
+
+############################################################
+# E5-J15 王恭初举【软】（04 §3.1）
+# 窗口 397.3.1 – 397.12.1。上游 E5-J10、E4-J97（读 done）。王恭 taiyuan_wang_023 有地、在晋天子政权内、不在战争中；
+#   王国宝 taiyuan_wang_061 在世、未被囚、在晋天子政权内（在朝）；司马道子 si_ma_dao_zi 在世、在晋天子政权内。
+# 道子是玩家：hd_j16.5010（a 杀王国宝谢天下，史实 / b 拒之）；否则王恭是玩家：hd_j16.5011（a 罢兵，史实 / b 进兵）；全是 AI：史实。
+# 史实：道子诛王国宝，王恭罢兵——设 PRE hd_j16_wanggong1_result（王国宝 K 397.5.29，凶手道子，由卒年表执行），王恭对道子 +20。
+# 进兵：王恭以清君侧 CB 向阙，君侧指王国宝；1 万事件兵；结局：王恭得终身辅政（或成 hd_court 权臣）→ _won 并补设 _result（王国宝下狱，按表处死），否则 _lost。
+#   王恭须是天子直属封臣（CB 要求）；不是时进兵当即作罢（SKIP war_start_failed）。
+# 变量：hd_j16_wanggong1_done/_skip/_wlog/_result/_started/_won/_lost/_att/_over/_ended；面板 hd_hev_j16_wanggong1
+############################################################
+hd_j16_node_wanggong1_effect = {
+	if = {
+		limit = {
+			has_global_variable = hd_j16_wanggong1_started
+			NOT = { has_global_variable = hd_j16_wanggong1_ended }
+		}
+		hd_j16_wanggong1_judge_effect = yes
+	}
+	else_if = {
+		limit = { NOT = { has_global_variable = hd_j16_wanggong1_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_wanggong1_done
+			debug_log = "HD_J16 e5_j15 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 397.3.1 }
+			if = {
+				limit = { current_date >= 397.12.2 }
+				set_global_variable = hd_j16_wanggong1_done
+				set_global_variable = hd_j16_wanggong1_skip
+				debug_log = "HD_J16 e5_j15 SKIP window_closed"
+			}
+			else_if = {
+				limit = {
+					OR = {
+						hd_j16_dead_trigger = { ID = taiyuan_wang_023 }
+						hd_j16_dead_trigger = { ID = taiyuan_wang_061 }
+						hd_j16_dead_trigger = { ID = si_ma_dao_zi }
+					}
+				}
+				set_global_variable = hd_j16_wanggong1_done
+				set_global_variable = hd_j16_wanggong1_skip
+				debug_log = "HD_J16 e5_j15 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_wanggong1_res_effect = yes
+				if = {
+					limit = {
+						has_global_variable = hd_j16_andi_done
+						has_global_variable = hd_j16_wanggong_jingkou_done
+						scope:hd_j16_kw1_gong ?= {
+							is_landed = yes
+							is_imprisoned = no
+							is_at_war = no
+							hd_j16_370b_in_jin_trigger = yes
+						}
+						scope:hd_j16_kw1_bao ?= {
+							is_imprisoned = no
+							hd_j16_370b_in_jin_trigger = yes
+						}
+						scope:hd_j16_kw1_dz ?= {
+							is_imprisoned = no
+							hd_j16_370b_in_jin_trigger = yes
+						}
+					}
+					set_global_variable = hd_j16_wanggong1_done
+					if = {
+						limit = { scope:hd_j16_kw1_dz = { is_ai = no } }
+						scope:hd_j16_kw1_dz = { trigger_event = hd_j16.5010 }
+						debug_log = "HD_J16 e5_j15 WAIT player_asked"
+					}
+					else_if = {
+						limit = { scope:hd_j16_kw1_gong = { is_ai = no } }
+						scope:hd_j16_kw1_gong = { trigger_event = hd_j16.5011 }
+						debug_log = "HD_J16 e5_j15 WAIT player_asked"
+					}
+					else = {
+						hd_j16_wanggong1_effect = yes
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_wanggong1_wlog } }
+					set_global_variable = hd_j16_wanggong1_wlog
+					debug_log = "HD_J16 e5_j15 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+hd_j16_wanggong1_res_effect = {
+	hd_j16_370b_res_effect = { ID = taiyuan_wang_023 AS = hd_j16_kw1_gong }
+	hd_j16_370b_res_effect = { ID = taiyuan_wang_061 AS = hd_j16_kw1_bao }
+	hd_j16_370b_res_effect = { ID = si_ma_dao_zi AS = hd_j16_kw1_dz }
+}
+
+# 史实：道子诛王国宝，王恭罢兵（AI；5010 a；5011 a）
+hd_j16_wanggong1_effect = {
+	hd_j16_wanggong1_res_effect = yes
+	set_global_variable = hd_j16_wanggong1_result
+	set_global_variable = hd_hev_j16_wanggong1
+	scope:hd_j16_kw1_gong ?= {
+		add_prestige = 100
+		if = {
+			limit = { exists = scope:hd_j16_kw1_dz }
+			add_opinion = { target = scope:hd_j16_kw1_dz modifier = hd_j16_zhu_guobao_opinion }
+		}
+		hd_j16_370b_news_effect = { WHO = scope:hd_j16_kw1_gong EVENT = hd_j16.5012 }
+	}
+	debug_log = "HD_J16 e5_j15 FIRE zhu_guobao"
+}
+
+# 进兵（5010 b、5011 b）：王恭清君侧，君侧指王国宝
+hd_j16_wanggong1_war_effect = {
+	hd_j16_wanggong1_res_effect = yes
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_j16_wanggong1_started }
+			scope:hd_j16_kw1_gong ?= { hd_j16_370b_qjc_ready_trigger = yes }
+			scope:hd_j16_kw1_bao ?= { is_alive = yes }
+		}
+		scope:hd_j16_kw1_gong = { hd_dc_kit_ten_start_qingjunce_effect = { TARGET = scope:hd_j16_kw1_bao } }
+	}
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_j16_wanggong1_started }
+			scope:hd_j16_kw1_gong ?= { hd_j16_370b_in_qjc_war_trigger = yes }
+		}
+		set_global_variable = hd_j16_wanggong1_started
+		set_global_variable = hd_hev_j16_wanggong1
+		set_global_variable = { name = hd_j16_wanggong1_att value = scope:hd_j16_kw1_gong }
+		hd_j16_370b_army_effect = { WHO = scope:hd_j16_kw1_gong SIZE = 10000 NAME = hd_j16_370b_wanggong_army_name }
+		debug_log = "HD_J16 e5_j15 FIRE war_started"
+	}
+	else_if = {
+		limit = { NOT = { has_global_variable = hd_j16_wanggong1_started } }
+		set_global_variable = hd_j16_wanggong1_skip
+		debug_log = "HD_J16 e5_j15 SKIP war_start_failed"
+	}
+}
+
+# 进兵结局：战争结束后隔一跳再判（终身辅政由 hd_dc_ten.0032 次日安装）
+hd_j16_wanggong1_judge_effect = {
+	if = {
+		limit = { NOT = { global_var:hd_j16_wanggong1_att ?= { hd_j16_370b_in_qjc_war_trigger = yes } } }
+		if = {
+			limit = { NOT = { has_global_variable = hd_j16_wanggong1_over } }
+			set_global_variable = hd_j16_wanggong1_over
+		}
+		else = {
+			set_global_variable = hd_j16_wanggong1_done
+			set_global_variable = hd_j16_wanggong1_ended
+			if = {
+				limit = { global_var:hd_j16_wanggong1_att ?= { hd_j16_370b_holds_regency_trigger = yes } }
+				set_global_variable = hd_j16_wanggong1_won
+				set_global_variable = hd_j16_wanggong1_result
+				debug_log = "HD_J16 e5_j15 FIRE result_won"
+			}
+			else = {
+				set_global_variable = hd_j16_wanggong1_lost
+				debug_log = "HD_J16 e5_j15 FIRE result_lost"
+			}
+		}
+	}
+}
+
+############################################################
+# E5-J20 王恭再举·刘牢之倒戈【软，战争】（04 §3.1）
+# 窗口 398.6.1 – 399.3.1。上游 E5-J15（读 done）。王恭是晋天子的直属封臣、有地、不在战争中（hd_j16_370b_qjc_ready_trigger）；
+#   刘牢之 congtingli_liu_043 在世、在晋天子政权内（自拟放宽：04 隐含他已由 E4-J97 摆进王恭宫廷；他若持朝官等头衔则 set_employer 搬不动，
+#   不再因此卡住本节点）；殷仲堪 chenjun_yin_015、桓玄 longkang_huan_027、杨佺期 hongnong_yang_017 至少一人有地。
+# 王恭是玩家：hd_j16.5020（a 再举，史实 / b 不举，节点了结）；AI：再举。
+# 开战：王恭清君侧，君侧指司马元显 henei_sima_121（不在则道子）；殷、桓、杨中有地、AI、在晋、不在战争中者入攻方；王恭 1 万事件兵；45 天倒戈引信。
+# 倒戈（引信到时刘牢之在世、未被囚、在晋）：AI 刘牢之直接倒戈；玩家刘牢之仅当属王恭一系（廷臣或封臣）时弹 hd_j16.5021（a 倒戈 / b 从王恭），否则记 _nodefect。
+#   倒戈＝刘牢之「反覆」10 年、王恭对他 −100；只在他属王恭一系时：廷臣改入天子宫廷、封臣改投天子（不在王恭一系就不动他的归属）；
+#   end_war = defender（王恭兵溃，CB on_defeat 由天子囚王恭）；隔 1 天（hd_j16_wanggong2_jk_wait）后毗陵（京口）郡授刘牢之，免与 on_defeat 收地同跳。
+# 结局（战争结束后隔一跳）：王恭秉政 → _won；否则 _lost 并设 PRE hd_j16_wanggong2_result（王恭 K 398.9.17，凶手元显，由卒年表执行）。
+# 变量：hd_j16_wanggong2_done/_skip/_wlog/_wsf_wlog/_result/_started/_won/_lost/_att/_asked/_go/_fuse/_defected/_defect_asked/_nodefect/_over/_ended/_jk_pending/_jk_wait；面板 hd_hev_j16_wanggong2
+############################################################
+hd_j16_node_wanggong2_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_wanggong2_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_wanggong2_done
+			debug_log = "HD_J16 e5_j20 SKIP prestart"
+		}
+		else_if = {
+			limit = { has_global_variable = hd_j16_wanggong2_started }
+			hd_j16_wanggong2_judge_effect = yes
+		}
+		else_if = {
+			limit = { current_date >= 398.6.1 }
+			if = {
+				limit = { current_date >= 399.3.2 }
+				set_global_variable = hd_j16_wanggong2_done
+				set_global_variable = hd_j16_wanggong2_skip
+				debug_log = "HD_J16 e5_j20 SKIP window_closed"
+			}
+			else_if = {
+				limit = { hd_j16_dead_trigger = { ID = taiyuan_wang_023 } }
+				set_global_variable = hd_j16_wanggong2_done
+				set_global_variable = hd_j16_wanggong2_skip
+				debug_log = "HD_J16 e5_j20 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_wanggong2_res_effect = yes
+				if = {
+					limit = {
+						has_global_variable = hd_j16_wanggong1_done
+						scope:hd_j16_kw2_gong ?= { hd_j16_370b_qjc_ready_trigger = yes }
+						# 刘牢之在世、在晋即可（不再要求已在王恭一系：E4-J97 召人可能因他持朝官等搬不动，见节点注释）
+						scope:hd_j16_kw2_liu ?= {
+							is_alive = yes
+							hd_j16_370b_in_jin_trigger = yes
+						}
+						exists = scope:hd_j16_kw2_tgt
+						OR = {
+							scope:hd_j16_kw2_yin ?= { is_landed = yes }
+							scope:hd_j16_kw2_xuan ?= { is_landed = yes }
+							scope:hd_j16_kw2_yang ?= { is_landed = yes }
+						}
+					}
+					if = {
+						limit = {
+							OR = {
+								scope:hd_j16_kw2_gong = { is_ai = yes }
+								has_global_variable = hd_j16_wanggong2_go
+							}
+						}
+						hd_j16_wanggong2_war_effect = yes
+					}
+					else_if = {
+						limit = { NOT = { has_global_variable = hd_j16_wanggong2_asked } }
+						set_global_variable = { name = hd_j16_wanggong2_asked value = yes days = 60 }
+						scope:hd_j16_kw2_gong = { trigger_event = hd_j16.5020 }
+						debug_log = "HD_J16 e5_j20 WAIT player_asked"
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_wanggong2_wlog } }
+					set_global_variable = hd_j16_wanggong2_wlog
+					debug_log = "HD_J16 e5_j20 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+# 解析：王恭、刘牢之、殷仲堪、桓玄、杨佺期；君侧 scope:hd_j16_kw2_tgt＝元显（不在则道子）
+hd_j16_wanggong2_res_effect = {
+	hd_j16_370b_res_effect = { ID = taiyuan_wang_023 AS = hd_j16_kw2_gong }
+	hd_j16_370b_res_effect = { ID = congtingli_liu_043 AS = hd_j16_kw2_liu }
+	hd_j16_370b_res_effect = { ID = chenjun_yin_015 AS = hd_j16_kw2_yin }
+	hd_j16_370b_res_effect = { ID = longkang_huan_027 AS = hd_j16_kw2_xuan }
+	hd_j16_370b_res_effect = { ID = hongnong_yang_017 AS = hd_j16_kw2_yang }
+	hd_j16_370b_res_effect = { ID = henei_sima_121 AS = hd_j16_kw2_yx }
+	hd_j16_370b_res_effect = { ID = si_ma_dao_zi AS = hd_j16_kw2_dz }
+	if = {
+		limit = { exists = scope:hd_j16_kw2_tgt }
+		clear_saved_scope = hd_j16_kw2_tgt
+	}
+	if = {
+		limit = { scope:hd_j16_kw2_yx ?= { is_imprisoned = no hd_j16_370b_in_jin_trigger = yes } }
+		scope:hd_j16_kw2_yx = { save_scope_as = hd_j16_kw2_tgt }
+	}
+	else_if = {
+		limit = { scope:hd_j16_kw2_dz ?= { is_imprisoned = no hd_j16_370b_in_jin_trigger = yes } }
+		scope:hd_j16_kw2_dz = { save_scope_as = hd_j16_kw2_tgt }
+	}
+}
+
+# 开战（AI；5020 a）。调用前 hd_j16_wanggong2_res_effect 已跑（5020 a 里先跑）
+hd_j16_wanggong2_war_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_j16_wanggong2_started }
+			exists = scope:hd_j16_kw2_tgt
+			scope:hd_j16_kw2_gong ?= { hd_j16_370b_qjc_ready_trigger = yes }
+		}
+		scope:hd_j16_kw2_gong = { hd_dc_kit_ten_start_qingjunce_effect = { TARGET = scope:hd_j16_kw2_tgt } }
+	}
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_j16_wanggong2_started }
+			scope:hd_j16_kw2_gong ?= { hd_j16_370b_in_qjc_war_trigger = yes }
+		}
+		set_global_variable = hd_j16_wanggong2_started
+		set_global_variable = hd_hev_j16_wanggong2
+		set_global_variable = { name = hd_j16_wanggong2_att value = scope:hd_j16_kw2_gong }
+		set_global_variable = { name = hd_j16_wanggong2_fuse value = yes days = 45 }
+		if = {
+			limit = { has_global_variable = hd_j16_wanggong2_go }
+			remove_global_variable = hd_j16_wanggong2_go
+		}
+		hd_j16_370b_army_effect = { WHO = scope:hd_j16_kw2_gong SIZE = 10000 NAME = hd_j16_370b_wanggong_army_name }
+		# 殷、桓、杨同举：有地、AI、在晋、不在战争中者入攻方
+		scope:hd_j16_kw2_gong = {
+			random_character_war = {
+				limit = {
+					using_cb = hd_dc_ten_qingjunce_cb
+					primary_attacker = scope:hd_j16_kw2_gong
+				}
+				save_scope_as = hd_j16_kw2_war
+			}
+		}
+		scope:hd_j16_kw2_yin ?= { hd_j16_wanggong2_join_effect = yes }
+		scope:hd_j16_kw2_xuan ?= { hd_j16_wanggong2_join_effect = yes }
+		scope:hd_j16_kw2_yang ?= { hd_j16_wanggong2_join_effect = yes }
+		debug_log = "HD_J16 e5_j20 FIRE war_started"
+	}
+	else_if = {
+		limit = { NOT = { has_global_variable = hd_j16_wanggong2_wsf_wlog } }
+		set_global_variable = hd_j16_wanggong2_wsf_wlog
+		debug_log = "HD_J16 e5_j20 WAIT war_start_failed"
+	}
+}
+
+# Scope：殷仲堪 / 桓玄 / 杨佺期；scope:hd_j16_kw2_war 已存
+hd_j16_wanggong2_join_effect = {
+	if = {
+		limit = {
+			exists = scope:hd_j16_kw2_war
+			is_alive = yes
+			is_ai = yes
+			is_landed = yes
+			is_imprisoned = no
+			is_at_war = no
+			hd_j16_370b_in_jin_trigger = yes
+			NOT = { this = scope:hd_j16_kw2_gong }
+		}
+		save_scope_as = hd_j16_kw2_ally
+		scope:hd_j16_kw2_war = { add_attacker = scope:hd_j16_kw2_ally }
+	}
+}
+
+# 已开战：倒戈引信与结局
+hd_j16_wanggong2_judge_effect = {
+	if = {
+		limit = { global_var:hd_j16_wanggong2_att ?= { hd_j16_370b_in_qjc_war_trigger = yes } }
+		if = {
+			limit = {
+				NOT = { has_global_variable = hd_j16_wanggong2_fuse }
+				NOT = { has_global_variable = hd_j16_wanggong2_defected }
+				NOT = { has_global_variable = hd_j16_wanggong2_nodefect }
+				NOT = { has_global_variable = hd_j16_wanggong2_defect_asked }
+			}
+			hd_j16_370b_res_effect = { ID = congtingli_liu_043 AS = hd_j16_kw2_liu }
+			if = {
+				limit = {
+					scope:hd_j16_kw2_liu ?= {
+						is_alive = yes
+						is_imprisoned = no
+						hd_j16_370b_in_jin_trigger = yes
+						NOT = { this = global_var:hd_j16_wanggong2_att }
+						# 玩家刘牢之只在属王恭一系时才问；AI 不论归属都倒戈（不在王恭一系时只发新闻、结束战争）
+						OR = {
+							is_ai = yes
+							hd_j16_370b_liu_under_gong_trigger = { GONG = global_var:hd_j16_wanggong2_att }
+						}
+					}
+				}
+				if = {
+					limit = { scope:hd_j16_kw2_liu = { is_ai = yes } }
+					hd_j16_wanggong2_defect_effect = yes
+				}
+				else = {
+					set_global_variable = { name = hd_j16_wanggong2_defect_asked value = yes days = 60 }
+					scope:hd_j16_kw2_liu = { trigger_event = hd_j16.5021 }
+					debug_log = "HD_J16 e5_j20 WAIT player_asked_defect"
+				}
+			}
+			else = {
+				set_global_variable = hd_j16_wanggong2_nodefect
+				debug_log = "HD_J16 e5_j20 SKIP defect_no_actor"
+			}
+		}
+	}
+	else_if = {
+		limit = { NOT = { has_global_variable = hd_j16_wanggong2_over } }
+		set_global_variable = hd_j16_wanggong2_over
+	}
+	else = {
+		set_global_variable = hd_j16_wanggong2_done
+		set_global_variable = hd_j16_wanggong2_ended
+		if = {
+			limit = { global_var:hd_j16_wanggong2_att ?= { hd_j16_370b_holds_regency_trigger = yes } }
+			set_global_variable = hd_j16_wanggong2_won
+			debug_log = "HD_J16 e5_j20 FIRE result_won"
+		}
+		else = {
+			set_global_variable = hd_j16_wanggong2_lost
+			set_global_variable = hd_j16_wanggong2_result
+			debug_log = "HD_J16 e5_j20 FIRE result_lost"
+		}
+	}
+}
+
+# 刘牢之倒戈（AI；5021 a）
+hd_j16_wanggong2_defect_effect = {
+	hd_j16_370b_res_effect = { ID = congtingli_liu_043 AS = hd_j16_kw2_liu }
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_j16_wanggong2_defected }
+			exists = scope:hd_j16_kw2_liu
+			exists = title:h_china.holder
+			global_var:hd_j16_wanggong2_att ?= { hd_j16_370b_in_qjc_war_trigger = yes }
+		}
+		set_global_variable = hd_j16_wanggong2_defected
+		title:h_china.holder = { save_scope_as = hd_j16_kw2_tz }
+		scope:hd_j16_kw2_liu = {
+			add_character_modifier = { modifier = hd_j16_fanfu_modifier years = 10 }
+			add_prestige = 100
+		}
+		global_var:hd_j16_wanggong2_att = {
+			if = {
+				limit = { is_alive = yes }
+				add_opinion = { target = scope:hd_j16_kw2_liu modifier = hd_j16_daoge_opinion }
+			}
+		}
+		# 退出王恭一方：只在他属王恭一系时动归属——封臣改投天子，廷臣改入天子宫廷（议员也搬：hd_j16_370b_can_employ_council_trigger）；
+		#   不在王恭一系（如仍在谢玄、桓氏名下）就不动
+		scope:hd_j16_kw2_liu = {
+			if = {
+				limit = { hd_j16_370b_liu_under_gong_trigger = { GONG = global_var:hd_j16_wanggong2_att } }
+				if = {
+					limit = { is_landed = yes }
+					hd_nbc_swear_fealty_effect = { LIEGE = scope:hd_j16_kw2_tz }
+				}
+				else_if = {
+					limit = { hd_j16_370b_can_employ_council_trigger = { TO = scope:hd_j16_kw2_tz } }
+					set_employer = scope:hd_j16_kw2_tz
+				}
+			}
+		}
+		hd_j16_370b_news_effect = { WHO = scope:hd_j16_kw2_liu EVENT = hd_j16.5022 }
+		# 王恭兵溃：清君侧战争以守方胜结束（CB on_defeat：天子囚王恭）
+		global_var:hd_j16_wanggong2_att = {
+			random_character_war = {
+				limit = {
+					using_cb = hd_dc_ten_qingjunce_cb
+					primary_attacker = global_var:hd_j16_wanggong2_att
+				}
+				end_war = defender
+			}
+		}
+		set_global_variable = hd_j16_wanggong2_jk_pending
+		set_global_variable = { name = hd_j16_wanggong2_jk_wait value = yes days = 1 }
+		debug_log = "HD_J16 e5_j20 FIRE liu_laozhi_defect"
+	}
+}
+
+# 战后：毗陵（京口）郡授刘牢之（D16，1 郡，持有者须是同政权的 AI；王恭是玩家时等其身死、郡归 AI 继承人）。止于 399.12.1
+hd_j16_wanggong2_jingkou_effect = {
+	if = {
+		limit = {
+			has_global_variable = hd_j16_wanggong2_jk_pending
+			NOT = { has_global_variable = hd_j16_wanggong2_jk_wait }	# 倒戈后隔 1 天，让清君侧 CB on_defeat 的囚禁、收地先跑完
+		}
+		hd_j16_370b_res_effect = { ID = congtingli_liu_043 AS = hd_j16_kjk_liu }
+		if = {
+			limit = {
+				exists = scope:hd_j16_kjk_liu
+				current_date < 399.12.2
+				hd_j16_370b_grantable_trigger = { DUCHY = title:d_piling TO = scope:hd_j16_kjk_liu }
+			}
+			hd_j16_370b_grant_duchy_effect = { DUCHY = title:d_piling TO = scope:hd_j16_kjk_liu LOG = e5_j20 }
+			remove_global_variable = hd_j16_wanggong2_jk_pending
+		}
+		else_if = {
+			limit = {
+				OR = {
+					NOT = { exists = scope:hd_j16_kjk_liu }
+					current_date >= 399.12.2
+					scope:hd_j16_kjk_liu = { hd_j16_370b_no_duchy_trigger = no }
+				}
+			}
+			remove_global_variable = hd_j16_wanggong2_jk_pending
+			debug_log = "HD_J16 e5_j20 SKIP jingkou_not_granted"
+		}
+	}
+}
+
+# 软加强（04 E5-J20）：E5-J20 了结后，桓玄若不持郡，授寻阳县 c_uuii_p_2077 所在郡（D16，1 郡，持有者须是同政权的 AI），作为 E5-J25 的前提。止于 400.12.1
+hd_j16_wanggong2_xunyang_effect = {
+	if = {
+		limit = {
+			has_global_variable = hd_j16_wanggong2_done
+			NOT = { has_global_variable = hd_j16_xunyang_checked }
+		}
+		if = {
+			limit = {
+				OR = {
+					global_var:hd_j16_start_year >= 404
+					current_date >= 400.12.2
+					hd_j16_dead_trigger = { ID = longkang_huan_027 }
+				}
+			}
+			set_global_variable = hd_j16_xunyang_checked
+		}
+		else = {
+			hd_j16_370b_res_effect = { ID = longkang_huan_027 AS = hd_j16_kxy_xuan }
+			if = {
+				limit = { scope:hd_j16_kxy_xuan ?= { hd_j16_370b_no_duchy_trigger = no } }
+				set_global_variable = hd_j16_xunyang_checked
+				debug_log = "HD_J16 e5_j20 SKIP xunyang_has_duchy"
+			}
+			else_if = {
+				limit = {
+					exists = scope:hd_j16_kxy_xuan
+					exists = title:c_uuii_p_2077.duchy
+					hd_j16_370b_grantable_trigger = { DUCHY = title:c_uuii_p_2077.duchy TO = scope:hd_j16_kxy_xuan }
+				}
+				set_global_variable = hd_j16_xunyang_checked
+				hd_j16_370b_grant_duchy_effect = { DUCHY = title:c_uuii_p_2077.duchy TO = scope:hd_j16_kxy_xuan LOG = e5_j20_xunyang }
+			}
+		}
+	}
+}
+
+############################################################
+# E5-J22 孙恩之乱·节点侧（04 §3.1；起兵归历史入侵 sunen，p5-C 已落盘：hd_hi_started_sunen、面板 hd_hev_j16_sunen 都由入侵设）
+# 窗口 399.10.1 – 403.1.1。条件：入侵 sunen 已真正开始（hd_hi_started_sunen）。规则关闭或孙恩 langya_sun_004 未起事先死 → 到期 / 当即跳过。
+# fire（衔接）：刘牢之有地、是 AI 时威望 +，刘裕 suiyuli_liu_013（AI、无地、非议员）入刘牢之宫廷（史实：刘裕以北府参军随牢之讨孙恩；为 E5-J42 铺垫）。
+#   谢琰之死由卒年表执行（die 400.7.7，战死，无凶手）。卢循接手归 06（E5-J60、J72），本节点不碰。
+# 变量：hd_j16_sunen_done/_skip/_wlog/_result
+############################################################
+hd_j16_node_sunen_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_sunen_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_sunen_done
+			debug_log = "HD_J16 e5_j22 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 399.10.1 }
+			if = {
+				limit = { has_global_variable = hd_hi_started_sunen }
+				set_global_variable = hd_j16_sunen_done
+				hd_j16_sunen_effect = yes
+			}
+			else_if = {
+				limit = { current_date >= 403.1.2 }
+				set_global_variable = hd_j16_sunen_done
+				set_global_variable = hd_j16_sunen_skip
+				debug_log = "HD_J16 e5_j22 SKIP window_closed"
+			}
+			else_if = {
+				limit = { hd_j16_dead_trigger = { ID = langya_sun_004 } }
+				set_global_variable = hd_j16_sunen_done
+				set_global_variable = hd_j16_sunen_skip
+				debug_log = "HD_J16 e5_j22 SKIP actor_dead"
+			}
+			else_if = {
+				limit = { NOT = { has_global_variable = hd_j16_sunen_wlog } }
+				set_global_variable = hd_j16_sunen_wlog
+				debug_log = "HD_J16 e5_j22 WAIT not_ready"
+			}
+		}
+	}
+}
+
+hd_j16_sunen_effect = {
+	set_global_variable = hd_j16_sunen_result
+	hd_j16_370b_res_effect = { ID = congtingli_liu_043 AS = hd_j16_ksn_liu }
+	hd_j16_370b_res_effect = { ID = suiyuli_liu_013 AS = hd_j16_ksn_yu }
+	if = {
+		limit = {
+			scope:hd_j16_ksn_liu ?= {
+				is_ai = yes
+				is_landed = yes
+				hd_j16_370b_in_jin_trigger = yes
+			}
+		}
+		scope:hd_j16_ksn_liu = { add_prestige = 50 }
+		hd_j16_370b_employ_effect = { WHO = scope:hd_j16_ksn_yu TO = scope:hd_j16_ksn_liu }
+	}
+	debug_log = "HD_J16 e5_j22 FIRE sunen_link"
+}
+
+############################################################
+# E5-J25 桓玄据荆江【软，战争】（04 §3.1）KIND = huanxuan_jing
+# 窗口 399.6.1 – 400.12.1（史实 399.12）。上游 E5-J20（读 done）。桓玄有地、是晋臣（非独立）、不在战争中；
+#   目标：殷仲堪（有地、在晋）优先，其次杨佺期；目标郡＝目标首府县所在郡，关键县＝该首府县。
+# 桓玄是玩家：hd_j16.5025（a 袭殷杨，史实 / b 不动，节点了结）；AI：开战。
+# 开战：hd_nbc_start_war_effect（封臣对封臣，同 304 刘乔—虓先例，实测项）；不成（CB 不允许或连通筛选裁掉）→ 改走「殷仲堪被围自尽」：不转头衔，按胜论。
+# 胜（关键县归桓玄一系，或围城支）→ _won 与 PRE hd_j16_huanxuan_jing_result（殷仲堪、杨佺期 K 399.12.1，凶手桓玄，由卒年表执行）；败 → _lost。
+# 变量：hd_j16_huanxuan_jing_done/_skip/_wlog/_result/_started/_won/_lost/_att/_def/_key/_asked/_go；面板 hd_hev_j16_huanxuan_jing
+############################################################
+hd_j16_node_huanxuan_jing_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_huanxuan_jing_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_huanxuan_jing_done
+			debug_log = "HD_J16 e5_j25 SKIP prestart"
+		}
+		else_if = {
+			limit = { has_global_variable = hd_j16_huanxuan_jing_started }
+			hd_j16_huanxuan_jing_judge_effect = yes
+		}
+		else_if = {
+			limit = { current_date >= 399.6.1 }
+			if = {
+				limit = { current_date >= 400.12.2 }
+				set_global_variable = hd_j16_huanxuan_jing_done
+				set_global_variable = hd_j16_huanxuan_jing_skip
+				debug_log = "HD_J16 e5_j25 SKIP window_closed"
+			}
+			else_if = {
+				limit = {
+					OR = {
+						hd_j16_dead_trigger = { ID = longkang_huan_027 }
+						AND = {
+							hd_j16_dead_trigger = { ID = chenjun_yin_015 }
+							hd_j16_dead_trigger = { ID = hongnong_yang_017 }
+						}
+					}
+				}
+				set_global_variable = hd_j16_huanxuan_jing_done
+				set_global_variable = hd_j16_huanxuan_jing_skip
+				debug_log = "HD_J16 e5_j25 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_huanxuan_jing_pick_effect = yes
+				if = {
+					limit = {
+						has_global_variable = hd_j16_wanggong2_done
+						exists = scope:hd_j16_kj_tgt
+						exists = scope:hd_j16_kj_duchy
+						scope:hd_j16_kj_xuan ?= {
+							is_landed = yes
+							is_imprisoned = no
+							is_at_war = no
+							is_independent_ruler = no
+							hd_j16_370b_in_jin_trigger = yes
+						}
+					}
+					if = {
+						limit = {
+							OR = {
+								scope:hd_j16_kj_xuan = { is_ai = yes }
+								has_global_variable = hd_j16_huanxuan_jing_go
+							}
+						}
+						hd_j16_huanxuan_jing_war_effect = yes
+					}
+					else_if = {
+						limit = { NOT = { has_global_variable = hd_j16_huanxuan_jing_asked } }
+						set_global_variable = { name = hd_j16_huanxuan_jing_asked value = yes days = 60 }
+						scope:hd_j16_kj_xuan = { trigger_event = hd_j16.5025 }
+						debug_log = "HD_J16 e5_j25 WAIT player_asked"
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_huanxuan_jing_wlog } }
+					set_global_variable = hd_j16_huanxuan_jing_wlog
+					debug_log = "HD_J16 e5_j25 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+# 解析桓玄与目标：scope:hd_j16_kj_xuan、hd_j16_kj_tgt（殷仲堪优先，次杨佺期；有地、在晋、不是桓玄一系）、hd_j16_kj_duchy、hd_j16_kj_key
+hd_j16_huanxuan_jing_pick_effect = {
+	hd_j16_370b_res_effect = { ID = longkang_huan_027 AS = hd_j16_kj_xuan }
+	hd_j16_370b_res_effect = { ID = chenjun_yin_015 AS = hd_j16_kj_yin }
+	hd_j16_370b_res_effect = { ID = hongnong_yang_017 AS = hd_j16_kj_yang }
+	if = {
+		limit = { exists = scope:hd_j16_kj_tgt }
+		clear_saved_scope = hd_j16_kj_tgt
+	}
+	if = {
+		limit = { exists = scope:hd_j16_kj_duchy }
+		clear_saved_scope = hd_j16_kj_duchy
+	}
+	if = {
+		limit = { exists = scope:hd_j16_kj_key }
+		clear_saved_scope = hd_j16_kj_key
+	}
+	if = {
+		limit = {
+			exists = scope:hd_j16_kj_xuan
+			scope:hd_j16_kj_yin ?= { hd_j16_370b_hxj_target_trigger = yes }
+		}
+		scope:hd_j16_kj_yin = { save_scope_as = hd_j16_kj_tgt }
+	}
+	else_if = {
+		limit = {
+			exists = scope:hd_j16_kj_xuan
+			scope:hd_j16_kj_yang ?= { hd_j16_370b_hxj_target_trigger = yes }
+		}
+		scope:hd_j16_kj_yang = { save_scope_as = hd_j16_kj_tgt }
+	}
+	scope:hd_j16_kj_tgt ?= {
+		capital_county ?= {
+			save_scope_as = hd_j16_kj_key
+			duchy ?= { save_scope_as = hd_j16_kj_duchy }
+		}
+	}
+}
+
+# 开战（AI；5025 a 先跑 pick）
+hd_j16_huanxuan_jing_war_effect = {
+	if = {
+		limit = { exists = scope:hd_nbc_war_huanxuan_jing }
+		clear_saved_scope = hd_nbc_war_huanxuan_jing
+	}
+	hd_nbc_start_war_effect = { ATTACKER = scope:hd_j16_kj_xuan DEFENDER = scope:hd_j16_kj_tgt TARGET = scope:hd_j16_kj_duchy KIND = huanxuan_jing }
+	if = {
+		limit = { exists = scope:hd_nbc_war_huanxuan_jing }
+		set_global_variable = hd_j16_huanxuan_jing_started
+		set_global_variable = hd_hev_j16_huanxuan_jing
+		set_global_variable = { name = hd_j16_huanxuan_jing_att value = scope:hd_j16_kj_xuan }
+		set_global_variable = { name = hd_j16_huanxuan_jing_def value = scope:hd_j16_kj_tgt }
+		set_global_variable = { name = hd_j16_huanxuan_jing_key value = scope:hd_j16_kj_key }
+		if = {
+			limit = { has_global_variable = hd_j16_huanxuan_jing_go }
+			remove_global_variable = hd_j16_huanxuan_jing_go
+		}
+		debug_log = "HD_J16 e5_j25 FIRE war_started"
+	}
+	else = {
+		# 封臣之间开不成战：改走「殷仲堪被围自尽」，不转头衔（04 E5-J25）
+		set_global_variable = hd_j16_huanxuan_jing_done
+		set_global_variable = hd_j16_huanxuan_jing_won
+		set_global_variable = hd_j16_huanxuan_jing_result
+		set_global_variable = hd_hev_j16_huanxuan_jing
+		scope:hd_j16_kj_xuan ?= {
+			add_prestige = 200
+			hd_j16_370b_news_effect = { WHO = scope:hd_j16_kj_xuan EVENT = hd_j16.5026 }
+		}
+		debug_log = "HD_J16 e5_j25 FIRE siege_fallback"
+	}
+}
+
+# 结局自判（新 KIND 不进 hd_nbc_war_result_effect）
+hd_j16_huanxuan_jing_judge_effect = {
+	if = {
+		limit = {
+			NOT = { global_var:hd_j16_huanxuan_jing_att ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:huanxuan_jing } } }
+			NOT = { global_var:hd_j16_huanxuan_jing_def ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:huanxuan_jing } } }
+		}
+		set_global_variable = hd_j16_huanxuan_jing_done
+		if = {
+			limit = {
+				global_var:hd_j16_huanxuan_jing_key ?= {
+					holder ?= {
+						OR = {
+							this = global_var:hd_j16_huanxuan_jing_att
+							target_is_liege_or_above = global_var:hd_j16_huanxuan_jing_att
+						}
+					}
+				}
+			}
+			set_global_variable = hd_j16_huanxuan_jing_won
+			set_global_variable = hd_j16_huanxuan_jing_result
+			global_var:hd_j16_huanxuan_jing_att ?= {
+				if = {
+					limit = { is_alive = yes }
+					hd_j16_370b_news_effect = { WHO = global_var:hd_j16_huanxuan_jing_att EVENT = hd_j16.5026 }
+				}
+			}
+			debug_log = "HD_J16 e5_j25 FIRE result_won"
+		}
+		else = {
+			set_global_variable = hd_j16_huanxuan_jing_lost
+			debug_log = "HD_J16 e5_j25 FIRE result_lost"
+		}
+		if = {
+			limit = { has_global_variable = hd_nbc_huanxuan_jing_active }
+			remove_global_variable = hd_nbc_huanxuan_jing_active
+		}
+	}
+}
+
+############################################################
+# E5-J30 桓玄入建康·秉政【软，战争】（04 §3.1；G4 ★A：桓玄装 hd_court 权臣）
+# 窗口 401.12.1 – 403.1.1（史实 402.1 元显讨玄，402.3 入建康）。上游 E5-J25（读 done）。
+# 条件：桓玄有地、持郡（04 原写「持荆州或江州王国级头衔」，放宽为持郡，见报告）、是晋臣；天子是司马氏；h_china 上没有 hd_court 权臣；元显在世、在晋。
+#   桓玄不是天子直属封臣而其主君是 AI 时，先改投天子（同一政权内摆位，清君侧 CB 要求直属）。
+# 玩家：天子或元显是玩家 → hd_j16.5030（a 讨之，史实 / b 安抚：桓玄和平秉政，直接装权臣）；否则桓玄是玩家 → hd_j16.5032（a 举兵东下 / b 按兵，节点了结）；AI：开战。
+# 开战：04 写「天子以元显名义对桓玄开战」；mod 里天子无法对自家封臣宣战，改为桓玄以清君侧 CB 向阙、君侧指元显（史实桓玄亦传檄讨元显）；桓玄 1 万事件兵；45 天倒戈引信。
+# 倒戈：刘牢之在世、在晋、不在桓玄一系：AI 直接倒戈（end_war = attacker，CB on_victory 囚元显、桓玄次日成终身辅政），玩家弹 hd_j16.5031（a 倒戈 / b 死战）。
+# 结局（战后隔一跳）：桓玄秉政 → _won、PRE hd_j16_huanxuan_won（元显 K 402.4.20、道子 K 403.2.3，凶手桓玄，由卒年表执行）；
+#   桓玄若还不是 hd_court 权臣且合格，装为权臣（hd_court_install_regency_effect），记 hd_j16_huanxuan_regent_set 与一年计时 hd_j16_huanxuan_regent_cd。
+#   否则 _lost，不重试。刘牢之自缢由卒年表执行（die 402.4.15）。
+# 变量：hd_j16_huanxuan_done/_skip/_wlog/_wsf_wlog/_result/_started/_won/_lost/_att/_asked/_go/_fuse/_defected/_defect_asked/_nodefect/_over/_peace、
+#   hd_j16_huanxuan_regent_set、hd_j16_huanxuan_regent_cd；面板 hd_hev_j16_huanxuan
+############################################################
+hd_j16_node_huanxuan_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_huanxuan_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_huanxuan_done
+			debug_log = "HD_J16 e5_j30 SKIP prestart"
+		}
+		else_if = {
+			limit = { has_global_variable = hd_j16_huanxuan_started }
+			hd_j16_huanxuan_judge_effect = yes
+		}
+		else_if = {
+			limit = { current_date >= 401.12.1 }
+			if = {
+				limit = { current_date >= 403.1.2 }
+				set_global_variable = hd_j16_huanxuan_done
+				set_global_variable = hd_j16_huanxuan_skip
+				debug_log = "HD_J16 e5_j30 SKIP window_closed"
+			}
+			else_if = {
+				limit = {
+					OR = {
+						hd_j16_dead_trigger = { ID = longkang_huan_027 }
+						hd_j16_dead_trigger = { ID = henei_sima_121 }
+					}
+				}
+				set_global_variable = hd_j16_huanxuan_done
+				set_global_variable = hd_j16_huanxuan_skip
+				debug_log = "HD_J16 e5_j30 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_huanxuan_res_effect = yes
+				if = {
+					limit = {
+						has_global_variable = hd_j16_huanxuan_jing_done
+						hd_j16_370b_jin_sima_trigger = yes
+						NOT = { hd_court_has_regent_trigger = yes }
+						scope:hd_j16_khx_xuan ?= {
+							is_landed = yes
+							is_imprisoned = no
+							is_at_war = no
+							is_independent_ruler = no
+							hd_j16_370b_in_jin_trigger = yes
+							hd_j16_370b_no_duchy_trigger = no
+						}
+						scope:hd_j16_khx_yx ?= {
+							is_imprisoned = no
+							hd_j16_370b_in_jin_trigger = yes
+						}
+					}
+					# 桓玄改投天子（直属）：主君是 AI 时才动
+					scope:hd_j16_khx_xuan = {
+						if = {
+							limit = {
+								NOT = { liege ?= title:h_china.holder }
+								liege ?= { is_ai = yes }
+							}
+							hd_nbc_swear_fealty_effect = { LIEGE = title:h_china.holder }
+							debug_log = "HD_J16 e5_j30 FIRE huanxuan_direct_vassal"
+						}
+					}
+					if = {
+						limit = { has_global_variable = hd_j16_huanxuan_go }
+						hd_j16_huanxuan_war_effect = yes
+					}
+					else_if = {
+						limit = {
+							OR = {
+								title:h_china.holder = { is_ai = no }
+								scope:hd_j16_khx_yx = { is_ai = no }
+							}
+						}
+						if = {
+							limit = { NOT = { has_global_variable = hd_j16_huanxuan_asked } }
+							set_global_variable = { name = hd_j16_huanxuan_asked value = yes days = 60 }
+							if = {
+								limit = { title:h_china.holder = { is_ai = no } }
+								title:h_china.holder = { trigger_event = hd_j16.5030 }
+							}
+							else = {
+								scope:hd_j16_khx_yx = { trigger_event = hd_j16.5030 }
+							}
+							debug_log = "HD_J16 e5_j30 WAIT player_asked"
+						}
+					}
+					else_if = {
+						limit = { scope:hd_j16_khx_xuan = { is_ai = no } }
+						if = {
+							limit = { NOT = { has_global_variable = hd_j16_huanxuan_asked } }
+							set_global_variable = { name = hd_j16_huanxuan_asked value = yes days = 60 }
+							scope:hd_j16_khx_xuan = { trigger_event = hd_j16.5032 }
+							debug_log = "HD_J16 e5_j30 WAIT player_asked"
+						}
+					}
+					else = {
+						hd_j16_huanxuan_war_effect = yes
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_huanxuan_wlog } }
+					set_global_variable = hd_j16_huanxuan_wlog
+					debug_log = "HD_J16 e5_j30 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+hd_j16_huanxuan_res_effect = {
+	hd_j16_370b_res_effect = { ID = longkang_huan_027 AS = hd_j16_khx_xuan }
+	hd_j16_370b_res_effect = { ID = henei_sima_121 AS = hd_j16_khx_yx }
+}
+
+# 开战（AI；5030 a；5032 a）：桓玄清君侧，君侧指元显
+hd_j16_huanxuan_war_effect = {
+	hd_j16_huanxuan_res_effect = yes
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_j16_huanxuan_started }
+			scope:hd_j16_khx_xuan ?= { hd_j16_370b_qjc_ready_trigger = yes }
+			scope:hd_j16_khx_yx ?= { is_alive = yes is_imprisoned = no }
+		}
+		scope:hd_j16_khx_xuan = { hd_dc_kit_ten_start_qingjunce_effect = { TARGET = scope:hd_j16_khx_yx } }
+	}
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_j16_huanxuan_started }
+			scope:hd_j16_khx_xuan ?= { hd_j16_370b_in_qjc_war_trigger = yes }
+		}
+		set_global_variable = hd_j16_huanxuan_started
+		set_global_variable = hd_j16_huanxuan_result
+		set_global_variable = hd_hev_j16_huanxuan
+		set_global_variable = { name = hd_j16_huanxuan_att value = scope:hd_j16_khx_xuan }
+		set_global_variable = { name = hd_j16_huanxuan_fuse value = yes days = 45 }
+		if = {
+			limit = { has_global_variable = hd_j16_huanxuan_go }
+			remove_global_variable = hd_j16_huanxuan_go
+		}
+		hd_j16_370b_army_effect = { WHO = scope:hd_j16_khx_xuan SIZE = 10000 NAME = hd_j16_370b_huanxuan_army_name }
+		debug_log = "HD_J16 e5_j30 FIRE war_started"
+	}
+	else_if = {
+		limit = { NOT = { has_global_variable = hd_j16_huanxuan_wsf_wlog } }
+		set_global_variable = hd_j16_huanxuan_wsf_wlog
+		debug_log = "HD_J16 e5_j30 WAIT war_start_failed"
+	}
+}
+
+# 已开战：倒戈引信与结局
+hd_j16_huanxuan_judge_effect = {
+	if = {
+		limit = { global_var:hd_j16_huanxuan_att ?= { hd_j16_370b_in_qjc_war_trigger = yes } }
+		if = {
+			limit = {
+				NOT = { has_global_variable = hd_j16_huanxuan_fuse }
+				NOT = { has_global_variable = hd_j16_huanxuan_defected }
+				NOT = { has_global_variable = hd_j16_huanxuan_nodefect }
+				NOT = { has_global_variable = hd_j16_huanxuan_defect_asked }
+			}
+			hd_j16_370b_res_effect = { ID = congtingli_liu_043 AS = hd_j16_khx_liu }
+			if = {
+				limit = {
+					scope:hd_j16_khx_liu ?= {
+						is_alive = yes
+						is_imprisoned = no
+						hd_j16_370b_in_jin_trigger = yes
+						NOT = { this = global_var:hd_j16_huanxuan_att }
+						NOT = { liege ?= global_var:hd_j16_huanxuan_att }
+						NOT = { employer ?= global_var:hd_j16_huanxuan_att }
+					}
+				}
+				if = {
+					limit = { scope:hd_j16_khx_liu = { is_ai = yes } }
+					hd_j16_huanxuan_defect_effect = yes
+				}
+				else = {
+					set_global_variable = { name = hd_j16_huanxuan_defect_asked value = yes days = 60 }
+					scope:hd_j16_khx_liu = { trigger_event = hd_j16.5031 }
+					debug_log = "HD_J16 e5_j30 WAIT player_asked_defect"
+				}
+			}
+			else = {
+				set_global_variable = hd_j16_huanxuan_nodefect
+				debug_log = "HD_J16 e5_j30 SKIP defect_no_actor"
+			}
+		}
+	}
+	else_if = {
+		limit = { NOT = { has_global_variable = hd_j16_huanxuan_over } }
+		set_global_variable = hd_j16_huanxuan_over
+	}
+	else = {
+		set_global_variable = hd_j16_huanxuan_done
+		if = {
+			limit = { global_var:hd_j16_huanxuan_att ?= { hd_j16_370b_holds_regency_trigger = yes } }
+			set_global_variable = hd_j16_huanxuan_won
+			hd_j16_huanxuan_install_effect = yes
+			global_var:hd_j16_huanxuan_att = {
+				hd_j16_370b_news_effect = { WHO = global_var:hd_j16_huanxuan_att EVENT = hd_j16.5033 }
+			}
+			debug_log = "HD_J16 e5_j30 FIRE result_won"
+		}
+		else = {
+			set_global_variable = hd_j16_huanxuan_lost
+			debug_log = "HD_J16 e5_j30 FIRE result_lost"
+		}
+	}
+}
+
+# 刘牢之倒戈（AI；5031 a）：天子一方兵溃，清君侧以攻方胜结束
+hd_j16_huanxuan_defect_effect = {
+	hd_j16_370b_res_effect = { ID = congtingli_liu_043 AS = hd_j16_khx_liu }
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_j16_huanxuan_defected }
+			exists = scope:hd_j16_khx_liu
+			global_var:hd_j16_huanxuan_att ?= { hd_j16_370b_in_qjc_war_trigger = yes }
+		}
+		set_global_variable = hd_j16_huanxuan_defected
+		scope:hd_j16_khx_liu = {
+			add_character_modifier = { modifier = hd_j16_fanfu_modifier years = 10 }
+		}
+		hd_j16_370b_res_effect = { ID = henei_sima_121 AS = hd_j16_khx_yx }
+		scope:hd_j16_khx_yx ?= {
+			if = {
+				limit = { is_alive = yes }
+				add_opinion = { target = scope:hd_j16_khx_liu modifier = hd_j16_daoge_opinion }
+			}
+		}
+		hd_j16_370b_news_effect = { WHO = scope:hd_j16_khx_liu EVENT = hd_j16.5034 }
+		global_var:hd_j16_huanxuan_att = {
+			random_character_war = {
+				limit = {
+					using_cb = hd_dc_ten_qingjunce_cb
+					primary_attacker = global_var:hd_j16_huanxuan_att
+				}
+				end_war = attacker
+			}
+		}
+		debug_log = "HD_J16 e5_j30 FIRE liu_laozhi_defect"
+	}
+}
+
+# 桓玄装 hd_court 权臣（04 G4 ★A）。Root：任意；桓玄存于 global_var:hd_j16_huanxuan_att 或由 5030 b 解析
+hd_j16_huanxuan_install_effect = {
+	hd_j16_370b_res_effect = { ID = longkang_huan_027 AS = hd_j16_khx_xuan }
+	if = {
+		limit = {
+			scope:hd_j16_khx_xuan ?= {
+				NOT = { hd_court_is_regent_trigger = yes }
+				hd_court_regent_eligible_trigger = yes
+				liege ?= title:h_china.holder
+			}
+		}
+		scope:hd_j16_khx_xuan = {
+			hd_court_install_regency_effect = yes
+			add_character_flag = { flag = hd_court_regent_tenure years = 1 }
+		}
+		debug_log = "HD_J16 e5_j30 FIRE install_regency"
+	}
+	if = {
+		limit = { scope:hd_j16_khx_xuan ?= { hd_j16_370b_holds_regency_trigger = yes } }
+		set_global_variable = hd_j16_huanxuan_regent_set
+		set_global_variable = { name = hd_j16_huanxuan_regent_cd value = yes years = 1 }
+	}
+}
+
+# 5030 b 安抚：桓玄和平秉政（不设 _won，元显、道子不按表被杀）
+hd_j16_huanxuan_peace_effect = {
+	set_global_variable = hd_j16_huanxuan_done
+	set_global_variable = hd_j16_huanxuan_result
+	set_global_variable = hd_j16_huanxuan_peace
+	set_global_variable = hd_hev_j16_huanxuan
+	hd_j16_huanxuan_install_effect = yes
+	scope:hd_j16_khx_xuan ?= {
+		add_prestige = 200
+		hd_j16_370b_news_effect = { WHO = scope:hd_j16_khx_xuan EVENT = hd_j16.5033 }
+	}
+	debug_log = "HD_J16 e5_j30 FIRE peace_regency"
+}
+
+############################################################
+# E5-J40 桓玄篡楚【软】（04 §3.1、§3.3）
+# 窗口 403.9.1 – 404.3.1（史实 403.12）。上游 E5-J30（读 done）。桓玄在世、秉政（hd_court 权臣或终身辅政）满一年（hd_j16_huanxuan_regent_cd 已过；
+#   未经本线装上的秉政不计时）；天子在世、不是桓玄。
+# AI 桓玄：受禅——经隐藏事件 hd_j16.5043（hd_transfer_mandate_to_claimant_effect 以 root 为新天子，root 必须是桓玄）；玩家桓玄：hd_j16.5040（a 受禅 / b 不受，节点了结）。
+# 执行：hd_court_usurp_common_effect（同一政权内，旧天子得无地封号）；国号「楚」（记到龙亢桓氏王朝上）；改元永始元年；旧天子 set_location 浔阳（寻阳县 c_uuii_p_2077）并「迁于浔阳」10 年。
+# 404 线接口（06 E5-J45、J50）：fire 时另设 hd_j16_huanxuan_usurp_done（04/06 原名，表示「已篡位」；节点 done 是 hd_j16_cuanchu_done，跳过时也设）。
+# 变量：hd_j16_cuanchu_done/_skip/_wlog/_result、hd_j16_huanxuan_usurp_done；面板 hd_hev_j16_cuanchu
+############################################################
+hd_j16_node_cuanchu_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_cuanchu_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_cuanchu_done
+			debug_log = "HD_J16 e5_j40 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 403.9.1 }
+			if = {
+				limit = { current_date >= 404.3.2 }
+				set_global_variable = hd_j16_cuanchu_done
+				set_global_variable = hd_j16_cuanchu_skip
+				debug_log = "HD_J16 e5_j40 SKIP window_closed"
+			}
+			else_if = {
+				limit = { hd_j16_dead_trigger = { ID = longkang_huan_027 } }
+				set_global_variable = hd_j16_cuanchu_done
+				set_global_variable = hd_j16_cuanchu_skip
+				debug_log = "HD_J16 e5_j40 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_370b_res_effect = { ID = longkang_huan_027 AS = hd_j16_kcc_xuan }
+				if = {
+					limit = {
+						has_global_variable = hd_j16_huanxuan_done
+						exists = title:h_china.holder
+						NOT = { has_global_variable = hd_j16_huanxuan_regent_cd }
+						scope:hd_j16_kcc_xuan ?= {
+							is_imprisoned = no
+							hd_j16_370b_holds_regency_trigger = yes
+							NOT = { this = title:h_china.holder }
+						}
+					}
+					set_global_variable = hd_j16_cuanchu_done
+					if = {
+						limit = { scope:hd_j16_kcc_xuan = { is_ai = yes } }
+						scope:hd_j16_kcc_xuan = { trigger_event = hd_j16.5043 }
+					}
+					else = {
+						scope:hd_j16_kcc_xuan = { trigger_event = hd_j16.5040 }
+						debug_log = "HD_J16 e5_j40 WAIT player_asked"
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_cuanchu_wlog } }
+					set_global_variable = hd_j16_cuanchu_wlog
+					debug_log = "HD_J16 e5_j40 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+# 受禅（hd_j16.5043 immediate；5040 a）。Root：桓玄（必须）
+hd_j16_cuanchu_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			exists = title:h_china.holder
+			NOT = { this = title:h_china.holder }
+		}
+		save_scope_as = hd_j16_kcc_xuan
+		if = {
+			limit = { exists = scope:hd_j16_kcc_old }
+			clear_saved_scope = hd_j16_kcc_old
+		}
+		title:h_china.holder = { save_scope_as = hd_j16_kcc_old }
+		set_global_variable = hd_j16_cuanchu_result
+		set_global_variable = hd_j16_huanxuan_usurp_done
+		set_global_variable = hd_hev_j16_cuanchu
+		hd_court_usurp_common_effect = { TITLE_TIER = duchy TITLE_NAME = hd_court_abdicated_title_name LEVEL = 2 }
+		if = {
+			limit = { has_title = title:h_china }
+			title:h_china = { set_title_name = dynn_title_chu }
+			dynasty ?= {
+				remove_variable = hd_fixed_realm_title
+				set_variable = { name = hd_fixed_realm_name value = flag:dynn_title_chu }
+			}
+			hd_370_change_era_effect = { KEY = yongshi YEAR = 1 }
+		}
+		scope:hd_j16_kcc_old ?= {
+			if = {
+				limit = { is_alive = yes }
+				add_character_modifier = { modifier = hd_j16_xunyang_modifier years = 10 }
+				if = {
+					limit = {
+						is_landed = no
+						exists = title:c_uuii_p_2077.title_province
+					}
+					set_location = title:c_uuii_p_2077.title_province
+				}
+			}
+		}
+		save_scope_as = hd_news_a
+		scope:hd_j16_kcc_old ?= { save_scope_as = hd_news_b }
+		hd_world_news_send_effect = { EVENT = hd_j16.5041 }
+		debug_log = "HD_J16 e5_j40 FIRE cuanchu"
+	}
+	else = {
+		set_global_variable = hd_j16_cuanchu_skip
+		debug_log = "HD_J16 e5_j40 SKIP player_late_reply"
+	}
+}
+
+############################################################
+# E5-J42 刘裕据京口【软摆位】（04 §3.1、§3.3）
+# 窗口 403.6.1 – 404.2.1。刘裕 suiyuli_liu_013 在世、在桓玄政权内（桓玄持 h_china，或桓玄秉政的晋廷）、不持郡；
+#   毗陵郡 d_piling 由同政权的 AI 持有（hd_j16_370b_grantable_trigger）。无分支。
+# 执行：毗陵授刘裕（D16，1 郡）；何无忌 donghai_he_wu_ji、刘毅 peixian_liu_005 是 AI、无地、非议员时入刘裕宫廷。
+#   这是 404 节 E5-J50 京口「刘裕在世有地、top_liege 是桓玄」的前提（篡楚后 h_china 归桓玄，封臣随之）。
+# 变量：hd_j16_liuyu_jingkou_done/_skip/_wlog/_result；面板 hd_hev_j16_liuyu_jingkou
+############################################################
+hd_j16_node_liuyu_jingkou_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_liuyu_jingkou_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_liuyu_jingkou_done
+			debug_log = "HD_J16 e5_j42 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 403.6.1 }
+			if = {
+				limit = { current_date >= 404.2.2 }
+				set_global_variable = hd_j16_liuyu_jingkou_done
+				set_global_variable = hd_j16_liuyu_jingkou_skip
+				debug_log = "HD_J16 e5_j42 SKIP window_closed"
+			}
+			else_if = {
+				limit = { hd_j16_dead_trigger = { ID = suiyuli_liu_013 } }
+				set_global_variable = hd_j16_liuyu_jingkou_done
+				set_global_variable = hd_j16_liuyu_jingkou_skip
+				debug_log = "HD_J16 e5_j42 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_370b_res_effect = { ID = suiyuli_liu_013 AS = hd_j16_kly_yu }
+				hd_j16_370b_res_effect = { ID = longkang_huan_027 AS = hd_j16_kly_xuan }
+				if = {
+					limit = {
+						exists = scope:hd_j16_kly_yu
+						scope:hd_j16_kly_xuan ?= {
+							OR = {
+								has_title = title:h_china
+								hd_j16_370b_holds_regency_trigger = yes
+							}
+						}
+						hd_j16_370b_grantable_trigger = { DUCHY = title:d_piling TO = scope:hd_j16_kly_yu }
+					}
+					set_global_variable = hd_j16_liuyu_jingkou_done
+					set_global_variable = hd_j16_liuyu_jingkou_result
+					set_global_variable = hd_hev_j16_liuyu_jingkou
+					hd_j16_370b_grant_duchy_effect = { DUCHY = title:d_piling TO = scope:hd_j16_kly_yu LOG = e5_j42 }
+					hd_j16_370b_res_effect = { ID = donghai_he_wu_ji AS = hd_j16_kly_he }
+					hd_j16_370b_res_effect = { ID = peixian_liu_005 AS = hd_j16_kly_yi }
+					hd_j16_370b_employ_effect = { WHO = scope:hd_j16_kly_he TO = scope:hd_j16_kly_yu }
+					hd_j16_370b_employ_effect = { WHO = scope:hd_j16_kly_yi TO = scope:hd_j16_kly_yu }
+					debug_log = "HD_J16 e5_j42 FIRE liuyu_jingkou"
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_liuyu_jingkou_wlog } }
+					set_global_variable = hd_j16_liuyu_jingkou_wlog
+					debug_log = "HD_J16 e5_j42 WAIT not_ready"
+				}
+			}
+		}
+	}
+}

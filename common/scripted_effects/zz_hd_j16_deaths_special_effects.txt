@@ -1,0 +1,74 @@
+﻿# 两晋十六国统一史实线（j16）特殊卒年（08 §1.3，第 2 期 2-D 写入）。
+# 由生成物 zz_hd_j16_deaths_effects.txt 在相应十年段里调用（卒年表 tsv 中类别为 S 的行），Root：title:h_china（心跳）。
+# 机制宏与内部步骤见 zz_hd_j16_death_core_effects.txt；done 变量沿用 hd_nbc_death_<ID>_done。
+
+############################################################
+# 佛图澄（A5-G4★B）：hd_fo 运行时生成（tools/hd_fo/gen_hd_fo_monks.py，ID fo_tu_cheng，指针 global_var:hd_fo_p_fo_tu_cheng），
+# 库中没有 history 条目，不能用 character:fo_tu_cheng，所以不走 hd_j16_death_effect 的解析，直接取 hd_fo 指针。
+# 日期 348.12.15（设计写 348.12；《高僧传》作永和四年十二月八日，农历换算约为 349 年 1 月【待核】）。
+# 在世：按 N 类病逝（借 core 的 hd_j16_death_natural_effect：AI 当即病逝，玩家弹病笃）；死后 hd_fo_on_death 照常发圆寂通知。
+# 已死、或到 DATE10（358.12.15）仍无指针（未生成、开局晚于 348 年）：只设 done。
+############################################################
+hd_j16_death_fotucheng_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_nbc_death_fo_tu_cheng_done }
+			current_date >= 348.12.15
+		}
+		if = {
+			limit = { hd_fo_monk_alive_trigger = { ID = fo_tu_cheng } }
+			if = {
+				limit = { exists = scope:hd_j16_dv }
+				clear_saved_scope = hd_j16_dv
+			}
+			global_var:hd_fo_p_fo_tu_cheng = { save_scope_as = hd_j16_dv }
+			hd_j16_death_natural_effect = { ID = fo_tu_cheng }
+		}
+		else_if = {
+			limit = {
+				OR = {
+					global_var:hd_fo_p_fo_tu_cheng ?= { is_alive = no }
+					current_date >= 358.12.15
+				}
+			}
+			set_global_variable = hd_nbc_death_fo_tu_cheng_done
+			debug_log = "HD_J16 death_fo_tu_cheng SKIP missing"
+		}
+	}
+}
+
+############################################################
+# 桓温（04 §3.2 第 1～3 步；E4-J30）：权臣交接阻断前置钩子，然后按 N 类病逝（表值 373.8.18，A0）。
+# 第 2 步：只有桓温是 AI、且其主头衔的继承人也是 AI 时，才在 title:h_china 上设 hd_j16_handoff_block = 桓温，
+#   让 hd_court 权臣交接分支（hd_court_regent_effects.txt，3-A 加判断）不把权臣交给他的继承人，天子获释。
+#   玩家例外（第 7 步）：桓温或继承人是玩家时不设，交接分支照常运作。
+# 第 3 步：调用 hd_j16_death_effect（AI 当即病逝；玩家弹病笃、可强撑一次）。阻断在杀人之前设好，同一跳内生效。
+# 遗命风味（E4-J30 ①②）与 ③ hd_j16_huanwen_dead_done 归 E4-J30 节点（第 5 期 5-A），本效果不发事件；
+# 阻断变量由 E4-J40 首跳删除（04 §3.2 第 5 步，5-A）。
+############################################################
+hd_j16_death_huanwen_effect = {
+	# 不另查 done：已死或已 done 时 hd_j16_resolve_effect 只存在世的人、取不到就不设阻断，hd_j16_death_effect 自己查 done
+	if = {
+		limit = { current_date >= 373.8.18 }
+		if = {
+			limit = { exists = scope:hd_j16_hw }
+			clear_saved_scope = hd_j16_hw
+		}
+		hd_j16_resolve_effect = { ID = longkang_huan_017 AS = hd_j16_hw }
+		if = {
+			limit = {
+				scope:hd_j16_hw ?= {
+					is_ai = yes
+					primary_title ?= {
+						current_heir ?= { is_ai = yes }
+					}
+				}
+			}
+			title:h_china = {
+				set_variable = { name = hd_j16_handoff_block value = scope:hd_j16_hw }
+			}
+			debug_log = "HD_J16 death_longkang_huan_017 FIRE handoff_block"
+		}
+		hd_j16_death_effect = { ID = longkang_huan_017 DATE = 373.8.18 DATE10 = 383.8.18 }
+	}
+}

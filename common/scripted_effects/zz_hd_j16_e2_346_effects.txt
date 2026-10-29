@@ -1,0 +1,422 @@
+﻿# 两晋十六国统一史实线 · E2（317.1–349.4）× 346 节（03_346戡定岷峨.md）。入口 hd_j16_e2_346_effect，由 hd_j16_pulse_effect 按时代粗筛后调用。
+# 写入者：第 1 期（迁入块）→ 第 4 期 4-B（08 §1.1）。节点写法见 01 §2.2 与 stage/p1-S_TEMPLATE.md。
+# 4-B（第 4 期第二轮）：加 E2-Z90 东宫之变、E2-Z95 石虎称帝；入口末尾调用 4-C 的 hd_j16_e2_346c_effect（张重华、杨初、刘群、刘玄的 E2 节点）。
+
+hd_j16_e2_346_effect = {
+	hd_j16_node_fashu_effect = yes      # E2-J90 桓温伐蜀
+	# E2-J91 灭蜀封赏，连同伐蜀结局兜底（R2）。收尾 pX-A：改调 j16 侧的 hd_j16_fashu_check_effect（冻结的 hd_nbc_check_fashu_effect 写死桓温、李势 ID，
+	#   304 局两人靠 hbirth 出场取不到，开战当跳就误判 _lost 并设 done、0110 永不发）；旧效果保留定义，不再调用
+	hd_j16_fashu_check_effect = yes
+	hd_j16_node_donggong_effect = yes   # E2-Z90 东宫之变
+	hd_j16_node_shihu_di_effect = yes   # E2-Z95 石虎称帝
+	hd_j16_e2_346c_effect = yes         # 4-C：E2-L90～L92、E2-X05、X55、X70
+}
+
+############################################################
+# E2-J90 桓温伐蜀（D9：由 346 开局播种改为心跳节点；01 §2.3、§5）
+# 窗口 346.11.1 – 348.1.1。桓温在世有地、top_liege 是晋天子（h_china 持有者，河内司马氏）；
+#   成汉之主（k_uuii_yizhou 持有者，独立，巴賨李氏）存在。304 局里成汉不在就等到截止跳过，不为凑条件生成成汉（D2）。
+# 无分支（同现状）。宣战照搬旧 hd_nbc346_huan_wen_war_effect：益州、巴蜀双目标经连通筛选，随征司马勋、周抚、袁乔。
+# 宣战失败不设 done，下一跳重试。结局由 hd_nbc_war_cb 设 hd_nbc_fashu_won/_lost/_white/_invalid，J91 读它（R1、R2）。
+# 变量（沿用旧名）：hd_nbc_fashu_active（已开战，fire 结果）、hd_nbc_fashu_done；新增 hd_j16_fashu_skip、hd_j16_fashu_wlog
+# 4-B 核对（03 §3）：03 对 J90/J91 只加「灭蜀后触发刘玄去留 E2-X70」，X70 由 4-C 读 hd_nbc_fashu_won 自判，本节点不改
+############################################################
+hd_j16_node_fashu_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_nbc_fashu_done }
+			NOT = { has_global_variable = hd_nbc_fashu_active }
+			current_date >= 346.11.1
+		}
+		if = {
+			limit = { current_date >= 348.1.1 }
+			set_global_variable = hd_nbc_fashu_done
+			set_global_variable = hd_j16_fashu_skip
+			debug_log = "HD_J16 e2_j90 SKIP window_closed"
+		}
+		else_if = {
+			limit = { hd_j16_dead_trigger = { ID = longkang_huan_017 } }
+			set_global_variable = hd_nbc_fashu_done
+			set_global_variable = hd_j16_fashu_skip
+			debug_log = "HD_J16 e2_j90 SKIP actor_dead"
+		}
+		else = {
+			if = {
+				limit = { exists = scope:hd_j16_fs_huan }
+				clear_saved_scope = hd_j16_fs_huan
+			}
+			if = {
+				limit = { exists = scope:hd_j16_fs_li }
+				clear_saved_scope = hd_j16_fs_li
+			}
+			hd_j16_resolve_effect = { ID = longkang_huan_017 AS = hd_j16_fs_huan }
+			# 成汉之主按位置解析
+			title:k_uuii_yizhou.holder ?= {
+				if = {
+					limit = {
+						is_independent_ruler = yes
+						dynasty ?= dynasty:bacong_li
+					}
+					save_scope_as = hd_j16_fs_li
+				}
+			}
+			if = {
+				limit = {
+					exists = scope:hd_j16_fs_li
+					title:h_china.holder ?= { house ?= house:henei_sima }
+					scope:hd_j16_fs_huan ?= {
+						is_landed = yes
+						top_liege = title:h_china.holder
+						NOT = { this = title:h_china.holder }
+					}
+				}
+				hd_j16_fashu_war_effect = yes
+			}
+			else_if = {
+				limit = { NOT = { has_global_variable = hd_j16_fashu_wlog } }
+				set_global_variable = hd_j16_fashu_wlog
+				debug_log = "HD_J16 e2_j90 WAIT not_ready"
+			}
+		}
+	}
+}
+
+# 开战。scope:hd_j16_fs_huan、scope:hd_j16_fs_li 已存好
+# 2026-10-28 boki：改走吞并 CB（hd_tb_annex_start_war_effect），胜即全取成汉；原按益州/巴蜀经连通筛选，成汉余地会漏
+hd_j16_fashu_war_effect = {
+	hd_tb_annex_start_war_effect = { ATTACKER = scope:hd_j16_fs_huan DEFENDER = scope:hd_j16_fs_li KIND = fashu }	# 设 hd_nbc_war_kind = flag:fashu 与 hd_nbc_fashu_active
+	scope:hd_nbc_war_fashu ?= {	# 战争作用域（add_attacker 须在此）
+		# 收尾 pX-A（R1）：存攻守方，供 hd_j16_fashu_check_effect 判「战争已了结」（照 dongzheng 的 _qin/_yan）
+		set_global_variable = { name = hd_j16_fashu_att value = scope:hd_j16_fs_huan }
+		set_global_variable = { name = hd_j16_fashu_def value = scope:hd_j16_fs_li }
+		# 司马勋（梁州）、周抚（益州）、袁乔（江夏相）同出（工坊 beichao_wars.txt 的参战名单）
+		hd_j16_fashu_add_attacker_effect = { ID = si_ma_xun_2 }
+		hd_j16_fashu_add_attacker_effect = { ID = lujiang_zhou_004 }
+		hd_j16_fashu_add_attacker_effect = { ID = chenjun_yuan_023 }
+	}
+	if = {
+		limit = { has_global_variable = hd_nbc_fashu_active }
+		debug_log = "HD_J16 e2_j90 FIRE war_started"
+	}
+	else_if = {
+		limit = { NOT = { has_global_variable = hd_j16_fashu_wlog } }
+		set_global_variable = hd_j16_fashu_wlog
+		debug_log = "HD_J16 e2_j90 WAIT war_start_failed"
+	}
+}
+
+# 战争作用域：随征者经解析加入攻方（在世、有地、不在战中）
+hd_j16_fashu_add_attacker_effect = {
+	if = {
+		limit = { exists = scope:hd_j16_fs_aid }
+		clear_saved_scope = hd_j16_fs_aid
+	}
+	hd_j16_resolve_effect = { ID = $ID$ AS = hd_j16_fs_aid }
+	if = {
+		limit = {
+			scope:hd_j16_fs_aid ?= {
+				is_landed = yes
+				is_at_war = no
+			}
+		}
+		add_attacker = scope:hd_j16_fs_aid
+	}
+}
+
+############################################################
+# E2-J91 灭蜀封赏 + 伐蜀结局兜底（收尾 pX-A，R1）。替代冻结的 hd_nbc_check_fashu_effect（zz_hd_nbc_history_effects.txt，保留定义不改）。
+# ① 兜底：已开战（hd_nbc_fashu_active）、CB 尚未设结局，而以下各方都已不在 kind=fashu 的战争里 → 清 active，按成都 c_uuii_p_4282 是否归天子一系补判 _won/_lost。
+#    判「仍在打」的对象只增不减（346 局判定只会更严，不会提前收尾）：开战时存的攻守方 global_var:hd_j16_fashu_att/_def；
+#    经 hd_j16_resolve_effect 解析的桓温、李势（原生或 hbirth 都能取到）；益州 k_uuii_yizhou 持有者；旧效果原有的荆州 k_uuii_jingzhou、巴蜀 e_bashu 持有者。
+# ② 了结：有任一结局标记而未 done → 设 hd_nbc_fashu_done；_won 时对解析出的桓温（在世）发 hd_nbc.0110，取不到只记日志。
+# 变量沿用旧名（下游 346c 杨初、X70 与面板都读 hd_nbc_fashu_*）。370 起开局的前标 done 照样挡住两段。
+############################################################
+hd_j16_fashu_check_effect = {
+	if = {
+		limit = {
+			has_global_variable = hd_nbc_fashu_active
+			NOT = { has_global_variable = hd_nbc_fashu_done }
+			NOT = { has_global_variable = hd_nbc_fashu_won }
+			NOT = { has_global_variable = hd_nbc_fashu_lost }
+			NOT = { has_global_variable = hd_nbc_fashu_white }
+			NOT = { has_global_variable = hd_nbc_fashu_invalid }
+		}
+		if = {
+			limit = { exists = scope:hd_j16_fsc_huan }
+			clear_saved_scope = hd_j16_fsc_huan
+		}
+		if = {
+			limit = { exists = scope:hd_j16_fsc_li }
+			clear_saved_scope = hd_j16_fsc_li
+		}
+		hd_j16_resolve_effect = { ID = longkang_huan_017 AS = hd_j16_fsc_huan }
+		hd_j16_resolve_effect = { ID = bacong_li_026 AS = hd_j16_fsc_li }
+		if = {
+			limit = {
+				NOT = { global_var:hd_j16_fashu_att ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:fashu } } }
+				NOT = { global_var:hd_j16_fashu_def ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:fashu } } }
+				NOT = { scope:hd_j16_fsc_huan ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:fashu } } }
+				NOT = { scope:hd_j16_fsc_li ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:fashu } } }
+				NOT = { title:k_uuii_yizhou.holder ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:fashu } } }
+				NOT = { title:k_uuii_jingzhou.holder ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:fashu } } }
+				NOT = { title:e_bashu.holder ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:fashu } } }
+			}
+			remove_global_variable = hd_nbc_fashu_active
+			if = {
+				limit = {
+					exists = title:h_china.holder
+					title:c_uuii_p_4282.holder ?= {
+						OR = {
+							this = title:h_china.holder
+							top_liege = title:h_china.holder
+						}
+					}
+				}
+				set_global_variable = hd_nbc_fashu_won
+				debug_log = "HD_J16 e2_j91 FIRE fallback_won"
+			}
+			else = {
+				set_global_variable = hd_nbc_fashu_lost
+				debug_log = "HD_J16 e2_j91 FIRE fallback_lost"
+			}
+		}
+	}
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_nbc_fashu_done }
+			OR = {
+				has_global_variable = hd_nbc_fashu_won
+				has_global_variable = hd_nbc_fashu_lost
+				has_global_variable = hd_nbc_fashu_white
+				has_global_variable = hd_nbc_fashu_invalid
+			}
+		}
+		set_global_variable = hd_nbc_fashu_done
+		if = {
+			limit = { has_global_variable = hd_nbc_fashu_won }
+			if = {
+				limit = { exists = scope:hd_j16_fsc_huan }
+				clear_saved_scope = hd_j16_fsc_huan
+			}
+			hd_j16_resolve_effect = { ID = longkang_huan_017 AS = hd_j16_fsc_huan }
+			if = {
+				limit = { scope:hd_j16_fsc_huan ?= { is_alive = yes } }
+				scope:hd_j16_fsc_huan = { trigger_event = hd_nbc.0110 }
+				debug_log = "HD_J16 e2_j91 FIRE reward_sent"
+			}
+			else = {
+				debug_log = "HD_J16 e2_j91 SKIP no_actor"
+			}
+		}
+		else = {
+			debug_log = "HD_J16 e2_j91 SKIP not_won"
+		}
+	}
+}
+
+############################################################
+# E2-Z90 东宫之变【软】（03 §2.1；F5★A 授郡）
+# 窗口 348.7.1 – 349.3.1。赵主（按位置：魏郡/襄国的最高领主，独立的上党石氏）是石虎 shangdang_shi_010；
+#   石宣 _012、石韬 _015 在世，都在赵主宫廷或为其下属。上游 304 局 E2-Z60 立石宣（hd_j16_shisui_done）不必读：局面条件已含「石宣在世、石虎为赵主」。
+# 跨开局：304、346 心跳；370、404 自保护（03 §0.2）。
+# AI 石虎（且石宣也是 AI）：执行史实（hd_j16_donggong_effect），天下通报 hd_j16.1001。
+# 玩家石虎：hd_j16.1002 a 车裂石宣、立石世（史实）/ b 立石遵为储 / c 宽宥石宣、仍为储（石韬已死；石宣卒年预设 done）。
+# 玩家石宣：hd_j16.1003 a 遣杨杯刺石韬（石韬死；石宣不被处死：卒年预设 done，石虎对他 −100 并改立石世）/ b 隐忍（两人卒年都预设 done）。
+# 死亡一律由卒年表执行（PRE = hd_j16_donggong_result）：石韬 348.9.10（凶手杨杯）、石宣 348.10.15（凶手石虎）。
+# 变量：hd_j16_donggong_done/_result/_skip/_wlog、hd_j16_donggong_alt（选 b/c、石宣 a 时设，E3-Z10 读它不改储）；面板 hd_hev_j16_donggong
+############################################################
+hd_j16_node_donggong_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_donggong_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 370 }
+			set_global_variable = hd_j16_donggong_done
+			debug_log = "HD_J16 e2_z90 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 348.7.1 }
+			if = {
+				limit = { current_date >= 349.3.2 }
+				hd_j16_304_skip_effect = { KEY = donggong LOG = e2_z90 WHY = window_closed }
+			}
+			else_if = {
+				limit = {
+					OR = {
+						hd_j16_dead_trigger = { ID = shangdang_shi_010 }
+						hd_j16_dead_trigger = { ID = shangdang_shi_012 }
+						hd_j16_dead_trigger = { ID = shangdang_shi_015 }
+					}
+				}
+				hd_j16_304_skip_effect = { KEY = donggong LOG = e2_z90 WHY = actor_dead }
+			}
+			else = {
+				hd_j16_b4_res_zhao_effect = { AS = hd_j16_dg_zhao }
+				hd_j16_304_res_effect = { ID = shangdang_shi_010 AS = hd_j16_dg_hu }
+				hd_j16_304_res_effect = { ID = shangdang_shi_012 AS = hd_j16_dg_xuan }
+				hd_j16_304_res_effect = { ID = shangdang_shi_015 AS = hd_j16_dg_tao }
+				if = {
+					limit = {
+						exists = scope:hd_j16_dg_zhao
+						scope:hd_j16_dg_hu ?= { this = scope:hd_j16_dg_zhao }
+						hd_j16_b4_under_trigger = { WHO = scope:hd_j16_dg_xuan LORD = scope:hd_j16_dg_zhao }
+						hd_j16_b4_under_trigger = { WHO = scope:hd_j16_dg_tao LORD = scope:hd_j16_dg_zhao }
+					}
+					set_global_variable = hd_j16_donggong_done
+					if = {
+						limit = { scope:hd_j16_dg_hu = { is_ai = no } }
+						scope:hd_j16_dg_hu = { trigger_event = hd_j16.1002 }
+						debug_log = "HD_J16 e2_z90 WAIT player_asked"
+					}
+					else_if = {
+						limit = { scope:hd_j16_dg_xuan = { is_ai = no } }
+						scope:hd_j16_dg_xuan = { trigger_event = hd_j16.1003 }
+						debug_log = "HD_J16 e2_z90 WAIT player_asked"
+					}
+					else = {
+						hd_j16_donggong_effect = { HEIR = shangdang_shi_016 }
+						scope:hd_j16_dg_hu = { save_scope_as = hd_news_a }
+						hd_world_news_send_all_effect = { EVENT = hd_j16.1001 }
+					}
+				}
+				else = {
+					# 石宣、石韬（AI、无地）若无雇主（人才池）：先召入赵主宫廷（任命在世史实人物，01 §7.1），下一跳再判
+					if = {
+						limit = { exists = scope:hd_j16_dg_zhao }
+						hd_j16_b4_join_pool_effect = { RULER = scope:hd_j16_dg_zhao WHO = scope:hd_j16_dg_xuan }
+						hd_j16_b4_join_pool_effect = { RULER = scope:hd_j16_dg_zhao WHO = scope:hd_j16_dg_tao }
+					}
+					hd_j16_304_wait_effect = { KEY = donggong LOG = e2_z90 WHY = not_ready }
+				}
+			}
+		}
+	}
+}
+
+# 东宫之变执行体（AI 节点、1002 a/b 调用；开头自行解析，事件里也能用）。$HEIR$：新储君人物 ID（史实石世 _016；1002 b 为石遵 _018）。
+# 顺序（03、advisor）：石宣（AI）的头衔与封臣收回石虎 → 襄国郡授石祗、广阳郡授石冲（D16 同政权内授无地者）→ 立储 → 「悲愤」→ 最后设 PRE
+hd_j16_donggong_effect = {
+	hd_j16_304_res_effect = { ID = shangdang_shi_010 AS = hd_j16_dge_hu }
+	hd_j16_304_res_effect = { ID = shangdang_shi_012 AS = hd_j16_dge_xuan }
+	hd_j16_304_res_effect = { ID = shangdang_shi_022 AS = hd_j16_dge_zhi }
+	hd_j16_304_res_effect = { ID = shangdang_shi_019 AS = hd_j16_dge_chong }
+	hd_j16_304_res_effect = { ID = $HEIR$ AS = hd_j16_dge_heir }
+	if = {
+		limit = { exists = scope:hd_j16_dge_hu }
+		if = {
+			limit = {
+				scope:hd_j16_dge_xuan ?= {
+					is_ai = yes
+					is_landed = yes
+					top_liege = scope:hd_j16_dge_hu
+				}
+			}
+			hd_370_take_realm_effect = { NEW = scope:hd_j16_dge_hu OLD = scope:hd_j16_dge_xuan }
+		}
+		if = {
+			limit = {
+				scope:hd_j16_dge_zhi ?= {
+					is_ai = yes
+					is_landed = no
+				}
+				title:d_xiangguo.holder ?= {
+					OR = {
+						this = scope:hd_j16_dge_hu
+						top_liege = scope:hd_j16_dge_hu
+					}
+				}
+			}
+			hd_j16_grant_duchy_effect = { DUCHY = title:d_xiangguo TO = scope:hd_j16_dge_zhi }
+			debug_log = "HD_J16 e2_z90 FIRE xiangguo_to_shizhi"
+		}
+		if = {
+			limit = {
+				scope:hd_j16_dge_chong ?= {
+					is_ai = yes
+					is_landed = no
+				}
+				title:d_guangyang.holder ?= {
+					is_ai = yes
+					top_liege = scope:hd_j16_dge_hu
+				}
+			}
+			hd_j16_grant_duchy_effect = { DUCHY = title:d_guangyang TO = scope:hd_j16_dge_chong }
+			debug_log = "HD_J16 e2_z90 FIRE guangyang_to_shichong"
+		}
+		scope:hd_j16_dge_hu = {
+			if = {
+				limit = {
+					scope:hd_j16_dge_heir ?= { NOT = { this = scope:hd_j16_dge_hu } }
+				}
+				set_designated_heir = scope:hd_j16_dge_heir
+			}
+			add_character_modifier = { modifier = hd_j16_beifen_modifier years = 3 }
+			add_stress = 40
+		}
+	}
+	set_global_variable = hd_j16_donggong_result
+	set_global_variable = hd_hev_j16_donggong
+	debug_log = "HD_J16 e2_z90 FIRE donggong"
+}
+
+############################################################
+# E2-Z95 石虎称帝【软】（03 §2.1）
+# 窗口 349.1.1 – 349.4.30。赵主是石虎、在世，主头衔称谓尚非帝（hd_nbc_style ≠ huangdi）。
+# 跨开局：304、346 心跳；370、404 自保护。AI 直接执行；玩家 hd_j16.1004 a 即皇帝位、改元太宁 / b 仍称天王。
+# 执行：hd_nbc_found_realm_effect NAME = dynn_title_zhao STYLE = huangdi FIXED = yes（国号不变）；年号太宁（新键 SG_nianhao_taining，交汇总人注册）。
+# 变量：hd_j16_shihu_di_done/_result/_skip/_wlog；面板 hd_hev_j16_shihu_di
+############################################################
+hd_j16_node_shihu_di_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_shihu_di_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 370 }
+			set_global_variable = hd_j16_shihu_di_done
+			debug_log = "HD_J16 e2_z95 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 349.1.1 }
+			if = {
+				limit = { current_date >= 349.5.1 }
+				hd_j16_304_skip_effect = { KEY = shihu_di LOG = e2_z95 WHY = window_closed }
+			}
+			else_if = {
+				limit = { hd_j16_dead_trigger = { ID = shangdang_shi_010 } }
+				hd_j16_304_skip_effect = { KEY = shihu_di LOG = e2_z95 WHY = actor_dead }
+			}
+			else = {
+				hd_j16_b4_res_zhao_effect = { AS = hd_j16_sd_zhao }
+				hd_j16_304_res_effect = { ID = shangdang_shi_010 AS = hd_j16_sd_hu }
+				if = {
+					limit = {
+						exists = scope:hd_j16_sd_zhao
+						scope:hd_j16_sd_hu ?= { this = scope:hd_j16_sd_zhao }
+						scope:hd_j16_sd_zhao.primary_title ?= { NOT = { var:hd_nbc_style ?= flag:huangdi } }
+					}
+					set_global_variable = hd_j16_shihu_di_done
+					if = {
+						limit = { scope:hd_j16_sd_hu = { is_ai = yes } }
+						scope:hd_j16_sd_hu = { hd_j16_shihu_di_effect = yes }
+					}
+					else = {
+						scope:hd_j16_sd_hu = { trigger_event = hd_j16.1004 }
+						debug_log = "HD_J16 e2_z95 WAIT player_asked"
+					}
+				}
+				else = {
+					hd_j16_304_wait_effect = { KEY = shihu_di LOG = e2_z95 WHY = not_ready }
+				}
+			}
+		}
+	}
+}
+
+# 石虎称帝执行体。Scope：石虎（节点或 1004 a 的 root）
+hd_j16_shihu_di_effect = {
+	hd_nbc_found_realm_effect = { NAME = dynn_title_zhao STYLE = huangdi FIXED = yes }
+	hd_j16_b1_change_era_effect = { KEY = taining YEAR = 1 }
+	set_global_variable = hd_j16_shihu_di_result
+	set_global_variable = hd_hev_j16_shihu_di
+	save_scope_as = hd_news_a
+	hd_world_news_send_effect = { EVENT = hd_j16.1005 }
+	debug_log = "HD_J16 e2_z95 FIRE shihu_di"
+}

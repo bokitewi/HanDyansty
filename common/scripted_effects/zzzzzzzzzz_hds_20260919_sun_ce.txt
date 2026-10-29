@@ -18,10 +18,29 @@ hds_sc_tick_effect = {
             if = {
                 # Sun Jian already left Yuan Shu himself (hds.5000): skip the Yuan Shu departure story.
                 # 2026-10-25：孙坚死后人物标记即失效，改认全局变量。
-                limit = { hds_sj_departed_line_trigger = yes }
+                # 2026-10-28：已在 hds.4001 选过出走但立营没成的，直接重试，不再弹事件；最多 3 次。
+                limit = {
+                    OR = {
+                        hds_sj_departed_line_trigger = yes
+                        AND = {
+                            has_character_flag = hds_sc_depart_chosen
+                            var:hds_sc_depart_tries < 3
+                        }
+                    }
+                }
                 hds_sc_depart_effect = yes
             }
-            else = { hds_queue_event_effect = { EVENT = hds.4001 LEASE = hds_lease_4001 } }
+            # 2026-10-28 boki：3 次都没立成营地，就按有地身份放行出走（即以前的行为），记诊断。
+            else_if = {
+                limit = { has_character_flag = hds_sc_depart_chosen }
+                add_character_flag = hds_sc_depart_landed_ok
+                hds_diag_bump_effect = { NAME = hds_diag_dep_landed_fallback }
+                hds_sc_depart_effect = yes
+            }
+            else_if = {
+                limit = { NOT = { has_character_flag = hds_sc_depart_chosen } }
+                hds_queue_event_effect = { EVENT = hds.4001 LEASE = hds_lease_4001 }
+            }
         }
         if = {
             limit = { has_character_flag = hds_sc_departed }
@@ -101,6 +120,17 @@ hds_sun_camp_departure_effect = {
 		limit = { is_landed = yes }
 		hds_sun_return_land_effect = yes
 	}
+	# 2026-10-28：190 局里交地当天旧首府县又以「收回」回到孙策手上，营地没建成。
+	# 交完仍有地就再交一次，并记诊断（存档 variables 段查 hds_diag_dep_*）。
+	if = {
+		limit = { is_alive = yes is_landed = yes }
+		hds_diag_bump_effect = { NAME = hds_diag_dep_regained }
+		hds_sun_return_land_effect = yes
+		if = {
+			limit = { is_landed = yes }
+			hds_diag_bump_effect = { NAME = hds_diag_dep_still_landed }
+		}
+	}
 	if = {
 		limit = { is_alive = yes is_landed = no NOT = { government_has_flag = government_is_landless_adventurer } }
 		# 人先到历阳，营地就建在那里
@@ -173,8 +203,11 @@ hds_sun_return_land_effect = {
 				template = post_migration_minor_warlord_template
 				save_scope_as = hds_sc_local_ruler
 			}
-			create_title_and_vassal_change = { type = granted save_scope_as = hds_sc_county_change add_claim_on_loss = no }
+			# 2026-10-28：转县与独立放进同一个变更（照原版 MPO 游牧分立写法），
+			# 不再出现「出走者已无地、新首领仍是其有地封臣」的中间态（190 局旧首府因此被收回）。
+			create_title_and_vassal_change = { type = independency save_scope_as = hds_sc_county_change add_claim_on_loss = no }
 			change_title_holder = { holder = scope:hds_sc_local_ruler change = scope:hds_sc_county_change take_baronies = yes }
+			scope:hds_sc_local_ruler = { becomes_independent = { change = scope:hds_sc_county_change } }
 			resolve_title_and_vassal_change = scope:hds_sc_county_change
 			scope:hds_sc_local_ruler = { hds_release_effect = yes }
 		}
@@ -194,6 +227,11 @@ hds_sun_return_land_effect = {
 			}
 			else = { hds_release_effect = yes }
 		}
+		# 2026-10-28：分出去的当地首领若还挂在名下（疑为原版「无地君主有有地封臣则收回一县」），再放一次。
+		every_vassal = {
+			limit = { is_landed = yes }
+			hds_release_effect = yes
+		}
 		every_held_title = {
 			limit = { tier > tier_county is_landless_type_title = no is_noble_family_title = no }
 			scope:hds_sc_settlement_actor = { destroy_title = prev }
@@ -209,11 +247,30 @@ hds_sc_depart_effect = {
             hds_release_effect = yes
             hds_sun_record_camp_effect = yes
         }
+        else_if = {
+            # 3 次立营失败后放行：不再交地，只脱离上级。
+            limit = { has_character_flag = hds_sc_depart_landed_ok }
+            hds_release_effect = yes
+        }
         else = {
+            add_character_flag = hds_sc_depart_chosen
+            if = {
+                limit = { NOT = { has_variable = hds_sc_depart_tries } }
+                set_variable = { name = hds_sc_depart_tries value = 0 }
+            }
+            change_variable = { name = hds_sc_depart_tries add = 1 }
             hds_sun_camp_departure_effect = { DONE_FLAG = hds_sc_camped ESTATE_FLAG = hds_sc_camp_converted }
         }
+        # 2026-10-28：交地立营这条线必须真的成了冒险者才算出走；没成就留待下次心跳重试。
         if = {
-            limit = { is_alive = yes is_independent_ruler = yes hds_sun_estate_inherited_trigger = yes }
+            limit = {
+                is_alive = yes is_independent_ruler = yes hds_sun_estate_inherited_trigger = yes
+                OR = {
+                    hds_sj_departed_line_trigger = yes
+                    has_character_flag = hds_sc_camped
+                    has_character_flag = hds_sc_depart_landed_ok
+                }
+            }
             if = { limit = { NOT = { has_title = title:k_uuii_yangzhou } } add_pressed_claim = title:k_uuii_yangzhou }
             add_character_flag = hds_sc_departed
             add_character_flag = hds_sc_danyang_target_version

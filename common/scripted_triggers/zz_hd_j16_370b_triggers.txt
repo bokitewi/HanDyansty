@@ -1,0 +1,170 @@
+﻿# 两晋十六国统一史实线 370 节·东晋段（5-A2）触发器。节点在 zz_hd_j16_370b_effects.txt（E4 段）与 zz_hd_j16_e5_370_effects.txt（E5 段）。
+# 写入者：5-A2（10-27 汇总人定：370 节本期三路并行，东晋段自建 370b 一套文件）。
+
+# 晋天子在位：h_china 有持有者，且是司马氏（河内司马氏的王朝键为 sima；OE 人物如司马元显挂 henei_sima_dyn，不作天子判断）
+hd_j16_370b_jin_sima_trigger = {
+	exists = title:h_china.holder
+	title:h_china.holder = { dynasty ?= dynasty:sima }
+}
+
+# 人物在晋天子的政权内（天子本人、其封臣及下属、或这些人宫廷里的廷臣）。Scope：角色
+hd_j16_370b_in_jin_trigger = {
+	exists = title:h_china.holder
+	OR = {
+		this = title:h_china.holder
+		top_liege ?= title:h_china.holder
+		employer ?= {
+			OR = {
+				this = title:h_china.holder
+				top_liege ?= title:h_china.holder
+			}
+		}
+	}
+}
+
+# 不持郡及以上的实地头衔（世族头衔、朝官头衔不算）。Scope：角色
+hd_j16_370b_no_duchy_trigger = {
+	NOT = {
+		any_held_title = {
+			tier >= tier_duchy
+			is_landless_type_title = no
+			is_noble_family_title = no
+		}
+	}
+}
+
+# 授郡（D16 / A1 §7.1，04 文首）：$DUCHY$ 有持有者、持有者是 AI、不是受郡者本人，两人同在晋天子政权内。
+# 受郡者须在世、不持郡（无地，或只有县：04 E4-J97「无地或只有县」）。用法：hd_j16_370b_grantable_trigger = { DUCHY = title:d_x TO = scope:y }
+hd_j16_370b_grantable_trigger = {
+	exists = $DUCHY$.holder
+	$DUCHY$.holder = {
+		is_ai = yes
+		NOT = { this = $TO$ }
+		hd_j16_370b_in_jin_trigger = yes
+	}
+	$TO$ = {
+		is_alive = yes
+		is_imprisoned = no
+		hd_j16_370b_in_jin_trigger = yes
+		hd_j16_370b_no_duchy_trigger = yes
+	}
+}
+
+# 可以召入某人宫廷（报错清单第 29 条：set_employer 对统治者、已在该宫廷者会失败）；另按 04 E4-J60「非议员」排除议会成员（设计要求，不是引擎限制）。
+# Scope：被召者；$TO$：新雇主
+hd_j16_370b_can_employ_trigger = {
+	is_alive = yes
+	is_ai = yes
+	is_landed = no
+	is_imprisoned = no
+	is_councillor = no
+	NOT = { this = $TO$ }
+	NOT = { employer ?= $TO$ }
+	$TO$ = {
+		is_alive = yes
+		is_landed = yes
+	}
+}
+
+# 同上，但不排除议会成员（E4-J97、E5-J20 倒戈用：04 E4-J97 只写「AI 且无郡」）。set_employer 换宫廷后原议席自然出缺。
+# 改判 is_ruler = no：天朝制议员多持 e_minister_* 等无地型头衔，is_landed 拦不住，而持头衔即统治者，set_employer 会失败（报错清单第 29 条）。
+# Scope：被召者；$TO$：新雇主
+hd_j16_370b_can_employ_council_trigger = {
+	is_alive = yes
+	is_ai = yes
+	is_landed = no
+	is_ruler = no
+	is_imprisoned = no
+	NOT = { this = $TO$ }
+	NOT = { employer ?= $TO$ }
+	$TO$ = {
+		is_alive = yes
+		is_landed = yes
+	}
+}
+
+# E5-J20 刘牢之属王恭一系：王恭的廷臣或封臣。Scope：刘牢之；$GONG$：王恭
+hd_j16_370b_liu_under_gong_trigger = {
+	OR = {
+		employer ?= $GONG$
+		liege ?= $GONG$
+	}
+}
+
+# E4-J20 4511 b「晋廷世族好感 −30」的对象：世族、在世，不是桓温（scope:hd_j16_kxt_tgt）、不是龙亢桓氏、不是谢安/王坦之（二人单独加）。Scope：角色
+hd_j16_370b_shaxin_shizu_trigger = {
+	is_alive = yes
+	hd_party_is_shizu_trigger = yes
+	NOT = { this = scope:hd_j16_kxt_tgt }
+	NOT = { house ?= house:longkang_huan }
+	trigger_if = {
+		limit = { exists = scope:hd_j16_kxt_xie }
+		NOT = { this = scope:hd_j16_kxt_xie }
+	}
+	trigger_if = {
+		limit = { exists = scope:hd_j16_kxt_wang }
+		NOT = { this = scope:hd_j16_kxt_wang }
+	}
+}
+
+# E4-J80 谢玄北伐目标县：不归晋、与晋接壤、其郡治也不归晋（目标郡尚未光复）。Scope：县头衔
+hd_j16_370b_beifa_county_trigger = {
+	exists = holder
+	NOT = { holder = { hd_j16_370b_in_jin_trigger = yes } }
+	any_neighboring_county = {
+		holder ?= { hd_j16_370b_in_jin_trigger = yes }
+	}
+	duchy ?= {
+		title_capital_county ?= {
+			NOT = { holder ?= { hd_j16_370b_in_jin_trigger = yes } }
+		}
+	}
+}
+
+# 清君侧（hd_dc_ten_qingjunce_cb）攻方条件：晋天子的直属封臣（CB allowed_against 要求 liege = 天子）、有地、未被囚、不在战争中。Scope：角色
+hd_j16_370b_qjc_ready_trigger = {
+	is_alive = yes
+	is_landed = yes
+	is_imprisoned = no
+	is_at_war = no
+	exists = title:h_china.holder
+	liege ?= title:h_china.holder
+	NOT = { this = title:h_china.holder }
+}
+
+# 某人正在打清君侧战争（攻方）。Scope：角色
+hd_j16_370b_in_qjc_war_trigger = {
+	any_character_war = {
+		using_cb = hd_dc_ten_qingjunce_cb
+		primary_attacker = prev
+	}
+}
+
+# 某人已秉政：hd_court 权臣，或清君侧得来的终身辅政（hd_dc_ten_qjc_regent）。Scope：角色
+hd_j16_370b_holds_regency_trigger = {
+	is_alive = yes
+	OR = {
+		hd_court_is_regent_trigger = yes
+		title:h_china.var:hd_dc_ten_qjc_regent ?= this
+	}
+}
+
+# 权臣交接后桓氏仍秉政：h_china 上的权臣在世且是龙亢桓氏（E4-J40 等待条件）
+hd_j16_370b_huan_regent_trigger = {
+	title:h_china.var:hd_court_regent ?= {
+		is_alive = yes
+		house ?= house:longkang_huan
+	}
+}
+
+# E5-J25 桓玄据荆江的目标（殷仲堪 / 杨佺期）：有地、在晋、未被囚、有首府县，且与桓玄不是上下级。Scope：目标；scope:hd_j16_kj_xuan＝桓玄
+hd_j16_370b_hxj_target_trigger = {
+	is_alive = yes
+	is_landed = yes
+	is_imprisoned = no
+	exists = capital_county
+	hd_j16_370b_in_jin_trigger = yes
+	NOT = { this = scope:hd_j16_kj_xuan }
+	NOT = { target_is_liege_or_above = scope:hd_j16_kj_xuan }
+	NOT = { scope:hd_j16_kj_xuan = { target_is_liege_or_above = prev } }
+}

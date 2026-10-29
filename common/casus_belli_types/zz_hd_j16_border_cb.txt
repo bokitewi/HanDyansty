@@ -1,0 +1,119 @@
+﻿# 两晋十六国统一史实线（j16）边境战争（A3-F2★A；03 §4.1 末「麻秋压境的 CB」；08 §1.2 归 4-A）。
+# 照 hd_sg218_war_cb（zz_hd_sg218_war_cb.txt:6-90）：只能由脚本宣战，胜利时只转目标县。用于「只打一县」的小边境战：
+# E2-L90/L91 麻秋压境、E3-L08 龙黎、E3-X10 等（346 节）、E5-T50 柴壁（06）。
+# 宣战一律用 zz_hd_j16_dir_effects.txt 的 hd_j16_border_start_war_effect = { ATTACKER DEFENDER TARGET KIND }（只取一县，不走连通筛选）。
+# 结算：
+#   胜：只转目标县；攻方与守方（及守方的顶层领主，若不同）互订 3 年停战；
+#   白和：守方得少量威望，攻方付少量赔款，3 年停战；
+#   败：守方得威望，攻方付赔款、失威望，3 年停战。
+# 结局不调 hd_nbc_war_result_kind_effect（00 §6：新 KIND 一律由节点按关键县归属自判，不进分发表）。
+#   核实（10-27）：该效果要求 KIND 为字面量（flag:$KIND$、hd_nbc_$KIND$_$RESULT$），本 CB 通用于多个场次，
+#   要调就得在 CB 里写死一张场次清单，等于另立分发表；故 CB 只记日志（读 root.war.var:hd_nbc_war_kind，同 10-26 的 root.war 写法），
+#   胜负与 hd_nbc_<KIND>_active 的清理由节点在结局时自做（实际所争的县存在全局 hd_j16_border_<KIND>_target）。
+hd_j16_border_cb = {
+	icon = conquest
+	group = conquest
+	combine_into_one = no
+	should_show_war_goal_subview = yes
+	mutually_exclusive_titles = { always = yes }
+	allow_hostages = no
+	allowed_for_character = {}
+	allowed_against_character = {}
+	target_titles = all
+	target_title_tier = all
+	target_de_jure_regions_above = yes
+	target_top_liege_if_outside_realm = no
+	ignore_effect = change_title_holder
+	should_check_for_interface_availability = no
+	valid_to_start = { always = no }
+	cost = {}
+
+	# 有效性：目标县仍由守方或其下属持有（守方不在时由继承人接手，见 on_primary_defender_death）
+	should_invalidate = {
+		NOT = {
+			any_in_list = {
+				list = target_titles
+				any_in_de_jure_hierarchy = {
+					tier = tier_county
+					holder = { OR = { this = scope:defender target_is_liege_or_above = scope:defender } }
+				}
+			}
+		}
+	}
+
+	on_invalidated_desc = msg_religious_war_invalidation_region_message
+	on_invalidated = {
+		if = {
+			limit = { exists = root.war }
+			debug_log = "HD_J16 border FIRE result_invalid"
+			debug_log_scopes = yes
+		}
+	}
+	on_declaration = { on_declared_war = yes }
+
+	on_victory_desc = { desc = hd_j16_border_victory_desc }
+	on_victory = {
+		create_title_and_vassal_change = { type = conquest save_scope_as = hd_j16_border_change add_claim_on_loss = no }
+		every_in_list = {
+			list = target_titles
+			conquest_cb_title_transfer = { RELIGIOUS_WAR = no }
+		}
+		every_in_list = { list = vassals_taken change_liege = { liege = scope:attacker change = scope:hd_j16_border_change } }
+		every_in_list = { list = titles_taken change_title_holder = { holder = scope:attacker change = scope:hd_j16_border_change take_baronies = yes } }
+		resolve_title_and_vassal_change = scope:hd_j16_border_change
+		hd_j16_border_truce_effect = { RESULT = victory }
+		scope:attacker = { add_prestige = minor_prestige_value }
+		if = {
+			limit = { exists = root.war }
+			debug_log = "HD_J16 border FIRE result_won"
+			debug_log_scopes = yes
+		}
+	}
+
+	on_white_peace_desc = { desc = hd_j16_border_white_peace_desc }
+	on_white_peace = {
+		scope:defender = { add_prestige = minor_prestige_value }
+		scope:attacker = {
+			pay_short_term_gold_reparations_effect = { GOLD_VALUE = 1 }
+		}
+		hd_j16_border_truce_effect = { RESULT = white_peace }
+		if = {
+			limit = { exists = root.war }
+			debug_log = "HD_J16 border FIRE result_white"
+			debug_log_scopes = yes
+		}
+	}
+
+	on_defeat_desc = { desc = hd_j16_border_defeat_desc }
+	on_defeat = {
+		scope:defender = { add_prestige = medium_prestige_value }
+		scope:attacker = {
+			pay_short_term_gold_reparations_effect = { GOLD_VALUE = 2 }
+			add_prestige = minor_prestige_loss
+		}
+		hd_j16_border_truce_effect = { RESULT = defeat }
+		if = {
+			limit = { exists = root.war }
+			debug_log = "HD_J16 border FIRE result_lost"
+			debug_log_scopes = yes
+		}
+	}
+
+	on_primary_attacker_death = inherit
+	on_primary_defender_death = inherit
+	transfer_behavior = transfer
+	attacker_allies_inherit = no
+	defender_allies_inherit = yes
+	war_name = "HD_J16_BORDER_WAR_NAME"
+	interface_priority = 80
+	use_de_jure_wargoal_only = yes
+	attacker_wargoal_percentage = 0.8
+	landless_attacker_needs_armies = no
+	full_occupation_by_attacker_gives_victory = no
+	full_occupation_by_defender_gives_victory = no
+	max_attacker_score_from_battles = 100
+	max_defender_score_from_battles = 50
+	max_defender_score_from_occupation = 150
+	max_attacker_score_from_occupation = 150
+	max_ai_diplo_distance_to_title = 500
+}

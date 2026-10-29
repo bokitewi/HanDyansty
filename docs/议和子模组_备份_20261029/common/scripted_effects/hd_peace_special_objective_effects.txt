@@ -1,0 +1,148 @@
+# ROOT = proposer. Store the objects shown in this draft, not a future search.
+hd_peace_cache_special_objective_effect = {
+	set_variable = { name = hd_peace_special_objective_type value = 0 }
+	remove_variable = hd_peace_objective_raze_province
+	set_variable = { name = hd_peace_objective_artifact_count value = 0 }
+	if = { limit = { has_variable_list = hd_peace_objective_artifacts } clear_variable_list = hd_peace_objective_artifacts }
+	if = {
+		limit = { var:hd_peace_treaty_war = { primary_attacker = root hd_peace_special_objective_war_trigger = yes } }
+		save_scope_as = attacker
+		var:hd_peace_treaty_opponent = { save_scope_as = defender }
+		if = {
+			limit = { var:hd_peace_treaty_war = { hd_peace_artifact_war_trigger = yes } }
+			set_variable = { name = hd_peace_special_objective_type value = 5 }
+			var:hd_peace_treaty_opponent = {
+				every_character_artifact = { hd_peace_cache_objective_artifact_effect = yes }
+				every_vassal_or_below = { every_character_artifact = { hd_peace_cache_objective_artifact_effect = yes } }
+			}
+		}
+		else_if = {
+			limit = { var:hd_peace_treaty_war = { using_cb = mandala_raze_capital_structure_cb } }
+			set_variable = { name = hd_peace_special_objective_type value = 6 }
+			var:hd_peace_treaty_opponent.capital_province ?= { root = { set_variable = { name = hd_peace_objective_raze_province value = prev } } }
+		}
+		else_if = {
+			limit = { var:hd_peace_treaty_war = { using_cb = migration_cb } }
+			set_variable = { name = hd_peace_special_objective_type value = 7 }
+		}
+		else_if = {
+			limit = { var:hd_peace_treaty_war = { using_cb = fp1_varangian_adventurer_conquest } }
+			set_variable = { name = hd_peace_special_objective_type value = 8 }
+		}
+		else_if = {
+			limit = { var:hd_peace_treaty_war = { using_cb = legendary_adventure } }
+			set_variable = { name = hd_peace_special_objective_type value = 9 }
+		}
+		else_if = {
+			limit = { var:hd_peace_treaty_war = { hd_peace_landless_relocation_war_trigger = yes } }
+			set_variable = { name = hd_peace_special_objective_type value = 10 }
+		}
+	}
+}
+
+hd_peace_cache_objective_artifact_effect = {
+	if = {
+		limit = {
+			hd_peace_objective_artifact_valid_trigger = yes
+			root = { NOT = { is_target_in_variable_list = { name = hd_peace_objective_artifacts target = prev } } }
+		}
+		root = {
+			add_to_variable_list = { name = hd_peace_objective_artifacts target = prev }
+			change_variable = { name = hd_peace_objective_artifact_count add = 1 }
+		}
+	}
+}
+
+hd_peace_apply_artifact_objective_effect = {
+	every_in_list = {
+		variable = hd_peace_objective_artifacts
+		save_scope_as = hd_peace_transferred_artifact
+		artifact_owner = { save_scope_as = hd_peace_artifact_old_owner }
+		set_owner = {
+			target = scope:hd_peace_objective_attacker
+			history = { type = conquest actor = scope:hd_peace_artifact_old_owner recipient = scope:hd_peace_objective_attacker }
+		}
+		# Keep the original CB's defender claim; the debug CB has no claim effect.
+		if = {
+			limit = { root.var:hd_peace_objective_artifact_claims = 1 }
+			scope:hd_peace_objective_defender = {
+				if = {
+					limit = { NOT = { has_personal_artifact_claim = scope:hd_peace_transferred_artifact } }
+					add_personal_artifact_claim = scope:hd_peace_transferred_artifact
+				}
+			}
+		}
+	}
+}
+
+hd_peace_apply_raze_objective_effect = {
+	var:hd_peace_objective_raze_province = { ruin_great_building = yes }
+	scope:hd_peace_objective_defender = {
+		if = { limit = { has_character_flag = devaraja_flag } remove_character_flag = devaraja_flag }
+		if = { limit = { has_character_modifier = mandala_rise_from_the_ashes_modifier } remove_character_modifier = mandala_rise_from_the_ashes_modifier }
+	}
+}
+
+# Native on_migration_war_end supplies domain and target_title. Only cache them
+# here; the acknowledged treaty chain executes the changes once after end_war.
+hd_peace_capture_migration_objective_effect = {
+	if = {
+		limit = {
+			exists = scope:war
+			exists = scope:domain
+			exists = scope:target_title
+			has_variable = hd_peace_treaty_resolution_in_progress
+			has_variable = hd_peace_objective
+			var:hd_peace_objective_kind = 7
+			var:hd_peace_treaty_war = scope:war
+			scope:war = {
+				hd_peace_is_ordinary_war_trigger = yes
+				using_cb = migration_cb
+				primary_attacker = root
+				var:hd_peace_signatory = root
+				var:hd_peace_signed_nonce = root.var:hd_peace_offer_nonce
+			}
+		}
+		set_variable = { name = hd_peace_migration_domain value = scope:domain }
+		set_variable = { name = hd_peace_migration_target value = scope:target_title }
+		set_variable = { name = hd_peace_migration_nonce value = var:hd_peace_offer_nonce }
+		trigger_event = { id = hd_peace.0403 }
+	}
+}
+
+hd_peace_apply_migration_objective_effect = {
+	if = {
+		limit = {
+			exists = var:hd_peace_migration_domain
+			exists = var:hd_peace_migration_target
+			var:hd_peace_migration_nonce = var:hd_peace_offer_nonce
+		}
+		remove_variable = hd_peace_migration_nonce
+		save_scope_as = actor
+		scope:hd_peace_objective_defender = { save_scope_as = recipient }
+		var:hd_peace_migration_domain = { save_scope_as = domain }
+		var:hd_peace_migration_target = { save_scope_as = target_title }
+		# Reuse the installed main mod's migration transaction, including old
+		# lands, title rank, displaced rulers and obedient migrating vassals.
+		migration_title_and_vassal_change_effect = yes
+		if = {
+			limit = { scope:domain = { tier = tier_county holder = root } }
+			set_realm_capital = scope:domain
+		}
+		else_if = {
+			limit = { scope:domain.title_capital_county = { holder = root } }
+			set_realm_capital = scope:domain.title_capital_county
+		}
+		domicile ?= { move_domicile = root.capital_province }
+		if = { limit = { is_ai = yes } set_variable = { name = migration_cooldown years = migration_cooldown_value } }
+		trigger_event = { on_action = mpo_migration_finished }
+	}
+}
+
+# The migration CB alone has an engine-owned domain. Adventure wars instead
+# expose all destination titles through their CB and use their own land rules.
+hd_peace_prepare_relocation_effect = {
+	save_scope_as = attacker
+	scope:hd_peace_objective_defender = { save_scope_as = defender }
+	every_in_list = { variable = hd_peace_objective_display_titles add_to_list = hd_peace_relocation_titles }
+}

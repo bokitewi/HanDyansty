@@ -1,0 +1,59 @@
+# War scope; start only once per owner, including bookmark wars.
+hd_peace_start_monitor_effect = {
+	if = {
+		limit = {
+			trigger_if = { limit = { has_variable = hd_peace_monitor_owner } NOT = { var:hd_peace_monitor_owner = primary_attacker } }
+		}
+		set_variable = { name = hd_peace_monitor_owner value = primary_attacker }
+		save_scope_as = war
+		primary_attacker = { trigger_event = { id = hd_peace.0400 days = 1 } }
+	}
+}
+
+# Explicit bounded full-score offer. All final checks also run in dispatch.
+hd_peace_compose_full_score_effect = {
+	if = {
+		limit = { hd_peace_objective_available_trigger = yes hd_peace_objective_price_value <= 100 }
+		set_variable = { name = hd_peace_objective value = 1 }
+	}
+	else_if = {
+		limit = {
+			var:hd_peace_treaty_war = { OR = { using_cb = make_tributary_cb using_cb = domination_cb } }
+			hd_peace_opponent_can_become_tributary_trigger = yes
+		}
+		set_variable = { name = hd_peace_demand_suzerainty value = 1 }
+	}
+	else = {
+		hd_peace_ai_select_budget_titles_effect = yes
+		every_in_list = {
+			variable = hd_peace_demand_candidates
+			limit = {
+				NOT = { hd_peace_county_covered_by_demand_titles_trigger = yes }
+				root = {
+					is_target_in_variable_list = { name = hd_peace_cb_reserved_counties target = prev }
+					# No count cap: the forced budget of 100 limits it, as for players.
+					var:hd_peace_treaty_opponent = { root.hd_peace_demand_county_count_value < realm_size }
+				}
+			}
+			save_scope_as = hd_peace_budget_county
+			root = {
+				add_to_variable_list = { name = hd_peace_demand_counties target = scope:hd_peace_budget_county }
+				if = {
+					limit = { hd_peace_demand_cost_value > 100 }
+					remove_list_variable = { name = hd_peace_demand_counties target = scope:hd_peace_budget_county }
+				}
+			}
+		}
+		if = {
+			limit = { NOT = { hd_peace_forced_clause_types_valid_trigger = yes } }
+			if = { limit = { has_variable_list = hd_peace_demand_counties } clear_variable_list = hd_peace_demand_counties }
+			if = { limit = { has_variable_list = hd_peace_demand_titles } clear_variable_list = hd_peace_demand_titles }
+		}
+		if = {
+			limit = { hd_peace_demand_county_count_value = 0 hd_peace_demand_title_count_value = 0 }
+			hd_peace_ai_set_max_demand_resource_effect = yes
+			set_variable = { name = hd_peace_demand_humiliation value = 1 }
+		}
+	}
+	set_variable = { name = hd_peace_long_truce value = 1 }
+}

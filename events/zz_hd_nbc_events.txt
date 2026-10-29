@@ -81,17 +81,38 @@ hd_nbc.0001 = {
 hd_nbc.0100 = {
 	type = character_event
 	title = hd_nbc.0100.t
-	desc = hd_nbc.0100.desc
+	# 强撑过一次的，第二次只剩交代后事（D10；文案键在 zz_hd_j16_core_l_*.yml）
+	desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { has_variable = hd_j16_endured }
+				desc = hd_j16_core_sick_again_desc
+			}
+			desc = hd_nbc.0100.desc
+		}
+	}
 	theme = physical_health
 	left_portrait = { character = root animation = sick }
 	trigger = { is_alive = yes }
 	option = {
 		name = hd_nbc.0100.a
+		# j16 卒年的待答标记（hd_j16_death_natural_effect 设），死前先清；旧 nbc 心跳弹本事件时没有这个变量
+		if = {
+			limit = { has_variable = hd_j16_dx_asked }
+			remove_variable = hd_j16_dx_asked
+		}
 		death = { death_reason = death_natural_causes }
 		ai_chance = { base = 100 }
 	}
 	option = {
 		name = hd_nbc.0100.b
+		# 强撑每人只能一次（D10），与大限 hd_j16.0001 共用此变量
+		trigger = { NOT = { has_variable = hd_j16_endured } }
+		if = {
+			limit = { has_variable = hd_j16_dx_asked }
+			remove_variable = hd_j16_dx_asked
+		}
+		set_variable = hd_j16_endured
 		if = {
 			limit = { NOT = { has_trait = ill } }
 			add_trait = ill
@@ -124,9 +145,20 @@ hd_nbc.0110 = {
 				save_scope_as = hd_nbc_cheng_lord
 			}
 		}
+		# j16 F-0：李势 bacong_li_026、周抚 lujiang_zhou_004 原写死 character:ID，改为 hd_j16_resolve_effect 解析（hbirth 出场者也能取到；取不到就跳过该段）
+		if = {
+			limit = { exists = scope:hd_j16_j91_lishi }
+			clear_saved_scope = hd_j16_j91_lishi
+		}
+		hd_j16_resolve_effect = { ID = bacong_li_026 AS = hd_j16_j91_lishi }
+		if = {
+			limit = { exists = scope:hd_j16_j91_zhoufu }
+			clear_saved_scope = hd_j16_j91_zhoufu
+		}
+		hd_j16_resolve_effect = { ID = lujiang_zhou_004 AS = hd_j16_j91_zhoufu }
 		if = {
 			limit = { NOT = { exists = scope:hd_nbc_cheng_lord } }
-			character:bacong_li_026 ?= {
+			scope:hd_j16_j91_lishi ?= {
 				if = {
 					limit = {
 						is_alive = yes
@@ -159,8 +191,8 @@ hd_nbc.0110 = {
 			if = {
 				limit = { title:k_uuii_yizhou.holder ?= scope:hd_nbc_cheng_lord }
 				if = {
-					limit = { character:lujiang_zhou_004 ?= { is_alive = yes is_landed = yes } }
-					character:lujiang_zhou_004 = { save_scope_as = hd_nbc_yizhou_holder }
+					limit = { scope:hd_j16_j91_zhoufu ?= { is_alive = yes is_landed = yes } }
+					scope:hd_j16_j91_zhoufu = { save_scope_as = hd_nbc_yizhou_holder }
 				}
 				else = {
 					scope:hd_nbc_jin_emperor ?= { save_scope_as = hd_nbc_yizhou_holder }
@@ -189,13 +221,44 @@ hd_nbc.0110 = {
 			}
 			debug_log = "HD_NBC 346 FASHU SETTLED"
 		}
+		# 2026-10-28 伐蜀改走吞并 CB（全取成汉）：益州、巴蜀帝国已随胜利归桓温本人。益州照上交周抚（不在则天子），巴蜀帝国销毁
+		if = {
+			limit = { title:k_uuii_yizhou.holder ?= root }
+			if = {
+				limit = { exists = scope:hd_nbc_yizhou_holder }
+				clear_saved_scope = hd_nbc_yizhou_holder
+			}
+			if = {
+				limit = {
+					scope:hd_j16_j91_zhoufu ?= {
+						is_alive = yes
+						is_landed = yes
+						NOT = { this = root }
+					}
+				}
+				scope:hd_j16_j91_zhoufu = { save_scope_as = hd_nbc_yizhou_holder }
+			}
+			else = {
+				scope:hd_nbc_jin_emperor ?= { save_scope_as = hd_nbc_yizhou_holder }
+			}
+			if = {
+				limit = { exists = scope:hd_nbc_yizhou_holder }
+				create_title_and_vassal_change = { type = granted save_scope_as = hd_nbc_yizhou_change2 add_claim_on_loss = no }
+				title:k_uuii_yizhou = { change_title_holder = { holder = scope:hd_nbc_yizhou_holder change = scope:hd_nbc_yizhou_change2 } }
+				resolve_title_and_vassal_change = scope:hd_nbc_yizhou_change2
+			}
+		}
+		if = {
+			limit = { title:e_bashu.holder ?= root }
+			destroy_title = title:e_bashu
+		}
 		save_scope_as = hd_news_a
 		if = {
 			limit = { exists = scope:hd_nbc_cheng_lord }
 			scope:hd_nbc_cheng_lord = { save_scope_as = hd_news_b }
 		}
 		else = {
-			character:bacong_li_026 ?= { save_scope_as = hd_news_b }
+			scope:hd_j16_j91_lishi ?= { save_scope_as = hd_news_b }
 		}
 		hd_world_news_send_effect = { EVENT = hd_nbc.0901 }
 		ai_chance = { base = 100 }
@@ -351,6 +414,29 @@ hd_nbc.0145 = {
 	option = {
 		name = hd_nbc.0145.a
 		set_global_variable = hd_hev_346_fujian_coup
+		# j16 F-0（p4-B 报告第五节第 6 条）：苻法之死节点 hd_j16_node_fufa_effect 与夺位节点在同一跳里先后运行，
+		# 本事件还没选时它已按 coup_not_fired 跳过。选 a 即撤销这次跳过，下一跳由它补做（苟氏入宫；玩家苻坚 60 天后 hd_j16.1210）
+		if = {
+			limit = {
+				has_global_variable = hd_j16_fufa_skip
+				NOT = { has_global_variable = hd_j16_fufa_result }
+			}
+			remove_global_variable = hd_j16_fufa_skip
+			remove_global_variable = hd_j16_fufa_done
+			debug_log = "HD_J16 e3_q20b WAIT reopened_by_0145a"
+		}
+		# 玩家苻坚：PRE 刚设，下一跳卒年表就会处死苻法，先暂扣（hd_j16_fufa_hold + 预设 done），由 hd_j16.1210 a 撤销、b 维持
+		if = {
+			limit = {
+				is_ai = no
+				NOT = { has_global_variable = hd_j16_fufa_done }
+				NOT = { has_global_variable = hd_nbc_death_lueyang_fu_019_done }
+				hd_j16_alive_trigger = { ID = lueyang_fu_019 }
+			}
+			set_global_variable = hd_nbc_death_lueyang_fu_019_done
+			set_global_variable = hd_j16_fufa_hold
+			debug_log = "HD_J16 e3_q20b WAIT fufa_death_held_for_player"
+		}
 		title:d_jingzhao.holder.top_liege = { save_scope_as = hd_nbc_fu_old }
 		hd_nbc_seize_realm_effect = { OLD = scope:hd_nbc_fu_old }
 		save_scope_as = hd_news_a
@@ -369,13 +455,23 @@ hd_nbc.0145 = {
 hd_nbc.0150 = {
 	type = character_event
 	title = hd_nbc.0150.t
-	desc = hd_nbc.0150.desc
+	# j16 F-0：洛阳之主是姚襄时（E3-J30 节点设 hd_j16_beifa_yishui）换「伊水破姚襄」版本
+	desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { has_global_variable = hd_j16_beifa_yishui }
+				desc = hd_nbc.0150.desc_yishui
+			}
+			desc = hd_nbc.0150.desc
+		}
+	}
 	theme = war
 	left_portrait = { character = root animation = war_attacker }
 	option = {
 		name = hd_nbc.0150.a
 		title:d_henan.holder.top_liege = { save_scope_as = hd_nbc_def_beifa }
-		hd_nbc_vassal_war_effect = { WHO = longkang_huan_017 DEFENDER = scope:hd_nbc_def_beifa TARGET = title:d_henan KIND = beifa }
+		# 10-27 两晋统一线 6-S（06 §2.1；p1 交接）：hd_nbc_vassal_war_effect 宏内写死 character:$WHO$，304/346 局桓温是 hbirth 出场者取不到，改用 root
+		hd_j16_395s_vassal_war_effect = { WHO = root DEF = scope:hd_nbc_def_beifa TARGET = title:d_henan KIND = beifa }
 		add_prestige = medium_prestige_gain
 		ai_chance = { base = 100 }
 	}
@@ -418,6 +514,7 @@ hd_nbc.0161 = {
 				is_alive = yes
 				highest_held_title_tier >= tier_duchy
 				NOT = { culture = culture:diren }
+				NOT = { has_variable = hd_j16_hi_reserved }	# 10-27 两晋统一线：入侵当事人交历史入侵起兵（04 §1.2 E4-Q51②）
 			}
 			hd_nbc_become_independent_effect = yes
 		}
@@ -433,30 +530,29 @@ hd_nbc.0161 = {
 }
 
 # H1 覆舟山。Root：桓玄
+# 10-27 两晋统一线 6-S（06 §2.1）：刘裕不再写死 character:（304/346/370 局是 hbirth 出场者），trigger 用解析触发器，immediate 重新解析存 scope:hd_j16_ev_liu；
+#   执行体改调 hd_j16_fuzhoushan_exec_effect（zz_hd_j16_e5_395_effects.txt，照抄旧 hd_nbc_fuzhoushan_effect，旧效果保留）
 hd_nbc.0210 = {
 	type = character_event
 	title = hd_nbc.0210.t
 	desc = hd_nbc.0210.desc
 	theme = war
 	left_portrait = { character = root animation = worry }
-	right_portrait = { character = character:suiyuli_liu_013 animation = war_attacker }
+	right_portrait = { character = scope:hd_j16_ev_liu animation = war_attacker trigger = { exists = scope:hd_j16_ev_liu } }
 	trigger = {
 		hd_history_events_enabled_trigger = yes
 		is_alive = yes
 		has_title = title:h_china
-		character:suiyuli_liu_013 ?= {
-			is_alive = yes
-			any_character_war = {
-				primary_attacker = character:suiyuli_liu_013
-				using_cb = independence_war
-			}
-		}
+		hd_j16_395_liuyu_indep_war_trigger = yes
+	}
+	immediate = {
+		hd_j16_370b_res_effect = { ID = suiyuli_liu_013 AS = hd_j16_ev_liu }
 	}
 	option = {
 		name = hd_nbc.0210.a
 		set_global_variable = hd_nbc_fuzhoushan_west
-		hd_nbc_fuzhoushan_effect = yes
-		character:suiyuli_liu_013 = { save_scope_as = hd_news_a }
+		hd_j16_fuzhoushan_exec_effect = yes
+		scope:hd_j16_ev_liu ?= { save_scope_as = hd_news_a }
 		save_scope_as = hd_news_b
 		hd_world_news_send_skip_both_effect = { EVENT = hd_nbc.0910 }
 		ai_chance = { base = 100 }
@@ -468,29 +564,34 @@ hd_nbc.0210 = {
 }
 
 # H2 峥嵘洲。Root：刘裕
+# 10-27 两晋统一线 6-S（06 §2.1）：桓玄、安帝、德文改经 hd_j16_resolve_effect 解析（immediate 存 scope:hd_j16_ev_huan），不再写死 character:；
+#   restore 战打赢后由 E5-J52 结局钩子 hd_j16_node_restore_hook_effect 奉迎晋帝
 hd_nbc.0220 = {
 	type = character_event
 	title = hd_nbc.0220.t
 	desc = hd_nbc.0220.desc
 	theme = war
 	left_portrait = { character = root animation = war_attacker }
-	right_portrait = { character = character:longkang_huan_027 animation = worry }
+	right_portrait = { character = scope:hd_j16_ev_huan animation = worry trigger = { exists = scope:hd_j16_ev_huan } }
+	immediate = {
+		hd_j16_370b_res_effect = { ID = longkang_huan_027 AS = hd_j16_ev_huan }
+	}
 	option = {
 		name = hd_nbc.0220.a
 		if = {
-			limit = { character:longkang_huan_027 = { is_ai = yes } }
-			# 桓玄是 AI：峥嵘洲一战结算，奉迎晋帝
+			limit = { scope:hd_j16_ev_huan ?= { is_ai = yes } }
+			# 桓玄是 AI：峥嵘洲一战结算，奉迎晋帝（德宗在世取德宗，否则德文）
+			hd_j16_370b_res_effect = { ID = si_ma_de_zong AS = hd_j16_ev_emp }
 			if = {
-				limit = { character:si_ma_de_zong ?= { is_alive = yes } }
-				character:si_ma_de_zong = { trigger_event = hd_nbc.0221 }
+				limit = { NOT = { exists = scope:hd_j16_ev_emp } }
+				hd_j16_370b_res_effect = { ID = si_ma_de_wen AS = hd_j16_ev_emp }
 			}
-			else = {
-				character:si_ma_de_wen = { trigger_event = hd_nbc.0221 }
-			}
+			scope:hd_j16_ev_emp ?= { trigger_event = hd_nbc.0221 }
 		}
-		else = {
+		else_if = {
+			limit = { exists = scope:hd_j16_ev_huan }
 			# 桓玄是玩家：真刀真枪打一场
-			hd_nbc_start_war_effect = { ATTACKER = root DEFENDER = character:longkang_huan_027 TARGET = title:e_jiangdong KIND = restore }
+			hd_nbc_start_war_effect = { ATTACKER = root DEFENDER = scope:hd_j16_ev_huan TARGET = title:e_jiangdong KIND = restore }
 		}
 		ai_chance = { base = 100 }
 	}
@@ -506,13 +607,17 @@ hd_nbc.0221 = {
 	hidden = yes
 	trigger = {
 		is_alive = yes
-		character:longkang_huan_027 ?= { is_alive = yes has_title = title:h_china }
+		hd_j16_395_huanxuan_emperor_trigger = yes
 	}
 	immediate = {
-		hd_nbc_restore_effect = yes
-		character:suiyuli_liu_013 = { save_scope_as = hd_news_a }
+		# 10-27 两晋统一线 6-S：执行体改调 hd_j16_restore_exec_effect（照抄旧 hd_nbc_restore_effect，人物改解析）
+		hd_j16_restore_exec_effect = yes
+		scope:hd_nbc_liu_yu ?= { save_scope_as = hd_news_a }
 		root = { save_scope_as = hd_news_b }
-		hd_world_news_send_all_effect = { EVENT = hd_nbc.0911 }
+		if = {
+			limit = { exists = scope:hd_news_a }
+			hd_world_news_send_all_effect = { EVENT = hd_nbc.0911 }
+		}
 	}
 }
 
@@ -538,6 +643,9 @@ hd_nbc.0230 = {
 			hd_nbc_spawn_army_effect = { SIZE = 8000 WHERE = title:c_uuii_p_6157 NAME = hd_nbc_luxun_army_name }
 			hd_nbc_start_war_effect = { ATTACKER = root DEFENDER = scope:hd_nbc_def_luxun TARGET = title:d_nanhai KIND = luxun }
 		}
+		# 10-27 两晋统一线 6-S（06 §2.2 E5-J60、§3.1）：入侵 luxun 不再起兵（与 j16 开局预设互为双保险）；徐道覆是 AI、无地时入卢循宫廷
+		set_global_variable = { name = hd_hi_done_luxun value = yes }
+		hd_j16_395s_join_effect = { ID = xu_dao_fu TO = root }
 		debug_log = "HD_NBC 404 LUXUN"
 		ai_chance = { base = 100 }
 	}
@@ -554,14 +662,19 @@ hd_nbc.0240 = {
 	desc = hd_nbc.0240.desc
 	theme = war
 	left_portrait = { character = root animation = war_attacker }
+	trigger = { is_alive = yes }
+	# 10-27 两晋统一线 6-S（06 §2.1）：南燕之主按位置（广县 / d_qiguo 的慕容氏独立君主）解析，刘裕不再写死 character:；
+	#   宣战成功才设 done（E5-J70 节点发事件前只设 _asked 60 天）；b 了结节点
 	option = {
 		name = hd_nbc.0240.a
-		title:k_uuii_qingzhou.holder.top_liege = { save_scope_as = hd_nbc_def_nanyan }
-		hd_nbc_vassal_war_effect = { WHO = suiyuli_liu_013 DEFENDER = scope:hd_nbc_def_nanyan TARGET = title:k_uuii_qingzhou KIND = nanyan }
+		hd_j16_nanyan_go_effect = yes
 		ai_chance = { base = 100 }
 	}
 	option = {
 		name = hd_nbc.0240.b
+		set_global_variable = hd_nbc_nanyan_done
+		set_global_variable = hd_j16_nanyan_skip
+		debug_log = "HD_J16 e5_j70 SKIP player_refused"
 		ai_chance = { base = 0 }
 	}
 }
@@ -573,14 +686,20 @@ hd_nbc.0250 = {
 	desc = hd_nbc.0250.desc
 	theme = war
 	left_portrait = { character = root animation = war_attacker }
+	trigger = { is_alive = yes }
+	# 10-27 两晋统一线 6-S（06 §2.1）：后秦之主按位置（长安的姚氏独立君主）解析，刘裕不再写死 character:；
+	#   宣战成功才设 done（E5-J80 节点发事件前只设 _asked 60 天）；b 了结节点，并设 helianbobo 第 3 阶段闸门
 	option = {
 		name = hd_nbc.0250.a
-		title:k_uuii_sili.holder.top_liege = { save_scope_as = hd_nbc_def_houqin }
-		hd_nbc_vassal_war_effect = { WHO = suiyuli_liu_013 DEFENDER = scope:hd_nbc_def_houqin TARGET = title:k_uuii_sili KIND = houqin }
+		hd_j16_houqin_go_effect = yes
 		ai_chance = { base = 100 }
 	}
 	option = {
 		name = hd_nbc.0250.b
+		set_global_variable = hd_nbc_houqin_done
+		set_global_variable = hd_j16_houqin_skip
+		set_global_variable = hd_j16_hi_gate_helianbobo_3
+		debug_log = "HD_J16 e5_j80 SKIP player_refused"
 		ai_chance = { base = 0 }
 	}
 }
@@ -600,7 +719,8 @@ hd_nbc.0260 = {
 	option = {
 		name = hd_nbc.0260.a
 		set_global_variable = hd_nbc_song_done
-		hd_nbc_song_effect = yes
+		# 10-27 两晋统一线 6-S（06 §2.2 E5-J90）：执行体改调 hd_j16_song_exec_effect（销毁宋国宋王、旧天子封零陵、恭帝之死排程）
+		hd_j16_song_exec_effect = yes
 		ai_chance = { base = 100 }
 	}
 	option = {

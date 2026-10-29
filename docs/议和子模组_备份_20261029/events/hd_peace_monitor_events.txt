@@ -1,0 +1,131 @@
+namespace = hd_peace
+
+# One monthly monitor per exact war; owner check rejects superseded loops.
+hd_peace.0400 = {
+	type = character_event
+	hidden = yes
+	trigger = {
+		exists = scope:war
+		scope:war = { primary_attacker = root var:hd_peace_monitor_owner = root }
+	}
+	immediate = {
+		scope:war = {
+			if = {
+				limit = { hd_peace_is_scripted_war_trigger = yes }
+				if = { limit = { attacker_war_score >= 100 } hd_peace_end_scripted_war_effect = { RESULT = attacker } }
+				else_if = { limit = { defender_war_score >= 100 } hd_peace_end_scripted_war_effect = { RESULT = defender } }
+			}
+			else_if = {
+				limit = { NOT = { has_variable = hd_peace_resolution_started } }
+				if = { limit = { attacker_war_score >= 0 } primary_attacker = { save_scope_as = hd_peace_ai_proposer } }
+				else = { primary_defender = { save_scope_as = hd_peace_ai_proposer } }
+				if = {
+					limit = { scope:hd_peace_ai_proposer = { is_ai = yes } }
+					scope:hd_peace_ai_proposer = { trigger_event = { id = hd_peace.0401 } }
+				}
+				else_if = {
+					limit = { attacker_war_score > -100 attacker_war_score < 100 }
+					# A losing AI can propose concessions to the human leader.
+					if = { limit = { primary_attacker = scope:hd_peace_ai_proposer } primary_defender = { trigger_event = { id = hd_peace.0401 } } }
+					else = { primary_attacker = { trigger_event = { id = hd_peace.0401 } } }
+				}
+			}
+		}
+		scope:war ?= {
+			primary_attacker = { trigger_event = { id = hd_peace.0400 days = 30 } }
+		}
+	}
+}
+
+hd_peace.0401 = {
+	type = character_event
+	hidden = yes
+	trigger = {
+		is_alive = yes
+		is_ai = yes
+		exists = scope:war
+		scope:war = { hd_peace_is_ordinary_war_trigger = yes NOT = { has_variable = hd_peace_resolution_started } }
+		OR = {
+			AND = {
+				NOT = { has_variable = hd_peace_treaty_locked }
+				NOT = { has_character_modifier = hd_peace_rebuffed_negotiator_modifier }
+			}
+			scope:war = {
+				OR = {
+					AND = { primary_attacker = root attacker_war_score >= 100 }
+					AND = { primary_defender = root defender_war_score >= 100 }
+				}
+			}
+		}
+	}
+	immediate = {
+		# Full victory supersedes our older unanswered offer, even in another war.
+		hd_peace_cancel_offer_effect = yes
+		hd_peace_open_treaty_effect = yes
+		if = {
+			limit = { hd_peace_actor_warscore_value >= 100 }
+			hd_peace_compose_full_score_effect = yes
+			hd_peace_ai_dispatch_treaty_effect = yes
+		}
+		else_if = {
+			limit = { scope:war = { war_days >= 365 } }
+			random = {
+				chance = 25
+				hd_peace_ai_compose_treaty_effect = yes
+				hd_peace_ai_dispatch_treaty_effect = yes
+			}
+		}
+	}
+}
+
+hd_peace.0402 = {
+	type = character_event
+	hidden = yes
+	trigger = {
+		is_alive = yes
+		exists = scope:war
+		scope:war = { primary_attacker = root hd_peace_is_ordinary_war_trigger = yes NOT = { has_variable = hd_peace_resolution_started } }
+		NOT = { has_variable = hd_peace_treaty_locked }
+	}
+	immediate = {
+		hd_peace_clear_treaty_state_effect = yes
+		hd_peace_open_treaty_effect = yes
+		set_variable = { name = hd_peace_long_truce value = 1 }
+		hd_peace_dispatch_offer_effect = yes
+	}
+}
+
+hd_peace.0501 = {
+	type = character_event
+	hidden = yes
+	immediate = { scope:war ?= { hd_peace_start_monitor_effect = yes } }
+}
+
+# Rebind ROOT to the signed migration's proposer. If the normal war callback
+# has not acknowledged yet, its original chain will retry the same finish gate.
+hd_peace.0403 = {
+	type = character_event
+	hidden = yes
+	trigger = {
+		has_variable = hd_peace_treaty_resolution_in_progress
+		has_variable = hd_peace_objective
+		var:hd_peace_objective_kind = 7
+	}
+	immediate = {
+		save_scope_as = hd_peace_objective_attacker
+		var:hd_peace_treaty_opponent = { save_scope_as = hd_peace_objective_defender }
+		hd_peace_finish_signed_treaty_effect = yes
+	}
+}
+
+# Identity is saved in the delayed event, so an old expiry cannot erase a new offer.
+hd_peace.0502 = {
+	type = character_event
+	hidden = yes
+	immediate = {
+		if = {
+			limit = { has_variable = hd_peace_treaty_locked var:hd_peace_offer_nonce = scope:hd_peace_expiry_nonce }
+			hd_peace_cancel_offer_effect = yes
+		}
+	}
+}

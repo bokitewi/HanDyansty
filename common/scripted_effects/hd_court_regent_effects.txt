@@ -365,12 +365,23 @@ hd_court_repair_effect = {
 				}
 				# 第 4 期：死于宫廷政变的权臣不由继承人接续
 				NOT = { exists = title:h_china.var:hd_court_coup_done }
+				# 两晋十六国（j16，3-A，02 §1.1）：八王时段内权臣死只 release，下一任由 B 节点或「入朝辅政」决定
+				NOT = { exists = global_var:hd_j16_bawang_active }
+				# 两晋十六国（j16，3-A，04 §3.2 第 4 步）：桓温卒的阻断钩子（zz_hd_j16_deaths_special_effects.txt）设了本变量＝已死权臣时不交接
+				NOT = { title:h_china.var:hd_j16_handoff_block ?= scope:hd_court_cur_regent }
 			}
 			title:h_china.var:hd_court_regent_title.holder = {
 				save_scope_as = hd_court_heir_regent
 			}
 			hd_court_release_effect = yes
 			scope:hd_court_heir_regent = { hd_court_install_regency_effect = yes }
+		}
+		else_if = {
+			# 两晋十六国（j16，3-A）：交接被阻断——天子获释，阻断变量用过即清（04 §3.2 第 5 步 E4-J40 的删除因此成为冗余兜底）
+			limit = { title:h_china.var:hd_j16_handoff_block ?= scope:hd_court_cur_regent }
+			hd_court_release_effect = yes
+			title:h_china = { remove_variable = hd_j16_handoff_block }
+			debug_log = "HD_J16 e4_j30 FIRE handoff_blocked"
 		}
 		else = {
 			hd_court_release_effect = yes
@@ -380,22 +391,17 @@ hd_court_repair_effect = {
 
 # D8（推广）：天子 0 县且无权臣时，京城县持有者的最高领主若有资格，即挟天子。Scope：任意
 hd_court_vacancy_check_effect = {
-	if = {
-		limit = {
-			hd_cycle_is_divided_trigger = yes
-			exists = title:h_china.holder
-			hd_court_has_regent_trigger = no
-			title:h_china.holder = {
-				NOT = { any_held_title = { tier = tier_county } }
+	# 10-29：不再自动挟持，改为向京城之主（最高领主）弹事件 hd_court.0005 询问；拒绝者永不再问
+	title:h_china.var:hd_court_capital_county.holder.top_liege ?= {
+		if = {
+			limit = {
+				hd_court_vacancy_candidate_trigger = yes
+				NOT = { has_character_flag = hd_court_vacancy_pending }
+				NOT = { has_character_flag = hd_court_vacancy_refused }
 			}
-			title:h_china.var:hd_court_capital_county.holder.top_liege ?= {
-				is_independent_ruler = yes
-				hd_court_regent_eligible_trigger = yes
-				NOT = { has_character_flag = hd_court_abandoned_emperor }
-			}
-		}
-		title:h_china.var:hd_court_capital_county.holder.top_liege = {
-			hd_court_takeover_effect = yes
+			add_character_flag = { flag = hd_court_vacancy_pending years = 1 }	# 兜底：事件未能触发时一年后可再问
+			title:h_china.holder = { save_scope_as = hd_court_emperor }
+			trigger_event = hd_court.0005
 		}
 	}
 }
@@ -466,5 +472,32 @@ hd_court_abandon_emperor_effect = {
 			target = scope:hd_court_abandoner
 			modifier = hd_court_abandoned_emperor_opinion
 		}
+	}
+}
+
+# D24 攻下京城选择挟天子（10-29）：先以攻方胜利结束战争，再立为权臣。Root：占领者；scope:hd_court_occ_war
+# 胜利结算后复核：天子仍在、不是占领者的封臣、占领者仍独立，才接管（否则会成环或无天子可挟）
+hd_court_occ_seize_effect = {
+	scope:hd_court_occ_war ?= { end_war = attacker }
+	if = {
+		limit = {
+			exists = title:h_china.holder
+			NOT = { title:h_china.holder = root }
+			title:h_china.holder = { NOT = { is_vassal_or_below_of = root } }
+			is_independent_ruler = yes
+			hd_court_regent_eligible_trigger = yes
+		}
+		# 两晋十六国（j16，3-A，02 §1.4）：八王时段内攻下京城只换权臣（占领者入朝），不转天子直辖地
+		if = {
+			limit = { exists = global_var:hd_j16_bawang_active }
+			hd_j16_swap_regent_effect = yes
+			debug_log = "HD_J16 bawang FIRE d24_swap_regent"
+		}
+		else = {
+			hd_court_takeover_effect = yes
+		}
+	}
+	else = {
+		debug_log = "HD_COURT d24 seize SKIPPED after victory"
 	}
 }

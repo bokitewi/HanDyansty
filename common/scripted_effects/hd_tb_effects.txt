@@ -1,9 +1,108 @@
 ﻿# 吞并 CB 情境标记（2026-10-21）。Scope：攻方角色。宣战前（can_declare_war / start_war 之前）调用，3 天自动过期。
-# KIND = historical / cao / yuan / jizhou / guandu / xuzhou / regional / wu
+# KIND = historical / cao / yuan / jizhou / guandu / xuzhou / regional / wu / annex
 hd_tb_arm_effect = {
 	set_variable = { name = hd_tb_kind value = flag:$KIND$ days = 3 }
 }
 
 hd_tb_disarm_effect = {
 	remove_variable = hd_tb_kind
+}
+
+# 史实战争宣战分派（2026-10-28）：$KIND$ 在灭国场次表（hd_tb_annex_kind_trigger）内走吞并 CB，否则照旧 hd_nbc_start_war_effect。
+# 参数同 hd_nbc_start_war_effect；灭国场次不用 $TARGET$（吞并全取守方）。供 hd_j16_b1_war_effect、hd_j16_395s_vassal_war_effect 等共用包装调用
+# 护栏：节点多以「目标人物的 top_liege」为守方。守方须独立、且本人持有 $TARGET$ 法理下的县（即守方就是要灭的那一国）；
+# 否则（目标人物只是某大国的封臣）全吞会吞掉整个上主，改回 hd_nbc_war_cb 只取目标
+hd_tb_hist_start_war_effect = {
+	save_scope_value_as = { name = hd_tb_kind_q value = flag:$KIND$ }
+	if = {
+		limit = {
+			hd_tb_annex_kind_trigger = yes
+			$DEFENDER$ = { is_independent_ruler = yes }
+			$TARGET$ = { any_in_de_jure_hierarchy = { tier = tier_county holder ?= $DEFENDER$ } }
+		}
+		hd_tb_annex_start_war_effect = { ATTACKER = $ATTACKER$ DEFENDER = $DEFENDER$ KIND = $KIND$ }
+	}
+	else = {
+		if = {
+			limit = { hd_tb_annex_kind_trigger = yes }
+			debug_log = "HD_TB ANNEX GUARD_FALLBACK $KIND$"	# 灭国场次因护栏退回只取目标，测试时据此查余地
+		}
+		hd_nbc_start_war_effect = { ATTACKER = $ATTACKER$ DEFENDER = $DEFENDER$ TARGET = $TARGET$ KIND = $KIND$ }
+	}
+}
+
+# 史实灭国宣战（2026-10-28 boki：历史吞并战争一律用吞并 CB，胜即全取守方，不做连通筛选、可有飞地）。
+# 用法：hd_tb_annex_start_war_effect = { ATTACKER = <角色> DEFENDER = <角色> KIND = <场次> }
+# 取代 hd_nbc_start_war_effect 的灭国场次；成功判据与它相同：exists = scope:hd_nbc_war_$KIND$，
+# 战争上设 hd_nbc_war_kind = flag:$KIND$，全局设 hd_nbc_$KIND$_active；结局由 CB 调 hd_nbc_war_result_effect。
+# 目标头衔只是占位（同普通吞并）：守方主头衔，不可用时取首府县。
+hd_tb_annex_start_war_effect = {
+	if = {
+		limit = { exists = scope:hd_nbc_war_$KIND$ }
+		clear_saved_scope = hd_nbc_war_$KIND$
+	}
+	if = {
+		limit = { exists = scope:hd_tb_ax_tgt }
+		clear_saved_scope = hd_tb_ax_tgt
+	}
+	if = {
+		limit = { exists = scope:hd_tb_ax_me }
+		clear_saved_scope = hd_tb_ax_me
+	}
+	if = {
+		limit = { exists = scope:hd_tb_ax_def }
+		clear_saved_scope = hd_tb_ax_def
+	}
+	$ATTACKER$ = { save_scope_as = hd_tb_ax_me }
+	$DEFENDER$ = { save_scope_as = hd_tb_ax_def }
+	scope:hd_tb_ax_def.primary_title ?= {
+		if = {
+			limit = { hd_tb_primary_title_target_trigger = { DEF = scope:hd_tb_ax_def } }
+			save_scope_as = hd_tb_ax_tgt
+		}
+	}
+	if = {
+		limit = { NOT = { exists = scope:hd_tb_ax_tgt } }
+		scope:hd_tb_ax_def.capital_county ?= { save_scope_as = hd_tb_ax_tgt }
+	}
+	# 调用方可能预先塞了连通筛选输入（hd_wct_add_input_effect），吞并不用，清掉免得漏进下一场
+	hd_wct_clear_input_effect = yes
+	if = {
+		limit = {
+			exists = scope:hd_tb_ax_tgt
+			scope:hd_tb_ax_def = { is_landed = yes }
+			NOT = { scope:hd_tb_ax_me = scope:hd_tb_ax_def }
+		}
+		scope:hd_tb_ax_me = {
+			if = {
+				limit = { is_allied_to = scope:hd_tb_ax_def }
+				break_alliance_due_to_attack_effect = { TARGET = scope:hd_tb_ax_def }
+			}
+			hd_tb_arm_effect = { KIND = annex }
+			start_war = {
+				cb = hd_dc_tunbing_cb
+				target = scope:hd_tb_ax_def
+				target_title = scope:hd_tb_ax_tgt
+			}
+			hd_tb_disarm_effect = yes	# 免得 3 天内从界面宣的吞并也被当成史实灭国
+			random_character_war = {
+				limit = {
+					using_cb = hd_dc_tunbing_cb
+					primary_attacker = scope:hd_tb_ax_me
+					primary_defender = scope:hd_tb_ax_def
+					NOT = { has_variable = hd_nbc_war_kind }
+				}
+				set_variable = { name = hd_nbc_war_kind value = flag:$KIND$ }
+				save_scope_as = hd_nbc_war_$KIND$
+			}
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_nbc_war_$KIND$ }
+		set_global_variable = hd_nbc_$KIND$_active
+		debug_log = "HD_TB ANNEX WAR_CONFIRMED $KIND$"
+	}
+	else = {
+		debug_log = "HD_TB ANNEX WAR_START_FAILED $KIND$"
+	}
 }

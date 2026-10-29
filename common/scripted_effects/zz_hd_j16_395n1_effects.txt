@@ -1,0 +1,3997 @@
+﻿# 两晋十六国统一史实线 · E5（395.1–421.1）× 395 节 · 北线一：后燕、北燕、南燕、北魏、后秦（06_395-421.md §1.1–§1.4，§3.2–§3.3 的开闸与阶段闸门）。
+# 写入者：第 6 期 6-N1（汇总人 10-27：第 6 期五路并行，本路自建文件）。入口 hd_j16_e5_395n1_effect 由 6-S 在 hd_j16_e5_395_effect 末尾调用。
+# 节点写法照 TEMPLATE（stage/p1-S_TEMPLATE.md）：窗口、自保护（global_var:hd_j16_start_year）、截止跳过、当事人已死、解析、等待日志只记一次。
+# 本路自用的工具、解析效果一律带 hd_j16_n1_ 前缀；scope 名带时代与节点号 hd_j16_e5<节点>_（E4 补遗有同号节点，防撞名）。
+# 换主一律不杀人（偏离 06 §0.4 的 hd_nbc_seize_realm_effect，见报告）：节点 fire 只设卒年 PRE，由卒年行到日执行（玩家走大限），
+#   史实受害者已死后，若主头衔落在非史实之人手里，AI 现任经 hd_j16_n1_take_realm_effect 转给史实之人；现任是玩家时弹 hd_j16.5590「逊位 / 拒之」。
+
+hd_j16_e5_395n1_effect = {
+	hd_j16_node_canhe_effect = yes          # E5-M10 参合陂之战（阶段闸门 tuobagui_2）
+	hd_j16_node_pingcheng_effect = yes      # E5-M15 慕容垂亲征平城
+	hd_j16_node_wei_bing_effect = yes       # E5-T10 魏取并州（阶段闸门 tuobagui_2、tuobagui_3）
+	hd_j16_node_de_ye_effect = yes          # E5-M20 慕容德镇邺
+	hd_j16_node_zhongshan_effect = yes      # E5-T20 中山之围（善后）
+	hd_j16_node_longcheng_effect = yes      # E5-M25 宝奔龙城
+	hd_j16_node_nanyan_open_effect = yes    # E5-M30 慕容德据滑台（开闸 murongde）
+	hd_j16_node_weiye_effect = yes          # E5-T30 魏取邺
+	hd_j16_node_lanhan_effect = yes         # E5-M35 兰汗之乱·慕容盛复国
+	hd_j16_node_wei_di_effect = yes         # E5-T40 称帝·迁都平城
+	hd_j16_node_nanyan_di_effect = yes      # E5-M40 广固定都·称帝
+	hd_j16_node_yaoluo_effect = yes         # E5-Y10 姚崇取洛阳
+	hd_j16_node_liaodong_effect = yes       # E5-M45 辽东之争（风味）
+	hd_j16_node_qifu_effect = yes           # E5-Y20 乞伏乾归降秦
+	hd_j16_node_xi_effect = yes             # E5-M50 慕容熙继立
+	hd_j16_node_houliang_effect = yes       # E5-Y30 后凉称藩·吕隆入长安
+	hd_j16_node_chaibi_effect = yes         # E5-T50 柴壁之战
+	hd_j16_node_chao_heir_effect = yes      # E5-M55 慕容超来奔·继统
+	hd_j16_node_guzang_tufa_effect = yes    # E5-Y40 傉檀受姑臧
+	hd_j16_node_gaoyun_effect = yes         # E5-M60 冯跋立高云
+	hd_j16_node_mingyuan_effect = yes       # E5-T60 拓跋绍之变·明元即位
+	hd_j16_node_beiyan_effect = yes         # E5-M65 冯跋即位
+	hd_j16_node_yaohong_effect = yes        # E5-Y50 姚兴晚年·立泓
+}
+
+############################################################
+# 本路工具（6-N1，前缀 hd_j16_n1_）
+############################################################
+
+# 清 saved scope（存在才清）。Scope：任意
+hd_j16_n1_clear_effect = {
+	if = {
+		limit = { exists = scope:$S$ }
+		clear_saved_scope = $S$
+	}
+}
+
+# 授郡（D16 / A1 §7.1 小幅转移）：$DUCHY$ 郡头衔与郡内 $FROM$ 直辖的县授给 $TO$（granted，不加宣称）。只在 $FROM$ 是 AI、$TO$ 在世且不是 $FROM$ 时执行；
+# 郡头衔由 $FROM$ 持有或无人持有才转。授后 $TO$ 的直接上级不是 $LIEGE$ 时改投 $LIEGE$（$LIEGE$ 与 $TO$ 同一人时不动）。$TAG$：日志节点号。
+# $TYPE$：头衔变更类型——主君授出用 granted；封臣交还主君（$TO$ 即 $LIEGE$）用 revoked。Scope：任意
+hd_j16_n1_grant_duchy_effect = {
+	if = {
+		limit = {
+			$FROM$ = {
+				is_alive = yes
+				is_ai = yes
+			}
+			$TO$ = { is_alive = yes }
+			NOT = { $FROM$ = { this = $TO$ } }
+		}
+		create_title_and_vassal_change = { type = $TYPE$ save_scope_as = hd_j16_n1_gd_change add_claim_on_loss = no }
+		$DUCHY$ = {
+			every_de_jure_county = {
+				limit = { holder ?= $FROM$ }
+				change_title_holder = {
+					holder = $TO$
+					change = scope:hd_j16_n1_gd_change
+					take_baronies = yes
+				}
+			}
+		}
+		if = {
+			limit = {
+				OR = {
+					$DUCHY$.holder ?= $FROM$
+					NOT = { exists = $DUCHY$.holder }
+				}
+			}
+			$DUCHY$ = {
+				change_title_holder = {
+					holder = $TO$
+					change = scope:hd_j16_n1_gd_change
+				}
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_j16_n1_gd_change
+		$TO$ = {
+			if = {
+				limit = {
+					is_landed = yes
+					NOT = { this = $LIEGE$ }
+					NOT = { liege ?= $LIEGE$ }
+				}
+				hd_nbc_swear_fealty_effect = { LIEGE = $LIEGE$ }
+			}
+			if = {
+				limit = { has_title = $DUCHY$ }
+				debug_log = "HD_J16 $TAG$ FIRE grant_duchy"
+			}
+			else = { debug_log = "HD_J16 $TAG$ WAIT grant_duchy_partial" }
+		}
+	}
+	else = { debug_log = "HD_J16 $TAG$ SKIP grant_duchy_not_ai" }
+}
+
+# 事件兵：在 $SIDE$ 一系、与郡 $DUCHY$ 相邻的县生成 $SIZE$ 兵，归 $WHO$；找不到这样的县就放在 $WHO$ 的都城县。Scope：任意
+hd_j16_n1_front_army_effect = {
+	hd_j16_n1_clear_effect = { S = hd_j16_n1_fa_place }
+	$DUCHY$ = {
+		random_de_jure_county = {
+			limit = {
+				NOT = { holder ?= { target_is_same_character_or_above = $SIDE$ } }
+				any_neighboring_county = { holder ?= { target_is_same_character_or_above = $SIDE$ } }
+			}
+			random_neighboring_county = {
+				limit = { holder ?= { target_is_same_character_or_above = $SIDE$ } }
+				save_scope_as = hd_j16_n1_fa_place
+			}
+		}
+	}
+	if = {
+		limit = { NOT = { exists = scope:hd_j16_n1_fa_place } }
+		$WHO$.capital_county ?= { save_scope_as = hd_j16_n1_fa_place }
+	}
+	$WHO$ = {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = yes
+				exists = scope:hd_j16_n1_fa_place
+			}
+			hd_nbc_spawn_army_effect = { SIZE = $SIZE$ WHERE = scope:hd_j16_n1_fa_place NAME = $NAME$ }
+		}
+	}
+}
+
+# 收入宫廷：只动在世、AI、无地、非统治者、不在狱中、不是议员、尚不在该宫廷的人（清单：set_employer 的失败条件；议员不挪）。Scope：任意
+hd_j16_n1_to_court_effect = {
+	if = {
+		limit = {
+			exists = $WHO$
+			exists = $COURT$
+			$WHO$ = {
+				is_alive = yes
+				is_ai = yes
+				is_landed = no
+				is_ruler = no
+				is_imprisoned = no
+				is_councillor = no
+				NOT = { employer ?= $COURT$ }
+				NOT = { this = $COURT$ }
+			}
+			$COURT$ = {
+				is_alive = yes
+				is_landed = yes
+			}
+		}
+		$COURT$ = { add_courtier = $WHO$ }
+	}
+}
+
+# 授议政席（$TYPE$ 为 councillor_*）：$WHO$ 是 AI 无地者先入 $LIEGE$ 宫廷；成年且在其宫廷时授席（照 304b C10 写法）。Scope：任意
+hd_j16_n1_council_effect = {
+	hd_j16_n1_to_court_effect = { WHO = $WHO$ COURT = $LIEGE$ }
+	if = {
+		limit = {
+			exists = $WHO$
+			$LIEGE$ ?= {
+				is_alive = yes
+				is_landed = yes
+			}
+			$WHO$ = {
+				is_alive = yes
+				is_adult = yes
+				is_imprisoned = no
+				employer ?= $LIEGE$
+				NOT = { this = $LIEGE$ }
+			}
+		}
+		$LIEGE$ = {
+			assign_councillor_type = {
+				type = $TYPE$
+				remove_existing_councillor = yes
+				target = $WHO$
+			}
+		}
+	}
+}
+
+# 改元（照 hd_j16_b1_change_era_effect：不设 100 年全局年号锁）。年号键须已在 WJ_tianjia_era_names.txt 注册（天兴、建平、太平已核）。Scope：君主
+hd_j16_n1_change_era_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			is_independent_ruler = yes
+		}
+		remove_all_NianHao = yes
+		set_variable = data_nianhao_to_SG
+		set_variable = SG_nianhao_$KEY$
+		set_variable = { name = SG_NianHao_data value = $YEAR$ }
+		add_character_flag = SanGong_NianHao_flag
+	}
+}
+
+# 国号与称谓（主头衔改名 + hd_nbc_style；不记王朝固定国号：慕容三燕同属 dynasty:murong）。Scope：君主
+hd_j16_n1_style_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			exists = primary_title
+		}
+		primary_title = {
+			set_title_name = $NAME$
+			set_variable = { name = hd_nbc_style value = flag:$STYLE$ }
+		}
+	}
+}
+
+# 迁都：$WHO$ 直辖 $COUNTY$ 时迁都。Scope：任意
+hd_j16_n1_move_capital_effect = {
+	$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				$COUNTY$.holder ?= this
+			}
+			set_realm_capital = $COUNTY$
+			debug_log = "HD_J16 $TAG$ FIRE capital_moved"
+		}
+		else = { debug_log = "HD_J16 $TAG$ SKIP capital_not_held" }
+	}
+}
+
+# 称藩：$VASSAL$（在世、有地、独立）改投 $LIEGE$，须 $LIEGE$ 的最高头衔等级高于 $VASSAL$（清单：封臣化要求被收编者头衔低于新主君）。Scope：任意
+hd_j16_n1_vassalize_effect = {
+	if = {
+		limit = {
+			$VASSAL$ ?= {
+				is_alive = yes
+				is_landed = yes
+				is_independent_ruler = yes
+			}
+			$LIEGE$ ?= {
+				is_alive = yes
+				is_landed = yes
+			}
+			NOT = { $VASSAL$ = { this = $LIEGE$ } }
+			OR = {
+				AND = {
+					$LIEGE$ = { highest_held_title_tier >= tier_empire }
+					$VASSAL$ = { highest_held_title_tier <= tier_kingdom }
+				}
+				AND = {
+					$LIEGE$ = { highest_held_title_tier >= tier_kingdom }
+					$VASSAL$ = { highest_held_title_tier <= tier_duchy }
+				}
+				AND = {
+					$LIEGE$ = { highest_held_title_tier >= tier_duchy }
+					$VASSAL$ = { highest_held_title_tier <= tier_county }
+				}
+			}
+		}
+		$VASSAL$ = { hd_nbc_swear_fealty_effect = { LIEGE = $LIEGE$ } }
+		debug_log = "HD_J16 $TAG$ FIRE vassalized"
+	}
+	else = { debug_log = "HD_J16 $TAG$ SKIP vassal_tier" }
+}
+
+# 同一政权内换主（不杀人；照 hd_nbc_seize_realm_effect 写法、删去末尾的 death）：$NEW$ 有地且非独立时先独立；$OLD$ 的县至帝国级领地头衔
+#   （不含世族、朝官头衔）逐个以 usurped 转给 $NEW$，再令 $OLD$ 的原封臣改投 $NEW$。
+#   转头衔前先把 $OLD$ 的封臣存入 list（转完后 $OLD$ 已无地，every_vassal 未必取得到）；转完头衔再对 list 改投，$NEW$ 原为无地廷臣时此时已有地、可受投。
+#   list 只收「仍独立或仍以 $OLD$ 为主君、尚未归 $NEW$」者，同一效果链内多次调用时前一次的 list 成员不会被误转。Scope：任意
+hd_j16_n1_take_realm_effect = {
+	hd_j16_n1_clear_effect = { S = hd_j16_n1_tr_new }
+	hd_j16_n1_clear_effect = { S = hd_j16_n1_tr_old }
+	$NEW$ = {
+		save_scope_as = hd_j16_n1_tr_new
+		if = {
+			limit = {
+				is_landed = yes
+				is_independent_ruler = no
+			}
+			hd_nbc_become_independent_effect = yes
+		}
+	}
+	$OLD$ = {
+		save_scope_as = hd_j16_n1_tr_old
+		every_vassal = {
+			limit = { NOT = { this = scope:hd_j16_n1_tr_new } }
+			add_to_list = hd_j16_n1_tr_vassals
+		}
+		every_held_title = {
+			limit = {
+				is_noble_family_title = no
+				tgp_is_minister_title = no
+				tier >= tier_county
+				tier <= tier_empire
+			}
+			save_scope_as = hd_j16_n1_tr_title
+			create_title_and_vassal_change = { type = usurped save_scope_as = hd_j16_n1_tr_change add_claim_on_loss = no }
+			scope:hd_j16_n1_tr_title = {
+				change_title_holder = {
+					holder = scope:hd_j16_n1_tr_new
+					change = scope:hd_j16_n1_tr_change
+					take_baronies = yes
+				}
+			}
+			resolve_title_and_vassal_change = scope:hd_j16_n1_tr_change
+		}
+	}
+	if = {
+		limit = { scope:hd_j16_n1_tr_new = { is_alive = yes is_landed = yes } }
+		every_in_list = {
+			list = hd_j16_n1_tr_vassals
+			limit = {
+				is_alive = yes
+				is_landed = yes
+				NOT = { this = scope:hd_j16_n1_tr_new }
+				NOT = { liege ?= scope:hd_j16_n1_tr_new }
+				OR = {
+					is_independent_ruler = yes
+					liege ?= scope:hd_j16_n1_tr_old
+				}
+			}
+			hd_nbc_swear_fealty_effect = { LIEGE = scope:hd_j16_n1_tr_new }
+		}
+	}
+}
+
+# 换主一步（同一政权内）：现任 $CUR$ 就是 $NEW$ → 记 seated；$CUR$ 不是燕系之主或拓跋氏 → 等待；$NEW$ 不在 $CUR$ 一系 → 等待；$CUR$ 是 AI → 转头衔、记 seated；$CUR$ 是玩家 → 弹 hd_j16.5590「逊位 / 拒之」（60 天内不重弹）。
+# 结果变量 hd_j16_$TAG$_seated（换主完成）、hd_j16_$TAG$_refused（玩家拒之，由 5590 b 设）。$LOG$：日志节点号。Scope：任意
+hd_j16_n1_seat_effect = {
+	if = {
+		limit = { $CUR$ = { this = $NEW$ } }
+		set_global_variable = hd_j16_$TAG$_seated
+		debug_log = "HD_J16 $LOG$ FIRE already_ruler"
+	}
+	# 现任须是燕系之主或拓跋氏（防止龙城落入北魏、高句丽等外人时，把外国整个转给史实之人；hd_j16_n1_seat_cur_ok_trigger）
+	else_if = {
+		limit = { NOT = { $CUR$ = { hd_j16_n1_seat_cur_ok_trigger = yes } } }
+		if = {
+			limit = { NOT = { has_global_variable = hd_j16_$TAG$_cwlog } }
+			set_global_variable = hd_j16_$TAG$_cwlog
+			debug_log = "HD_J16 $LOG$ WAIT seat_cur_foreign"
+		}
+	}
+	# 史实之人须在现任一系之内（防止按位置解析到外人政权时误转）
+	else_if = {
+		limit = { NOT = { $NEW$ = { hd_j16_n1_in_realm_trigger = { R = $CUR$ } } } }
+		if = {
+			limit = { NOT = { has_global_variable = hd_j16_$TAG$_swlog } }
+			set_global_variable = hd_j16_$TAG$_swlog
+			debug_log = "HD_J16 $LOG$ WAIT seat_not_in_realm"
+		}
+	}
+	else_if = {
+		limit = { $CUR$ = { is_ai = yes } }
+		hd_j16_n1_take_realm_effect = { NEW = $NEW$ OLD = $CUR$ }
+		set_global_variable = hd_j16_$TAG$_seated
+		debug_log = "HD_J16 $LOG$ FIRE seated"
+	}
+	else_if = {
+		limit = {
+			NOT = { has_global_variable = hd_j16_$TAG$_abd_asked }
+			NOT = { has_global_variable = hd_j16_$TAG$_refused }
+		}
+		set_global_variable = { name = hd_j16_$TAG$_abd_asked value = yes days = 60 }
+		$CUR$ = {
+			set_variable = { name = hd_j16_n1_abd_tag value = flag:$TAG$ }
+			set_variable = { name = hd_j16_n1_abd_new value = $NEW$ }
+			trigger_event = hd_j16.5590
+		}
+		debug_log = "HD_J16 $LOG$ WAIT player_asked"
+	}
+}
+
+# hd_j16.5590 a「逊位」。Root：玩家现任。按旗标分发到各节点的换主后续
+hd_j16_n1_abd_accept_effect = {
+	hd_j16_n1_clear_effect = { S = hd_j16_n1_abd_to }
+	# 节点已了结（已换主或已关窗）：迟到的逊位不转国
+	if = {
+		limit = { hd_j16_n1_abd_closed_trigger = yes }
+		debug_log = "HD_J16 n1 SKIP player_late_reply"
+	}
+	else = {
+		var:hd_j16_n1_abd_new ?= {
+			if = {
+				limit = { is_alive = yes }
+				save_scope_as = hd_j16_n1_abd_to
+			}
+		}
+		if = {
+			limit = { exists = scope:hd_j16_n1_abd_to }
+			save_scope_as = hd_j16_n1_abd_from
+			hd_j16_n1_take_realm_effect = { NEW = scope:hd_j16_n1_abd_to OLD = scope:hd_j16_n1_abd_from }
+			if = {
+				limit = { var:hd_j16_n1_abd_tag ?= flag:lanhan }
+				set_global_variable = hd_j16_lanhan_seated
+				debug_log = "HD_J16 e5_m35 FIRE player_abdicated_lanhan"
+			}
+			else_if = {
+				limit = { var:hd_j16_n1_abd_tag ?= flag:sheng }
+				set_global_variable = hd_j16_sheng_seated
+				debug_log = "HD_J16 e5_m35 FIRE player_abdicated_sheng"
+			}
+			else_if = {
+				limit = { var:hd_j16_n1_abd_tag ?= flag:xi }
+				set_global_variable = hd_j16_xi_seated
+				debug_log = "HD_J16 e5_m50 FIRE player_abdicated"
+			}
+			else_if = {
+				limit = { var:hd_j16_n1_abd_tag ?= flag:gaoyun }
+				set_global_variable = hd_j16_gaoyun_seated
+				hd_j16_gaoyun_after_effect = yes
+				debug_log = "HD_J16 e5_m60 FIRE player_abdicated"
+			}
+			else_if = {
+				limit = { var:hd_j16_n1_abd_tag ?= flag:fengba }
+				set_global_variable = hd_j16_fengba_seated
+				hd_j16_beiyan_after_effect = yes
+				debug_log = "HD_J16 e5_m65 FIRE player_abdicated"
+			}
+			else_if = {
+				limit = { var:hd_j16_n1_abd_tag ?= flag:tuobasi }
+				set_global_variable = hd_j16_tuobasi_seated
+				debug_log = "HD_J16 e5_t60 FIRE player_abdicated"
+			}
+		}
+		else = { debug_log = "HD_J16 n1 SKIP abdicate_no_heir" }
+	}
+	hd_j16_n1_abd_clear_effect = yes
+}
+
+# hd_j16.5590 b「拒之」：节点已了结则只记日志；否则记 refused（节点据此作罢）；篡位者是 AI、有地、在本人治下时自立（拒之即内战，A3-F13 软化为分裂）。Root：玩家现任
+hd_j16_n1_abd_refuse_effect = {
+	# 节点已了结（已换主或已关窗）：迟到的拒之不再记 refused、不令篡位者自立
+	if = {
+		limit = { hd_j16_n1_abd_closed_trigger = yes }
+		debug_log = "HD_J16 n1 SKIP player_late_reply"
+	}
+	else = {
+		if = {
+			limit = { var:hd_j16_n1_abd_tag ?= flag:lanhan }
+			set_global_variable = hd_j16_lanhan_refused
+		}
+		else_if = {
+			limit = { var:hd_j16_n1_abd_tag ?= flag:sheng }
+			set_global_variable = hd_j16_sheng_refused
+		}
+		else_if = {
+			limit = { var:hd_j16_n1_abd_tag ?= flag:xi }
+			set_global_variable = hd_j16_xi_refused
+		}
+		else_if = {
+			limit = { var:hd_j16_n1_abd_tag ?= flag:gaoyun }
+			set_global_variable = hd_j16_gaoyun_refused
+		}
+		else_if = {
+			limit = { var:hd_j16_n1_abd_tag ?= flag:fengba }
+			set_global_variable = hd_j16_fengba_refused
+		}
+		else_if = {
+			limit = { var:hd_j16_n1_abd_tag ?= flag:tuobasi }
+			set_global_variable = hd_j16_tuobasi_refused
+		}
+		save_scope_as = hd_j16_n1_abd_from
+		var:hd_j16_n1_abd_new ?= {
+			if = {
+				limit = {
+					is_alive = yes
+					is_ai = yes
+					is_landed = yes
+					top_liege ?= scope:hd_j16_n1_abd_from
+					NOT = { this = scope:hd_j16_n1_abd_from }
+				}
+				hd_nbc_become_independent_effect = yes
+			}
+		}
+		debug_log = "HD_J16 n1 SKIP player_refused_abdication"
+	}
+	hd_j16_n1_abd_clear_effect = yes
+}
+
+hd_j16_n1_abd_clear_effect = {
+	if = {
+		limit = { has_variable = hd_j16_n1_abd_tag }
+		remove_variable = hd_j16_n1_abd_tag
+	}
+	if = {
+		limit = { has_variable = hd_j16_n1_abd_new }
+		remove_variable = hd_j16_n1_abd_new
+	}
+}
+
+# 世界新闻（全体玩家）：$A$、$B$ 存为 hd_news_a / hd_news_b（B 可不存在）。Scope：任意
+hd_j16_n1_news_effect = {
+	hd_j16_n1_clear_effect = { S = hd_news_a }
+	hd_j16_n1_clear_effect = { S = hd_news_b }
+	$A$ ?= { save_scope_as = hd_news_a }
+	$B$ ?= { save_scope_as = hd_news_b }
+	if = {
+		limit = { exists = scope:hd_news_a }
+		hd_world_news_send_all_effect = { EVENT = $EVENT$ }
+	}
+}
+
+############################################################
+# 按位置解析（06 §0.3；01 §4.1）。参数 AS：存成的 scope 名。取不到则不存。06 §0.2 原名 hd_j16_get_<线>_ruler_effect，
+# 本路加 n1 前缀，免与 6-E4 / 6-N2 同名定义冲突（报告列汇总人合并）
+############################################################
+
+# 后燕主：中山 → 冀州王冠 → 扶黎（龙城）→ 平州王冠 → 燕蓟帝国，取其 top_liege（独立、dynasty:murong）。
+# 排除南燕：先解析南燕之主（scope:hd_j16_n1_ny_tmp），与之相同者不取；另排除南燕入侵首领（hd_hi_key = murongde）
+hd_j16_n1_get_houyan_ruler_effect = {
+	hd_j16_n1_clear_effect = { S = $AS$ }
+	hd_j16_n1_get_nanyan_ruler_effect = { AS = hd_j16_n1_ny_tmp }
+	hd_j16_n1_houyan_try_effect = { T = title:c_uuii_p_407.holder.top_liege AS = $AS$ }
+	hd_j16_n1_houyan_try_effect = { T = title:k_uuii_jizhou.holder.top_liege AS = $AS$ }
+	hd_j16_n1_houyan_try_effect = { T = title:c_uuii_p_3479.holder.top_liege AS = $AS$ }
+	hd_j16_n1_houyan_try_effect = { T = title:k_pingzhou.holder.top_liege AS = $AS$ }
+	hd_j16_n1_houyan_try_effect = { T = title:e_youyan.holder AS = $AS$ }
+}
+hd_j16_n1_houyan_try_effect = {
+	if = {
+		limit = { NOT = { exists = scope:$AS$ } }
+		$T$ ?= {
+			if = {
+				limit = {
+					is_landed = yes
+					is_independent_ruler = yes
+					dynasty ?= dynasty:murong
+					NOT = { var:hd_hi_key ?= flag:murongde }
+				}
+				save_scope_as = $AS$
+			}
+		}
+		if = {
+			limit = {
+				exists = scope:$AS$
+				exists = scope:hd_j16_n1_ny_tmp
+			}
+			if = {
+				limit = { scope:$AS$ = scope:hd_j16_n1_ny_tmp }
+				clear_saved_scope = $AS$
+			}
+		}
+	}
+}
+
+# 龙城之主（兰汗、高云、冯跋都不是慕容氏）：扶黎 → 平州王冠，取其 top_liege（独立、燕系之主 hd_j16_n1_yan_system_trigger：
+#   慕容氏 / 长乐冯氏 / 昌黎兰氏 / 持高云即位时所记主头衔）。龙城落入北魏、高句丽等外人之手时取不到，换主节点就此等待或到期跳过
+hd_j16_n1_get_beiyan_ruler_effect = {
+	hd_j16_n1_clear_effect = { S = $AS$ }
+	title:c_uuii_p_3479.holder.top_liege ?= {
+		if = {
+			limit = {
+				is_independent_ruler = yes
+				hd_j16_n1_yan_system_trigger = yes
+			}
+			save_scope_as = $AS$
+		}
+	}
+	if = {
+		limit = { NOT = { exists = scope:$AS$ } }
+		title:k_pingzhou.holder.top_liege ?= {
+			if = {
+				limit = {
+					is_independent_ruler = yes
+					hd_j16_n1_yan_system_trigger = yes
+				}
+				save_scope_as = $AS$
+			}
+		}
+	}
+}
+
+# 燕位（M35、M45、M50、M60 用；398 年后燕都龙城）：先取龙城（扶黎）之主——慕容氏或冯氏（house_changle_feng）且独立；
+#   取不到再取后燕主（中山一线）；仍取不到取龙城的燕系独立之主（兰汗、高云不是慕容氏；外人不取）。换主前另判现任是燕系、史实之人在其一系（hd_j16_n1_seat_effect）
+hd_j16_n1_get_yanwei_ruler_effect = {
+	hd_j16_n1_clear_effect = { S = $AS$ }
+	title:c_uuii_p_3479.holder.top_liege ?= {
+		if = {
+			limit = {
+				is_independent_ruler = yes
+				OR = {
+					dynasty ?= dynasty:murong
+					house ?= house:house_changle_feng
+				}
+			}
+			save_scope_as = $AS$
+		}
+	}
+	if = {
+		limit = { NOT = { exists = scope:$AS$ } }
+		hd_j16_n1_get_houyan_ruler_effect = { AS = $AS$ }
+	}
+	if = {
+		limit = { NOT = { exists = scope:$AS$ } }
+		hd_j16_n1_get_beiyan_ruler_effect = { AS = $AS$ }
+	}
+}
+
+# 南燕主：广县（广固）→ 齐国郡 → 白马（滑台）且为南燕首领 → 慕容德本人（独立、有地），取 top_liege（独立、dynasty:murong）
+hd_j16_n1_get_nanyan_ruler_effect = {
+	hd_j16_n1_clear_effect = { S = $AS$ }
+	title:c_uuii_p_2978.holder.top_liege ?= {
+		if = {
+			limit = {
+				is_independent_ruler = yes
+				dynasty ?= dynasty:murong
+			}
+			save_scope_as = $AS$
+		}
+	}
+	if = {
+		limit = { NOT = { exists = scope:$AS$ } }
+		title:d_qiguo.holder.top_liege ?= {
+			if = {
+				limit = {
+					is_independent_ruler = yes
+					dynasty ?= dynasty:murong
+				}
+				save_scope_as = $AS$
+			}
+		}
+	}
+	if = {
+		limit = { NOT = { exists = scope:$AS$ } }
+		title:c_uuii_p_684.holder.top_liege ?= {
+			if = {
+				limit = {
+					is_independent_ruler = yes
+					dynasty ?= dynasty:murong
+					var:hd_hi_key ?= flag:murongde
+				}
+				save_scope_as = $AS$
+			}
+		}
+	}
+	if = {
+		limit = { NOT = { exists = scope:$AS$ } }
+		hd_j16_resolve_effect = { ID = changli_murong_028 AS = $AS$ }
+		if = {
+			limit = {
+				exists = scope:$AS$
+				scope:$AS$ = {
+					OR = {
+						is_landed = no
+						is_independent_ruler = no
+					}
+				}
+			}
+			clear_saved_scope = $AS$
+		}
+	}
+}
+
+# 魏主：平城 → 拓跋郡首府 → 云中郡首府，取 top_liege（独立、dynasty:tuoba）；再试拓跋珪、拓跋嗣本人（独立、有地）
+hd_j16_n1_get_wei_ruler_effect = {
+	hd_j16_n1_clear_effect = { S = $AS$ }
+	title:c_uuii_p_1265.holder.top_liege ?= {
+		if = {
+			limit = {
+				is_independent_ruler = yes
+				dynasty ?= dynasty:tuoba
+			}
+			save_scope_as = $AS$
+		}
+	}
+	if = {
+		limit = { NOT = { exists = scope:$AS$ } }
+		title:d_tuoba.title_capital_county.holder.top_liege ?= {
+			if = {
+				limit = {
+					is_independent_ruler = yes
+					dynasty ?= dynasty:tuoba
+				}
+				save_scope_as = $AS$
+			}
+		}
+	}
+	if = {
+		limit = { NOT = { exists = scope:$AS$ } }
+		title:d_yunzhong.title_capital_county.holder.top_liege ?= {
+			if = {
+				limit = {
+					is_independent_ruler = yes
+					dynasty ?= dynasty:tuoba
+				}
+				save_scope_as = $AS$
+			}
+		}
+	}
+	if = {
+		limit = { NOT = { exists = scope:$AS$ } }
+		hd_j16_resolve_effect = { ID = tuoba_011 AS = $AS$ }
+		if = {
+			limit = {
+				exists = scope:$AS$
+				scope:$AS$ = {
+					OR = {
+						is_landed = no
+						is_independent_ruler = no
+					}
+				}
+			}
+			clear_saved_scope = $AS$
+		}
+	}
+	if = {
+		limit = { NOT = { exists = scope:$AS$ } }
+		hd_j16_resolve_effect = { ID = tuoba_013 AS = $AS$ }
+		if = {
+			limit = {
+				exists = scope:$AS$
+				scope:$AS$ = {
+					OR = {
+						is_landed = no
+						is_independent_ruler = no
+					}
+				}
+			}
+			clear_saved_scope = $AS$
+		}
+	}
+}
+
+# 后秦主：长安的 top_liege（独立、dynasty:yao）；再试姚兴、姚泓本人（独立、有地）。不能借 hd_j16_get_qin_ruler_effect（那是苻氏 fu_1）
+hd_j16_n1_get_houqin_ruler_effect = {
+	hd_j16_n1_clear_effect = { S = $AS$ }
+	title:c_uuii_p_867.holder.top_liege ?= {
+		if = {
+			limit = {
+				is_independent_ruler = yes
+				dynasty ?= dynasty:yao
+			}
+			save_scope_as = $AS$
+		}
+	}
+	if = {
+		limit = { NOT = { exists = scope:$AS$ } }
+		hd_j16_resolve_effect = { ID = shaodang_yao_013 AS = $AS$ }
+		if = {
+			limit = {
+				exists = scope:$AS$
+				scope:$AS$ = {
+					OR = {
+						is_landed = no
+						is_independent_ruler = no
+					}
+				}
+			}
+			clear_saved_scope = $AS$
+		}
+	}
+	if = {
+		limit = { NOT = { exists = scope:$AS$ } }
+		hd_j16_resolve_effect = { ID = shaodang_yao_020 AS = $AS$ }
+		if = {
+			limit = {
+				exists = scope:$AS$
+				scope:$AS$ = {
+					OR = {
+						is_landed = no
+						is_independent_ruler = no
+					}
+				}
+			}
+			clear_saved_scope = $AS$
+		}
+	}
+}
+
+############################################################
+# E5-M10 参合陂之战【战争；新 KIND = canhe，按云中自判】（06 §1.1；阶段闸门 06 §3.3）
+# 窗口 395.5.1 – 396.3.1。燕主（hd_j16_n1_get_houyan_ruler_effect）与魏主（hd_j16_n1_get_wei_ruler_effect）都在、接壤、未交战；
+#   上游：E4-M55 灭西燕已 done（hd_j16_xiyan_done，6-E4 设），或西燕已不存在（慕容永不再是有地独立君主）。
+# 燕主 AI：遣慕容宝伐魏；玩家燕主收 hd_j16.5400（发前设 _asked 60 天）：a 遣宝伐魏（当场开战）/ b 不伐（done、_skip，闸门照设）。
+# 宣战 hd_nbc_start_war_effect TARGET = d_yunzhong；成功才设 _started、存攻守方、给燕方 1.2 万事件兵；魏主是玩家时收 hd_j16.5401 预警。失败下一跳重试。
+# 结局：攻守双方都已没有 canhe 场次的战争后，云中 c_uuii_p_1333 归燕一系 → hd_j16_canhe_won（魏主「挫锋」3 年）；
+#   否则 hd_j16_canhe_yan_lost（卒年 PRE：慕容绍），燕主「参合之殇」5 年、魏主威望 +300。清 hd_nbc_canhe_active。
+# 闸门 hd_j16_hi_gate_tuobagui_2：结局（胜负都设）、玩家 b、截止跳过、前标都设（p5-C 通则）。
+# 变量：hd_j16_canhe_done、_started、_won、hd_j16_canhe_yan_lost（fire 结果 / PRE）、_skip、_wlog、_asked、_att、_def、_wsf_wlog；面板 hd_hev_j16_canhe（开战时）
+############################################################
+hd_j16_node_canhe_effect = {
+	if = {
+		limit = {
+			has_global_variable = hd_j16_canhe_started
+			NOT = { has_global_variable = hd_j16_canhe_done }
+		}
+		hd_j16_canhe_result_effect = yes
+	}
+	else_if = {
+		limit = { NOT = { has_global_variable = hd_j16_canhe_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_canhe_done
+			hd_j16_canhe_gate_effect = yes
+			debug_log = "HD_J16 e5_m10 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 395.5.1 }
+			if = {
+				limit = { current_date >= 396.3.2 }
+				set_global_variable = hd_j16_canhe_done
+				set_global_variable = hd_j16_canhe_skip
+				hd_j16_canhe_gate_effect = yes
+				debug_log = "HD_J16 e5_m10 SKIP window_closed"
+			}
+			else = {
+				hd_j16_canhe_sides_effect = yes
+				if = {
+					limit = { hd_j16_canhe_ready_trigger = yes }
+					scope:hd_j16_e5m10_yan = {
+						if = {
+							limit = {
+								OR = {
+									is_ai = yes
+									has_global_variable = hd_j16_canhe_go
+								}
+							}
+							hd_j16_canhe_war_effect = yes
+						}
+						else_if = {
+							limit = { NOT = { has_global_variable = hd_j16_canhe_asked } }
+							set_global_variable = { name = hd_j16_canhe_asked value = yes days = 60 }
+							trigger_event = hd_j16.5400
+							debug_log = "HD_J16 e5_m10 WAIT player_asked"
+						}
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_canhe_wlog } }
+					set_global_variable = hd_j16_canhe_wlog
+					debug_log = "HD_J16 e5_m10 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+# 燕主 scope:hd_j16_e5m10_yan、魏主 scope:hd_j16_e5m10_wei
+hd_j16_canhe_sides_effect = {
+	hd_j16_n1_get_houyan_ruler_effect = { AS = hd_j16_e5m10_yan }
+	hd_j16_n1_get_wei_ruler_effect = { AS = hd_j16_e5m10_wei }
+}
+
+# 阶段闸门 tuobagui_2（M10 或 T10 先到先设）
+hd_j16_canhe_gate_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_hi_gate_tuobagui_2 } }
+		set_global_variable = hd_j16_hi_gate_tuobagui_2
+		debug_log = "HD_J16 e5_m10 FIRE gate_tuobagui_2"
+	}
+}
+
+# 开战。节点（AI 燕主）与 hd_j16.5400 a 调用；开头自己重新解析，节点已了结（截止后才回复）时不开战
+hd_j16_canhe_war_effect = {
+	if = {
+		limit = {
+			OR = {
+				has_global_variable = hd_j16_canhe_done
+				has_global_variable = hd_j16_canhe_started
+			}
+		}
+		debug_log = "HD_J16 e5_m10 SKIP player_late_reply"
+	}
+	else = {
+		hd_j16_canhe_sides_effect = yes
+		hd_j16_n1_clear_effect = { S = hd_nbc_war_canhe }
+		if = {
+			limit = { hd_j16_canhe_ready_trigger = yes }
+			hd_nbc_start_war_effect = { ATTACKER = scope:hd_j16_e5m10_yan DEFENDER = scope:hd_j16_e5m10_wei TARGET = title:d_yunzhong KIND = canhe }
+		}
+		if = {
+			limit = { exists = scope:hd_nbc_war_canhe }
+			set_global_variable = hd_j16_canhe_started
+			set_global_variable = hd_hev_j16_canhe
+			set_global_variable = { name = hd_j16_canhe_att value = scope:hd_j16_e5m10_yan }
+			set_global_variable = { name = hd_j16_canhe_def value = scope:hd_j16_e5m10_wei }
+			hd_j16_n1_front_army_effect = { DUCHY = title:d_yunzhong SIDE = scope:hd_j16_e5m10_yan WHO = scope:hd_j16_e5m10_yan SIZE = 12000 NAME = hd_j16_n1_army_canhe_name }
+			scope:hd_j16_e5m10_wei = {
+				if = {
+					limit = { is_ai = no }
+					trigger_event = hd_j16.5401
+				}
+			}
+			debug_log = "HD_J16 e5_m10 FIRE war_started"
+		}
+		else_if = {
+			limit = { NOT = { has_global_variable = hd_j16_canhe_wsf_wlog } }
+			set_global_variable = hd_j16_canhe_wsf_wlog
+			debug_log = "HD_J16 e5_m10 WAIT war_start_failed"
+		}
+	}
+}
+
+# 玩家燕主 b：不伐（hd_j16.5400 b）
+hd_j16_canhe_refuse_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_canhe_done } }
+		set_global_variable = hd_j16_canhe_done
+		set_global_variable = hd_j16_canhe_skip
+		hd_j16_canhe_gate_effect = yes
+		debug_log = "HD_J16 e5_m10 SKIP player_refused"
+	}
+}
+
+# 结局（新 KIND 自判）
+hd_j16_canhe_result_effect = {
+	if = {
+		limit = {
+			NOT = { global_var:hd_j16_canhe_att ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:canhe } } }
+			NOT = { global_var:hd_j16_canhe_def ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:canhe } } }
+		}
+		set_global_variable = hd_j16_canhe_done
+		if = {
+			limit = { has_global_variable = hd_nbc_canhe_active }
+			remove_global_variable = hd_nbc_canhe_active
+		}
+		hd_j16_canhe_sides_effect = yes
+		if = {
+			limit = {
+				title:c_uuii_p_1333.holder ?= {
+					OR = {
+						this = global_var:hd_j16_canhe_att
+						top_liege ?= global_var:hd_j16_canhe_att
+						# 攻方战中身故、由继承人接战：按位置重新解析出的本方之主（不认同王朝的第三方）
+						AND = {
+							exists = scope:hd_j16_e5m10_yan
+							OR = {
+								this = scope:hd_j16_e5m10_yan
+								top_liege ?= scope:hd_j16_e5m10_yan
+							}
+						}
+					}
+				}
+			}
+			set_global_variable = hd_j16_canhe_won
+			scope:hd_j16_e5m10_wei ?= { add_character_modifier = { modifier = hd_j16_canhe_cuofeng_modifier years = 3 } }
+			debug_log = "HD_J16 e5_m10 FIRE result_won"
+		}
+		else = {
+			set_global_variable = hd_j16_canhe_yan_lost
+			scope:hd_j16_e5m10_yan ?= { add_character_modifier = { modifier = hd_j16_canhe_shang_modifier years = 5 } }
+			scope:hd_j16_e5m10_wei ?= { add_prestige = 300 }
+			debug_log = "HD_J16 e5_m10 FIRE result_lost"
+		}
+		hd_j16_canhe_gate_effect = yes
+	}
+}
+
+############################################################
+# E5-M15 慕容垂亲征平城【战争；新 KIND = pingcheng，按平城自判】（06 §1.1）
+# 窗口 396.1.1 – 396.9.1。上游 hd_j16_canhe_yan_lost（参合陂燕败）；参合陂已了结而燕未败 → SKIP deviated。
+# 慕容垂 changli_murong_038 在世，是燕主；魏主在、接壤、未交战。AI：亲征；玩家收 hd_j16.5405：a 亲征 / b 罢兵（done、_skip）。
+# 宣战 TARGET = d_yanmen_youzhou（平城 c_uuii_p_1265）；成功设 hd_j16_pingcheng_started（卒年 PRE：拓跋虔）、1 万事件兵、慕容垂压力 +50（过参合陂）。
+#   慕容垂之死仍走卒年表 N 396.6.2，本节点不加死亡。
+# 结局：平城归燕一系 → _won；否则 _lost。清 _active。
+# 变量：hd_j16_pingcheng_done、_started（fire 结果 / PRE）、_won、_lost、_skip、_wlog、_asked、_att、_def、_wsf_wlog
+############################################################
+hd_j16_node_pingcheng_effect = {
+	if = {
+		limit = {
+			has_global_variable = hd_j16_pingcheng_started
+			NOT = { has_global_variable = hd_j16_pingcheng_done }
+		}
+		hd_j16_pingcheng_result_effect = yes
+	}
+	else_if = {
+		limit = { NOT = { has_global_variable = hd_j16_pingcheng_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_pingcheng_done
+			debug_log = "HD_J16 e5_m15 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 396.1.1 }
+			if = {
+				limit = { current_date >= 396.9.2 }
+				set_global_variable = hd_j16_pingcheng_done
+				set_global_variable = hd_j16_pingcheng_skip
+				debug_log = "HD_J16 e5_m15 SKIP window_closed"
+			}
+			else_if = {
+				limit = { hd_j16_dead_trigger = { ID = changli_murong_038 } }
+				set_global_variable = hd_j16_pingcheng_done
+				set_global_variable = hd_j16_pingcheng_skip
+				debug_log = "HD_J16 e5_m15 SKIP actor_dead"
+			}
+			else_if = {
+				limit = {
+					has_global_variable = hd_j16_canhe_done
+					NOT = { has_global_variable = hd_j16_canhe_yan_lost }
+				}
+				set_global_variable = hd_j16_pingcheng_done
+				set_global_variable = hd_j16_pingcheng_skip
+				debug_log = "HD_J16 e5_m15 SKIP deviated"
+			}
+			else = {
+				hd_j16_pingcheng_sides_effect = yes
+				if = {
+					limit = { hd_j16_pingcheng_ready_trigger = yes }
+					scope:hd_j16_e5m15_yan = {
+						if = {
+							limit = {
+								OR = {
+									is_ai = yes
+									has_global_variable = hd_j16_pingcheng_go
+								}
+							}
+							hd_j16_pingcheng_war_effect = yes
+						}
+						else_if = {
+							limit = { NOT = { has_global_variable = hd_j16_pingcheng_asked } }
+							set_global_variable = { name = hd_j16_pingcheng_asked value = yes days = 60 }
+							trigger_event = hd_j16.5405
+							debug_log = "HD_J16 e5_m15 WAIT player_asked"
+						}
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_pingcheng_wlog } }
+					set_global_variable = hd_j16_pingcheng_wlog
+					debug_log = "HD_J16 e5_m15 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+# 燕主 scope:hd_j16_e5m15_yan（须为慕容垂）、魏主 scope:hd_j16_e5m15_wei、慕容垂 scope:hd_j16_e5m15_chui
+hd_j16_pingcheng_sides_effect = {
+	hd_j16_n1_get_houyan_ruler_effect = { AS = hd_j16_e5m15_yan }
+	hd_j16_n1_get_wei_ruler_effect = { AS = hd_j16_e5m15_wei }
+	hd_j16_n1_clear_effect = { S = hd_j16_e5m15_chui }
+	hd_j16_resolve_effect = { ID = changli_murong_038 AS = hd_j16_e5m15_chui }
+}
+
+hd_j16_pingcheng_war_effect = {
+	if = {
+		limit = {
+			OR = {
+				has_global_variable = hd_j16_pingcheng_done
+				has_global_variable = hd_j16_pingcheng_started
+			}
+		}
+		debug_log = "HD_J16 e5_m15 SKIP player_late_reply"
+	}
+	else = {
+		hd_j16_pingcheng_sides_effect = yes
+		hd_j16_n1_clear_effect = { S = hd_nbc_war_pingcheng }
+		if = {
+			limit = { hd_j16_pingcheng_ready_trigger = yes }
+			hd_nbc_start_war_effect = { ATTACKER = scope:hd_j16_e5m15_yan DEFENDER = scope:hd_j16_e5m15_wei TARGET = title:d_yanmen_youzhou KIND = pingcheng }
+		}
+		if = {
+			limit = { exists = scope:hd_nbc_war_pingcheng }
+			set_global_variable = hd_j16_pingcheng_started
+			set_global_variable = { name = hd_j16_pingcheng_att value = scope:hd_j16_e5m15_yan }
+			set_global_variable = { name = hd_j16_pingcheng_def value = scope:hd_j16_e5m15_wei }
+			hd_j16_n1_front_army_effect = { DUCHY = title:d_yanmen_youzhou SIDE = scope:hd_j16_e5m15_yan WHO = scope:hd_j16_e5m15_yan SIZE = 10000 NAME = hd_j16_n1_army_pingcheng_name }
+			scope:hd_j16_e5m15_chui = { add_stress = 50 }
+			scope:hd_j16_e5m15_wei = {
+				if = {
+					limit = { is_ai = no }
+					trigger_event = hd_j16.5401
+				}
+			}
+			debug_log = "HD_J16 e5_m15 FIRE war_started"
+		}
+		else_if = {
+			limit = { NOT = { has_global_variable = hd_j16_pingcheng_wsf_wlog } }
+			set_global_variable = hd_j16_pingcheng_wsf_wlog
+			debug_log = "HD_J16 e5_m15 WAIT war_start_failed"
+		}
+	}
+}
+
+hd_j16_pingcheng_refuse_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_pingcheng_done } }
+		set_global_variable = hd_j16_pingcheng_done
+		set_global_variable = hd_j16_pingcheng_skip
+		debug_log = "HD_J16 e5_m15 SKIP player_refused"
+	}
+}
+
+hd_j16_pingcheng_result_effect = {
+	if = {
+		limit = {
+			NOT = { global_var:hd_j16_pingcheng_att ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:pingcheng } } }
+			NOT = { global_var:hd_j16_pingcheng_def ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:pingcheng } } }
+		}
+		set_global_variable = hd_j16_pingcheng_done
+		if = {
+			limit = { has_global_variable = hd_nbc_pingcheng_active }
+			remove_global_variable = hd_nbc_pingcheng_active
+		}
+		hd_j16_n1_get_houyan_ruler_effect = { AS = hd_j16_e5m15_yan }
+		if = {
+			limit = {
+				title:c_uuii_p_1265.holder ?= {
+					OR = {
+						this = global_var:hd_j16_pingcheng_att
+						top_liege ?= global_var:hd_j16_pingcheng_att
+						# 攻方战中身故、由继承人接战：按位置重新解析出的本方之主（不认同王朝的第三方）
+						AND = {
+							exists = scope:hd_j16_e5m15_yan
+							OR = {
+								this = scope:hd_j16_e5m15_yan
+								top_liege ?= scope:hd_j16_e5m15_yan
+							}
+						}
+					}
+				}
+			}
+			set_global_variable = hd_j16_pingcheng_won
+			debug_log = "HD_J16 e5_m15 FIRE result_won"
+		}
+		else = {
+			set_global_variable = hd_j16_pingcheng_lost
+			debug_log = "HD_J16 e5_m15 FIRE result_lost"
+		}
+	}
+}
+
+############################################################
+# E5-M20 慕容德镇邺【软摆位；D16 授郡】（06 §1.1）
+# 窗口 396.6.1 – 397.12.1。慕容德 changli_murong_028 在世、无地、在燕主一系；魏郡 d_weijun 由燕主或其一系的 AI 持有（郡头衔，无人持有时看邺县）。
+# 无分支：魏郡授慕容德作燕主之臣（1 郡，同一政权内）。慕容德已有县 → 不授，done、_skip（M30 以其现有领地起事）。
+# 变量：hd_j16_de_ye_done、_result、_skip、_wlog
+############################################################
+hd_j16_node_de_ye_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_de_ye_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_de_ye_done
+			debug_log = "HD_J16 e5_m20 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 396.6.1 }
+			if = {
+				limit = { current_date >= 397.12.2 }
+				set_global_variable = hd_j16_de_ye_done
+				set_global_variable = hd_j16_de_ye_skip
+				debug_log = "HD_J16 e5_m20 SKIP window_closed"
+			}
+			else_if = {
+				limit = { hd_j16_dead_trigger = { ID = changli_murong_028 } }
+				set_global_variable = hd_j16_de_ye_done
+				set_global_variable = hd_j16_de_ye_skip
+				debug_log = "HD_J16 e5_m20 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_n1_get_houyan_ruler_effect = { AS = hd_j16_e5m20_yan }
+				hd_j16_n1_clear_effect = { S = hd_j16_e5m20_de }
+				hd_j16_n1_clear_effect = { S = hd_j16_e5m20_from }
+				hd_j16_resolve_effect = { ID = changli_murong_028 AS = hd_j16_e5m20_de }
+				if = {
+					limit = { scope:hd_j16_e5m20_de ?= { is_landed = yes } }
+					set_global_variable = hd_j16_de_ye_done
+					set_global_variable = hd_j16_de_ye_skip
+					debug_log = "HD_J16 e5_m20 SKIP has_land"
+				}
+				else = {
+					if = {
+						limit = { exists = scope:hd_j16_e5m20_yan }
+						title:d_weijun.holder ?= {
+							if = {
+								limit = {
+									is_ai = yes
+									OR = {
+										this = scope:hd_j16_e5m20_yan
+										top_liege ?= scope:hd_j16_e5m20_yan
+									}
+								}
+								save_scope_as = hd_j16_e5m20_from
+							}
+						}
+						if = {
+							limit = {
+								NOT = { exists = scope:hd_j16_e5m20_from }
+								NOT = { exists = title:d_weijun.holder }
+							}
+							title:c_uuii_p_1172.holder ?= {
+								if = {
+									limit = {
+										is_ai = yes
+										OR = {
+											this = scope:hd_j16_e5m20_yan
+											top_liege ?= scope:hd_j16_e5m20_yan
+										}
+									}
+									save_scope_as = hd_j16_e5m20_from
+								}
+							}
+						}
+					}
+					if = {
+						limit = {
+							exists = scope:hd_j16_e5m20_from
+							scope:hd_j16_e5m20_de ?= {
+								is_imprisoned = no
+								hd_j16_n1_in_realm_trigger = { R = scope:hd_j16_e5m20_yan }
+							}
+						}
+						set_global_variable = hd_j16_de_ye_done
+						set_global_variable = hd_j16_de_ye_result
+						hd_j16_n1_grant_duchy_effect = { DUCHY = title:d_weijun FROM = scope:hd_j16_e5m20_from TO = scope:hd_j16_e5m20_de LIEGE = scope:hd_j16_e5m20_yan TAG = e5_m20 TYPE = granted }
+						debug_log = "HD_J16 e5_m20 FIRE de_ye"
+					}
+					else_if = {
+						limit = { NOT = { has_global_variable = hd_j16_de_ye_wlog } }
+						set_global_variable = hd_j16_de_ye_wlog
+						debug_log = "HD_J16 e5_m20 WAIT not_ready"
+					}
+				}
+			}
+		}
+	}
+}
+
+############################################################
+# E5-M25 宝奔龙城【软摆位；A6-F7 三档】（06 §1.1）
+# 窗口 397.2.1 – 398.6.1。燕主（慕容氏）与魏主交战且中山 c_uuii_p_407 被魏主占领（county_controller），或中山的 top_liege 已是魏主。
+# 燕主 AI：北走；玩家收 hd_j16.5410：a 北走 / b 死守（done、_skip）。
+# ① 燕一系持昌黎 d_changli 或平州 k_pingzhou 之县：扶黎 c_uuii_p_3479 在燕的 AI 封臣手里 → 昌黎郡收为直辖（1 郡）；迁都扶黎，不成则迁到燕主直辖的最北之县。
+# ② 否则扶黎由与燕接壤的外人持有 → 燕主得昌黎宣称（不开战、不给兵；「3 年 AI 宣战倾向」无现成写法，未做，见报告）。
+# ③ 都不成立 → 迁都到燕主直辖的最北之县（按昌黎、辽西、辽东、玄菟、右北平、渔阳、东乌桓、宇文的固定顺序取第一个）。
+# 慕容详据中山称帝只作新闻（未做，见报告）。变量：hd_j16_longcheng_done、_result、_skip、_wlog、_asked
+############################################################
+hd_j16_node_longcheng_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_longcheng_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_longcheng_done
+			debug_log = "HD_J16 e5_m25 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 397.2.1 }
+			if = {
+				limit = { current_date >= 398.6.2 }
+				set_global_variable = hd_j16_longcheng_done
+				set_global_variable = hd_j16_longcheng_skip
+				debug_log = "HD_J16 e5_m25 SKIP window_closed"
+			}
+			else = {
+				hd_j16_longcheng_sides_effect = yes
+				if = {
+					limit = {
+						exists = scope:hd_j16_e5m25_yan
+						exists = scope:hd_j16_e5m25_wei
+						OR = {
+							title:c_uuii_p_407.holder.top_liege ?= scope:hd_j16_e5m25_wei
+							AND = {
+								scope:hd_j16_e5m25_yan = { is_at_war_with = scope:hd_j16_e5m25_wei }
+								title:c_uuii_p_407 = { county_controller = scope:hd_j16_e5m25_wei }
+							}
+						}
+					}
+					scope:hd_j16_e5m25_yan = {
+						if = {
+							limit = { is_ai = yes }
+							hd_j16_longcheng_effect = yes
+						}
+						else_if = {
+							limit = { NOT = { has_global_variable = hd_j16_longcheng_asked } }
+							set_global_variable = { name = hd_j16_longcheng_asked value = yes days = 60 }
+							trigger_event = hd_j16.5410
+							debug_log = "HD_J16 e5_m25 WAIT player_asked"
+						}
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_longcheng_wlog } }
+					set_global_variable = hd_j16_longcheng_wlog
+					debug_log = "HD_J16 e5_m25 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+hd_j16_longcheng_sides_effect = {
+	hd_j16_n1_get_houyan_ruler_effect = { AS = hd_j16_e5m25_yan }
+	hd_j16_n1_get_wei_ruler_effect = { AS = hd_j16_e5m25_wei }
+}
+
+# 执行（AI 燕主与 hd_j16.5410 a）
+hd_j16_longcheng_effect = {
+	if = {
+		limit = { has_global_variable = hd_j16_longcheng_done }
+		debug_log = "HD_J16 e5_m25 SKIP player_late_reply"
+	}
+	else = {
+		hd_j16_longcheng_sides_effect = yes
+		set_global_variable = hd_j16_longcheng_done
+		if = {
+			limit = { exists = scope:hd_j16_e5m25_yan }
+			set_global_variable = hd_j16_longcheng_result
+			# 扶黎之主（外人）：② 档用
+			hd_j16_n1_clear_effect = { S = hd_j16_e5m25_out }
+			title:c_uuii_p_3479.holder.top_liege ?= {
+				if = {
+					limit = { NOT = { this = scope:hd_j16_e5m25_yan } }
+					save_scope_as = hd_j16_e5m25_out
+				}
+			}
+			if = {
+				limit = {
+					OR = {
+						title:d_changli = { any_de_jure_county = { holder ?= { target_is_same_character_or_above = scope:hd_j16_e5m25_yan } } }
+						title:k_pingzhou = { any_de_jure_county = { holder ?= { target_is_same_character_or_above = scope:hd_j16_e5m25_yan } } }
+					}
+				}
+				hd_j16_n1_clear_effect = { S = hd_j16_e5m25_vas }
+				title:c_uuii_p_3479.holder ?= {
+					if = {
+						limit = {
+							is_ai = yes
+							NOT = { this = scope:hd_j16_e5m25_yan }
+							top_liege ?= scope:hd_j16_e5m25_yan
+						}
+						save_scope_as = hd_j16_e5m25_vas
+					}
+				}
+				if = {
+					limit = { exists = scope:hd_j16_e5m25_vas }
+					hd_j16_n1_grant_duchy_effect = { DUCHY = title:d_changli FROM = scope:hd_j16_e5m25_vas TO = scope:hd_j16_e5m25_yan LIEGE = scope:hd_j16_e5m25_yan TAG = e5_m25 TYPE = revoked }
+				}
+				hd_j16_longcheng_capital_effect = yes
+				debug_log = "HD_J16 e5_m25 FIRE tier1_longcheng"
+			}
+			else_if = {
+				limit = {
+					exists = scope:hd_j16_e5m25_out
+					hd_j16_n1_borders_realm_trigger = { A = scope:hd_j16_e5m25_yan B = scope:hd_j16_e5m25_out }
+				}
+				scope:hd_j16_e5m25_yan = {
+					if = {
+						limit = { NOT = { has_claim_on = title:d_changli } }
+						add_pressed_claim = title:d_changli
+					}
+				}
+				debug_log = "HD_J16 e5_m25 FIRE tier2_claim"
+			}
+			else = {
+				hd_j16_longcheng_capital_effect = yes
+				debug_log = "HD_J16 e5_m25 FIRE tier3_north"
+			}
+		}
+		else = { debug_log = "HD_J16 e5_m25 SKIP no_actor" }
+	}
+}
+
+# 迁都：扶黎直辖则迁扶黎，否则按固定顺序取燕主直辖的第一县（引擎无纬度比较，顺序即「最北」的近似）
+hd_j16_longcheng_capital_effect = {
+	hd_j16_n1_clear_effect = { S = hd_j16_e5m25_cap }
+	if = {
+		limit = { title:c_uuii_p_3479.holder ?= scope:hd_j16_e5m25_yan }
+		title:c_uuii_p_3479 = { save_scope_as = hd_j16_e5m25_cap }
+	}
+	hd_j16_longcheng_pick_effect = { DUCHY = title:d_changli }
+	hd_j16_longcheng_pick_effect = { DUCHY = title:d_liaoxi }
+	hd_j16_longcheng_pick_effect = { DUCHY = title:d_liaodong }
+	hd_j16_longcheng_pick_effect = { DUCHY = title:d_xuantu }
+	hd_j16_longcheng_pick_effect = { DUCHY = title:d_youbeiping }
+	hd_j16_longcheng_pick_effect = { DUCHY = title:d_yuyang }
+	hd_j16_longcheng_pick_effect = { DUCHY = title:d_dongwuhuan }
+	hd_j16_longcheng_pick_effect = { DUCHY = title:d_yuwen }
+	if = {
+		limit = { exists = scope:hd_j16_e5m25_cap }
+		scope:hd_j16_e5m25_yan = { set_realm_capital = scope:hd_j16_e5m25_cap }
+		debug_log = "HD_J16 e5_m25 FIRE capital_moved"
+	}
+	else = { debug_log = "HD_J16 e5_m25 SKIP capital_none" }
+}
+hd_j16_longcheng_pick_effect = {
+	if = {
+		limit = { NOT = { exists = scope:hd_j16_e5m25_cap } }
+		$DUCHY$ = {
+			random_de_jure_county = {
+				limit = { holder ?= scope:hd_j16_e5m25_yan }
+				save_scope_as = hd_j16_e5m25_cap
+			}
+		}
+	}
+}
+
+# 玩家 b：死守中山（hd_j16.5410 b）
+hd_j16_longcheng_refuse_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_longcheng_done } }
+		set_global_variable = hd_j16_longcheng_done
+		set_global_variable = hd_j16_longcheng_skip
+		debug_log = "HD_J16 e5_m25 SKIP player_refused"
+	}
+}
+
+############################################################
+# E5-M35 兰汗之乱·慕容盛复国【人事；同一政权内换主】（06 §1.1）
+# 窗口 398.4.1 – 399.1.1（第一步）；后续各步到 399.6.1 为止。
+# 第一步：燕位（hd_j16_n1_get_yanwei_ruler_effect）是慕容宝 changli_murong_041；兰汗 changli_lan_han、慕容盛 changli_murong_049 在世、在宝一系。
+#   宝 AI：fire——设 hd_j16_lanhan_s1_result（卒年 PRE：慕容宝 398.4.26 凶手兰汗、段速骨）、90 天计时 _s2_wait。
+#   宝是玩家：hd_j16.5420 a 回龙城（同 AI，宝之死走卒年大限）/ b 不回（done、_skip；宝的 K 卒年前提不成立，按 D15 顺延）。
+# 第一步后续：宝已死 → 兰汗换主（hd_j16_n1_seat_effect，TAG = lanhan；现任是玩家时弹 5590）。
+# 第二步：兰汗已在位、90 天计时到期，兰汗与盛在世 → 设 hd_j16_lanhan_result（卒年 PRE：兰汗 398.8.15 凶手慕容盛）。
+# 第三步：兰汗已死 → 慕容盛换主（TAG = sheng）。兰汗或盛先死、玩家拒之、到 399.6.1 → 该步作罢（_seat_skip / _s2_skip / _sheng_skip）。
+# 变量：hd_j16_lanhan_done、hd_j16_lanhan_s1_result、hd_j16_lanhan_result（两步 fire 结果 / PRE）、_skip、_wlog、_asked、_s2_wait、
+#   hd_j16_lanhan_seated、_refused、_abd_asked、_seat_skip、_s2_skip、hd_j16_sheng_seated、_refused、_abd_asked、hd_j16_lanhan_sheng_skip
+############################################################
+hd_j16_node_lanhan_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_lanhan_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_lanhan_done
+			debug_log = "HD_J16 e5_m35 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 398.4.1 }
+			if = {
+				limit = { current_date >= 399.1.2 }
+				set_global_variable = hd_j16_lanhan_done
+				set_global_variable = hd_j16_lanhan_skip
+				debug_log = "HD_J16 e5_m35 SKIP window_closed"
+			}
+			else_if = {
+				limit = { hd_j16_dead_trigger = { ID = changli_murong_041 } }
+				set_global_variable = hd_j16_lanhan_done
+				set_global_variable = hd_j16_lanhan_skip
+				debug_log = "HD_J16 e5_m35 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_lanhan_sides_effect = yes
+				if = {
+					limit = {
+						exists = scope:hd_j16_e5m35_cur
+						exists = scope:hd_j16_e5m35_bao
+						scope:hd_j16_e5m35_cur = scope:hd_j16_e5m35_bao
+						scope:hd_j16_e5m35_han ?= { hd_j16_n1_in_realm_trigger = { R = scope:hd_j16_e5m35_bao } }
+						scope:hd_j16_e5m35_sheng ?= { hd_j16_n1_in_realm_trigger = { R = scope:hd_j16_e5m35_bao } }
+					}
+					scope:hd_j16_e5m35_bao = {
+						if = {
+							limit = { is_ai = yes }
+							hd_j16_lanhan_s1_effect = yes
+						}
+						else_if = {
+							limit = { NOT = { has_global_variable = hd_j16_lanhan_asked } }
+							set_global_variable = { name = hd_j16_lanhan_asked value = yes days = 60 }
+							trigger_event = hd_j16.5420
+							debug_log = "HD_J16 e5_m35 WAIT player_asked"
+						}
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_lanhan_wlog } }
+					set_global_variable = hd_j16_lanhan_wlog
+					debug_log = "HD_J16 e5_m35 WAIT not_ready"
+				}
+			}
+		}
+	}
+	# 第一步后续：宝已死 → 兰汗换主
+	else_if = {
+		limit = {
+			has_global_variable = hd_j16_lanhan_s1_result
+			NOT = { has_global_variable = hd_j16_lanhan_seated }
+			NOT = { has_global_variable = hd_j16_lanhan_seat_skip }
+		}
+		if = {
+			limit = {
+				OR = {
+					current_date >= 399.6.1
+					has_global_variable = hd_j16_lanhan_refused
+					hd_j16_dead_trigger = { ID = changli_lan_han }
+				}
+			}
+			set_global_variable = hd_j16_lanhan_seat_skip
+			debug_log = "HD_J16 e5_m35 SKIP seat_lanhan"
+		}
+		else_if = {
+			limit = { hd_j16_dead_trigger = { ID = changli_murong_041 } }
+			hd_j16_lanhan_sides_effect = yes
+			if = {
+				limit = {
+					exists = scope:hd_j16_e5m35_cur
+					exists = scope:hd_j16_e5m35_han
+				}
+				hd_j16_n1_seat_effect = { CUR = scope:hd_j16_e5m35_cur NEW = scope:hd_j16_e5m35_han TAG = lanhan LOG = e5_m35 }
+			}
+		}
+	}
+	# 第二步：兰汗在位、计时到期 → 兰汗 K 前提
+	else_if = {
+		limit = {
+			has_global_variable = hd_j16_lanhan_seated
+			NOT = { has_global_variable = hd_j16_lanhan_result }
+			NOT = { has_global_variable = hd_j16_lanhan_s2_skip }
+			NOT = { has_global_variable = hd_j16_lanhan_s2_wait }
+		}
+		if = {
+			limit = {
+				hd_j16_alive_trigger = { ID = changli_lan_han }
+				hd_j16_alive_trigger = { ID = changli_murong_049 }
+				current_date < 399.6.1
+			}
+			set_global_variable = hd_j16_lanhan_result
+			debug_log = "HD_J16 e5_m35 FIRE step2"
+		}
+		else = {
+			set_global_variable = hd_j16_lanhan_s2_skip
+			debug_log = "HD_J16 e5_m35 SKIP step2"
+		}
+	}
+	# 第三步：兰汗已死 → 慕容盛换主
+	else_if = {
+		limit = {
+			has_global_variable = hd_j16_lanhan_result
+			NOT = { has_global_variable = hd_j16_sheng_seated }
+			NOT = { has_global_variable = hd_j16_lanhan_sheng_skip }
+		}
+		if = {
+			limit = {
+				OR = {
+					current_date >= 399.6.1
+					has_global_variable = hd_j16_sheng_refused
+					hd_j16_dead_trigger = { ID = changli_murong_049 }
+				}
+			}
+			set_global_variable = hd_j16_lanhan_sheng_skip
+			debug_log = "HD_J16 e5_m35 SKIP seat_sheng"
+		}
+		else_if = {
+			limit = { hd_j16_dead_trigger = { ID = changli_lan_han } }
+			hd_j16_lanhan_sides_effect = yes
+			if = {
+				limit = {
+					exists = scope:hd_j16_e5m35_cur
+					exists = scope:hd_j16_e5m35_sheng
+				}
+				hd_j16_n1_seat_effect = { CUR = scope:hd_j16_e5m35_cur NEW = scope:hd_j16_e5m35_sheng TAG = sheng LOG = e5_m35 }
+			}
+		}
+	}
+}
+
+hd_j16_lanhan_sides_effect = {
+	hd_j16_n1_get_yanwei_ruler_effect = { AS = hd_j16_e5m35_cur }
+	hd_j16_n1_clear_effect = { S = hd_j16_e5m35_bao }
+	hd_j16_n1_clear_effect = { S = hd_j16_e5m35_han }
+	hd_j16_n1_clear_effect = { S = hd_j16_e5m35_sheng }
+	hd_j16_resolve_effect = { ID = changli_murong_041 AS = hd_j16_e5m35_bao }
+	hd_j16_resolve_effect = { ID = changli_lan_han AS = hd_j16_e5m35_han }
+	hd_j16_resolve_effect = { ID = changli_murong_049 AS = hd_j16_e5m35_sheng }
+}
+
+# 第一步 fire（AI 宝与 hd_j16.5420 a）
+hd_j16_lanhan_s1_effect = {
+	if = {
+		limit = { has_global_variable = hd_j16_lanhan_done }
+		debug_log = "HD_J16 e5_m35 SKIP player_late_reply"
+	}
+	else = {
+		set_global_variable = hd_j16_lanhan_done
+		set_global_variable = hd_j16_lanhan_s1_result
+		set_global_variable = { name = hd_j16_lanhan_s2_wait value = yes days = 90 }
+		debug_log = "HD_J16 e5_m35 FIRE step1"
+	}
+}
+
+# 玩家宝 b：不回龙城（hd_j16.5420 b）
+hd_j16_lanhan_refuse_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_lanhan_done } }
+		set_global_variable = hd_j16_lanhan_done
+		set_global_variable = hd_j16_lanhan_skip
+		debug_log = "HD_J16 e5_m35 SKIP player_refused"
+	}
+}
+
+############################################################
+# E5-M45 辽东之争【风味：两条新闻，不宣战】（06 §1.1）
+# 400 年：窗口 400.2.1 – 401.10.1，燕主（燕位）与高句丽王 korean_go_goguryeo_13（06 原写 hd_nbc_gjl_gao_tan_de，第 2 期已并入此 ID）都在世 → hd_j16.5430。
+# 405 年：窗口 405.1.1 – 406.1.1，同上 → hd_j16.5431（熙攻辽东城不克）。404 开局：400 年那条前标，405 年那条照常。
+# tande 入侵第 1 阶段（辽东）照旧，本节点不碰。变量：hd_j16_liaodong_400_done、_405_done、hd_j16_liaodong_done（两条都了结）、_skip
+############################################################
+hd_j16_node_liaodong_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_liaodong_done } }
+		if = {
+			limit = { NOT = { has_global_variable = hd_j16_liaodong_400_done } }
+			if = {
+				limit = { global_var:hd_j16_start_year >= 404 }
+				set_global_variable = hd_j16_liaodong_400_done
+				debug_log = "HD_J16 e5_m45 SKIP prestart_400"
+			}
+			else_if = {
+				limit = { current_date >= 400.2.1 }
+				if = {
+					limit = { current_date >= 401.10.2 }
+					set_global_variable = hd_j16_liaodong_400_done
+					set_global_variable = hd_j16_liaodong_skip
+					debug_log = "HD_J16 e5_m45 SKIP window_closed_400"
+				}
+				else = {
+					hd_j16_liaodong_sides_effect = yes
+					if = {
+						limit = {
+							exists = scope:hd_j16_e5m45_yan
+							exists = scope:hd_j16_e5m45_go
+						}
+						set_global_variable = hd_j16_liaodong_400_done
+						hd_j16_n1_news_effect = { A = scope:hd_j16_e5m45_yan B = scope:hd_j16_e5m45_go EVENT = hd_j16.5430 }
+						debug_log = "HD_J16 e5_m45 FIRE news_400"
+					}
+				}
+			}
+		}
+		if = {
+			limit = { NOT = { has_global_variable = hd_j16_liaodong_405_done } }
+			if = {
+				limit = { current_date >= 405.1.1 }
+				if = {
+					limit = { current_date >= 406.1.2 }
+					set_global_variable = hd_j16_liaodong_405_done
+					set_global_variable = hd_j16_liaodong_skip
+					debug_log = "HD_J16 e5_m45 SKIP window_closed_405"
+				}
+				else = {
+					hd_j16_liaodong_sides_effect = yes
+					if = {
+						limit = {
+							exists = scope:hd_j16_e5m45_yan
+							exists = scope:hd_j16_e5m45_go
+						}
+						set_global_variable = hd_j16_liaodong_405_done
+						hd_j16_n1_news_effect = { A = scope:hd_j16_e5m45_yan B = scope:hd_j16_e5m45_go EVENT = hd_j16.5431 }
+						debug_log = "HD_J16 e5_m45 FIRE news_405"
+					}
+				}
+			}
+		}
+		if = {
+			limit = {
+				has_global_variable = hd_j16_liaodong_400_done
+				has_global_variable = hd_j16_liaodong_405_done
+			}
+			set_global_variable = hd_j16_liaodong_done
+		}
+	}
+}
+
+hd_j16_liaodong_sides_effect = {
+	hd_j16_n1_get_yanwei_ruler_effect = { AS = hd_j16_e5m45_yan }
+	hd_j16_n1_clear_effect = { S = hd_j16_e5m45_go }
+	hd_j16_resolve_effect = { ID = korean_go_goguryeo_13 AS = hd_j16_e5m45_go }
+	# 燕主与高句丽王是同一人（龙城归高句丽）时不算燕
+	if = {
+		limit = {
+			exists = scope:hd_j16_e5m45_yan
+			exists = scope:hd_j16_e5m45_go
+			scope:hd_j16_e5m45_yan = scope:hd_j16_e5m45_go
+		}
+		clear_saved_scope = hd_j16_e5m45_yan
+	}
+}
+
+############################################################
+# E5-M50 慕容熙继立【人事；同一政权内换主】（06 §1.1）
+# 窗口 401.8.1 – 402.6.1。慕容盛已死（hd_j16_dead_trigger）；慕容熙 changli_murong_048 在世、在燕位之主一系（或已是燕主）。
+# 燕主已是熙 → fire；否则换主（TAG = xi；现任是 AI 即转，现任是玩家弹 5590 逊位 / 拒之）。慕容熙早出场（A1-F2 名单）。丁太后只作文本。
+# 变量：hd_j16_xi_done、_result、_skip、_wlog、hd_j16_xi_seated、_refused、_abd_asked
+############################################################
+hd_j16_node_xi_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_xi_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_xi_done
+			debug_log = "HD_J16 e5_m50 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 401.8.1 }
+			if = {
+				limit = { has_global_variable = hd_j16_xi_seated }
+				set_global_variable = hd_j16_xi_done
+				set_global_variable = hd_j16_xi_result
+				debug_log = "HD_J16 e5_m50 FIRE xi_enthroned"
+			}
+			else_if = {
+				limit = {
+					OR = {
+						current_date >= 402.6.2
+						has_global_variable = hd_j16_xi_refused
+					}
+				}
+				set_global_variable = hd_j16_xi_done
+				set_global_variable = hd_j16_xi_skip
+				debug_log = "HD_J16 e5_m50 SKIP window_closed"
+			}
+			else_if = {
+				limit = { hd_j16_dead_trigger = { ID = changli_murong_048 } }
+				set_global_variable = hd_j16_xi_done
+				set_global_variable = hd_j16_xi_skip
+				debug_log = "HD_J16 e5_m50 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_n1_get_yanwei_ruler_effect = { AS = hd_j16_e5m50_cur }
+				hd_j16_n1_clear_effect = { S = hd_j16_e5m50_xi }
+				hd_j16_resolve_effect = { ID = changli_murong_048 AS = hd_j16_e5m50_xi }
+				if = {
+					limit = {
+						hd_j16_dead_trigger = { ID = changli_murong_049 }
+						exists = scope:hd_j16_e5m50_cur
+						scope:hd_j16_e5m50_xi ?= {
+							is_imprisoned = no
+							hd_j16_n1_in_realm_trigger = { R = scope:hd_j16_e5m50_cur }
+						}
+					}
+					hd_j16_n1_seat_effect = { CUR = scope:hd_j16_e5m50_cur NEW = scope:hd_j16_e5m50_xi TAG = xi LOG = e5_m50 }
+					if = {
+						limit = { has_global_variable = hd_j16_xi_seated }
+						set_global_variable = hd_j16_xi_done
+						set_global_variable = hd_j16_xi_result
+						debug_log = "HD_J16 e5_m50 FIRE xi_enthroned"
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_xi_wlog } }
+					set_global_variable = hd_j16_xi_wlog
+					debug_log = "HD_J16 e5_m50 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+############################################################
+# E5-M60 冯跋立高云【人事；同一政权内换主】（06 §1.1）
+# 窗口 407.6.1 – 408.6.1（fire）；换主到 409.1.1 为止。燕位之主是慕容熙；冯跋 beiyan_0001 在世、在熙一系；高云 1415976 在世。
+# 熙 AI：fire——设 hd_j16_gaoyun_result（卒年 PRE：慕容熙 407.8.15 凶手冯跋；高云 409.11.15 凶手离班）。
+# 熙是玩家：hd_j16.5440 a 逊位（当即把燕位转给高云，并设 _result）/ b 拒之（done、_skip；冯跋是 AI 有地之臣时自立，A3-F13 拒之即内战的软化）。
+# 后续：熙已死 → 龙城之主换给高云（TAG = gaoyun；现任是玩家弹 5590）。换主后：国号仍燕（北燕），称天王；冯跋任首席议政（councillor_chancellor），
+#   冯素弗 beiyan_0002 任大司马（councillor_marshal）。变量：hd_j16_gaoyun_done、_result、_skip、_wlog、_asked、hd_j16_gaoyun_seated、_refused、
+#   _abd_asked、_seat_skip、_after
+############################################################
+hd_j16_node_gaoyun_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_gaoyun_done } }
+		if = {
+			limit = { current_date >= 407.6.1 }
+			if = {
+				limit = { current_date >= 408.6.2 }
+				set_global_variable = hd_j16_gaoyun_done
+				set_global_variable = hd_j16_gaoyun_skip
+				debug_log = "HD_J16 e5_m60 SKIP window_closed"
+			}
+			else_if = {
+				limit = {
+					OR = {
+						hd_j16_dead_trigger = { ID = changli_murong_048 }
+						hd_j16_dead_trigger = { ID = 1415976 }
+						hd_j16_dead_trigger = { ID = beiyan_0001 }
+					}
+				}
+				set_global_variable = hd_j16_gaoyun_done
+				set_global_variable = hd_j16_gaoyun_skip
+				debug_log = "HD_J16 e5_m60 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_gaoyun_sides_effect = yes
+				if = {
+					limit = {
+						exists = scope:hd_j16_e5m60_cur
+						exists = scope:hd_j16_e5m60_xi
+						exists = scope:hd_j16_e5m60_yun
+						scope:hd_j16_e5m60_cur = scope:hd_j16_e5m60_xi
+						scope:hd_j16_e5m60_feng ?= { hd_j16_n1_in_realm_trigger = { R = scope:hd_j16_e5m60_xi } }
+					}
+					scope:hd_j16_e5m60_xi = {
+						if = {
+							limit = { is_ai = yes }
+							set_global_variable = hd_j16_gaoyun_done
+							set_global_variable = hd_j16_gaoyun_result
+							debug_log = "HD_J16 e5_m60 FIRE step1"
+						}
+						else_if = {
+							limit = { NOT = { has_global_variable = hd_j16_gaoyun_asked } }
+							set_global_variable = { name = hd_j16_gaoyun_asked value = yes days = 60 }
+							trigger_event = hd_j16.5440
+							debug_log = "HD_J16 e5_m60 WAIT player_asked"
+						}
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_gaoyun_wlog } }
+					set_global_variable = hd_j16_gaoyun_wlog
+					debug_log = "HD_J16 e5_m60 WAIT not_ready"
+				}
+			}
+		}
+	}
+	# 后续：熙已死 → 高云换主
+	else_if = {
+		limit = {
+			has_global_variable = hd_j16_gaoyun_result
+			NOT = { has_global_variable = hd_j16_gaoyun_seated }
+			NOT = { has_global_variable = hd_j16_gaoyun_seat_skip }
+		}
+		if = {
+			limit = {
+				OR = {
+					current_date >= 409.1.1
+					has_global_variable = hd_j16_gaoyun_refused
+					hd_j16_dead_trigger = { ID = 1415976 }
+				}
+			}
+			set_global_variable = hd_j16_gaoyun_seat_skip
+			debug_log = "HD_J16 e5_m60 SKIP seat_gaoyun"
+		}
+		else_if = {
+			limit = { hd_j16_dead_trigger = { ID = changli_murong_048 } }
+			hd_j16_gaoyun_sides_effect = yes
+			if = {
+				limit = {
+					exists = scope:hd_j16_e5m60_cur
+					exists = scope:hd_j16_e5m60_yun
+				}
+				hd_j16_n1_seat_effect = { CUR = scope:hd_j16_e5m60_cur NEW = scope:hd_j16_e5m60_yun TAG = gaoyun LOG = e5_m60 }
+				if = {
+					limit = { has_global_variable = hd_j16_gaoyun_seated }
+					hd_j16_gaoyun_after_effect = yes
+				}
+			}
+		}
+	}
+}
+
+# 燕位之主 scope:hd_j16_e5m60_cur（先后燕、再龙城之主）、熙、高云、冯跋
+hd_j16_gaoyun_sides_effect = {
+	hd_j16_n1_get_yanwei_ruler_effect = { AS = hd_j16_e5m60_cur }
+	hd_j16_n1_clear_effect = { S = hd_j16_e5m60_xi }
+	hd_j16_n1_clear_effect = { S = hd_j16_e5m60_yun }
+	hd_j16_n1_clear_effect = { S = hd_j16_e5m60_feng }
+	hd_j16_resolve_effect = { ID = changli_murong_048 AS = hd_j16_e5m60_xi }
+	hd_j16_resolve_effect = { ID = 1415976 AS = hd_j16_e5m60_yun }
+	hd_j16_resolve_effect = { ID = beiyan_0001 AS = hd_j16_e5m60_feng }
+}
+
+# 换主后：国号燕、称天王；冯跋首席议政、冯素弗大司马（只一次）
+hd_j16_gaoyun_after_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_gaoyun_after } }
+		set_global_variable = hd_j16_gaoyun_after
+		hd_j16_n1_clear_effect = { S = hd_j16_e5m60_yun }
+		hd_j16_n1_clear_effect = { S = hd_j16_e5m60_feng }
+		hd_j16_n1_clear_effect = { S = hd_j16_e5m60_su }
+		hd_j16_resolve_effect = { ID = 1415976 AS = hd_j16_e5m60_yun }
+		hd_j16_resolve_effect = { ID = beiyan_0001 AS = hd_j16_e5m60_feng }
+		hd_j16_resolve_effect = { ID = beiyan_0002 AS = hd_j16_e5m60_su }
+		scope:hd_j16_e5m60_yun ?= {
+			if = {
+				limit = { is_landed = yes }
+				hd_j16_n1_style_effect = { NAME = dynn_title_yan STYLE = tianwang }
+				# 燕系头衔标记（hd_j16_n1_yan_system_trigger）：高云与高句丽王同王朝同家族，只能按其主头衔认
+				set_global_variable = { name = hd_j16_n1_yan_title value = primary_title }
+			}
+		}
+		if = {
+			limit = { scope:hd_j16_e5m60_yun ?= { is_landed = yes } }
+			hd_j16_n1_council_effect = { LIEGE = scope:hd_j16_e5m60_yun WHO = scope:hd_j16_e5m60_feng TYPE = councillor_chancellor }
+			hd_j16_n1_council_effect = { LIEGE = scope:hd_j16_e5m60_yun WHO = scope:hd_j16_e5m60_su TYPE = councillor_marshal }
+		}
+		debug_log = "HD_J16 e5_m60 FIRE after"
+	}
+}
+
+# 玩家熙 a：逊位于高云（hd_j16.5440 a）。Root：熙
+hd_j16_gaoyun_abdicate_effect = {
+	if = {
+		limit = { has_global_variable = hd_j16_gaoyun_done }
+		debug_log = "HD_J16 e5_m60 SKIP player_late_reply"
+	}
+	else = {
+		set_global_variable = hd_j16_gaoyun_done
+		set_global_variable = hd_j16_gaoyun_result
+		save_scope_as = hd_j16_e5m60_old
+		hd_j16_n1_clear_effect = { S = hd_j16_e5m60_yun }
+		hd_j16_resolve_effect = { ID = 1415976 AS = hd_j16_e5m60_yun }
+		if = {
+			limit = { exists = scope:hd_j16_e5m60_yun }
+			hd_j16_n1_take_realm_effect = { NEW = scope:hd_j16_e5m60_yun OLD = scope:hd_j16_e5m60_old }
+			set_global_variable = hd_j16_gaoyun_seated
+			hd_j16_gaoyun_after_effect = yes
+		}
+		debug_log = "HD_J16 e5_m60 FIRE player_abdicated"
+	}
+}
+
+# 玩家熙 b：拒之（hd_j16.5440 b）。Root：熙
+hd_j16_gaoyun_refuse_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_gaoyun_done } }
+		set_global_variable = hd_j16_gaoyun_done
+		set_global_variable = hd_j16_gaoyun_skip
+		save_scope_as = hd_j16_e5m60_old
+		hd_j16_n1_clear_effect = { S = hd_j16_e5m60_feng }
+		hd_j16_resolve_effect = { ID = beiyan_0001 AS = hd_j16_e5m60_feng }
+		scope:hd_j16_e5m60_feng ?= {
+			if = {
+				limit = {
+					is_ai = yes
+					is_landed = yes
+					top_liege ?= scope:hd_j16_e5m60_old
+				}
+				hd_nbc_become_independent_effect = yes
+			}
+		}
+		debug_log = "HD_J16 e5_m60 SKIP player_refused"
+	}
+}
+
+############################################################
+# E5-M65 冯跋即位【人事；同一政权内换主】（06 §1.1）
+# 窗口 409.10.1 – 410.6.1。高云已死（卒年 K，凶手离班）；冯跋 beiyan_0001 在世、在龙城之主一系（或已是其主）。
+# 冯跋 AI：换主（TAG = fengba；现任是玩家弹 5590）。冯跋是玩家：hd_j16.5450 a 即位 / b 另立（done、_skip）。
+# 即位后：改元太平，国号燕、称天王。离班、桃仁只作文本。变量：hd_j16_beiyan_done、_result、_skip、_wlog、_asked、hd_j16_fengba_seated、_refused、_abd_asked、
+#   hd_j16_beiyan_after
+############################################################
+hd_j16_node_beiyan_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_beiyan_done } }
+		if = {
+			limit = { current_date >= 409.10.1 }
+			if = {
+				limit = { has_global_variable = hd_j16_fengba_seated }
+				set_global_variable = hd_j16_beiyan_done
+				set_global_variable = hd_j16_beiyan_result
+				hd_j16_beiyan_after_effect = yes
+				debug_log = "HD_J16 e5_m65 FIRE fengba_enthroned"
+			}
+			else_if = {
+				limit = {
+					OR = {
+						current_date >= 410.6.2
+						has_global_variable = hd_j16_fengba_refused
+					}
+				}
+				set_global_variable = hd_j16_beiyan_done
+				set_global_variable = hd_j16_beiyan_skip
+				debug_log = "HD_J16 e5_m65 SKIP window_closed"
+			}
+			else_if = {
+				limit = { hd_j16_dead_trigger = { ID = beiyan_0001 } }
+				set_global_variable = hd_j16_beiyan_done
+				set_global_variable = hd_j16_beiyan_skip
+				debug_log = "HD_J16 e5_m65 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_n1_get_beiyan_ruler_effect = { AS = hd_j16_e5m65_cur }
+				hd_j16_n1_clear_effect = { S = hd_j16_e5m65_feng }
+				hd_j16_resolve_effect = { ID = beiyan_0001 AS = hd_j16_e5m65_feng }
+				if = {
+					limit = {
+						hd_j16_dead_trigger = { ID = 1415976 }
+						exists = scope:hd_j16_e5m65_cur
+						scope:hd_j16_e5m65_feng ?= {
+							is_imprisoned = no
+							hd_j16_n1_in_realm_trigger = { R = scope:hd_j16_e5m65_cur }
+						}
+					}
+					scope:hd_j16_e5m65_feng = {
+						if = {
+							limit = { is_ai = yes }
+							hd_j16_n1_seat_effect = { CUR = scope:hd_j16_e5m65_cur NEW = scope:hd_j16_e5m65_feng TAG = fengba LOG = e5_m65 }
+						}
+						else_if = {
+							limit = { NOT = { has_global_variable = hd_j16_beiyan_asked } }
+							set_global_variable = { name = hd_j16_beiyan_asked value = yes days = 60 }
+							trigger_event = hd_j16.5450
+							debug_log = "HD_J16 e5_m65 WAIT player_asked"
+						}
+					}
+					if = {
+						limit = { has_global_variable = hd_j16_fengba_seated }
+						set_global_variable = hd_j16_beiyan_done
+						set_global_variable = hd_j16_beiyan_result
+						hd_j16_beiyan_after_effect = yes
+						debug_log = "HD_J16 e5_m65 FIRE fengba_enthroned"
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_beiyan_wlog } }
+					set_global_variable = hd_j16_beiyan_wlog
+					debug_log = "HD_J16 e5_m65 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+# 玩家冯跋 a：即位（hd_j16.5450 a）。Root：冯跋
+hd_j16_beiyan_player_a_effect = {
+	if = {
+		limit = { has_global_variable = hd_j16_beiyan_done }
+		debug_log = "HD_J16 e5_m65 SKIP player_late_reply"
+	}
+	else = {
+		save_scope_as = hd_j16_e5m65_feng
+		hd_j16_n1_get_beiyan_ruler_effect = { AS = hd_j16_e5m65_cur }
+		if = {
+			limit = { exists = scope:hd_j16_e5m65_cur }
+			hd_j16_n1_seat_effect = { CUR = scope:hd_j16_e5m65_cur NEW = scope:hd_j16_e5m65_feng TAG = fengba LOG = e5_m65 }
+		}
+	}
+}
+
+# 玩家冯跋 b：另立（hd_j16.5450 b）
+hd_j16_beiyan_refuse_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_beiyan_done } }
+		set_global_variable = hd_j16_beiyan_done
+		set_global_variable = hd_j16_beiyan_skip
+		debug_log = "HD_J16 e5_m65 SKIP player_refused"
+	}
+}
+
+# 即位后：改元太平、国号燕、称天王（只一次）
+hd_j16_beiyan_after_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_beiyan_after } }
+		set_global_variable = hd_j16_beiyan_after
+		hd_j16_n1_clear_effect = { S = hd_j16_e5m65_ba }
+		hd_j16_resolve_effect = { ID = beiyan_0001 AS = hd_j16_e5m65_ba }
+		scope:hd_j16_e5m65_ba ?= {
+			if = {
+				limit = { is_landed = yes }
+				hd_j16_n1_style_effect = { NAME = dynn_title_yan STYLE = tianwang }
+				hd_j16_n1_change_era_effect = { KEY = taiping YEAR = 1 }
+			}
+		}
+		debug_log = "HD_J16 e5_m65 FIRE after"
+	}
+}
+
+############################################################
+# E5-M30 慕容德据滑台【开闸 murongde；立国由历史入侵驱动】（06 §1.2，A6-F2；06 §3.2-2/3）
+# 窗口 397.11.1 – 400.1.1。慕容德 changli_murong_028 有地、非独立、其 top_liege 是慕容氏（燕封臣）；中山已失（E5-M25 已 done，或中山的 top_liege 是拓跋氏）。
+# fire：先设 hd_j16_hi_go_murongde，再调 hd_hi_try_start_murongde_effect（环境短路；玩家慕容德由入侵弹 hd_hi.0200 a 起事 / d 不举事，本节点不另发事件）。
+#   本节点不做任何抬高慕容德头衔等级的操作（p5-C：先 try_start 再升王级）；M40 称帝只改称谓。
+# 窗口末仍不满足：照样设 go 与 hd_j16_hi_go_murongde_late，再 try_start（不短路，交还入侵常规判定），done、_skip。
+# 404 开局：前标只设 done，**不设** go（404 已据青州，hd_hi_done_murongde 由 6-B 开局预设；设 go 会让年度块在 404 局补试起兵）。
+# 变量：hd_j16_nanyan_open_done、_result、_skip、_wlog；hd_j16_hi_go_murongde、hd_j16_hi_go_murongde_late（p5-C 入侵侧读）
+############################################################
+hd_j16_node_nanyan_open_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_nanyan_open_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_nanyan_open_done
+			debug_log = "HD_J16 e5_m30 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 397.11.1 }
+			if = {
+				limit = { current_date >= 400.1.2 }
+				set_global_variable = hd_j16_nanyan_open_done
+				set_global_variable = hd_j16_nanyan_open_skip
+				if = {
+					limit = { NOT = { has_global_variable = hd_hi_done_murongde } }
+					set_global_variable = hd_j16_hi_go_murongde
+					set_global_variable = hd_j16_hi_go_murongde_late
+					hd_hi_try_start_murongde_effect = yes
+				}
+				debug_log = "HD_J16 e5_m30 SKIP window_closed_late_open"
+			}
+			else_if = {
+				limit = { hd_j16_dead_trigger = { ID = changli_murong_028 } }
+				set_global_variable = hd_j16_nanyan_open_done
+				set_global_variable = hd_j16_nanyan_open_skip
+				debug_log = "HD_J16 e5_m30 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_n1_clear_effect = { S = hd_j16_e5m30_de }
+				hd_j16_resolve_effect = { ID = changli_murong_028 AS = hd_j16_e5m30_de }
+				if = {
+					limit = {
+						scope:hd_j16_e5m30_de ?= {
+							is_landed = yes
+							is_independent_ruler = no
+							is_imprisoned = no
+							top_liege ?= { dynasty ?= dynasty:murong }
+						}
+						OR = {
+							has_global_variable = hd_j16_longcheng_done
+							title:c_uuii_p_407.holder.top_liege ?= { dynasty ?= dynasty:tuoba }
+						}
+					}
+					set_global_variable = hd_j16_nanyan_open_done
+					set_global_variable = hd_j16_nanyan_open_result
+					set_global_variable = hd_j16_hi_go_murongde
+					hd_hi_try_start_murongde_effect = yes
+					debug_log = "HD_J16 e5_m30 FIRE gate_opened"
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_nanyan_open_wlog } }
+					set_global_variable = hd_j16_nanyan_open_wlog
+					debug_log = "HD_J16 e5_m30 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+############################################################
+# E5-M40 广固定都·称帝【称号继统类】（06 §1.2）
+# 窗口 399.6.1 – 401.6.1。慕容德独立、有地，广县 c_uuii_p_2978（广固）在其一系。
+# 无分支：称帝（称谓 huangdi，国号燕，不记王朝固定国号），改元建平；AI 迁都广县（须直辖）。
+# 设 hd_j16_nanyan_di_result（卒年 PRE：辟闾浑 399.9.15，凶手慕容德）。变量：hd_j16_nanyan_di_done、_result、_skip、_wlog；面板 hd_hev_j16_nanyan_di
+############################################################
+hd_j16_node_nanyan_di_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_nanyan_di_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_nanyan_di_done
+			debug_log = "HD_J16 e5_m40 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 399.6.1 }
+			if = {
+				limit = { current_date >= 401.6.2 }
+				set_global_variable = hd_j16_nanyan_di_done
+				set_global_variable = hd_j16_nanyan_di_skip
+				debug_log = "HD_J16 e5_m40 SKIP window_closed"
+			}
+			else_if = {
+				limit = { hd_j16_dead_trigger = { ID = changli_murong_028 } }
+				set_global_variable = hd_j16_nanyan_di_done
+				set_global_variable = hd_j16_nanyan_di_skip
+				debug_log = "HD_J16 e5_m40 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_n1_clear_effect = { S = hd_j16_e5m40_de }
+				hd_j16_resolve_effect = { ID = changli_murong_028 AS = hd_j16_e5m40_de }
+				if = {
+					limit = {
+						scope:hd_j16_e5m40_de ?= {
+							is_landed = yes
+							is_independent_ruler = yes
+						}
+						title:c_uuii_p_2978.holder ?= {
+							OR = {
+								this = scope:hd_j16_e5m40_de
+								top_liege ?= scope:hd_j16_e5m40_de
+							}
+						}
+					}
+					set_global_variable = hd_j16_nanyan_di_done
+					set_global_variable = hd_j16_nanyan_di_result
+					set_global_variable = hd_hev_j16_nanyan_di
+					scope:hd_j16_e5m40_de = {
+						hd_j16_n1_style_effect = { NAME = dynn_title_yan STYLE = huangdi }
+						hd_j16_n1_change_era_effect = { KEY = jianping YEAR = 1 }
+						if = {
+							limit = { is_ai = yes }
+							hd_j16_n1_move_capital_effect = { WHO = scope:hd_j16_e5m40_de COUNTY = title:c_uuii_p_2978 TAG = e5_m40 }
+						}
+					}
+					debug_log = "HD_J16 e5_m40 FIRE nanyan_di"
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_nanyan_di_wlog } }
+					set_global_variable = hd_j16_nanyan_di_wlog
+					debug_log = "HD_J16 e5_m40 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+############################################################
+# E5-M55 慕容超来奔·继统【人事；同一政权内立储】（06 §1.2）
+# 窗口 405.1.1 – 406.6.1（四开局都走心跳）。慕容德在世、是南燕之主（hd_j16_n1_get_nanyan_ruler_effect）；慕容超 changli_murong_058 在世、无地、未被囚。
+# 慕容超 AI：入德宫廷（已在则不动），德是 AI 时立为储（set_designated_heir，侄非子，生效与否列实测）；公孙五楼 gong_sun_wu_lou、慕容镇 hd_j16_murong_zhen、
+#   韩范 hd_j16_han_fan 是 AI 无地者时入德宫廷。慕容超是玩家：hd_j16.5470 a 南奔（同 AI）/ b 不奔（done、_skip）。慕容德之死仍按卒年表 405.10.1。
+# 变量：hd_j16_chao_heir_done、_result、_skip、_wlog、_asked
+############################################################
+hd_j16_node_chao_heir_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_chao_heir_done } }
+		if = {
+			limit = { current_date >= 405.1.1 }
+			if = {
+				limit = { current_date >= 406.6.2 }
+				set_global_variable = hd_j16_chao_heir_done
+				set_global_variable = hd_j16_chao_heir_skip
+				debug_log = "HD_J16 e5_m55 SKIP window_closed"
+			}
+			else_if = {
+				limit = {
+					OR = {
+						hd_j16_dead_trigger = { ID = changli_murong_028 }
+						hd_j16_dead_trigger = { ID = changli_murong_058 }
+					}
+				}
+				set_global_variable = hd_j16_chao_heir_done
+				set_global_variable = hd_j16_chao_heir_skip
+				debug_log = "HD_J16 e5_m55 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_chao_heir_sides_effect = yes
+				if = {
+					limit = {
+						exists = scope:hd_j16_e5m55_ny
+						exists = scope:hd_j16_e5m55_de
+						scope:hd_j16_e5m55_ny = scope:hd_j16_e5m55_de
+						scope:hd_j16_e5m55_chao ?= {
+							is_landed = no
+							is_imprisoned = no
+						}
+					}
+					scope:hd_j16_e5m55_chao = {
+						if = {
+							limit = { is_ai = yes }
+							hd_j16_chao_heir_effect = yes
+						}
+						else_if = {
+							limit = { NOT = { has_global_variable = hd_j16_chao_heir_asked } }
+							set_global_variable = { name = hd_j16_chao_heir_asked value = yes days = 60 }
+							trigger_event = hd_j16.5470
+							debug_log = "HD_J16 e5_m55 WAIT player_asked"
+						}
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_chao_heir_wlog } }
+					set_global_variable = hd_j16_chao_heir_wlog
+					debug_log = "HD_J16 e5_m55 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+hd_j16_chao_heir_sides_effect = {
+	hd_j16_n1_get_nanyan_ruler_effect = { AS = hd_j16_e5m55_ny }
+	hd_j16_n1_clear_effect = { S = hd_j16_e5m55_de }
+	hd_j16_n1_clear_effect = { S = hd_j16_e5m55_chao }
+	hd_j16_resolve_effect = { ID = changli_murong_028 AS = hd_j16_e5m55_de }
+	hd_j16_resolve_effect = { ID = changli_murong_058 AS = hd_j16_e5m55_chao }
+}
+
+# 执行（AI 慕容超与 hd_j16.5470 a）
+hd_j16_chao_heir_effect = {
+	if = {
+		limit = { has_global_variable = hd_j16_chao_heir_done }
+		debug_log = "HD_J16 e5_m55 SKIP player_late_reply"
+	}
+	else = {
+		hd_j16_chao_heir_sides_effect = yes
+		set_global_variable = hd_j16_chao_heir_done
+		if = {
+			limit = {
+				scope:hd_j16_e5m55_de ?= {
+					is_alive = yes
+					is_landed = yes
+				}
+				scope:hd_j16_e5m55_chao ?= {
+					is_alive = yes
+					is_landed = no
+				}
+			}
+			set_global_variable = hd_j16_chao_heir_result
+			scope:hd_j16_e5m55_chao = {
+				if = {
+					limit = { NOT = { employer ?= scope:hd_j16_e5m55_de } }
+					# 06 E5-M55：先排除议会成员（议员、统治者、在狱者不挪）
+					if = {
+						limit = {
+							is_ruler = no
+							is_imprisoned = no
+							is_councillor = no
+						}
+						scope:hd_j16_e5m55_de = { add_courtier = scope:hd_j16_e5m55_chao }
+					}
+					else = { debug_log = "HD_J16 e5_m55 SKIP chao_councillor_or_ruler" }
+				}
+			}
+			scope:hd_j16_e5m55_de = {
+				if = {
+					limit = {
+						is_ai = yes
+						scope:hd_j16_e5m55_chao = { employer ?= scope:hd_j16_e5m55_de }
+					}
+					set_designated_heir = scope:hd_j16_e5m55_chao
+				}
+			}
+			hd_j16_n1_clear_effect = { S = hd_j16_e5m55_wl }
+			hd_j16_n1_clear_effect = { S = hd_j16_e5m55_zhen }
+			hd_j16_n1_clear_effect = { S = hd_j16_e5m55_fan }
+			hd_j16_resolve_effect = { ID = gong_sun_wu_lou AS = hd_j16_e5m55_wl }
+			hd_j16_resolve_effect = { ID = hd_j16_murong_zhen AS = hd_j16_e5m55_zhen }
+			hd_j16_resolve_effect = { ID = hd_j16_han_fan AS = hd_j16_e5m55_fan }
+			hd_j16_n1_to_court_effect = { WHO = scope:hd_j16_e5m55_wl COURT = scope:hd_j16_e5m55_de }
+			hd_j16_n1_to_court_effect = { WHO = scope:hd_j16_e5m55_zhen COURT = scope:hd_j16_e5m55_de }
+			hd_j16_n1_to_court_effect = { WHO = scope:hd_j16_e5m55_fan COURT = scope:hd_j16_e5m55_de }
+			debug_log = "HD_J16 e5_m55 FIRE chao_heir"
+		}
+		else = {
+			set_global_variable = hd_j16_chao_heir_skip
+			debug_log = "HD_J16 e5_m55 SKIP no_actor"
+		}
+	}
+}
+
+hd_j16_chao_heir_refuse_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_chao_heir_done } }
+		set_global_variable = hd_j16_chao_heir_done
+		set_global_variable = hd_j16_chao_heir_skip
+		debug_log = "HD_J16 e5_m55 SKIP player_refused"
+	}
+}
+
+############################################################
+# E5-T10 魏取并州【闸门 tuobagui_2 / tuobagui_3】（06 §1.3、§3.3）
+# 窗口 396.6.1 – 397.6.1。上游 hd_j16_canhe_done，且慕容垂已死或已过 396.7.1 → 设 tuobagui_2（M10 未设时）；
+#   晋阳 c_uuii_p_351 的 top_liege 是魏主 → 设 tuobagui_3，fire：拓跋仪 1415138 是 AI 无地者时入魏主宫廷（「任将」无现成写法，未做），全体玩家收「晋阳之失」hd_j16.5500。
+# 窗口到期晋阳仍不归魏：照样设两道闸门，done、_skip，记 SKIP gate_opened（06 自拟，防入侵永久卡阶段）。404 前标同样设两道闸门（p5-C 通则）。
+# 变量：hd_j16_wei_bing_done、_result、_skip、_wlog、_jwlog
+############################################################
+hd_j16_node_wei_bing_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_wei_bing_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_wei_bing_done
+			hd_j16_wei_bing_gate_effect = { N = 2 }
+			hd_j16_wei_bing_gate_effect = { N = 3 }
+			debug_log = "HD_J16 e5_t10 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 396.6.1 }
+			if = {
+				limit = { current_date >= 397.6.2 }
+				set_global_variable = hd_j16_wei_bing_done
+				set_global_variable = hd_j16_wei_bing_skip
+				hd_j16_wei_bing_gate_effect = { N = 2 }
+				hd_j16_wei_bing_gate_effect = { N = 3 }
+				debug_log = "HD_J16 e5_t10 SKIP gate_opened"
+			}
+			else_if = {
+				limit = {
+					has_global_variable = hd_j16_canhe_done
+					OR = {
+						hd_j16_dead_trigger = { ID = changli_murong_038 }
+						current_date >= 396.7.1
+					}
+				}
+				hd_j16_wei_bing_gate_effect = { N = 2 }
+				hd_j16_n1_get_wei_ruler_effect = { AS = hd_j16_e5t10_wei }
+				if = {
+					limit = {
+						exists = scope:hd_j16_e5t10_wei
+						title:c_uuii_p_351.holder.top_liege ?= scope:hd_j16_e5t10_wei
+					}
+					set_global_variable = hd_j16_wei_bing_done
+					set_global_variable = hd_j16_wei_bing_result
+					hd_j16_wei_bing_gate_effect = { N = 3 }
+					hd_j16_n1_clear_effect = { S = hd_j16_e5t10_yi }
+					hd_j16_resolve_effect = { ID = 1415138 AS = hd_j16_e5t10_yi }
+					hd_j16_n1_to_court_effect = { WHO = scope:hd_j16_e5t10_yi COURT = scope:hd_j16_e5t10_wei }
+					hd_j16_n1_get_houyan_ruler_effect = { AS = hd_j16_e5t10_yan }
+					hd_j16_n1_news_effect = { A = scope:hd_j16_e5t10_wei B = scope:hd_j16_e5t10_yan EVENT = hd_j16.5500 }
+					debug_log = "HD_J16 e5_t10 FIRE jinyang_taken"
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_wei_bing_jwlog } }
+					set_global_variable = hd_j16_wei_bing_jwlog
+					debug_log = "HD_J16 e5_t10 WAIT jinyang"
+				}
+			}
+			else_if = {
+				limit = { NOT = { has_global_variable = hd_j16_wei_bing_wlog } }
+				set_global_variable = hd_j16_wei_bing_wlog
+				debug_log = "HD_J16 e5_t10 WAIT not_ready"
+			}
+		}
+	}
+}
+
+# 设阶段闸门 hd_j16_hi_gate_tuobagui_$N$（已设则不动）
+hd_j16_wei_bing_gate_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_hi_gate_tuobagui_$N$ } }
+		set_global_variable = hd_j16_hi_gate_tuobagui_$N$
+		debug_log = "HD_J16 e5_t10 FIRE gate_tuobagui_$N$"
+	}
+}
+
+############################################################
+# E5-T20 中山之围（善后）【软】（06 §1.3）
+# 窗口 397.1.1 – 398.6.1。中山 c_uuii_p_407 的 top_liege 是魏主（tuobagui 第 3 阶段由入侵打，本节点只善后）。
+# fire：魏主威望 +300、金 +200（后燕府库）；崔宏 zhongzu_cui_021 是 AI 无地者时入魏主宫廷；慕容麟 changli_murong_044 是 AI 无地者时入慕容德宫廷（德有地时）。
+# 变量：hd_j16_zhongshan_done、_result、_skip、_wlog；面板 hd_hev_j16_zhongshan
+############################################################
+hd_j16_node_zhongshan_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_zhongshan_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_zhongshan_done
+			debug_log = "HD_J16 e5_t20 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 397.1.1 }
+			if = {
+				limit = { current_date >= 398.6.2 }
+				set_global_variable = hd_j16_zhongshan_done
+				set_global_variable = hd_j16_zhongshan_skip
+				debug_log = "HD_J16 e5_t20 SKIP window_closed"
+			}
+			else = {
+				hd_j16_n1_get_wei_ruler_effect = { AS = hd_j16_e5t20_wei }
+				if = {
+					limit = {
+						exists = scope:hd_j16_e5t20_wei
+						title:c_uuii_p_407.holder.top_liege ?= scope:hd_j16_e5t20_wei
+					}
+					set_global_variable = hd_j16_zhongshan_done
+					set_global_variable = hd_j16_zhongshan_result
+					set_global_variable = hd_hev_j16_zhongshan
+					scope:hd_j16_e5t20_wei = {
+						add_prestige = 300
+						add_gold = 200
+					}
+					# 「后燕府库」：燕位之主（龙城一线）是 AI、不是魏主、金 >= 200 时扣 200；玩家燕主或府库不足时不扣
+					hd_j16_n1_get_yanwei_ruler_effect = { AS = hd_j16_e5t20_yan }
+					scope:hd_j16_e5t20_yan ?= {
+						if = {
+							limit = {
+								is_ai = yes
+								NOT = { this = scope:hd_j16_e5t20_wei }
+								gold >= 200
+							}
+							remove_short_term_gold = 200
+						}
+					}
+					hd_j16_n1_clear_effect = { S = hd_j16_e5t20_cui }
+					hd_j16_n1_clear_effect = { S = hd_j16_e5t20_lin }
+					hd_j16_n1_clear_effect = { S = hd_j16_e5t20_de }
+					hd_j16_resolve_effect = { ID = zhongzu_cui_021 AS = hd_j16_e5t20_cui }
+					hd_j16_resolve_effect = { ID = changli_murong_044 AS = hd_j16_e5t20_lin }
+					hd_j16_resolve_effect = { ID = changli_murong_028 AS = hd_j16_e5t20_de }
+					hd_j16_n1_to_court_effect = { WHO = scope:hd_j16_e5t20_cui COURT = scope:hd_j16_e5t20_wei }
+					if = {
+						limit = { exists = scope:hd_j16_e5t20_de }
+						hd_j16_n1_to_court_effect = { WHO = scope:hd_j16_e5t20_lin COURT = scope:hd_j16_e5t20_de }
+					}
+					debug_log = "HD_J16 e5_t20 FIRE zhongshan"
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_zhongshan_wlog } }
+					set_global_variable = hd_j16_zhongshan_wlog
+					debug_log = "HD_J16 e5_t20 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+############################################################
+# E5-T30 魏取邺【战争；新 KIND = weiye，按邺自判】（06 §1.3）
+# 窗口 398.1.1 – 399.6.1。魏主与魏郡 d_weijun 接壤；邺 c_uuii_p_1172 不归魏；守方 = 邺的 top_liege（不是魏主、不是晋天子）；双方未交战。
+# 魏主 AI 出兵；玩家魏主收 hd_j16.5510：a 取邺 / b 不取（done、_skip）。宣战 TARGET = d_weijun；成功给 0.8 万事件兵。
+# 结局：邺归魏一系 → _won；否则 _lost。清 _active。变量：hd_j16_weiye_done、_started、_won、_lost、_skip、_wlog、_asked、_att、_def、_wsf_wlog
+############################################################
+hd_j16_node_weiye_effect = {
+	if = {
+		limit = {
+			has_global_variable = hd_j16_weiye_started
+			NOT = { has_global_variable = hd_j16_weiye_done }
+		}
+		hd_j16_weiye_result_effect = yes
+	}
+	else_if = {
+		limit = { NOT = { has_global_variable = hd_j16_weiye_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_weiye_done
+			debug_log = "HD_J16 e5_t30 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 398.1.1 }
+			if = {
+				limit = { current_date >= 399.6.2 }
+				set_global_variable = hd_j16_weiye_done
+				set_global_variable = hd_j16_weiye_skip
+				debug_log = "HD_J16 e5_t30 SKIP window_closed"
+			}
+			else = {
+				hd_j16_weiye_sides_effect = yes
+				if = {
+					limit = { hd_j16_weiye_ready_trigger = yes }
+					scope:hd_j16_e5t30_wei = {
+						if = {
+							limit = {
+								OR = {
+									is_ai = yes
+									has_global_variable = hd_j16_weiye_go
+								}
+							}
+							hd_j16_weiye_war_effect = yes
+						}
+						else_if = {
+							limit = { NOT = { has_global_variable = hd_j16_weiye_asked } }
+							set_global_variable = { name = hd_j16_weiye_asked value = yes days = 60 }
+							trigger_event = hd_j16.5510
+							debug_log = "HD_J16 e5_t30 WAIT player_asked"
+						}
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_weiye_wlog } }
+					set_global_variable = hd_j16_weiye_wlog
+					debug_log = "HD_J16 e5_t30 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+# 魏主 scope:hd_j16_e5t30_wei、守方（邺的 top_liege）scope:hd_j16_e5t30_def
+hd_j16_weiye_sides_effect = {
+	hd_j16_n1_get_wei_ruler_effect = { AS = hd_j16_e5t30_wei }
+	hd_j16_n1_clear_effect = { S = hd_j16_e5t30_def }
+	title:c_uuii_p_1172.holder.top_liege ?= { save_scope_as = hd_j16_e5t30_def }
+}
+
+hd_j16_weiye_war_effect = {
+	if = {
+		limit = {
+			OR = {
+				has_global_variable = hd_j16_weiye_done
+				has_global_variable = hd_j16_weiye_started
+			}
+		}
+		debug_log = "HD_J16 e5_t30 SKIP player_late_reply"
+	}
+	else = {
+		hd_j16_weiye_sides_effect = yes
+		hd_j16_n1_clear_effect = { S = hd_nbc_war_weiye }
+		if = {
+			limit = { hd_j16_weiye_ready_trigger = yes }
+			hd_nbc_start_war_effect = { ATTACKER = scope:hd_j16_e5t30_wei DEFENDER = scope:hd_j16_e5t30_def TARGET = title:d_weijun KIND = weiye }
+		}
+		if = {
+			limit = { exists = scope:hd_nbc_war_weiye }
+			set_global_variable = hd_j16_weiye_started
+			set_global_variable = { name = hd_j16_weiye_att value = scope:hd_j16_e5t30_wei }
+			set_global_variable = { name = hd_j16_weiye_def value = scope:hd_j16_e5t30_def }
+			hd_j16_n1_front_army_effect = { DUCHY = title:d_weijun SIDE = scope:hd_j16_e5t30_wei WHO = scope:hd_j16_e5t30_wei SIZE = 8000 NAME = hd_j16_n1_army_weiye_name }
+			debug_log = "HD_J16 e5_t30 FIRE war_started"
+		}
+		else_if = {
+			limit = { NOT = { has_global_variable = hd_j16_weiye_wsf_wlog } }
+			set_global_variable = hd_j16_weiye_wsf_wlog
+			debug_log = "HD_J16 e5_t30 WAIT war_start_failed"
+		}
+	}
+}
+
+hd_j16_weiye_refuse_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_weiye_done } }
+		set_global_variable = hd_j16_weiye_done
+		set_global_variable = hd_j16_weiye_skip
+		debug_log = "HD_J16 e5_t30 SKIP player_refused"
+	}
+}
+
+hd_j16_weiye_result_effect = {
+	if = {
+		limit = {
+			NOT = { global_var:hd_j16_weiye_att ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:weiye } } }
+			NOT = { global_var:hd_j16_weiye_def ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:weiye } } }
+		}
+		set_global_variable = hd_j16_weiye_done
+		if = {
+			limit = { has_global_variable = hd_nbc_weiye_active }
+			remove_global_variable = hd_nbc_weiye_active
+		}
+		hd_j16_n1_get_wei_ruler_effect = { AS = hd_j16_e5t30_wei }
+		if = {
+			limit = {
+				title:c_uuii_p_1172.holder ?= {
+					OR = {
+						this = global_var:hd_j16_weiye_att
+						top_liege ?= global_var:hd_j16_weiye_att
+						# 攻方战中身故、由继承人接战：按位置重新解析出的本方之主（不认同王朝的第三方）
+						AND = {
+							exists = scope:hd_j16_e5t30_wei
+							OR = {
+								this = scope:hd_j16_e5t30_wei
+								top_liege ?= scope:hd_j16_e5t30_wei
+							}
+						}
+					}
+				}
+			}
+			set_global_variable = hd_j16_weiye_won
+			debug_log = "HD_J16 e5_t30 FIRE result_won"
+		}
+		else = {
+			set_global_variable = hd_j16_weiye_lost
+			debug_log = "HD_J16 e5_t30 FIRE result_lost"
+		}
+	}
+}
+
+############################################################
+# E5-T40 称帝·迁都平城【称号继统类】（06 §1.3）
+# 窗口 398.6.1 – 399.12.1。魏主独立，平城 c_uuii_p_1265 在其一系。
+# 无分支：称帝（称谓 huangdi，国号魏），改元天兴；AI 魏主迁都平城（须直辖）、崔宏 zhongzu_cui_021 授尚书（非 h_china 政权无朝官，以首席议政 councillor_chancellor 代）。
+#   不在此立储（06：挪到 E5-T60 首步）。变量：hd_j16_wei_di_done、_result、_skip、_wlog
+############################################################
+hd_j16_node_wei_di_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_wei_di_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_wei_di_done
+			debug_log = "HD_J16 e5_t40 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 398.6.1 }
+			if = {
+				limit = { current_date >= 399.12.2 }
+				set_global_variable = hd_j16_wei_di_done
+				set_global_variable = hd_j16_wei_di_skip
+				debug_log = "HD_J16 e5_t40 SKIP window_closed"
+			}
+			else = {
+				hd_j16_n1_get_wei_ruler_effect = { AS = hd_j16_e5t40_wei }
+				if = {
+					limit = {
+						exists = scope:hd_j16_e5t40_wei
+						title:c_uuii_p_1265.holder ?= {
+							OR = {
+								this = scope:hd_j16_e5t40_wei
+								top_liege ?= scope:hd_j16_e5t40_wei
+							}
+						}
+					}
+					set_global_variable = hd_j16_wei_di_done
+					set_global_variable = hd_j16_wei_di_result
+					scope:hd_j16_e5t40_wei = {
+						hd_j16_n1_style_effect = { NAME = dynn_title_wei STYLE = huangdi }
+						hd_j16_n1_change_era_effect = { KEY = tianxing YEAR = 1 }
+					}
+					if = {
+						limit = { scope:hd_j16_e5t40_wei = { is_ai = yes } }
+						hd_j16_n1_move_capital_effect = { WHO = scope:hd_j16_e5t40_wei COUNTY = title:c_uuii_p_1265 TAG = e5_t40 }
+						hd_j16_n1_clear_effect = { S = hd_j16_e5t40_cui }
+						hd_j16_resolve_effect = { ID = zhongzu_cui_021 AS = hd_j16_e5t40_cui }
+						hd_j16_n1_council_effect = { LIEGE = scope:hd_j16_e5t40_wei WHO = scope:hd_j16_e5t40_cui TYPE = councillor_chancellor }
+					}
+					debug_log = "HD_J16 e5_t40 FIRE wei_di"
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_wei_di_wlog } }
+					set_global_variable = hd_j16_wei_di_wlog
+					debug_log = "HD_J16 e5_t40 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+############################################################
+# E5-T50 柴壁之战【边境战；hd_j16_border_cb，只争一县，按所争之县自判】（06 §1.3；p4-A 边境工具）
+# 窗口 402.3.1 – 403.6.1。魏主、后秦主（hd_j16_n1_get_houqin_ruler_effect）都在、未交战，且在平阳 d_pingyang 或河东 d_hedong 接壤
+#   （两郡内有秦一系之县与魏一系之县相邻）。
+# 双方 AI：魏主出兵。玩家魏主收 hd_j16.5520：a 出兵 / b 不出（done、_skip）；魏主 AI 而秦主是玩家：hd_j16.5521 a 迎战（魏主出兵）/ b 遣使求和（done、_skip）。
+# 宣战 hd_j16_border_start_war_effect，先试 TARGET = d_pingyang，不成再试 d_hedong（工具在郡内取一县）；成功双方各 0.8 万事件兵。
+# 结局：所争之县（global_var:hd_j16_border_chaibi_target）归魏一系 → hd_j16_chaibi_wei_won（卒年 PRE：姚平），狄伯支 tianshui_di_001 是 AI 无地者时入魏主宫廷；
+#   否则 _lost。清 hd_nbc_chaibi_active（边境工具不经分发表，节点自清）。
+# 变量：hd_j16_chaibi_done、_started、hd_j16_chaibi_wei_won（PRE）、_lost、_skip、_wlog、_asked、_att、_def、_wsf_wlog；面板 hd_hev_j16_chaibi（开战时）
+############################################################
+hd_j16_node_chaibi_effect = {
+	if = {
+		limit = {
+			has_global_variable = hd_j16_chaibi_started
+			NOT = { has_global_variable = hd_j16_chaibi_done }
+		}
+		hd_j16_chaibi_result_effect = yes
+	}
+	else_if = {
+		limit = { NOT = { has_global_variable = hd_j16_chaibi_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_chaibi_done
+			debug_log = "HD_J16 e5_t50 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 402.3.1 }
+			if = {
+				limit = { current_date >= 403.6.2 }
+				set_global_variable = hd_j16_chaibi_done
+				set_global_variable = hd_j16_chaibi_skip
+				debug_log = "HD_J16 e5_t50 SKIP window_closed"
+			}
+			else = {
+				hd_j16_chaibi_sides_effect = yes
+				if = {
+					limit = { hd_j16_chaibi_ready_trigger = yes }
+					if = {
+						limit = {
+							OR = {
+								has_global_variable = hd_j16_chaibi_go
+								AND = {
+									scope:hd_j16_e5t50_wei = { is_ai = yes }
+									scope:hd_j16_e5t50_qin = { is_ai = yes }
+								}
+							}
+						}
+						hd_j16_chaibi_war_effect = yes
+					}
+					else_if = {
+						limit = {
+							scope:hd_j16_e5t50_wei = { is_ai = no }
+							NOT = { has_global_variable = hd_j16_chaibi_asked }
+						}
+						set_global_variable = { name = hd_j16_chaibi_asked value = yes days = 60 }
+						scope:hd_j16_e5t50_wei = { trigger_event = hd_j16.5520 }
+						debug_log = "HD_J16 e5_t50 WAIT player_asked"
+					}
+					else_if = {
+						limit = {
+							scope:hd_j16_e5t50_wei = { is_ai = yes }
+							NOT = { has_global_variable = hd_j16_chaibi_asked }
+						}
+						set_global_variable = { name = hd_j16_chaibi_asked value = yes days = 60 }
+						scope:hd_j16_e5t50_qin = { trigger_event = hd_j16.5521 }
+						debug_log = "HD_J16 e5_t50 WAIT player_asked_qin"
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_chaibi_wlog } }
+					set_global_variable = hd_j16_chaibi_wlog
+					debug_log = "HD_J16 e5_t50 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+hd_j16_chaibi_sides_effect = {
+	hd_j16_n1_get_wei_ruler_effect = { AS = hd_j16_e5t50_wei }
+	hd_j16_n1_get_houqin_ruler_effect = { AS = hd_j16_e5t50_qin }
+}
+
+hd_j16_chaibi_war_effect = {
+	if = {
+		limit = {
+			OR = {
+				has_global_variable = hd_j16_chaibi_done
+				has_global_variable = hd_j16_chaibi_started
+			}
+		}
+		debug_log = "HD_J16 e5_t50 SKIP player_late_reply"
+	}
+	else = {
+		hd_j16_chaibi_sides_effect = yes
+		if = {
+			limit = { hd_j16_chaibi_ready_trigger = yes }
+			hd_j16_border_start_war_effect = { ATTACKER = scope:hd_j16_e5t50_wei DEFENDER = scope:hd_j16_e5t50_qin TARGET = title:d_pingyang KIND = chaibi }
+			if = {
+				limit = { NOT = { exists = scope:hd_nbc_war_chaibi } }
+				hd_j16_border_start_war_effect = { ATTACKER = scope:hd_j16_e5t50_wei DEFENDER = scope:hd_j16_e5t50_qin TARGET = title:d_hedong KIND = chaibi }
+			}
+		}
+		if = {
+			limit = { exists = scope:hd_nbc_war_chaibi }
+			set_global_variable = hd_j16_chaibi_started
+			set_global_variable = hd_hev_j16_chaibi
+			set_global_variable = { name = hd_j16_chaibi_att value = scope:hd_j16_e5t50_wei }
+			set_global_variable = { name = hd_j16_chaibi_def value = scope:hd_j16_e5t50_qin }
+			# 事件兵按实际所争之县所在的郡布置（边境工具存 hd_j16_border_chaibi_target）；取不到时退平阳
+			hd_j16_n1_clear_effect = { S = hd_j16_e5t50_duchy }
+			global_var:hd_j16_border_chaibi_target ?= {
+				duchy ?= { save_scope_as = hd_j16_e5t50_duchy }
+			}
+			if = {
+				limit = { NOT = { exists = scope:hd_j16_e5t50_duchy } }
+				title:d_pingyang = { save_scope_as = hd_j16_e5t50_duchy }
+			}
+			hd_j16_n1_front_army_effect = { DUCHY = scope:hd_j16_e5t50_duchy SIDE = scope:hd_j16_e5t50_wei WHO = scope:hd_j16_e5t50_wei SIZE = 8000 NAME = hd_j16_n1_army_chaibi_wei_name }
+			hd_j16_n1_front_army_effect = { DUCHY = scope:hd_j16_e5t50_duchy SIDE = scope:hd_j16_e5t50_qin WHO = scope:hd_j16_e5t50_qin SIZE = 8000 NAME = hd_j16_n1_army_chaibi_qin_name }
+			debug_log = "HD_J16 e5_t50 FIRE war_started"
+		}
+		else_if = {
+			limit = { NOT = { has_global_variable = hd_j16_chaibi_wsf_wlog } }
+			set_global_variable = hd_j16_chaibi_wsf_wlog
+			debug_log = "HD_J16 e5_t50 WAIT war_start_failed"
+		}
+	}
+}
+
+hd_j16_chaibi_refuse_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_chaibi_done } }
+		set_global_variable = hd_j16_chaibi_done
+		set_global_variable = hd_j16_chaibi_skip
+		debug_log = "HD_J16 e5_t50 SKIP player_refused"
+	}
+}
+
+hd_j16_chaibi_result_effect = {
+	if = {
+		limit = {
+			NOT = { global_var:hd_j16_chaibi_att ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:chaibi } } }
+			NOT = { global_var:hd_j16_chaibi_def ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:chaibi } } }
+		}
+		set_global_variable = hd_j16_chaibi_done
+		if = {
+			limit = { has_global_variable = hd_nbc_chaibi_active }
+			remove_global_variable = hd_nbc_chaibi_active
+		}
+		hd_j16_n1_get_wei_ruler_effect = { AS = hd_j16_e5t50_wei }
+		if = {
+			limit = {
+				global_var:hd_j16_border_chaibi_target.holder ?= {
+					OR = {
+						this = global_var:hd_j16_chaibi_att
+						top_liege ?= global_var:hd_j16_chaibi_att
+						# 攻方战中身故、由继承人接战：按位置重新解析出的本方之主（不认同王朝的第三方）
+						AND = {
+							exists = scope:hd_j16_e5t50_wei
+							OR = {
+								this = scope:hd_j16_e5t50_wei
+								top_liege ?= scope:hd_j16_e5t50_wei
+							}
+						}
+					}
+				}
+			}
+			set_global_variable = hd_j16_chaibi_wei_won
+			hd_j16_n1_clear_effect = { S = hd_j16_e5t50_di }
+			hd_j16_resolve_effect = { ID = tianshui_di_001 AS = hd_j16_e5t50_di }
+			if = {
+				limit = { exists = scope:hd_j16_e5t50_wei }
+				hd_j16_n1_to_court_effect = { WHO = scope:hd_j16_e5t50_di COURT = scope:hd_j16_e5t50_wei }
+			}
+			debug_log = "HD_J16 e5_t50 FIRE result_won"
+		}
+		else = {
+			set_global_variable = hd_j16_chaibi_lost
+			debug_log = "HD_J16 e5_t50 FIRE result_lost"
+		}
+	}
+}
+
+############################################################
+# E5-T60 拓跋绍之变·明元即位【人事；同一政权内换主】（06 §1.3）
+# 窗口 409.1.1 – 410.6.1（四开局都走心跳）。
+# 首步（窗口一开，只一次）：魏主是拓跋珪 tuoba_011、AI；拓跋嗣 tuoba_013 在世、成年、在珪一系 → set_designated_heir。珪是玩家不改储（只记日志）。
+# 次步：拓跋珪已死（卒年 K 409.11.6，凶手拓跋绍）；拓跋嗣在世：嗣 AI → fire（设 hd_j16_mingyuan_result，卒年 PRE：拓跋绍，凶手拓跋嗣），
+#   主头衔不在嗣手中时换主（TAG = tuobasi；现任是玩家弹 5590）；嗣是玩家：hd_j16.5540 a 入宫诛绍（同 AI）/ b 观望（done、_skip）。
+# 变量：hd_j16_mingyuan_done、_result、_skip、_wlog、_asked、_heir_set、hd_j16_tuobasi_seated、_refused、_abd_asked
+############################################################
+hd_j16_node_mingyuan_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_mingyuan_done } }
+		if = {
+			limit = { current_date >= 409.1.1 }
+			if = {
+				limit = { has_global_variable = hd_j16_tuobasi_seated }
+				set_global_variable = hd_j16_mingyuan_done
+				debug_log = "HD_J16 e5_t60 FIRE mingyuan_enthroned"
+			}
+			else_if = {
+				limit = {
+					OR = {
+						current_date >= 410.6.2
+						has_global_variable = hd_j16_tuobasi_refused
+					}
+				}
+				set_global_variable = hd_j16_mingyuan_done
+				set_global_variable = hd_j16_mingyuan_skip
+				debug_log = "HD_J16 e5_t60 SKIP window_closed"
+			}
+			else_if = {
+				limit = { hd_j16_dead_trigger = { ID = tuoba_013 } }
+				set_global_variable = hd_j16_mingyuan_done
+				set_global_variable = hd_j16_mingyuan_skip
+				debug_log = "HD_J16 e5_t60 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_mingyuan_sides_effect = yes
+				# 首步：立储
+				if = {
+					limit = {
+						NOT = { has_global_variable = hd_j16_mingyuan_heir_set }
+						exists = scope:hd_j16_e5t60_wei
+						exists = scope:hd_j16_e5t60_gui
+						scope:hd_j16_e5t60_wei = scope:hd_j16_e5t60_gui
+						scope:hd_j16_e5t60_si ?= {
+							is_adult = yes
+							hd_j16_n1_in_realm_trigger = { R = scope:hd_j16_e5t60_gui }
+						}
+					}
+					set_global_variable = hd_j16_mingyuan_heir_set
+					scope:hd_j16_e5t60_gui = {
+						if = {
+							limit = { is_ai = yes }
+							set_designated_heir = scope:hd_j16_e5t60_si
+							debug_log = "HD_J16 e5_t60 FIRE heir_set"
+						}
+						else = { debug_log = "HD_J16 e5_t60 SKIP heir_player_ruler" }
+					}
+				}
+				# 次步：珪已死 → 嗣入宫诛绍、即位
+				if = {
+					limit = {
+						hd_j16_dead_trigger = { ID = tuoba_011 }
+						exists = scope:hd_j16_e5t60_wei
+						scope:hd_j16_e5t60_si ?= { is_imprisoned = no }
+					}
+					if = {
+						limit = {
+							OR = {
+								has_global_variable = hd_j16_mingyuan_result
+								scope:hd_j16_e5t60_si = { is_ai = yes }
+							}
+						}
+						hd_j16_mingyuan_fire_effect = yes
+					}
+					else_if = {
+						limit = { NOT = { has_global_variable = hd_j16_mingyuan_asked } }
+						set_global_variable = { name = hd_j16_mingyuan_asked value = yes days = 60 }
+						scope:hd_j16_e5t60_si = { trigger_event = hd_j16.5540 }
+						debug_log = "HD_J16 e5_t60 WAIT player_asked"
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_mingyuan_wlog } }
+					set_global_variable = hd_j16_mingyuan_wlog
+					debug_log = "HD_J16 e5_t60 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+hd_j16_mingyuan_sides_effect = {
+	hd_j16_n1_get_wei_ruler_effect = { AS = hd_j16_e5t60_wei }
+	hd_j16_n1_clear_effect = { S = hd_j16_e5t60_gui }
+	hd_j16_n1_clear_effect = { S = hd_j16_e5t60_si }
+	hd_j16_resolve_effect = { ID = tuoba_011 AS = hd_j16_e5t60_gui }
+	hd_j16_resolve_effect = { ID = tuoba_013 AS = hd_j16_e5t60_si }
+}
+
+# 次步 fire 与换主（节点、hd_j16.5540 a 调用；scope 由调用方或本效果重新解析）
+hd_j16_mingyuan_fire_effect = {
+	if = {
+		limit = { has_global_variable = hd_j16_mingyuan_done }
+		debug_log = "HD_J16 e5_t60 SKIP player_late_reply"
+	}
+	else = {
+		hd_j16_mingyuan_sides_effect = yes
+		if = {
+			limit = { NOT = { has_global_variable = hd_j16_mingyuan_result } }
+			set_global_variable = hd_j16_mingyuan_result
+			debug_log = "HD_J16 e5_t60 FIRE step2"
+		}
+		if = {
+			limit = {
+				exists = scope:hd_j16_e5t60_wei
+				exists = scope:hd_j16_e5t60_si
+			}
+			hd_j16_n1_seat_effect = { CUR = scope:hd_j16_e5t60_wei NEW = scope:hd_j16_e5t60_si TAG = tuobasi LOG = e5_t60 }
+			if = {
+				limit = { has_global_variable = hd_j16_tuobasi_seated }
+				set_global_variable = hd_j16_mingyuan_done
+				debug_log = "HD_J16 e5_t60 FIRE mingyuan_enthroned"
+			}
+		}
+	}
+}
+
+hd_j16_mingyuan_refuse_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_mingyuan_done } }
+		set_global_variable = hd_j16_mingyuan_done
+		set_global_variable = hd_j16_mingyuan_skip
+		debug_log = "HD_J16 e5_t60 SKIP player_refused"
+	}
+}
+
+############################################################
+# E5-Y10 姚崇取洛阳【战争；新 KIND = yaoluo，按洛阳自判】（06 §1.4）
+# 窗口 399.6.1 – 400.12.1。后秦主与河南郡 d_henan 接壤；洛阳 c_luoyang 的 top_liege 是晋天子（h_china 持有者、河内司马氏）；双方未交战。
+# 秦主 AI 出兵；玩家秦主收 hd_j16.5550：a 遣姚崇取洛阳 / b 不取（done、_skip）。开战后晋天子是玩家时收 hd_j16.5551 预警。1 万事件兵。
+# 结局：洛阳归秦一系 → _won；姚崇 shaodang_yao_016 在世、AI、无地、在秦一系时 D16 授河南郡（取自洛阳的 AI 持有者，同一政权内 1 郡）。否则 _lost。
+# 变量：hd_j16_yaoluo_done、_started、_won、_lost、_skip、_wlog、_asked、_att、_def、_wsf_wlog
+############################################################
+hd_j16_node_yaoluo_effect = {
+	if = {
+		limit = {
+			has_global_variable = hd_j16_yaoluo_started
+			NOT = { has_global_variable = hd_j16_yaoluo_done }
+		}
+		hd_j16_yaoluo_result_effect = yes
+	}
+	else_if = {
+		limit = { NOT = { has_global_variable = hd_j16_yaoluo_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_yaoluo_done
+			debug_log = "HD_J16 e5_y10 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 399.6.1 }
+			if = {
+				limit = { current_date >= 400.12.2 }
+				set_global_variable = hd_j16_yaoluo_done
+				set_global_variable = hd_j16_yaoluo_skip
+				debug_log = "HD_J16 e5_y10 SKIP window_closed"
+			}
+			else = {
+				hd_j16_yaoluo_sides_effect = yes
+				if = {
+					limit = { hd_j16_yaoluo_ready_trigger = yes }
+					scope:hd_j16_e5y10_qin = {
+						if = {
+							limit = {
+								OR = {
+									is_ai = yes
+									has_global_variable = hd_j16_yaoluo_go
+								}
+							}
+							hd_j16_yaoluo_war_effect = yes
+						}
+						else_if = {
+							limit = { NOT = { has_global_variable = hd_j16_yaoluo_asked } }
+							set_global_variable = { name = hd_j16_yaoluo_asked value = yes days = 60 }
+							trigger_event = hd_j16.5550
+							debug_log = "HD_J16 e5_y10 WAIT player_asked"
+						}
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_yaoluo_wlog } }
+					set_global_variable = hd_j16_yaoluo_wlog
+					debug_log = "HD_J16 e5_y10 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+# 秦主 scope:hd_j16_e5y10_qin、晋天子 scope:hd_j16_e5y10_jin
+hd_j16_yaoluo_sides_effect = {
+	hd_j16_n1_get_houqin_ruler_effect = { AS = hd_j16_e5y10_qin }
+	hd_j16_n1_clear_effect = { S = hd_j16_e5y10_jin }
+	title:h_china.holder ?= {
+		if = {
+			limit = { house ?= house:henei_sima }
+			save_scope_as = hd_j16_e5y10_jin
+		}
+	}
+}
+
+hd_j16_yaoluo_war_effect = {
+	if = {
+		limit = {
+			OR = {
+				has_global_variable = hd_j16_yaoluo_done
+				has_global_variable = hd_j16_yaoluo_started
+			}
+		}
+		debug_log = "HD_J16 e5_y10 SKIP player_late_reply"
+	}
+	else = {
+		hd_j16_yaoluo_sides_effect = yes
+		hd_j16_n1_clear_effect = { S = hd_nbc_war_yaoluo }
+		if = {
+			limit = { hd_j16_yaoluo_ready_trigger = yes }
+			hd_nbc_start_war_effect = { ATTACKER = scope:hd_j16_e5y10_qin DEFENDER = scope:hd_j16_e5y10_jin TARGET = title:d_henan KIND = yaoluo }
+		}
+		if = {
+			limit = { exists = scope:hd_nbc_war_yaoluo }
+			set_global_variable = hd_j16_yaoluo_started
+			set_global_variable = { name = hd_j16_yaoluo_att value = scope:hd_j16_e5y10_qin }
+			set_global_variable = { name = hd_j16_yaoluo_def value = scope:hd_j16_e5y10_jin }
+			hd_j16_n1_front_army_effect = { DUCHY = title:d_henan SIDE = scope:hd_j16_e5y10_qin WHO = scope:hd_j16_e5y10_qin SIZE = 10000 NAME = hd_j16_n1_army_yaoluo_name }
+			scope:hd_j16_e5y10_jin = {
+				if = {
+					limit = { is_ai = no }
+					trigger_event = hd_j16.5551
+				}
+			}
+			debug_log = "HD_J16 e5_y10 FIRE war_started"
+		}
+		else_if = {
+			limit = { NOT = { has_global_variable = hd_j16_yaoluo_wsf_wlog } }
+			set_global_variable = hd_j16_yaoluo_wsf_wlog
+			debug_log = "HD_J16 e5_y10 WAIT war_start_failed"
+		}
+	}
+}
+
+hd_j16_yaoluo_refuse_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_yaoluo_done } }
+		set_global_variable = hd_j16_yaoluo_done
+		set_global_variable = hd_j16_yaoluo_skip
+		debug_log = "HD_J16 e5_y10 SKIP player_refused"
+	}
+}
+
+hd_j16_yaoluo_result_effect = {
+	if = {
+		limit = {
+			NOT = { global_var:hd_j16_yaoluo_att ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:yaoluo } } }
+			NOT = { global_var:hd_j16_yaoluo_def ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:yaoluo } } }
+		}
+		set_global_variable = hd_j16_yaoluo_done
+		if = {
+			limit = { has_global_variable = hd_nbc_yaoluo_active }
+			remove_global_variable = hd_nbc_yaoluo_active
+		}
+		hd_j16_n1_get_houqin_ruler_effect = { AS = hd_j16_e5y10_qin }
+		if = {
+			limit = {
+				title:c_luoyang.holder ?= {
+					OR = {
+						this = global_var:hd_j16_yaoluo_att
+						top_liege ?= global_var:hd_j16_yaoluo_att
+						# 攻方战中身故、由继承人接战：按位置重新解析出的本方之主（不认同王朝的第三方）
+						AND = {
+							exists = scope:hd_j16_e5y10_qin
+							OR = {
+								this = scope:hd_j16_e5y10_qin
+								top_liege ?= scope:hd_j16_e5y10_qin
+							}
+						}
+					}
+				}
+			}
+			set_global_variable = hd_j16_yaoluo_won
+			hd_j16_n1_get_houqin_ruler_effect = { AS = hd_j16_e5y10_qin }
+			hd_j16_n1_clear_effect = { S = hd_j16_e5y10_chong }
+			hd_j16_n1_clear_effect = { S = hd_j16_e5y10_from }
+			hd_j16_resolve_effect = { ID = shaodang_yao_016 AS = hd_j16_e5y10_chong }
+			title:c_luoyang.holder ?= { save_scope_as = hd_j16_e5y10_from }
+			if = {
+				limit = {
+					exists = scope:hd_j16_e5y10_qin
+					exists = scope:hd_j16_e5y10_from
+					scope:hd_j16_e5y10_chong ?= {
+						is_ai = yes
+						is_landed = no
+						is_imprisoned = no
+						hd_j16_n1_in_realm_trigger = { R = scope:hd_j16_e5y10_qin }
+					}
+				}
+				hd_j16_n1_grant_duchy_effect = { DUCHY = title:d_henan FROM = scope:hd_j16_e5y10_from TO = scope:hd_j16_e5y10_chong LIEGE = scope:hd_j16_e5y10_qin TAG = e5_y10 TYPE = granted }
+			}
+			debug_log = "HD_J16 e5_y10 FIRE result_won"
+		}
+		else = {
+			set_global_variable = hd_j16_yaoluo_lost
+			debug_log = "HD_J16 e5_y10 FIRE result_lost"
+		}
+	}
+}
+
+############################################################
+# E5-Y20 乞伏乾归降秦【战争 + 称藩；新 KIND = xiqin，按所攻之郡首府自判；A6-F9 称藩保留封地】（06 §1.4）
+# 2026-10-28 boki：开战改走吞并 CB（hd_tb_annex_start_war_effect），秦胜即全取西秦；战后把西秦主原首府所在郡封还给他作秦臣（史实河州刺史），
+#   E5-X62 乾归复国照旧。战前玩家选降秦（5561 a）仍是称藩。
+# 窗口 400.5.1 – 401.6.1。后秦主与西秦之主接壤、未交战。西秦之主：乞伏乾归 qifu_008，不是有地独立的乞伏氏时改取乞伏炽磐 qifu_010。
+# 西秦主是玩家：hd_j16.5561 a 降秦（当即称藩，done）/ b 拒之（开战）。否则秦主是玩家：hd_j16.5560 a 遣姚硕德伐之 / b 不伐（done、_skip）。双方 AI：开战。
+# 宣战 TARGET = 西秦主首府县所在郡（存 global_var:hd_j16_qifu_tgt）。结局：该郡首府县归秦一系 → _won，西秦主 AI 则称藩（hd_j16_n1_vassalize_effect），
+#   玩家则收 hd_j16.5562 a 称藩 / b 不从；否则 _lost。称藩成功另设 hd_j16_qifu_vassal（N2 E5-X62 只读 done，不读它）。
+# 变量：hd_j16_qifu_done（降附、开战未降、到期、前标都设）、_started、_won、_lost、_vassal、_skip、_wlog、_asked、_att、_def、_tgt、_wsf_wlog
+############################################################
+hd_j16_node_qifu_effect = {
+	if = {
+		limit = {
+			has_global_variable = hd_j16_qifu_started
+			NOT = { has_global_variable = hd_j16_qifu_done }
+		}
+		hd_j16_qifu_result_effect = yes
+	}
+	else_if = {
+		limit = { NOT = { has_global_variable = hd_j16_qifu_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_qifu_done
+			debug_log = "HD_J16 e5_y20 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 400.5.1 }
+			if = {
+				limit = { current_date >= 401.6.2 }
+				set_global_variable = hd_j16_qifu_done
+				set_global_variable = hd_j16_qifu_skip
+				debug_log = "HD_J16 e5_y20 SKIP window_closed"
+			}
+			else = {
+				hd_j16_qifu_sides_effect = yes
+				if = {
+					limit = { hd_j16_n1_vassal_war_ready_trigger = { A = scope:hd_j16_e5y20_qin B = scope:hd_j16_e5y20_xq } }
+					if = {
+						limit = { has_global_variable = hd_j16_qifu_go }
+						hd_j16_qifu_war_effect = yes
+					}
+					else_if = {
+						limit = { scope:hd_j16_e5y20_xq = { is_ai = no } }
+						if = {
+							limit = { NOT = { has_global_variable = hd_j16_qifu_asked } }
+							set_global_variable = { name = hd_j16_qifu_asked value = yes days = 60 }
+							scope:hd_j16_e5y20_xq = { trigger_event = hd_j16.5561 }
+							debug_log = "HD_J16 e5_y20 WAIT player_asked_xiqin"
+						}
+					}
+					else_if = {
+						limit = { scope:hd_j16_e5y20_qin = { is_ai = no } }
+						if = {
+							limit = { NOT = { has_global_variable = hd_j16_qifu_asked } }
+							set_global_variable = { name = hd_j16_qifu_asked value = yes days = 60 }
+							scope:hd_j16_e5y20_qin = { trigger_event = hd_j16.5560 }
+							debug_log = "HD_J16 e5_y20 WAIT player_asked_qin"
+						}
+					}
+					else = { hd_j16_qifu_war_effect = yes }
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_qifu_wlog } }
+					set_global_variable = hd_j16_qifu_wlog
+					debug_log = "HD_J16 e5_y20 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+# 秦主 scope:hd_j16_e5y20_qin、西秦主 scope:hd_j16_e5y20_xq。西秦主先按位置（06 §0.1-4）：枹罕 → 金城郡首府 → 陇西郡首府，取其 top_liege
+#   （独立、乞伏氏；头衔与 6-N2 hd_j16_n2_get_xiqin_ruler_effect 一致，但本路位置优先、N2 是 ID 优先）；取不到再退回乾归，再炽磐（须有地、独立、乞伏氏）
+hd_j16_n1_xiqin_try_effect = {
+	if = {
+		limit = { NOT = { exists = scope:hd_j16_e5y20_xq } }
+		$T$ ?= {
+			if = {
+				limit = {
+					is_landed = yes
+					is_independent_ruler = yes
+					dynasty ?= dynasty:qifu
+				}
+				save_scope_as = hd_j16_e5y20_xq
+			}
+		}
+	}
+}
+hd_j16_qifu_sides_effect = {
+	hd_j16_n1_get_houqin_ruler_effect = { AS = hd_j16_e5y20_qin }
+	hd_j16_n1_clear_effect = { S = hd_j16_e5y20_xq }
+	hd_j16_n1_xiqin_try_effect = { T = title:c_uuii_p_3062.holder.top_liege }
+	hd_j16_n1_xiqin_try_effect = { T = title:d_jincheng.title_capital_county.holder.top_liege }
+	hd_j16_n1_xiqin_try_effect = { T = title:d_longxi.title_capital_county.holder.top_liege }
+	if = {
+		limit = { NOT = { exists = scope:hd_j16_e5y20_xq } }
+		hd_j16_resolve_effect = { ID = qifu_008 AS = hd_j16_e5y20_xq }
+	}
+	if = {
+		limit = {
+			exists = scope:hd_j16_e5y20_xq
+			scope:hd_j16_e5y20_xq = {
+				NOT = {
+					AND = {
+						is_landed = yes
+						is_independent_ruler = yes
+						dynasty ?= dynasty:qifu
+					}
+				}
+			}
+		}
+		clear_saved_scope = hd_j16_e5y20_xq
+	}
+	if = {
+		limit = { NOT = { exists = scope:hd_j16_e5y20_xq } }
+		hd_j16_resolve_effect = { ID = qifu_010 AS = hd_j16_e5y20_xq }
+		if = {
+			limit = {
+				exists = scope:hd_j16_e5y20_xq
+				scope:hd_j16_e5y20_xq = {
+					NOT = {
+						AND = {
+							is_landed = yes
+							is_independent_ruler = yes
+							dynasty ?= dynasty:qifu
+						}
+					}
+				}
+			}
+			clear_saved_scope = hd_j16_e5y20_xq
+		}
+	}
+}
+
+# 开战（双方 AI 的节点、5560 a、5561 b 调用）
+hd_j16_qifu_war_effect = {
+	if = {
+		limit = {
+			OR = {
+				has_global_variable = hd_j16_qifu_done
+				has_global_variable = hd_j16_qifu_started
+			}
+		}
+		debug_log = "HD_J16 e5_y20 SKIP player_late_reply"
+	}
+	else = {
+		hd_j16_qifu_sides_effect = yes
+		hd_j16_n1_clear_effect = { S = hd_nbc_war_xiqin }
+		hd_j16_n1_clear_effect = { S = hd_j16_e5y20_tgt }
+		if = {
+			limit = { exists = scope:hd_j16_e5y20_xq }
+			scope:hd_j16_e5y20_xq.capital_county.duchy ?= { save_scope_as = hd_j16_e5y20_tgt }
+		}
+		if = {
+			limit = {
+				exists = scope:hd_j16_e5y20_tgt
+				hd_j16_n1_vassal_war_ready_trigger = { A = scope:hd_j16_e5y20_qin B = scope:hd_j16_e5y20_xq }
+			}
+			hd_tb_annex_start_war_effect = { ATTACKER = scope:hd_j16_e5y20_qin DEFENDER = scope:hd_j16_e5y20_xq KIND = xiqin }	# 吞并 CB，胜即全取西秦（boki 10-28）
+		}
+		if = {
+			limit = { exists = scope:hd_nbc_war_xiqin }
+			set_global_variable = hd_j16_qifu_started
+			set_global_variable = { name = hd_j16_qifu_att value = scope:hd_j16_e5y20_qin }
+			set_global_variable = { name = hd_j16_qifu_def value = scope:hd_j16_e5y20_xq }
+			set_global_variable = { name = hd_j16_qifu_tgt value = scope:hd_j16_e5y20_tgt }
+			debug_log = "HD_J16 e5_y20 FIRE war_started"
+		}
+		else_if = {
+			limit = { NOT = { has_global_variable = hd_j16_qifu_wsf_wlog } }
+			set_global_variable = hd_j16_qifu_wsf_wlog
+			debug_log = "HD_J16 e5_y20 WAIT war_start_failed"
+		}
+	}
+}
+
+# 称藩（5561 a 战前、5562 a 战后、AI 战败）：西秦主改投秦主。Root：不限（自己解析）
+hd_j16_qifu_submit_effect = {
+	if = {
+		limit = { has_global_variable = hd_j16_qifu_vassal }
+		debug_log = "HD_J16 e5_y20 SKIP player_late_reply"
+	}
+	else = {
+		hd_j16_qifu_sides_effect = yes
+		if = {
+			limit = { NOT = { has_global_variable = hd_j16_qifu_started } }
+			set_global_variable = hd_j16_qifu_done
+		}
+		if = {
+			limit = {
+				exists = scope:hd_j16_e5y20_qin
+				exists = scope:hd_j16_e5y20_xq
+			}
+			hd_j16_n1_vassalize_effect = { VASSAL = scope:hd_j16_e5y20_xq LIEGE = scope:hd_j16_e5y20_qin TAG = e5_y20 }
+			if = {
+				limit = { scope:hd_j16_e5y20_xq = { liege ?= scope:hd_j16_e5y20_qin } }
+				set_global_variable = hd_j16_qifu_vassal
+				debug_log = "HD_J16 e5_y20 FIRE submitted"
+			}
+		}
+		else = { debug_log = "HD_J16 e5_y20 SKIP submit_no_actor" }
+	}
+}
+
+# 玩家秦主 b：不伐（5560 b）；玩家西秦主 5562 b 不从只记日志
+hd_j16_qifu_refuse_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_qifu_done } }
+		set_global_variable = hd_j16_qifu_done
+		set_global_variable = hd_j16_qifu_skip
+		debug_log = "HD_J16 e5_y20 SKIP player_refused"
+	}
+}
+
+hd_j16_qifu_result_effect = {
+	if = {
+		limit = {
+			NOT = { global_var:hd_j16_qifu_att ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:xiqin } } }
+			NOT = { global_var:hd_j16_qifu_def ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:xiqin } } }
+		}
+		set_global_variable = hd_j16_qifu_done
+		if = {
+			limit = { has_global_variable = hd_nbc_xiqin_active }
+			remove_global_variable = hd_nbc_xiqin_active
+		}
+		hd_j16_n1_get_houqin_ruler_effect = { AS = hd_j16_e5y20_qin }
+		if = {
+			limit = {
+				global_var:hd_j16_qifu_tgt.title_capital_county.holder ?= {
+					OR = {
+						this = global_var:hd_j16_qifu_att
+						top_liege ?= global_var:hd_j16_qifu_att
+						# 攻方战中身故、由继承人接战：按位置重新解析出的本方之主（不认同王朝的第三方）
+						AND = {
+							exists = scope:hd_j16_e5y20_qin
+							OR = {
+								this = scope:hd_j16_e5y20_qin
+								top_liege ?= scope:hd_j16_e5y20_qin
+							}
+						}
+					}
+				}
+			}
+			set_global_variable = hd_j16_qifu_won
+			global_var:hd_j16_qifu_def ?= {
+				if = {
+					limit = {
+						is_alive = yes
+						is_landed = yes
+						is_independent_ruler = yes
+					}
+					if = {
+						limit = { is_ai = yes }
+						hd_j16_qifu_submit_effect = yes
+					}
+					else = { trigger_event = hd_j16.5562 }
+				}
+				# 2026-10-28 吞并全取后西秦主已无地：把原首府所在郡（开战时存的目标郡）封还给他作秦臣（史实降秦后为河州刺史），E5-X62 才能复国
+				else_if = {
+					limit = {
+						is_alive = yes
+						is_landed = no
+						is_imprisoned = no
+						global_var:hd_j16_qifu_att ?= { is_alive = yes is_landed = yes }
+					}
+					save_scope_as = hd_j16_e5y20_regrant
+					hd_j16_n1_grant_duchy_effect = { DUCHY = global_var:hd_j16_qifu_tgt FROM = global_var:hd_j16_qifu_att TO = scope:hd_j16_e5y20_regrant LIEGE = global_var:hd_j16_qifu_att TAG = e5_y20 TYPE = granted }
+					if = {
+						limit = { scope:hd_j16_e5y20_regrant = { liege ?= global_var:hd_j16_qifu_att } }
+						set_global_variable = hd_j16_qifu_vassal
+						debug_log = "HD_J16 e5_y20 FIRE regranted_as_vassal"
+					}
+					else = { debug_log = "HD_J16 e5_y20 SKIP regrant_failed" }
+				}
+			}
+			debug_log = "HD_J16 e5_y20 FIRE result_won"
+		}
+		else = {
+			set_global_variable = hd_j16_qifu_lost
+			debug_log = "HD_J16 e5_y20 FIRE result_lost"
+		}
+	}
+}
+
+############################################################
+# E5-Y30 后凉称藩·吕隆入长安【战争 + 称藩，新 KIND = houliang；后续收姑臧】（06 §1.4）
+# 2026-10-28 boki：开战改走吞并 CB，秦胜即全取后凉；吕隆无地即入秦主宫廷，乙段「收姑臧」视为已成、直接进王尚受郡。战前玩家选降仍是称藩。
+# 甲段（窗口 401.6.1 – 404.1.1）：上游 E5-X42 已 done（hd_j16_lvlong_done，6-N2 设；或已过 401.12.1）；后秦主与后凉之主接壤、未交战。后凉之主：姑臧 c_uuii_p_1564 的 top_liege（独立、dynasty:lueyang_lv_dyn），取不到再试吕隆 lueyang_lv_014。
+#   「战 / 降」同 E5-Y20：后凉主是玩家 hd_j16.5571 a 降 / b 拒之；秦主是玩家 hd_j16.5570 a 伐 / b 不伐；战胜后玩家后凉主 hd_j16.5572 a 称藩 / b 不从。
+#   甲段 done：hd_j16_houliang_done；称藩成功 hd_j16_houliang_vassal。
+# 乙段（403.1.1 – 404.1.1，甲段 done 之后）：吕隆是 AI、为后秦一系之臣、直辖姑臧，且北凉（沮渠氏）或南凉（秃发氏）与武威郡 d_wuwei 接壤 →
+#   武威郡收归秦主直辖（同一政权内 1 郡），吕隆无地后入秦主宫廷；下一跳王尚 jingzhao_wang_016 是 AI 无地者时 D16 授武威郡作凉州刺史。
+#   乙段 done：hd_j16_houliang_end_done（前标、到期也设）；王尚受郡设 hd_j16_houliang_end_result。
+# 变量：hd_j16_houliang_done、_started、_won、_lost、_vassal、_skip、_wlog、_asked、_att、_def、_tgt、_wsf_wlog、hd_j16_houliang_b1、
+#   hd_j16_houliang_end_done、_end_result、_end_skip、_end_wlog
+############################################################
+hd_j16_node_houliang_effect = {
+	if = {
+		limit = {
+			has_global_variable = hd_j16_houliang_started
+			NOT = { has_global_variable = hd_j16_houliang_done }
+		}
+		hd_j16_houliang_result_effect = yes
+	}
+	else_if = {
+		limit = { NOT = { has_global_variable = hd_j16_houliang_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 404 }
+			set_global_variable = hd_j16_houliang_done
+			set_global_variable = hd_j16_houliang_end_done
+			debug_log = "HD_J16 e5_y30 SKIP prestart"
+		}
+		else_if = {
+			limit = { current_date >= 401.6.1 }
+			if = {
+				limit = { current_date >= 404.1.2 }
+				set_global_variable = hd_j16_houliang_done
+				set_global_variable = hd_j16_houliang_skip
+				debug_log = "HD_J16 e5_y30 SKIP window_closed"
+			}
+			else = {
+				hd_j16_houliang_sides_effect = yes
+				if = {
+					limit = {
+						# 上游 E5-X42 吕超弑纂·立吕隆（6-N2 设 hd_j16_lvlong_done）；不阻塞：过其止日 401.12.1 后照常
+						OR = {
+							has_global_variable = hd_j16_lvlong_done
+							current_date >= 401.12.2
+						}
+						hd_j16_n1_vassal_war_ready_trigger = { A = scope:hd_j16_e5y30_qin B = scope:hd_j16_e5y30_hl }
+					}
+					if = {
+						limit = { has_global_variable = hd_j16_houliang_go }
+						hd_j16_houliang_war_effect = yes
+					}
+					else_if = {
+						limit = { scope:hd_j16_e5y30_hl = { is_ai = no } }
+						if = {
+							limit = { NOT = { has_global_variable = hd_j16_houliang_asked } }
+							set_global_variable = { name = hd_j16_houliang_asked value = yes days = 60 }
+							scope:hd_j16_e5y30_hl = { trigger_event = hd_j16.5571 }
+							debug_log = "HD_J16 e5_y30 WAIT player_asked_houliang"
+						}
+					}
+					else_if = {
+						limit = { scope:hd_j16_e5y30_qin = { is_ai = no } }
+						if = {
+							limit = { NOT = { has_global_variable = hd_j16_houliang_asked } }
+							set_global_variable = { name = hd_j16_houliang_asked value = yes days = 60 }
+							scope:hd_j16_e5y30_qin = { trigger_event = hd_j16.5570 }
+							debug_log = "HD_J16 e5_y30 WAIT player_asked_qin"
+						}
+					}
+					else = { hd_j16_houliang_war_effect = yes }
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_houliang_wlog } }
+					set_global_variable = hd_j16_houliang_wlog
+					debug_log = "HD_J16 e5_y30 WAIT not_ready"
+				}
+			}
+		}
+	}
+	# 乙段：收姑臧、授王尚
+	else_if = {
+		limit = { NOT = { has_global_variable = hd_j16_houliang_end_done } }
+		if = {
+			limit = { current_date >= 404.1.2 }
+			set_global_variable = hd_j16_houliang_end_done
+			set_global_variable = hd_j16_houliang_end_skip
+			debug_log = "HD_J16 e5_y30 SKIP end_window_closed"
+		}
+		else_if = {
+			limit = { current_date >= 403.1.1 }
+			hd_j16_houliang_end_sides_effect = yes
+			if = {
+				limit = { NOT = { has_global_variable = hd_j16_houliang_b1 } }
+				if = {
+					limit = {
+						exists = scope:hd_j16_e5y30_qin
+						scope:hd_j16_e5y30_long ?= {
+							is_ai = yes
+							is_landed = yes
+							is_independent_ruler = no
+							top_liege ?= scope:hd_j16_e5y30_qin
+						}
+						title:c_uuii_p_1564.holder ?= scope:hd_j16_e5y30_long
+						title:d_wuwei = {
+							any_de_jure_county = {
+								any_neighboring_county = {
+									holder ?= {
+										top_liege ?= {
+											OR = {
+												dynasty ?= dynasty:juqu
+												dynasty ?= dynasty:tufa
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+					set_global_variable = hd_j16_houliang_b1
+					hd_j16_n1_grant_duchy_effect = { DUCHY = title:d_wuwei FROM = scope:hd_j16_e5y30_long TO = scope:hd_j16_e5y30_qin LIEGE = scope:hd_j16_e5y30_qin TAG = e5_y30 TYPE = revoked }
+					scope:hd_j16_e5y30_long = {
+						if = {
+							limit = {
+								is_alive = yes
+								is_landed = no
+							}
+							hd_j16_n1_to_court_effect = { WHO = scope:hd_j16_e5y30_long COURT = scope:hd_j16_e5y30_qin }
+						}
+					}
+					debug_log = "HD_J16 e5_y30 FIRE guzang_taken"
+				}
+				# 2026-10-28 吞并战已全取后凉：姑臧已在秦主一系，收姑臧视为已成，下一跳授王尚
+				else_if = {
+					limit = {
+						has_global_variable = hd_j16_houliang_won
+						exists = scope:hd_j16_e5y30_qin
+						title:c_uuii_p_1564.holder ?= {
+							OR = {
+								this = scope:hd_j16_e5y30_qin
+								top_liege ?= scope:hd_j16_e5y30_qin
+							}
+						}
+					}
+					set_global_variable = hd_j16_houliang_b1
+					hd_j16_n1_to_court_effect = { WHO = scope:hd_j16_e5y30_long COURT = scope:hd_j16_e5y30_qin }
+					debug_log = "HD_J16 e5_y30 FIRE guzang_already_annexed"
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_houliang_end_wlog } }
+					set_global_variable = hd_j16_houliang_end_wlog
+					debug_log = "HD_J16 e5_y30 WAIT end_not_ready"
+				}
+			}
+			else = {
+				set_global_variable = hd_j16_houliang_end_done
+				if = {
+					limit = {
+						exists = scope:hd_j16_e5y30_qin
+						scope:hd_j16_e5y30_qin = { is_ai = yes }
+						title:c_uuii_p_1564.holder ?= scope:hd_j16_e5y30_qin
+						scope:hd_j16_e5y30_shang ?= {
+							is_ai = yes
+							is_landed = no
+							is_imprisoned = no
+						}
+					}
+					set_global_variable = hd_j16_houliang_end_result
+					hd_j16_n1_grant_duchy_effect = { DUCHY = title:d_wuwei FROM = scope:hd_j16_e5y30_qin TO = scope:hd_j16_e5y30_shang LIEGE = scope:hd_j16_e5y30_qin TAG = e5_y30 TYPE = granted }
+					debug_log = "HD_J16 e5_y30 FIRE wangshang_guzang"
+				}
+				else = { debug_log = "HD_J16 e5_y30 SKIP wangshang_unavailable" }
+			}
+		}
+	}
+}
+
+# 秦主 scope:hd_j16_e5y30_qin、后凉主 scope:hd_j16_e5y30_hl
+hd_j16_houliang_sides_effect = {
+	hd_j16_n1_get_houqin_ruler_effect = { AS = hd_j16_e5y30_qin }
+	hd_j16_n1_clear_effect = { S = hd_j16_e5y30_hl }
+	title:c_uuii_p_1564.holder.top_liege ?= {
+		if = {
+			limit = {
+				is_independent_ruler = yes
+				dynasty ?= dynasty:lueyang_lv_dyn
+			}
+			save_scope_as = hd_j16_e5y30_hl
+		}
+	}
+	if = {
+		limit = { NOT = { exists = scope:hd_j16_e5y30_hl } }
+		hd_j16_resolve_effect = { ID = lueyang_lv_014 AS = hd_j16_e5y30_hl }
+		if = {
+			limit = {
+				exists = scope:hd_j16_e5y30_hl
+				scope:hd_j16_e5y30_hl = {
+					NOT = {
+						AND = {
+							is_landed = yes
+							is_independent_ruler = yes
+						}
+					}
+				}
+			}
+			clear_saved_scope = hd_j16_e5y30_hl
+		}
+	}
+}
+
+# 乙段：秦主、吕隆、王尚
+hd_j16_houliang_end_sides_effect = {
+	hd_j16_n1_get_houqin_ruler_effect = { AS = hd_j16_e5y30_qin }
+	hd_j16_n1_clear_effect = { S = hd_j16_e5y30_long }
+	hd_j16_n1_clear_effect = { S = hd_j16_e5y30_shang }
+	hd_j16_resolve_effect = { ID = lueyang_lv_014 AS = hd_j16_e5y30_long }
+	hd_j16_resolve_effect = { ID = jingzhao_wang_016 AS = hd_j16_e5y30_shang }
+}
+
+hd_j16_houliang_war_effect = {
+	if = {
+		limit = {
+			OR = {
+				has_global_variable = hd_j16_houliang_done
+				has_global_variable = hd_j16_houliang_started
+			}
+		}
+		debug_log = "HD_J16 e5_y30 SKIP player_late_reply"
+	}
+	else = {
+		hd_j16_houliang_sides_effect = yes
+		hd_j16_n1_clear_effect = { S = hd_nbc_war_houliang }
+		hd_j16_n1_clear_effect = { S = hd_j16_e5y30_tgt }
+		if = {
+			limit = { exists = scope:hd_j16_e5y30_hl }
+			scope:hd_j16_e5y30_hl.capital_county.duchy ?= { save_scope_as = hd_j16_e5y30_tgt }
+		}
+		if = {
+			limit = {
+				exists = scope:hd_j16_e5y30_tgt
+				hd_j16_n1_vassal_war_ready_trigger = { A = scope:hd_j16_e5y30_qin B = scope:hd_j16_e5y30_hl }
+			}
+			hd_tb_annex_start_war_effect = { ATTACKER = scope:hd_j16_e5y30_qin DEFENDER = scope:hd_j16_e5y30_hl KIND = houliang }	# 吞并 CB，胜即全取后凉（boki 10-28）
+		}
+		if = {
+			limit = { exists = scope:hd_nbc_war_houliang }
+			set_global_variable = hd_j16_houliang_started
+			set_global_variable = { name = hd_j16_houliang_att value = scope:hd_j16_e5y30_qin }
+			set_global_variable = { name = hd_j16_houliang_def value = scope:hd_j16_e5y30_hl }
+			set_global_variable = { name = hd_j16_houliang_tgt value = scope:hd_j16_e5y30_tgt }
+			debug_log = "HD_J16 e5_y30 FIRE war_started"
+		}
+		else_if = {
+			limit = { NOT = { has_global_variable = hd_j16_houliang_wsf_wlog } }
+			set_global_variable = hd_j16_houliang_wsf_wlog
+			debug_log = "HD_J16 e5_y30 WAIT war_start_failed"
+		}
+	}
+}
+
+hd_j16_houliang_submit_effect = {
+	if = {
+		limit = { has_global_variable = hd_j16_houliang_vassal }
+		debug_log = "HD_J16 e5_y30 SKIP player_late_reply"
+	}
+	else = {
+		hd_j16_houliang_sides_effect = yes
+		if = {
+			limit = { NOT = { has_global_variable = hd_j16_houliang_started } }
+			set_global_variable = hd_j16_houliang_done
+		}
+		if = {
+			limit = {
+				exists = scope:hd_j16_e5y30_qin
+				exists = scope:hd_j16_e5y30_hl
+			}
+			hd_j16_n1_vassalize_effect = { VASSAL = scope:hd_j16_e5y30_hl LIEGE = scope:hd_j16_e5y30_qin TAG = e5_y30 }
+			if = {
+				limit = { scope:hd_j16_e5y30_hl = { liege ?= scope:hd_j16_e5y30_qin } }
+				set_global_variable = hd_j16_houliang_vassal
+				debug_log = "HD_J16 e5_y30 FIRE submitted"
+			}
+		}
+		else = { debug_log = "HD_J16 e5_y30 SKIP submit_no_actor" }
+	}
+}
+
+hd_j16_houliang_refuse_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_houliang_done } }
+		set_global_variable = hd_j16_houliang_done
+		set_global_variable = hd_j16_houliang_skip
+		debug_log = "HD_J16 e5_y30 SKIP player_refused"
+	}
+}
+
+hd_j16_houliang_result_effect = {
+	if = {
+		limit = {
+			NOT = { global_var:hd_j16_houliang_att ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:houliang } } }
+			NOT = { global_var:hd_j16_houliang_def ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:houliang } } }
+		}
+		set_global_variable = hd_j16_houliang_done
+		if = {
+			limit = { has_global_variable = hd_nbc_houliang_active }
+			remove_global_variable = hd_nbc_houliang_active
+		}
+		hd_j16_n1_get_houqin_ruler_effect = { AS = hd_j16_e5y30_qin }
+		if = {
+			limit = {
+				global_var:hd_j16_houliang_tgt.title_capital_county.holder ?= {
+					OR = {
+						this = global_var:hd_j16_houliang_att
+						top_liege ?= global_var:hd_j16_houliang_att
+						# 攻方战中身故、由继承人接战：按位置重新解析出的本方之主（不认同王朝的第三方）
+						AND = {
+							exists = scope:hd_j16_e5y30_qin
+							OR = {
+								this = scope:hd_j16_e5y30_qin
+								top_liege ?= scope:hd_j16_e5y30_qin
+							}
+						}
+					}
+				}
+			}
+			set_global_variable = hd_j16_houliang_won
+			global_var:hd_j16_houliang_def ?= {
+				if = {
+					limit = {
+						is_alive = yes
+						is_landed = yes
+						is_independent_ruler = yes
+					}
+					if = {
+						limit = { is_ai = yes }
+						hd_j16_houliang_submit_effect = yes
+					}
+					else = { trigger_event = hd_j16.5572 }
+				}
+			}
+			# 2026-10-28 吞并全取后后凉主已无地：入秦主宫廷（史实吕隆入长安）
+			global_var:hd_j16_houliang_def ?= { save_scope_as = hd_j16_e5y30_fallen }
+			hd_j16_n1_to_court_effect = { WHO = scope:hd_j16_e5y30_fallen COURT = global_var:hd_j16_houliang_att }
+			debug_log = "HD_J16 e5_y30 FIRE result_won"
+		}
+		else = {
+			set_global_variable = hd_j16_houliang_lost
+			debug_log = "HD_J16 e5_y30 FIRE result_lost"
+		}
+	}
+}
+
+############################################################
+# E5-Y40 傉檀受姑臧【A1 §7.1 小幅转移（傉檀有地，不属 D16）】（06 §1.4）
+# 窗口 406.3.1 – 407.6.1（四开局都走心跳；404 开局姑臧在王尚手里）。姑臧 c_uuii_p_1564 由后秦主或王尚直辖，持有者是 AI；
+#   秃发傉檀 tufa_012 有地、是后秦一系之臣（非独立）。无分支：武威郡授傉檀（1 郡，同一政权内；授后仍归其原主君）；王尚是 AI、无地后入秦主宫廷（召回长安）。
+# 变量：hd_j16_guzang_tufa_done、_result、_skip、_wlog
+############################################################
+hd_j16_node_guzang_tufa_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_guzang_tufa_done } }
+		if = {
+			limit = { current_date >= 406.3.1 }
+			if = {
+				limit = { current_date >= 407.6.2 }
+				set_global_variable = hd_j16_guzang_tufa_done
+				set_global_variable = hd_j16_guzang_tufa_skip
+				debug_log = "HD_J16 e5_y40 SKIP window_closed"
+			}
+			else_if = {
+				limit = { hd_j16_dead_trigger = { ID = tufa_012 } }
+				set_global_variable = hd_j16_guzang_tufa_done
+				set_global_variable = hd_j16_guzang_tufa_skip
+				debug_log = "HD_J16 e5_y40 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_n1_get_houqin_ruler_effect = { AS = hd_j16_e5y40_qin }
+				hd_j16_n1_clear_effect = { S = hd_j16_e5y40_tan }
+				hd_j16_n1_clear_effect = { S = hd_j16_e5y40_shang }
+				hd_j16_n1_clear_effect = { S = hd_j16_e5y40_from }
+				hd_j16_n1_clear_effect = { S = hd_j16_e5y40_lg }
+				hd_j16_resolve_effect = { ID = tufa_012 AS = hd_j16_e5y40_tan }
+				hd_j16_resolve_effect = { ID = jingzhao_wang_016 AS = hd_j16_e5y40_shang }
+				title:c_uuii_p_1564.holder ?= {
+					if = {
+						limit = {
+							is_ai = yes
+							OR = {
+								this = scope:hd_j16_e5y40_qin
+								this = scope:hd_j16_e5y40_shang
+							}
+						}
+						save_scope_as = hd_j16_e5y40_from
+					}
+				}
+				if = {
+					limit = { exists = scope:hd_j16_e5y40_tan }
+					scope:hd_j16_e5y40_tan.liege ?= { save_scope_as = hd_j16_e5y40_lg }
+				}
+				if = {
+					limit = {
+						exists = scope:hd_j16_e5y40_qin
+						exists = scope:hd_j16_e5y40_from
+						exists = scope:hd_j16_e5y40_lg
+						scope:hd_j16_e5y40_tan ?= {
+							is_landed = yes
+							is_independent_ruler = no
+							top_liege ?= scope:hd_j16_e5y40_qin
+						}
+					}
+					set_global_variable = hd_j16_guzang_tufa_done
+					set_global_variable = hd_j16_guzang_tufa_result
+					hd_j16_n1_grant_duchy_effect = { DUCHY = title:d_wuwei FROM = scope:hd_j16_e5y40_from TO = scope:hd_j16_e5y40_tan LIEGE = scope:hd_j16_e5y40_lg TAG = e5_y40 TYPE = granted }
+					if = {
+						limit = { scope:hd_j16_e5y40_shang ?= { is_landed = no } }
+						hd_j16_n1_to_court_effect = { WHO = scope:hd_j16_e5y40_shang COURT = scope:hd_j16_e5y40_qin }
+					}
+					debug_log = "HD_J16 e5_y40 FIRE guzang_tufa"
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_guzang_tufa_wlog } }
+					set_global_variable = hd_j16_guzang_tufa_wlog
+					debug_log = "HD_J16 e5_y40 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+############################################################
+# E5-Y50 姚兴晚年·立泓【人事；立储】（06 §1.4）
+# 窗口 413.1.1 – 416.3.1。姚兴 shaodang_yao_013 在世、是后秦主；姚泓 shaodang_yao_020 在世。
+# 姚兴 AI：立储姚泓，fire。姚兴是玩家：hd_j16.5580 a 立泓（同 AI）/ b 不立（done、_skip）（01 §7.3 玩家规则）。
+# **变量拆分（偏离 06 原文）**：06 写「设 hd_j16_yaohong_heir（即本节点 done 变量）」，但它是卒年表 PRE（姚弼，凶手姚兴），按 TEMPLATE §5-15 只能在 fire 时设；
+#   故 done 另起 hd_j16_yaohong_done（跳过、到期也设），hd_j16_yaohong_heir 只在 fire 设。变量：hd_j16_yaohong_done、hd_j16_yaohong_heir、_skip、_wlog、_asked
+############################################################
+hd_j16_node_yaohong_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_yaohong_done } }
+		if = {
+			limit = { current_date >= 413.1.1 }
+			if = {
+				limit = { current_date >= 416.3.2 }
+				set_global_variable = hd_j16_yaohong_done
+				set_global_variable = hd_j16_yaohong_skip
+				debug_log = "HD_J16 e5_y50 SKIP window_closed"
+			}
+			else_if = {
+				limit = {
+					OR = {
+						hd_j16_dead_trigger = { ID = shaodang_yao_013 }
+						hd_j16_dead_trigger = { ID = shaodang_yao_020 }
+					}
+				}
+				set_global_variable = hd_j16_yaohong_done
+				set_global_variable = hd_j16_yaohong_skip
+				debug_log = "HD_J16 e5_y50 SKIP actor_dead"
+			}
+			else = {
+				hd_j16_yaohong_sides_effect = yes
+				if = {
+					limit = {
+						exists = scope:hd_j16_e5y50_qin
+						exists = scope:hd_j16_e5y50_xing
+						exists = scope:hd_j16_e5y50_hong
+						scope:hd_j16_e5y50_qin = scope:hd_j16_e5y50_xing
+					}
+					scope:hd_j16_e5y50_xing = {
+						if = {
+							limit = { is_ai = yes }
+							hd_j16_yaohong_effect = yes
+						}
+						else_if = {
+							limit = { NOT = { has_global_variable = hd_j16_yaohong_asked } }
+							set_global_variable = { name = hd_j16_yaohong_asked value = yes days = 60 }
+							trigger_event = hd_j16.5580
+							debug_log = "HD_J16 e5_y50 WAIT player_asked"
+						}
+					}
+				}
+				else_if = {
+					limit = { NOT = { has_global_variable = hd_j16_yaohong_wlog } }
+					set_global_variable = hd_j16_yaohong_wlog
+					debug_log = "HD_J16 e5_y50 WAIT not_ready"
+				}
+			}
+		}
+	}
+}
+
+hd_j16_yaohong_sides_effect = {
+	hd_j16_n1_get_houqin_ruler_effect = { AS = hd_j16_e5y50_qin }
+	hd_j16_n1_clear_effect = { S = hd_j16_e5y50_xing }
+	hd_j16_n1_clear_effect = { S = hd_j16_e5y50_hong }
+	hd_j16_resolve_effect = { ID = shaodang_yao_013 AS = hd_j16_e5y50_xing }
+	hd_j16_resolve_effect = { ID = shaodang_yao_020 AS = hd_j16_e5y50_hong }
+}
+
+# fire（AI 姚兴与 hd_j16.5580 a）
+hd_j16_yaohong_effect = {
+	if = {
+		limit = { has_global_variable = hd_j16_yaohong_done }
+		debug_log = "HD_J16 e5_y50 SKIP player_late_reply"
+	}
+	else = {
+		hd_j16_yaohong_sides_effect = yes
+		set_global_variable = hd_j16_yaohong_done
+		if = {
+			limit = {
+				exists = scope:hd_j16_e5y50_xing
+				exists = scope:hd_j16_e5y50_hong
+			}
+			set_global_variable = hd_j16_yaohong_heir
+			scope:hd_j16_e5y50_xing = { set_designated_heir = scope:hd_j16_e5y50_hong }
+			debug_log = "HD_J16 e5_y50 FIRE yaohong_heir"
+		}
+		else = {
+			set_global_variable = hd_j16_yaohong_skip
+			debug_log = "HD_J16 e5_y50 SKIP no_actor"
+		}
+	}
+}
+
+hd_j16_yaohong_refuse_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_yaohong_done } }
+		set_global_variable = hd_j16_yaohong_done
+		set_global_variable = hd_j16_yaohong_skip
+		debug_log = "HD_J16 e5_y50 SKIP player_refused"
+	}
+}

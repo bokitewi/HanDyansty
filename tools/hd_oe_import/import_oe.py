@@ -408,6 +408,10 @@ MERGED18.update({r['删除ID']: r['并入ID'] for r in
 MERGED18.update({r['删除ID']: r['并入ID'] for r in
                  csv.DictReader(open(os.path.join(MOD, 'docs/人物审查/合并记录_2026-10-25.csv'), encoding='utf-8-sig'))
                  if r['删除方文件'] == 'zz_hd_oe_characters.txt'})
+# 2026-10-27 两晋十六国第 2 期（p2-A）：慕容、拓跋、秃发、柔然、吐谷浑、高句丽等 OE 副本并入 mod 原有人物
+MERGED18.update({r['删除ID']: r['并入ID'] for r in
+                 csv.DictReader(open(os.path.join(MOD, 'docs/人物审查/合并记录_2026-10-27.csv'), encoding='utf-8-sig'))
+                 if r['删除方文件'] == 'zz_hd_oe_characters.txt'})
 # 2026-10-19：富春孙氏并入吴郡孙氏，不再单立家族；孙孺、孙香随父亲孙旃入乐安孙氏
 HOUSE_REMAP = {'house_fuchun_sun': 'wujun_sun'}
 CHAR_HOUSE = {'1407880': 'lean_sun', '1407881': 'lean_sun'}
@@ -632,6 +636,9 @@ def emit_char(c):
     if c.get('female') == 'yes':
         L.append('\tfemale = yes')
     dyn, house = c.get('dynasty'), c.get('dynasty_house')
+    # 2026-10-27 两晋十六国 p2-B（05 §3 #33）：临渭苻氏整支并入略阳苻氏 lueyang_fu；苻敞之父 linwei_fu_0047（「不知是谁」）保留
+    if dyn == 'linwei_fu_dyn' and not house and nid != 'linwei_fu_0047':
+        dyn, house = None, 'lueyang_fu'
     if house:
         house = CHAR_HOUSE.get(c['id'], HOUSE_REMAP.get(house, house))
         if house in HD_HOUSE or house in OE_HOUSE or house in VAN_HOUSE:

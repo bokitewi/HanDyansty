@@ -1,4 +1,5 @@
-﻿# 370 年剧本「王猛伐燕」史实主线。只由 common/on_action/zz_hd_370_history_on_actions.txt 的 30 天心跳调用，那边带 370.2.13 闸门。
+﻿# 【1-B 冻结】本文件已由两晋十六国统一心跳接管（hd_j16_pulse，common/on_action/zz_hd_j16_history_on_actions.txt；01_架构.md §1.4），第 1 期后不再改（08 §1.4）。
+# 370 年剧本「王猛伐燕」史实主线。只由 common/on_action/zz_hd_370_history_on_actions.txt 的 30 天心跳调用，那边带 370.2.13 闸门。
 # 计划见 docs/370苻坚剧本_计划.md 第 10、14 节。写法照 531 执行后复核修订版：
 #   条件不合先等待，到截止日才跳过，跳过原因分开记日志；只有执行人死了才立即跳过；宣战失败不设 done，下次心跳重试；
 #   战争结局不用 hd_nbc_war_result_effect（它不认新场次）：先确认"双方都已没有这一场次的战争"，再看目标城归谁；
@@ -119,7 +120,9 @@ hd_370_end_kind_war_effect = {
 }
 
 ############################################################
-# 袁真之死：电脑袁真死前先把寿春交给袁瑾（计划复核必改 4）；玩家袁真照常"病笃"
+# 袁真之死（X 类特例，D11）：电脑袁真死前先把寿春交给袁瑾（计划复核必改 4）；玩家袁真照常"病笃"。
+# 1-B：人物改经 hd_j16_resolve_effect 解析（先 history 原生人物，再 hbirth 指针）；由 zz_hd_j16_deaths_effects.txt 调用（第 5 期前只在 370 局）。
+# 玩家分支改走 j16 卒年机制（hd_j16_death_effect，DATE10 = 380.4.10）。scope：hd_j16_xyz_zhen（袁真）、hd_j16_xyz_jin（袁瑾）
 ############################################################
 hd_370_yuanzhen_death_effect = {
 	if = {
@@ -128,63 +131,84 @@ hd_370_yuanzhen_death_effect = {
 			NOT = { exists = global_var:hd_370_yuanzhen_death_done }
 		}
 		if = {
-			limit = { character:chenjun_yuan_zhen ?= { is_alive = yes is_ai = yes } }
+			limit = { exists = scope:hd_j16_xyz_zhen }
+			clear_saved_scope = hd_j16_xyz_zhen
+		}
+		if = {
+			limit = { exists = scope:hd_j16_xyz_jin }
+			clear_saved_scope = hd_j16_xyz_jin
+		}
+		hd_j16_resolve_effect = { ID = chenjun_yuan_zhen AS = hd_j16_xyz_zhen }
+		if = {
+			limit = { scope:hd_j16_xyz_zhen ?= { is_ai = yes } }
 			set_global_variable = hd_370_yuanzhen_death_done
+			hd_j16_resolve_effect = { ID = chenjun_yuan_jin AS = hd_j16_xyz_jin }
 			if = {
 				limit = {
-					character:chenjun_yuan_zhen = { is_landed = yes }
-					character:chenjun_yuan_jin ?= { is_alive = yes is_imprisoned = no }
+					scope:hd_j16_xyz_zhen = { is_landed = yes }
+					scope:hd_j16_xyz_jin ?= { is_imprisoned = no }
 				}
-				hd_370_take_realm_effect = { NEW = character:chenjun_yuan_jin OLD = character:chenjun_yuan_zhen }
-				character:chenjun_yuan_jin = {
+				hd_370_take_realm_effect = { NEW = scope:hd_j16_xyz_jin OLD = scope:hd_j16_xyz_zhen }
+				scope:hd_j16_xyz_jin = {
 					hd_nbc_become_independent_effect = yes
 					if = {
 						limit = { has_title = title:c_uuii_p_1961 }
 						set_realm_capital = title:c_uuii_p_1961
 					}
 				}
-				debug_log = "HD_370 YUANZHEN SHOUCHUN_TO_YUANJIN"
+				debug_log = "HD_J16 death_chenjun_yuan_zhen FIRE shouchun_to_yuanjin"
 			}
-			character:chenjun_yuan_zhen = { death = { death_reason = death_natural_causes } }
-			debug_log = "HD_370 HIST_DEATH chenjun_yuan_zhen"
+			scope:hd_j16_xyz_zhen = { death = { death_reason = death_natural_causes } }
+			debug_log = "HD_J16 death_chenjun_yuan_zhen FIRE natural"
 		}
 		else_if = {
-			limit = { NOT = { character:chenjun_yuan_zhen ?= { is_alive = yes } } }
+			limit = { NOT = { exists = scope:hd_j16_xyz_zhen } }
+			# 已死，或解析不到（未出场）：同旧行为，当即了结
 			set_global_variable = hd_370_yuanzhen_death_done
+			debug_log = "HD_J16 death_chenjun_yuan_zhen SKIP no_actor"
 		}
 		else = {
-			hd_nbc_hist_death_effect = { WHO = chenjun_yuan_zhen DATE = 370.4.10 }
+			# 玩家袁真：病笃（hd_nbc.0100）；死后下一跳解析不到人即了结
+			hd_j16_death_effect = { ID = chenjun_yuan_zhen DATE = 370.4.10 DATE10 = 380.4.10 }
 		}
 	}
 }
 
 ############################################################
-# 结局类卒年
+# 结局类卒年（X 类，D11）：什翼犍、慕容暐、苻坚。只在前提成立时执行，否则只记 SKIP 日志，不退回普通卒年。
+# 1-B：人物改经 hd_j16_resolve_effect 解析；由 zz_hd_j16_deaths_effects.txt 调用，10-27 汇总人补「曾据有」前提后放开到 304/346/370 局（卒年表开局限制 <404；404 局由开局前标记设 done）。
+# scope：hd_j16_xd_v（当事人）、hd_j16_xd_k（苻坚 / 姚苌）。旧 hd_370_kill_effect / hd_370_die_effect 取人用 character:$WHO$，不再调用（定义保留）
 ############################################################
 hd_370_outcome_deaths_effect = {
-	# 拓跋什翼犍：建元十二年十二月秦灭代，什翼犍死于内乱。只在代已失云中、或正与秦交战时
+	# 拓跋什翼犍：建元十二年十二月秦灭代，什翼犍死于内乱。只在代已失云中、或正与秦主苻坚交战时
 	if = {
 		limit = {
 			current_date >= 376.12.12
 			NOT = { exists = global_var:hd_370_death_tuoba_005_done }
 		}
 		set_global_variable = hd_370_death_tuoba_005_done
+		hd_370_x_resolve_effect = { ID = tuoba_005 KILLER = lueyang_fu_020 }
 		if = {
 			limit = {
-				character:tuoba_005 ?= {
-					is_alive = yes
-					OR = {
-						NOT = { title:c_uuii_p_1333.holder ?= { OR = { this = character:tuoba_005 top_liege = character:tuoba_005 } } }
-						AND = {
-							exists = character:lueyang_fu_020
-							is_at_war_with = character:lueyang_fu_020
+				exists = scope:hd_j16_xd_v
+				OR = {
+					AND = {
+						NOT = { title:c_uuii_p_1333.holder ?= { OR = { this = scope:hd_j16_xd_v top_liege = scope:hd_j16_xd_v } } }
+						# 10-27 放开到 304/346 局（汇总人）：非 370 局须是云中落入苻氏之手，免得从未据有云中者空真
+						OR = {
+							global_var:hd_j16_start_year = 370
+							title:c_uuii_p_1333.holder.top_liege ?= { dynasty ?= dynasty:fu_1 }
 						}
+					}
+					AND = {
+						exists = scope:hd_j16_xd_k
+						scope:hd_j16_xd_v = { is_at_war_with = scope:hd_j16_xd_k }
 					}
 				}
 			}
-			hd_370_die_effect = { WHO = tuoba_005 REASON = death_murder }
+			hd_370_x_die_effect = { ID = tuoba_005 REASON = death_murder }
 		}
-		else = { debug_log = "HD_370 DEATH_SKIP tuoba_005" }
+		else = { debug_log = "HD_J16 death_tuoba_005 SKIP x_precondition" }
 	}
 	# 慕容暐：太元九年十二月谋刺苻坚事泄被杀。只在他已入苻坚宫廷（燕亡出降）时
 	if = {
@@ -193,18 +217,19 @@ hd_370_outcome_deaths_effect = {
 			NOT = { exists = global_var:hd_370_death_murong_wei_done }
 		}
 		set_global_variable = hd_370_death_murong_wei_done
+		hd_370_x_resolve_effect = { ID = changli_murong_077 KILLER = lueyang_fu_020 }
 		if = {
 			limit = {
-				character:changli_murong_077 ?= {
-					is_alive = yes
+				exists = scope:hd_j16_xd_v
+				exists = scope:hd_j16_xd_k
+				scope:hd_j16_xd_v = {
 					is_landed = no
-					employer ?= character:lueyang_fu_020
+					employer ?= scope:hd_j16_xd_k
 				}
-				character:lueyang_fu_020 ?= { is_alive = yes }
 			}
-			hd_370_kill_effect = { WHO = changli_murong_077 REASON = death_execution KILLER = character:lueyang_fu_020 }
+			hd_370_x_kill_effect = { ID = changli_murong_077 REASON = death_execution }
 		}
-		else = { debug_log = "HD_370 DEATH_SKIP changli_murong_077" }
+		else = { debug_log = "HD_J16 death_changli_murong_077 SKIP x_precondition" }
 	}
 	# 苻坚：淝水败后为姚苌所执，缢于新平佛寺（太元十年八月辛丑）。只在他已失长安时
 	if = {
@@ -213,20 +238,60 @@ hd_370_outcome_deaths_effect = {
 			NOT = { exists = global_var:hd_370_death_fu_jian_done }
 		}
 		set_global_variable = hd_370_death_fu_jian_done
+		hd_370_x_resolve_effect = { ID = lueyang_fu_020 KILLER = shaodang_yao_006 }
 		if = {
 			limit = {
-				character:lueyang_fu_020 ?= {
-					is_alive = yes
-					NOT = { title:c_uuii_p_867.holder ?= { OR = { this = character:lueyang_fu_020 top_liege = character:lueyang_fu_020 } } }
+				exists = scope:hd_j16_xd_v
+				NOT = { title:c_uuii_p_867.holder ?= { OR = { this = scope:hd_j16_xd_v top_liege = scope:hd_j16_xd_v } } }
+				# 10-27 放开到 304/346 局（汇总人）：非 370 局须前秦曾强盛（E4-W50 的 hd_j16_qin_existed），免得从未据有长安者空真
+				OR = {
+					global_var:hd_j16_start_year = 370
+					has_global_variable = hd_j16_qin_existed
 				}
 			}
 			if = {
-				limit = { character:shaodang_yao_006 ?= { is_alive = yes } }
-				hd_370_kill_effect = { WHO = lueyang_fu_020 REASON = death_murder_known KILLER = character:shaodang_yao_006 }
+				limit = { exists = scope:hd_j16_xd_k }
+				hd_370_x_kill_effect = { ID = lueyang_fu_020 REASON = death_murder_known }
 			}
-			else = { hd_370_die_effect = { WHO = lueyang_fu_020 REASON = death_murder } }
+			else = { hd_370_x_die_effect = { ID = lueyang_fu_020 REASON = death_murder } }
 		}
-		else = { debug_log = "HD_370 DEATH_SKIP lueyang_fu_020" }
+		else = { debug_log = "HD_J16 death_lueyang_fu_020 SKIP x_precondition" }
+	}
+}
+
+# 解析当事人与凶手（先清旧 scope；只存在世的人）
+hd_370_x_resolve_effect = {
+	if = {
+		limit = { exists = scope:hd_j16_xd_v }
+		clear_saved_scope = hd_j16_xd_v
+	}
+	if = {
+		limit = { exists = scope:hd_j16_xd_k }
+		clear_saved_scope = hd_j16_xd_k
+	}
+	hd_j16_resolve_effect = { ID = $ID$ AS = hd_j16_xd_v }
+	hd_j16_resolve_effect = { ID = $KILLER$ AS = hd_j16_xd_k }
+}
+# 被杀（凶手 scope:hd_j16_xd_k，调用方已确认存在）。电脑角色直接死；玩家角色不杀，只记日志（同旧 hd_370_kill_effect）
+hd_370_x_kill_effect = {
+	scope:hd_j16_xd_v = {
+		if = {
+			limit = { is_ai = yes }
+			death = { death_reason = $REASON$ killer = scope:hd_j16_xd_k }
+			debug_log = "HD_J16 death_$ID$ FIRE $REASON$"
+		}
+		else = { debug_log = "HD_J16 death_$ID$ SKIP player" }
+	}
+}
+# 被杀（无具名凶手）（同旧 hd_370_die_effect）
+hd_370_x_die_effect = {
+	scope:hd_j16_xd_v = {
+		if = {
+			limit = { is_ai = yes }
+			death = { death_reason = $REASON$ }
+			debug_log = "HD_J16 death_$ID$ FIRE $REASON$"
+		}
+		else = { debug_log = "HD_J16 death_$ID$ SKIP player" }
 	}
 }
 

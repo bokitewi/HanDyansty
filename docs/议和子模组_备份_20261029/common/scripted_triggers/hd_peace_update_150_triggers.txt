@@ -1,0 +1,114 @@
+# Proposer scope, used identically by manual offers, AI dispatch and gold search.
+hd_peace_ai_accepts_treaty_trigger = {
+ hd_peace_deal_acceptance_value >= 0
+}
+# New independence clauses deliberately exclude appointed/nomadic structures.
+# Compatibility patches may narrow this trigger without replacing the feature.
+hd_peace_release_government_allowed_trigger = {
+ # Han celestial/administrative lords use the title/vassal transaction below.
+ NOT = { government_has_flag = government_is_mandala }
+ NOT = { government_has_flag = government_is_nomadic }
+ NOT = { government_has_flag = government_is_landless_adventurer }
+}
+# Character scope = prospective direct vassal, PARAMETER = former liege.
+hd_peace_can_release_vassal_trigger = {
+ is_alive = yes
+ is_landed = yes
+ is_independent_ruler = no
+ exists = liege
+ liege = $LIEGE$
+ $LIEGE$ = { is_independent_ruler = yes hd_peace_release_government_allowed_trigger = yes }
+ hd_peace_release_government_allowed_trigger = yes
+ # Only genuine lords: barons, mayors, barony bishops and holy orders are excluded.
+ is_holy_order = no
+ highest_held_title_tier >= tier_county
+ primary_title = { tier >= tier_county is_landless_type_title = no is_noble_family_title = no }
+ NOT = { is_at_war_with = $LIEGE$ }
+ save_temporary_scope_as = hd_peace_release_candidate
+ NOT = {
+  root = {
+   any_in_list = {
+    variable = hd_peace_offer_counties
+    holder = { OR = { this = scope:hd_peace_release_candidate is_vassal_or_below_of = scope:hd_peace_release_candidate } }
+   }
+  }
+ }
+ NOT = {
+  root = {
+   any_in_list = {
+    variable = hd_peace_demand_counties
+    holder = { OR = { this = scope:hd_peace_release_candidate is_vassal_or_below_of = scope:hd_peace_release_candidate } }
+   }
+  }
+ }
+ NOT = {
+  root = {
+   any_in_list = {
+    variable = hd_peace_demand_titles
+    any_de_jure_county = {
+     exists = holder
+     holder = { OR = { this = scope:hd_peace_release_candidate is_vassal_or_below_of = scope:hd_peace_release_candidate } }
+    }
+   }
+  }
+ }
+}
+hd_peace_selected_releases_valid_trigger = {
+ hd_peace_offer_release_count_value <= 3
+ hd_peace_demand_release_count_value <= 3
+ trigger_if = {
+  limit = { has_variable_list = hd_peace_offer_released_vassals }
+  NOT = { any_in_list = { variable = hd_peace_offer_released_vassals NOT = { hd_peace_can_release_vassal_trigger = { LIEGE = root } } } }
+ }
+ trigger_if = {
+  limit = { has_variable_list = hd_peace_demand_released_vassals }
+  NOT = { any_in_list = { variable = hd_peace_demand_released_vassals NOT = { hd_peace_can_release_vassal_trigger = { LIEGE = root.var:hd_peace_treaty_opponent } } } }
+ }
+}
+# Recipient event scope: an old window cannot act on a newer proposal.
+hd_peace_event_offer_matches_trigger = {
+ is_ai = no
+ exists = scope:hd_peace_event_proposer
+ exists = scope:hd_peace_event_war
+ exists = scope:hd_peace_event_nonce
+ exists = var:hd_peace_pending_treaty_proposer
+ var:hd_peace_pending_treaty_proposer = scope:hd_peace_event_proposer
+ scope:hd_peace_event_proposer = {
+  is_alive = yes
+  has_variable = hd_peace_treaty_locked
+  var:hd_peace_treaty_opponent = root
+  var:hd_peace_treaty_war = scope:hd_peace_event_war
+  var:hd_peace_offer_nonce = scope:hd_peace_event_nonce
+ }
+ scope:hd_peace_event_war = {
+  OR = {
+   AND = { primary_attacker = scope:hd_peace_event_proposer primary_defender = root }
+   AND = { primary_defender = scope:hd_peace_event_proposer primary_attacker = root }
+  }
+ }
+}
+
+# All selected titles must still belong to the promised side at signature.
+hd_peace_selected_territories_valid_trigger = {
+ # No count cap: war score and acceptance limit how much land changes hands.
+ hd_peace_selected_titles_valid_trigger = yes
+ NOT = {
+  any_in_list = {
+   variable = hd_peace_offer_counties
+   NOT = {
+    tier = tier_county is_landless_type_title = no is_noble_family_title = no exists = holder
+    holder = { OR = { this = root is_vassal_or_below_of = root } }
+    NOT = { this = root.capital_county }
+   }
+  }
+ }
+ NOT = {
+  any_in_list = {
+   variable = hd_peace_demand_counties
+   NOT = {
+    tier = tier_county is_landless_type_title = no is_noble_family_title = no exists = holder
+    holder = { OR = { this = root.var:hd_peace_treaty_opponent is_vassal_or_below_of = root.var:hd_peace_treaty_opponent } }
+   }
+  }
+ }
+}

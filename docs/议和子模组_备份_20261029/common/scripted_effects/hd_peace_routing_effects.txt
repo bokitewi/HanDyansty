@@ -1,0 +1,105 @@
+# War scope. This is the only authorized low-level end_war entry for victories.
+hd_peace_end_scripted_war_effect = {
+	if = {
+		limit = { hd_peace_is_scripted_war_trigger = yes NOT = { has_variable = hd_peace_resolution_started } }
+		set_variable = { name = hd_peace_resolution_started value = 1 }
+		set_variable = { name = hd_peace_script_authorized value = 1 }
+		end_war = $RESULT$
+	}
+}
+
+# Former event/interaction endpoints. A normal war gets an explicit ceasefire
+# proposal, never its removed CB reward. A story war retains its own outcome.
+hd_peace_route_script_end_effect = {
+	if = {
+		limit = { hd_peace_is_scripted_war_trigger = yes }
+		hd_peace_end_scripted_war_effect = { RESULT = $RESULT$ }
+	}
+	else = {
+		save_scope_as = war
+		primary_attacker = {
+			# A fresh character event makes the proposer ROOT even when the
+			# original endpoint was called from another character or a CB.
+			trigger_event = { id = hd_peace.0402 }
+		}
+	}
+}
+
+# CB scope; called by all neutralized ordinary callbacks. Terms are frozen on
+# the proposer, with the exact war and nonce pinned before the engine call.
+hd_peace_cb_result_effect = {
+	if = {
+		limit = {
+			exists = root.war
+			root.war = {
+				hd_peace_is_ordinary_war_trigger = yes
+				exists = var:hd_peace_signatory
+				has_variable = hd_peace_resolution_started
+				has_variable = hd_peace_signed_nonce
+				NOT = { has_variable = hd_peace_terms_applied }
+				var:hd_peace_signatory = {
+					has_variable = hd_peace_treaty_resolution_in_progress
+					var:hd_peace_treaty_war = root.war
+					var:hd_peace_offer_nonce = root.war.var:hd_peace_signed_nonce
+				}
+			}
+		}
+		root.war = {
+			set_variable = { name = hd_peace_terms_applied value = 1 }
+			var:hd_peace_signatory = {
+				set_variable = { name = hd_peace_cb_confirmed value = root.war.var:hd_peace_signed_nonce }
+			}
+		}
+	}
+}
+
+hd_peace_cb_invalidated_effect = {
+	# Invalidated wars never award a treaty. Their on_action clears proposals.
+	debug_log = "HD_PEACE ordinary war invalidated; no economic or political award"
+}
+
+# ROOT = proposer. Withdraw only this character's pending recipient pointer.
+# The monotonically increasing nonce makes older event windows inert.
+hd_peace_cancel_offer_effect = {
+	var:hd_peace_treaty_opponent ?= {
+		if = { limit = { var:hd_peace_pending_treaty_proposer = root } remove_variable = hd_peace_pending_treaty_proposer }
+	}
+	var:hd_peace_treaty_war ?= { remove_variable = hd_peace_ai_offer_pending }
+	hd_peace_clear_treaty_state_effect = yes
+}
+
+# Character scope. Automatic and manual proposals share exactly one path.
+hd_peace_dispatch_offer_effect = {
+	if = {
+		limit = {
+			hd_peace_all_clauses_valid_trigger = yes
+			hd_peace_has_any_treaty_clause_trigger = yes
+			NOT = { has_variable = hd_peace_treaty_locked }
+			OR = {
+				hd_peace_force_allowed_trigger = yes
+				AND = {
+					var:hd_peace_treaty_opponent = { is_ai = yes }
+					hd_peace_ai_accepts_treaty_trigger = yes
+				}
+				AND = {
+					var:hd_peace_treaty_opponent = { is_ai = no NOT = { has_variable = hd_peace_pending_treaty_proposer } }
+				}
+			}
+		}
+		hd_peace_prepare_offer_identity_effect = yes
+		if = {
+			limit = { OR = { hd_peace_force_allowed_trigger = yes var:hd_peace_treaty_opponent = { is_ai = yes } } }
+			hd_peace_end_negotiated_war_effect = yes
+		}
+		else = {
+			set_variable = { name = hd_peace_treaty_locked value = 1 }
+			var:hd_peace_treaty_war = { set_variable = { name = hd_peace_ai_offer_pending value = 1 } }
+			var:hd_peace_treaty_opponent = {
+				set_variable = { name = hd_peace_pending_treaty_proposer value = root }
+				trigger_event = { id = hd_peace.0200 }
+			}
+			save_scope_value_as = { name = hd_peace_expiry_nonce value = var:hd_peace_offer_nonce }
+			trigger_event = { id = hd_peace.0502 days = 90 }
+		}
+	}
+}

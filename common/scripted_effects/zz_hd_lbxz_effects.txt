@@ -34,15 +34,6 @@ hd_lbxz_tick_effect = {
 			limit = { has_character_flag = hd_lbxz_gov_check }
 			hd_force_celestial_effect = yes
 		}
-		# 屯驻荆州的军阀身份因政体被重设而作废时补回（被「收回权力」的不补）
-		if = {
-			limit = {
-				has_character_flag = hd_lbxz_jing_warlord_recheck
-				NOT = { has_character_flag = hd_warlord_revoked_cooldown }
-				NOT = { hd_warlord_trigger = yes }
-			}
-			hd_lbxz_jing_warlord_effect = yes
-		}
 		# 丹阳兵首领夺徐州后同样补天朝制
 		global_var:hd_lbxz_seizer ?= {
 			if = {
@@ -991,60 +982,50 @@ hd_lbxz_jing_declined_effect = {
 	remove_global_variable = hd_lbxz_jing_pending
 }
 
-# boki 定：刘备作刘表封臣屯新野。先授县，再走 hds_join_liege_effect（含等级判断和群雄逐鹿保护）。
+# 2026-10-28 boki：刘备投刘表改为整郡独立。新野郡在刘表境内就给新野，否则在刘表境内的荆州郡里随机挑一个非军阀的郡；
+# 刘备接手郡头衔与原郡守直辖的郡内各县，郡内其余县主改作刘备封臣，随即独立，向刘表朝贡、结盟、互订二十年停战。
+# 一个郡也挑不出时：营地移到刘表都城，与刘表结盟（原兜底）。
 hd_lbxz_join_liu_biao_effect = {
 	if = {
 		limit = { hd_lbxz_jing_ready_trigger = yes }
 		character:liu_biao = {
 			if = { limit = { is_imprisoned = yes } release_from_prison = yes }
 		}
-		clear_saved_scope = hd_lbxz_jing_county
-		# 只用刘表本人直接持有的县，绝不拿其封臣或第三方的地；新野不归刘表本人时随机挑一个。
+		clear_saved_scope = hd_lbxz_jing_duchy
 		if = {
-			limit = { title:c_uuii_p_1723 = { hd_lbxz_jing_grantable_county_trigger = yes } }
-			title:c_uuii_p_1723 = { save_scope_as = hd_lbxz_jing_county }
+			limit = { title:d_xinye = { hd_lbxz_jing_duchy_base_trigger = yes } }
+			title:d_xinye = { save_scope_as = hd_lbxz_jing_duchy }
 		}
 		else = {
 			character:liu_biao = {
-				random_held_title = {
-					limit = { hd_lbxz_jing_grantable_county_trigger = yes }
-					save_scope_as = hd_lbxz_jing_county
+				random_sub_realm_duchy = {
+					limit = { hd_lbxz_jing_random_duchy_trigger = yes }
+					save_scope_as = hd_lbxz_jing_duchy
 				}
 			}
 		}
 		if = {
-			limit = { exists = scope:hd_lbxz_jing_county }
+			limit = { exists = scope:hd_lbxz_jing_duchy }
 			character:liu_bei = {
 				every_courtier = {
 					limit = { is_alive = yes }
 					add_to_list = hd_lbxz_jing_followers
 				}
 			}
-			create_title_and_vassal_change = {
-				type = granted
-				save_scope_as = hd_lbxz_jing_change
-				add_claim_on_loss = no
-			}
-			scope:hd_lbxz_jing_county = {
-				change_title_holder = {
-					holder = character:liu_bei
-					change = scope:hd_lbxz_jing_change
-					take_baronies = yes
-				}
-			}
-			resolve_title_and_vassal_change = scope:hd_lbxz_jing_change
+			hd_lbxz_jing_take_duchy_effect = yes
 			character:liu_bei = {
 				if = {
 					limit = { is_landed = yes }
 					hd_force_celestial_effect = yes
 					hd_lbxz_destroy_camp_title_effect = yes
 					if = {
-						limit = { has_title = scope:hd_lbxz_jing_county }
-						set_realm_capital = scope:hd_lbxz_jing_county
+						limit = { is_independent_ruler = no }
+						create_title_and_vassal_change = { type = independency save_scope_as = hd_lbxz_jing_independence add_claim_on_loss = no }
+						becomes_independent = { change = scope:hd_lbxz_jing_independence }
+						resolve_title_and_vassal_change = scope:hd_lbxz_jing_independence
 					}
-					hds_join_liege_effect = { LIEGE = character:liu_biao }
 					add_character_flag = { flag = hd_lbxz_gov_check days = 60 }
-					hd_lbxz_jing_warlord_effect = yes
+					hd_lbxz_jing_tributary_effect = yes
 				}
 			}
 			every_in_list = {
@@ -1052,16 +1033,16 @@ hd_lbxz_join_liu_biao_effect = {
 				hd_lb_join_liu_court_effect = yes
 			}
 			if = {
-				limit = { character:liu_bei = { is_landed = yes liege ?= character:liu_biao } }
-				debug_log = "HD_LBXZ JING_VASSAL"
+				limit = { character:liu_bei = { is_landed = yes is_independent_ruler = yes has_title = scope:hd_lbxz_jing_duchy } }
+				debug_log = "HD_LBXZ JING_DUCHY_INDEPENDENT"
 			}
-			else = { debug_log = "HD_LBXZ JING_VASSAL_POSTCONDITION_FAILED" }
-			# 已授县，无论改投是否成功都结束节点，不重复授县。
+			else = { debug_log = "HD_LBXZ JING_DUCHY_POSTCONDITION_FAILED" }
+			# 已授郡，无论后续成败都结束节点，不重复授郡。
 			set_global_variable = hd_lbxz_jing_resolved
 			set_global_variable = hd_lbxz_jing_done
 		}
 		else = {
-			# 刘表本人除都城外一县也给不出：营地移到刘表都城，与刘表结盟。
+			# 刘表境内一个可给的郡也没有：营地移到刘表都城，与刘表结盟。
 			character:liu_bei = {
 				if = {
 					limit = { exists = character:liu_biao.capital_province }
@@ -1082,30 +1063,112 @@ hd_lbxz_join_liu_biao_effect = {
 	remove_global_variable = hd_lbxz_jing_pending
 }
 
-# 2026-10-25 boki：刘备屯驻荆州作刘表封臣即为军阀（不走「拥兵自重」决议、不扣主君好感），10 年内 AI 刘表不发起「收回权力」。
-# 写法照 hd190_warlord_one_effect。结盟兜底分支（刘表无县可授）刘备不是封臣，不在此列。Scope：刘备
-hd_lbxz_jing_warlord_effect = {
+# 一个事务内交接 scope:hd_lbxz_jing_duchy：郡头衔、原郡守直辖的郡内各县（刘表都城除外）归刘备，
+# 郡内其余县主中原郡守的直属封臣改作刘备封臣。Scope：任意。
+hd_lbxz_jing_take_duchy_effect = {
+	scope:hd_lbxz_jing_duchy.holder = { save_scope_as = hd_lbxz_jing_old }
+	scope:hd_lbxz_jing_duchy = {
+		every_in_de_jure_hierarchy = {
+			limit = {
+				tier = tier_county
+				holder ?= scope:hd_lbxz_jing_old
+				NOT = { character:liu_biao.capital_county ?= this }
+			}
+			add_to_list = hd_lbxz_jing_counties
+		}
+		every_in_de_jure_hierarchy = {
+			limit = {
+				tier = tier_county
+				exists = holder
+				NOT = { holder = scope:hd_lbxz_jing_old }
+				NOT = { holder = character:liu_bei }
+				holder = { liege ?= scope:hd_lbxz_jing_old }
+			}
+			holder = {
+				if = {
+					limit = { NOT = { is_in_list = hd_lbxz_jing_vassals } }
+					add_to_list = hd_lbxz_jing_vassals
+				}
+			}
+		}
+	}
+	create_title_and_vassal_change = {
+		type = granted
+		save_scope_as = hd_lbxz_jing_change
+		add_claim_on_loss = no
+	}
+	every_in_list = {
+		list = hd_lbxz_jing_counties
+		change_title_holder = {
+			holder = character:liu_bei
+			change = scope:hd_lbxz_jing_change
+			take_baronies = yes
+		}
+	}
+	scope:hd_lbxz_jing_duchy = {
+		change_title_holder = {
+			holder = character:liu_bei
+			change = scope:hd_lbxz_jing_change
+		}
+	}
+	every_in_list = {
+		list = hd_lbxz_jing_vassals
+		change_liege = { liege = character:liu_bei change = scope:hd_lbxz_jing_change }
+	}
+	resolve_title_and_vassal_change = scope:hd_lbxz_jing_change
+	character:liu_bei = {
+		if = {
+			limit = { exists = scope:hd_lbxz_jing_duchy.title_capital_county scope:hd_lbxz_jing_duchy.title_capital_county = { holder ?= character:liu_bei } }
+			set_realm_capital = scope:hd_lbxz_jing_duchy.title_capital_county
+		}
+		else = {
+			random_held_title = {
+				limit = { tier = tier_county target_is_de_jure_liege_or_above = scope:hd_lbxz_jing_duchy }
+				save_scope_as = hd_lbxz_jing_seat
+			}
+			if = {
+				limit = { exists = scope:hd_lbxz_jing_seat }
+				set_realm_capital = scope:hd_lbxz_jing_seat
+			}
+		}
+	}
+	debug_log = "HD_LBXZ JING_DUCHY_TAKEN"
+}
+
+# 独立后的刘备向刘表朝贡（刘表不是霸权级，用原版 tributary_settled）、结盟、互订二十年停战。Scope：刘备
+hd_lbxz_jing_tributary_effect = {
 	if = {
 		limit = {
-			this = character:liu_bei
-			is_alive = yes
-			is_landed = yes
-			liege ?= character:liu_biao
-			government_has_flag = government_is_celestial
-			liege = { government_has_flag = government_is_celestial }
-			NOT = { hd_warlord_trigger = yes }
+			is_independent_ruler = yes
+			is_tributary = no
+			character:liu_biao = { is_alive = yes is_landed = yes }
 		}
-		hd_warlord_establish_effect = yes
-		add_character_flag = { flag = hd_warlord_revoke_ai_grace years = 10 }
-		# 得地后原版可能重设政体（见 hd_lbxz_gov_check），身份随之作废时由月度心跳在 60 天内补回
-		add_character_flag = { flag = hd_lbxz_jing_warlord_recheck days = 60 }
-		if = {
-			limit = { hd_warlord_trigger = yes vassal_contract_has_flag = hd_warlord }
-			debug_log = "HD_LBXZ JING_WARLORD_OK"
+		start_tributary = {
+			contract_group = tributary_settled
+			suzerain = character:liu_biao
 		}
-		else = { debug_log = "HD_LBXZ JING_WARLORD_FAILED" }
 	}
-	else = { debug_log = "HD_LBXZ JING_WARLORD_SKIPPED" }
+	if = {
+		limit = { is_tributary_of = character:liu_biao }
+		debug_log = "HD_LBXZ JING_TRIBUTARY_OK"
+	}
+	else = { debug_log = "HD_LBXZ JING_TRIBUTARY_FAILED" }
+	hd_lbxz_alliance_effect = { A = character:liu_bei B = character:liu_biao }
+	if = {
+		limit = { is_allied_to = character:liu_biao }
+		debug_log = "HD_LBXZ JING_ALLIANCE_OK"
+	}
+	else = { debug_log = "HD_LBXZ JING_ALLIANCE_FAILED" }
+	add_truce_both_ways = {
+		character = character:liu_biao
+		years = 20
+		name = TRUCE_COLLABORATION
+	}
+	if = {
+		limit = { has_truce = character:liu_biao }
+		debug_log = "HD_LBXZ JING_TRUCE_OK"
+	}
+	else = { debug_log = "HD_LBXZ JING_TRUCE_FAILED" }
 }
 
 # ===== 第二段：三顾茅庐、隆中对、入蜀 =====

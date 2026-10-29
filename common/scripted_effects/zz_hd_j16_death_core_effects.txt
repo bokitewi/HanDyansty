@@ -1,0 +1,278 @@
+﻿# 两晋十六国统一史实线（j16）卒年机制。设计：01_架构.md §6，D10、D11、D15，A1-F5、A1-F6；08 §1.3、§5。
+# 数据行在 zz_hd_j16_deaths_effects.txt（第 2 期起由 tools/hd_j16/gen_deaths_effects.py 生成），本文件只放机制。
+#
+# 调用形式（对外宏参数名固定为 ID、KILLER，生成器正则据此收指针；KILLER 是凶手人物 ID）：
+#   N 病逝        hd_j16_death_effect = { ID DATE DATE10 }
+#   K 被杀        hd_j16_death_kill_effect = { ID DATE DATE10 REASON KILLER }
+#   K 带前置节点  hd_j16_death_kill_pre_effect = { ID DATE DATE10 REASON KILLER PRE }   PRE 填前置节点 fire 的结果变量（全局变量名）
+#   无凶手的非病死（部众所杀、自缢、自尽、投水）
+#                 hd_j16_death_die_effect = { ID DATE DATE10 REASON }
+#                 hd_j16_death_die_pre_effect = { ID DATE DATE10 REASON PRE }
+#   X 结局        不走本文件，保持各自的独立效果（D11），由 deaths 文件直接调用
+#   DATE10 = 史料日期 DATE 加 10 年（宏里做不了日期加法，由生成器算好传入；N 类也必须带，宏没有可选参数）。
+# done 变量沿用 hd_nbc_death_<ID>_done（旧档与 A3 冉闵读它）。判断「已死」一律用 hd_j16_dead_trigger。
+#
+# 单条流程（01 §6.2）：已 done → 不动；未到 DATE → 不动；在库中已死 → 设 done；
+#   解析不到人 → 已过 DATE10 当即设 done（记 SKIP missing_prestart，晚开局首跳全段扫时就是这种）；否则计数，满 24 跳（约 2 年）设 done，记 SKIP missing；
+#   K 类前提不成立（PRE 未设、凶手解析不到或已死）→ D15 顺延，每跳重查；到 DATE10 仍不成立 → 改按 N 类病逝，记 SKIP d15_to_N（D15「满 DATE + 10 年」）；
+#   AI → 到日即死；玩家 → N 类弹 hd_nbc.0100「病笃」，K 类弹 hd_j16.0001「大限」，强撑每人只能一次（D10，两事件共用 hd_j16_endured）。
+#   玩家待答标记 hd_j16_dx_asked（365 天兜底）在 hd_nbc.0100、hd_j16.0001 的选项里清掉，没回复前不重复弹。
+# 本文件内部用的 scope：hd_j16_dv（当事人）、hd_j16_dk（凶手）。每行开头先清掉，免得串到上一行的人。
+# DATE10 ≤ 段止 + 10 年，deaths 文件的粗筛上限「段止 + 11 年」罩得住：段内条目在窗口内每跳重查，窗口外的首跳全段扫时一律已过 DATE10。
+
+############################################################
+# 对外入口
+############################################################
+hd_j16_death_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_nbc_death_$ID$_done }
+			current_date >= $DATE$
+		}
+		hd_j16_death_prepare_effect = { ID = $ID$ DATE10 = $DATE10$ }
+		if = {
+			limit = { exists = scope:hd_j16_dv }
+			hd_j16_death_natural_effect = { ID = $ID$ }
+		}
+	}
+}
+
+hd_j16_death_kill_effect = {
+	# 不带前置节点：PRE 填一个心跳运行期间恒成立的变量
+	hd_j16_death_kill_pre_effect = { ID = $ID$ DATE = $DATE$ DATE10 = $DATE10$ REASON = $REASON$ KILLER = $KILLER$ PRE = hd_j16_pulse_started }
+}
+
+hd_j16_death_kill_pre_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_nbc_death_$ID$_done }
+			current_date >= $DATE$
+		}
+		hd_j16_death_prepare_effect = { ID = $ID$ DATE10 = $DATE10$ }
+		if = {
+			limit = { exists = scope:hd_j16_dv }
+			if = {
+				limit = { exists = scope:hd_j16_dk }
+				clear_saved_scope = hd_j16_dk
+			}
+			hd_j16_resolve_effect = { ID = $KILLER$ AS = hd_j16_dk }
+			if = {
+				limit = {
+					has_global_variable = $PRE$
+					exists = scope:hd_j16_dk
+					NOT = { scope:hd_j16_dk = scope:hd_j16_dv }
+				}
+				hd_j16_death_violent_effect = { ID = $ID$ REASON = $REASON$ HAS_KILLER = yes }
+			}
+			else = {
+				hd_j16_death_defer_effect = { ID = $ID$ DATE10 = $DATE10$ }
+			}
+		}
+	}
+}
+
+hd_j16_death_die_effect = {
+	hd_j16_death_die_pre_effect = { ID = $ID$ DATE = $DATE$ DATE10 = $DATE10$ REASON = $REASON$ PRE = hd_j16_pulse_started }
+}
+
+hd_j16_death_die_pre_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_nbc_death_$ID$_done }
+			current_date >= $DATE$
+		}
+		hd_j16_death_prepare_effect = { ID = $ID$ DATE10 = $DATE10$ }
+		if = {
+			limit = { exists = scope:hd_j16_dv }
+			if = {
+				limit = { has_global_variable = $PRE$ }
+				hd_j16_death_violent_effect = { ID = $ID$ REASON = $REASON$ HAS_KILLER = no }
+			}
+			else = {
+				hd_j16_death_defer_effect = { ID = $ID$ DATE10 = $DATE10$ }
+			}
+		}
+	}
+}
+
+############################################################
+# 内部步骤
+############################################################
+
+# 已到 DATE、未 done 时调用：已死设 done；取不到人：已过 DATE10 当即设 done，否则计数；取到人则存为 scope:hd_j16_dv
+hd_j16_death_prepare_effect = {
+	if = {
+		limit = { exists = scope:hd_j16_dv }
+		clear_saved_scope = hd_j16_dv
+	}
+	if = {
+		limit = { hd_j16_dead_trigger = { ID = $ID$ } }
+		set_global_variable = hd_nbc_death_$ID$_done
+	}
+	else = {
+		hd_j16_resolve_effect = { ID = $ID$ AS = hd_j16_dv }
+		if = {
+			limit = {
+				NOT = { exists = scope:hd_j16_dv }
+				current_date >= $DATE10$
+			}
+			# 史料日期已过 10 年仍取不到人（晚开局首跳全段扫，段已在粗筛窗口外，之后不会再查）：不再等 24 跳
+			set_global_variable = hd_nbc_death_$ID$_done
+			if = {
+				limit = { has_global_variable = hd_j16_dmiss_$ID$ }
+				remove_global_variable = hd_j16_dmiss_$ID$
+			}
+			debug_log = "HD_J16 death_$ID$ SKIP missing_prestart"
+		}
+		else_if = {
+			limit = { NOT = { exists = scope:hd_j16_dv } }
+			# hbirth 尚未出场，或指针随载体丢失（次年元旦才补出）：不立即吞掉这条卒年
+			if = {
+				limit = { NOT = { has_global_variable = hd_j16_dmiss_$ID$ } }
+				set_global_variable = { name = hd_j16_dmiss_$ID$ value = 0 }
+			}
+			change_global_variable = { name = hd_j16_dmiss_$ID$ add = 1 }
+			if = {
+				limit = { global_var:hd_j16_dmiss_$ID$ >= 24 }
+				set_global_variable = hd_nbc_death_$ID$_done
+				remove_global_variable = hd_j16_dmiss_$ID$
+				debug_log = "HD_J16 death_$ID$ SKIP missing"
+			}
+		}
+	}
+}
+
+# N 类（含 K 类满 10 年转 N）。scope:hd_j16_dv 已存好
+hd_j16_death_natural_effect = {
+	scope:hd_j16_dv = {
+		if = {
+			limit = { is_ai = yes }
+			set_global_variable = hd_nbc_death_$ID$_done
+			death = { death_reason = death_natural_causes }
+			debug_log = "HD_J16 death_$ID$ FIRE natural"
+		}
+		else_if = {
+			limit = {
+				NOT = { has_variable = hd_nbc_death_delay }
+				NOT = { has_variable = hd_j16_dx_asked }
+			}
+			# 待答标记：hd_nbc.0100 的两个选项清掉；365 天只是兜底
+			set_variable = { name = hd_j16_dx_asked value = yes days = 365 }
+			trigger_event = hd_nbc.0100
+			debug_log = "HD_J16 death_$ID$ WAIT player_sick"
+		}
+	}
+}
+
+# 有死因的死亡。HAS_KILLER = yes 时带 scope:hd_j16_dk 作凶手（调用方已确认存在）。
+# HAS_KILLER 是内部开关（yes/no），不是凶手 ID；对外的凶手 ID 参数叫 KILLER，两者别混
+hd_j16_death_violent_effect = {
+	scope:hd_j16_dv = {
+		if = {
+			limit = { is_ai = yes }
+			set_global_variable = hd_nbc_death_$ID$_done
+			if = {
+				limit = { always = $HAS_KILLER$ }
+				death = { death_reason = $REASON$ killer = scope:hd_j16_dk }
+			}
+			else = {
+				death = { death_reason = $REASON$ }
+			}
+			debug_log = "HD_J16 death_$ID$ FIRE $REASON$"
+		}
+		# A1-F6：当事人是玩家时不杀，改弹「大限」（可强撑一次）。死因、凶手记在人物身上，由事件选项读回
+		else_if = {
+			limit = {
+				NOT = { has_variable = hd_nbc_death_delay }
+				NOT = { has_variable = hd_j16_dx_asked }
+			}
+			# 待答标记：hd_j16.0001 的两个选项（经 hd_j16_doom_clear_effect）清掉；365 天只是兜底
+			set_variable = { name = hd_j16_dx_asked value = yes days = 365 }
+			set_variable = { name = hd_j16_dx_reason value = flag:$REASON$ }
+			if = {
+				limit = { always = $HAS_KILLER$ }
+				set_variable = { name = hd_j16_dx_killer value = scope:hd_j16_dk }
+			}
+			else_if = {
+				limit = { has_variable = hd_j16_dx_killer }
+				remove_variable = hd_j16_dx_killer
+			}
+			trigger_event = hd_j16.0001
+			debug_log = "HD_J16 death_$ID$ WAIT player_doom"
+		}
+	}
+}
+
+# D15 顺延：前提不成立时每跳重查；到 DATE10（史料日期 + 10 年）仍不成立，改按 N 类病逝。
+# 晚开局首跳就已过 DATE10 的，当跳直接转 N。hd_j16_dd_<ID> 只用来让「顺延」日志记一次
+hd_j16_death_defer_effect = {
+	if = {
+		limit = { current_date >= $DATE10$ }
+		debug_log = "HD_J16 death_$ID$ SKIP d15_to_N"
+		hd_j16_death_natural_effect = { ID = $ID$ }
+	}
+	else_if = {
+		limit = { NOT = { has_global_variable = hd_j16_dd_$ID$ } }
+		set_global_variable = hd_j16_dd_$ID$
+		debug_log = "HD_J16 death_$ID$ WAIT d15_defer"
+	}
+}
+
+############################################################
+# 大限事件（hd_j16.0001）选项 a 用：按记下的死因赴死。Root：玩家当事人
+############################################################
+hd_j16_doom_die_effect = {
+	if = {
+		limit = { var:hd_j16_dx_killer ?= { is_alive = yes } }
+		var:hd_j16_dx_killer = { save_scope_as = hd_j16_dx_k }
+	}
+	# 死因按记下的旗标逐个展开（save_scope_value_as 不收旗标，报错清单第 24 条）；先判旗标，进分支后再清变量、赴死
+	if = {
+		limit = { var:hd_j16_dx_reason ?= flag:death_execution }
+		hd_j16_doom_die_reason_effect = { REASON = death_execution }
+	}
+	else_if = {
+		limit = { var:hd_j16_dx_reason ?= flag:death_battle }
+		hd_j16_doom_die_reason_effect = { REASON = death_battle }
+	}
+	else_if = {
+		limit = { var:hd_j16_dx_reason ?= flag:death_murder_known }
+		hd_j16_doom_die_reason_effect = { REASON = death_murder_known }
+	}
+	else_if = {
+		limit = { var:hd_j16_dx_reason ?= flag:death_suicide }
+		hd_j16_doom_die_reason_effect = { REASON = death_suicide }
+	}
+	else_if = {
+		limit = { var:hd_j16_dx_reason ?= flag:death_drowned }
+		hd_j16_doom_die_reason_effect = { REASON = death_drowned }
+	}
+	else = {
+		hd_j16_doom_die_reason_effect = { REASON = death_murder }
+	}
+}
+hd_j16_doom_die_reason_effect = {
+	hd_j16_doom_clear_effect = yes
+	if = {
+		limit = { exists = scope:hd_j16_dx_k }
+		death = { death_reason = $REASON$ killer = scope:hd_j16_dx_k }
+	}
+	else = {
+		death = { death_reason = $REASON$ }
+	}
+}
+# 清掉大限的临时人物变量（人还活着时调用；0001 两个选项都先经过这里，含待答标记 hd_j16_dx_asked）
+hd_j16_doom_clear_effect = {
+	if = {
+		limit = { has_variable = hd_j16_dx_asked }
+		remove_variable = hd_j16_dx_asked
+	}
+	if = {
+		limit = { has_variable = hd_j16_dx_reason }
+		remove_variable = hd_j16_dx_reason
+	}
+	if = {
+		limit = { has_variable = hd_j16_dx_killer }
+		remove_variable = hd_j16_dx_killer
+	}
+}

@@ -14,6 +14,9 @@
 #   flag:xuzhou      原 hd4_tao_xuzhou_cb        陶谦徐州
 #   flag:regional    原 hds_regional_cb          孙家区域战
 #   flag:wu          原 hds_wu_invasion_cb       孙家入吴/丹阳（取 zzzzzzzz 覆盖版）
+#   flag:annex       史实灭国（2026-10-28 boki：两晋十六国灭国战、前秦导演灭仇池/前凉/代）。只经脚本宣战
+#                    （hd_tb_annex_start_war_effect），不看斗争期；胜败结算与普通吞并相同（全取守方），另调
+#                    hd_nbc_war_result_effect 给剧本节点发结局标记（战争变量 hd_nbc_war_kind 照旧）
 # 无 kind 时即普通吞并。各情境的开战条件、作废条件、胜败钩子、描述原样搬入下列分支；
 # 静态参数（占领分上限、战斗分、死亡继承、目标层级）全部共用，取历史战争的取值。
 # 目标头衔：target_titles = all / tier all，脚本战争照旧传 target_title；普通吞并的目标只是占位，
@@ -47,7 +50,12 @@ hd_dc_tunbing_cb = {
 		trigger_if = {
 			limit = { scope:attacker = { has_variable = hd_tb_kind } }
 			trigger_if = {
-				limit = { hd_tb_arm_kind_trigger = { K = historical } }
+				limit = {
+					OR = {
+						hd_tb_arm_kind_trigger = { K = historical }
+						hd_tb_arm_kind_trigger = { K = annex }
+					}
+				}
 				always = yes
 			}
 			trigger_else_if = {
@@ -147,7 +155,12 @@ hd_dc_tunbing_cb = {
 		trigger_if = {
 			limit = { scope:attacker = { has_variable = hd_tb_kind } }
 			trigger_if = {
-				limit = { hd_tb_arm_kind_trigger = { K = historical } }
+				limit = {
+					OR = {
+						hd_tb_arm_kind_trigger = { K = historical }
+						hd_tb_arm_kind_trigger = { K = annex }
+					}
+				}
 				always = yes
 			}
 			trigger_else_if = {
@@ -275,7 +288,7 @@ hd_dc_tunbing_cb = {
 				title:d_danyang = { hds_enemy_holds_target_trigger = yes }
 			}
 			trigger_else = {
-				always = yes	# historical：只经脚本 start_war，不走界面
+				always = yes	# historical / annex：只经脚本 start_war，不走界面
 			}
 		}
 		trigger_else = {
@@ -429,6 +442,11 @@ hd_dc_tunbing_cb = {
 				NOT = { title:d_danyang = { hds_enemy_holds_target_trigger = yes } }
 			}
 		}
+		trigger_else_if = {
+			limit = { hd_tb_war_kind_trigger = { K = annex } }
+			# 史实灭国：守方已无地（被别国灭掉）才作废；不看斗争期、是否独立
+			scope:defender = { is_landed = no }
+		}
 		trigger_else = {
 			OR = {
 				hd_cycle_phase_is_struggle_trigger = no
@@ -476,6 +494,10 @@ hd_dc_tunbing_cb = {
 			}
 			hds_cb_retry_effect = yes
 		}
+		else_if = {
+			limit = { hd_tb_war_kind_trigger = { K = annex } }
+			hd_nbc_war_result_effect = { RESULT = invalid }
+		}
 	}
 
 	cost = {
@@ -498,6 +520,7 @@ hd_dc_tunbing_cb = {
 				else_if = { limit = { scope:attacker.var:hd_tb_kind ?= flag:xuzhou } set_variable = { name = hd_tb_kind value = flag:xuzhou } }
 				else_if = { limit = { scope:attacker.var:hd_tb_kind ?= flag:regional } set_variable = { name = hd_tb_kind value = flag:regional } }
 				else_if = { limit = { scope:attacker.var:hd_tb_kind ?= flag:wu } set_variable = { name = hd_tb_kind value = flag:wu } }
+				else_if = { limit = { scope:attacker.var:hd_tb_kind ?= flag:annex } set_variable = { name = hd_tb_kind value = flag:annex } }
 			}
 			if = {
 				limit = { scope:attacker.var:hd_tb_kind ?= flag:guandu }
@@ -704,6 +727,17 @@ hd_dc_tunbing_cb = {
 			}
 			scope:attacker = { add_prestige_experience = medium_prestige_value }
 			add_truce_attacker_victory_effect = yes
+			if = {
+				limit = { hd_tb_war_kind_trigger = { K = annex } }
+				# 被灭之国的称谓变量与国号随头衔留下，胜者不应显示旧国的天王、皇帝和国号（照 hd_nbc_war_cb）
+				every_in_list = {
+					list = hd_dc_tunbing_titles
+					limit = { has_variable = hd_nbc_style }
+					remove_variable = hd_nbc_style
+					reset_title_name = yes
+				}
+				hd_nbc_war_result_effect = { RESULT = won }
+			}
 		}
 	}
 
@@ -772,6 +806,10 @@ hd_dc_tunbing_cb = {
 		else = {
 			scope:attacker = { show_pow_release_message_effect = yes }
 			add_truce_white_peace_effect = yes
+			if = {
+				limit = { hd_tb_war_kind_trigger = { K = annex } }
+				hd_nbc_war_result_effect = { RESULT = white }
+			}
 		}
 	}
 
@@ -842,6 +880,10 @@ hd_dc_tunbing_cb = {
 			scope:attacker = { show_pow_release_message_effect = yes }
 			scope:attacker = { pay_short_term_gold_reparations_effect = { GOLD_VALUE = 3 } }
 			add_truce_attacker_defeat_effect = yes
+			if = {
+				limit = { hd_tb_war_kind_trigger = { K = annex } }
+				hd_nbc_war_result_effect = { RESULT = lost }
+			}
 		}
 	}
 

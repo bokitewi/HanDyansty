@@ -1,0 +1,95 @@
+# War scope. These objectives must never fall back to a county conquest.
+hd_peace_artifact_war_trigger = {
+	OR = { using_cb = artifact_war using_cb = reclaim_relic_artifact_war using_cb = debug_artifact_war }
+}
+hd_peace_special_objective_war_trigger = {
+	OR = { hd_peace_artifact_war_trigger = yes using_cb = mandala_raze_capital_structure_cb using_cb = migration_cb hd_peace_adventure_relocation_war_trigger = yes }
+}
+hd_peace_landless_relocation_war_trigger = {
+	OR = {
+		using_cb = ep3_laamp_adventurer_county_invasion
+		using_cb = ep3_laamp_adventurer_duchy_invasion
+		using_cb = ep3_laamp_adventurer_kingdom_invasion
+		using_cb = ep3_laamp_adventurer_empire_invasion
+	}
+}
+hd_peace_adventure_relocation_war_trigger = {
+	OR = { using_cb = fp1_varangian_adventurer_conquest using_cb = legendary_adventure hd_peace_landless_relocation_war_trigger = yes }
+}
+
+# Artifact scope; ROOT is the proposer, scope:attacker/defender are explicitly
+# bound before calling the native artifact eligibility triggers.
+hd_peace_objective_artifact_valid_trigger = {
+	exists = artifact_owner
+	trigger_if = {
+		limit = { root.var:hd_peace_treaty_war = { using_cb = artifact_war } }
+		artifact_war_claimable_artifact_trigger = yes
+		OR = {
+			root = { has_personal_artifact_claim = prev }
+			AND = {
+				root.house ?= { has_house_artifact_claim = prev }
+				exists = root.house
+				artifact_owner = { trigger_if = { limit = { exists = house } house != root.house } }
+			}
+		}
+	}
+	trigger_else_if = {
+		limit = { root.var:hd_peace_treaty_war = { using_cb = reclaim_relic_artifact_war } }
+		OR = { relic_war_valid_religious_artifact_trigger = yes relic_war_valid_struggle_artifact_trigger = yes }
+		artifact_owner = {
+			OR = {
+				this = root.var:hd_peace_treaty_opponent
+				AND = { is_vassal_or_below_of = root.var:hd_peace_treaty_opponent faith != root.faith }
+			}
+		}
+	}
+	trigger_else_if = {
+		limit = { root.var:hd_peace_treaty_war = { using_cb = debug_artifact_war } }
+		artifact_owner = root.var:hd_peace_treaty_opponent
+	}
+	trigger_else = { always = no }
+}
+
+# Character scope, ROOT = proposer. The exact offered artifacts/building are
+# cached at composition, so a pending offer cannot silently change its targets.
+hd_peace_special_objective_available_trigger = {
+	save_temporary_scope_as = attacker
+	var:hd_peace_treaty_opponent = { save_temporary_scope_as = defender }
+	OR = {
+		AND = {
+			var:hd_peace_treaty_war = { hd_peace_artifact_war_trigger = yes }
+			has_variable_list = hd_peace_objective_artifacts
+			any_in_list = { variable = hd_peace_objective_artifacts always = yes }
+			any_in_list = { variable = hd_peace_objective_artifacts count = root.var:hd_peace_objective_artifact_count always = yes }
+			NOT = { any_in_list = { variable = hd_peace_objective_artifacts NOT = { hd_peace_objective_artifact_valid_trigger = yes } } }
+		}
+		AND = {
+			var:hd_peace_treaty_war = { using_cb = mandala_raze_capital_structure_cb }
+			exists = var:hd_peace_objective_raze_province
+			var:hd_peace_treaty_opponent.capital_province = var:hd_peace_objective_raze_province
+			var:hd_peace_objective_raze_province = { has_building_with_flag = mandala_capital_building has_ruined_great_building = no }
+		}
+		AND = {
+			var:hd_peace_treaty_war = { using_cb = migration_cb }
+			government_has_flag = government_is_nomadic
+			var:hd_peace_treaty_war.casus_belli = { any_target_title = { always = yes } }
+		}
+		AND = {
+			var:hd_peace_treaty_war = { hd_peace_adventure_relocation_war_trigger = yes }
+			any_in_list = {
+				variable = hd_peace_cb_reserved_counties
+				holder ?= { OR = { this = root.var:hd_peace_treaty_opponent is_vassal_or_below_of = root.var:hd_peace_treaty_opponent } }
+				exists = holder
+			}
+			trigger_if = {
+				limit = { var:hd_peace_treaty_war = { using_cb = fp1_varangian_adventurer_conquest } }
+				is_independent_ruler = yes
+				highest_held_title_tier <= tier_duchy
+			}
+			trigger_if = {
+				limit = { var:hd_peace_treaty_war = { hd_peace_landless_relocation_war_trigger = yes } }
+				government_has_flag = government_is_landless_adventurer
+			}
+		}
+	}
+}

@@ -208,8 +208,25 @@ hd_fo_dispatch_events_effect = {
 	if = { limit = { hd_fo_due_trigger = { E = e24 YEAR = 345 } } hd_fo_e24_effect = yes }
 	if = { limit = { hd_fo_due_trigger = { E = e25 YEAR = 365 } } hd_fo_e25_effect = yes }
 	if = { limit = { hd_fo_due_trigger = { E = e50 YEAR = 366 } } hd_fo_e50_effect = yes }
-	if = { limit = { hd_fo_due_trigger = { E = e26 YEAR = 379 } } hd_fo_e26_effect = yes }
-	if = { limit = { hd_fo_due_trigger = { E = e27 YEAR = 384 } } hd_fo_e27_effect = yes }
+	# E26、E27：两晋十六国统一史实线（j16）心跳在运行时（hd_j16_pulse_started，史实事件规则开启的 304/346/370/404 开局），
+	# 改由 E4-Q40 襄阳之战秦胜、E4-Q45 吕光破龟兹调用 hd_fo_e26_j16_effect、hd_fo_e27_j16_effect（j16 04 §4 第 7、8 步），
+	# 这里只管到期作废（E26 385、E27 394；罗什留龟兹等 E30）。非 j16 局（190、218 等一路玩下来）照旧按年份触发
+	if = {
+		limit = { hd_fo_due_trigger = { E = e26 YEAR = 379 } }
+		if = {
+			limit = { has_global_variable = hd_j16_pulse_started }
+			hd_fo_expire_effect = { E = e26 EXP = 385 }
+		}
+		else = { hd_fo_e26_effect = yes }
+	}
+	if = {
+		limit = { hd_fo_due_trigger = { E = e27 YEAR = 384 } }
+		if = {
+			limit = { has_global_variable = hd_j16_pulse_started }
+			hd_fo_expire_effect = { E = e27 EXP = 394 }
+		}
+		else = { hd_fo_e27_effect = yes }
+	}
 	if = { limit = { hd_fo_due_trigger = { E = e28 YEAR = 386 } } hd_fo_e28_effect = yes }
 	if = { limit = { hd_fo_due_trigger = { E = e29a YEAR = 399 } } hd_fo_e29a_effect = yes }
 	if = { limit = { hd_fo_due_trigger = { E = e30 YEAR = 401 } } hd_fo_e30_effect = yes }
@@ -650,6 +667,51 @@ hd_fo_e27_effect = {
 		}
 	}
 	else = { hd_fo_expire_effect = { E = e27 EXP = 394 } }
+}
+
+# —— j16 入口（两晋十六国统一史实线 04 §4 第 7、8 步）——
+# 原效果写死 character:lueyang_fu_020（苻坚）、character:lueyang_lv_002（吕光）；304 开局时二人尚未出生，
+# 只有 hbirth 出场指针，history 人物不存在。所以 j16 节点改调下面两个入口，由节点把解析好的人物作为 WHO 传入。
+# 两个入口都不看年份（绕过 hd_fo_due_trigger），所以自带 done 守卫；任意作用域可调，只用全局变量与 WHO。
+# 用法：hd_j16_resolve_effect = { ID = lueyang_lv_002 AS = hd_j16_q45_lv }  hd_fo_e27_j16_effect = { WHO = scope:hd_j16_q45_lv }
+
+# E26 j16 入口：E4-Q40 襄阳之战秦胜时调用。WHO = 秦主（在世即可）。道安归 WHO，慧远移居柴桑，WHO 收 hd_fo.1026。
+# 道安已死、WHO 不存在或已死、E26 已做过：什么都不做（j16 年度调度到 385 年把 E26 作废）
+hd_fo_e26_j16_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_fo_done_e26 }
+			hd_fo_monk_alive_trigger = { ID = dao_an }
+			$WHO$ ?= { is_alive = yes }
+		}
+		$WHO$ = { save_scope_as = hd_fo_actor }
+		hd_fo_done_effect = { E = e26 }
+		hd_fo_give_monk_to_effect = { ID = dao_an WHO = scope:hd_fo_actor }
+		hd_fo_move_monk_effect = { ID = hui_yuan PLACE = c_uuii_p_6364 }
+		scope:hd_fo_actor = { add_piety = 100 add_prestige = 75 trigger_event = hd_fo.1026 }
+		clear_saved_scope = hd_fo_actor
+		debug_log = "hd_fo: 事件 e26 由 j16 E4-Q40 调用"
+	}
+}
+
+# E27 j16 入口：E4-Q45 第 ② 步「破龟兹」调用。WHO = 吕光（此时已受敦煌，is_ruler = yes）。罗什归 WHO；
+# WHO 不存在、已死或无地时照原效果移居姑臧。罗什已死或 E27 已做过：什么都不做（j16 年度调度到 394 年把 E27 作废）
+hd_fo_e27_j16_effect = {
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_fo_done_e27 }
+			hd_fo_monk_alive_trigger = { ID = jiu_mo_luo_shi }
+		}
+		hd_fo_done_effect = { E = e27 }
+		if = {
+			limit = { $WHO$ ?= { is_alive = yes is_ruler = yes } }
+			hd_fo_give_monk_to_effect = { ID = jiu_mo_luo_shi WHO = $WHO$ }
+		}
+		else = {
+			hd_fo_move_monk_effect = { ID = jiu_mo_luo_shi PLACE = c_uuii_p_1564 }
+		}
+		debug_log = "hd_fo: 事件 e27 由 j16 E4-Q45 调用"
+	}
 }
 
 # E28 慧远入庐山，桓伊立东林寺（386）

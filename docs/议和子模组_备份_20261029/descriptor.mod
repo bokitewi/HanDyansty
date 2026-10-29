@@ -1,0 +1,12 @@
+version="1.0.0"
+tags={
+	"Gameplay"
+	"Warfare"
+}
+name="汉晋春秋·议和与战争结算"
+dependencies={
+	"汉晋春秋内测"
+}
+replace_path="common/casus_belli_types"
+supported_version="1.20.*"
+remote_file_id="3820784621"

@@ -1,0 +1,362 @@
+﻿# 两晋十六国统一史实线 304 开局内容（08 §1.2）。由 zz_hd_304_startup_effects.txt 的 hd_304_after_lobby_effect 末尾 调用（on_game_start_after_lobby，调用处已带开局日期闸门）。
+# 写入者：3-A（八王装配，已写）→ 3-C（世族、朝官、宫廷）（第 1 期先建空入口）。旧的三个 startup 文件之后不再改，各节的开局内容一律写在这里。
+# 函数开头的「历史入侵预设」块是第 1 期 p1-S 放的（审查 minor-5：读游戏规则要在大厅之后），后续写入者往下追加，不要删改这一块。
+
+hd_j16_startup_304_effect = {
+	# 历史入侵预设（A1-F7，06 §3.1）：刘裕、卢循两场入侵在史实事件开启时不起兵，改由心跳节点 E5-J 线驱动；规则关闭时心跳不跑，入侵照旧。
+	# 放在大厅之后（原版 game_start.txt 注释：读游戏规则用 on_game_start_after_lobby）；读取方 hd_hi_yearly_* 挂 yearly_global_pulse，开局后才跑
+	if = {
+		limit = { hd_history_events_enabled_trigger = yes }
+		set_global_variable = { name = hd_hi_done_liuyu value = yes }
+		set_global_variable = { name = hd_hi_done_luxun value = yes }
+	}
+	# 3-A 八王装配（02 §1.1 #1–#8）：只在史实事件开启时做（规则关闭时心跳不跑，八王节点与闸门无人收尾，保持旧行为：颙仍朝贡、不装权臣）
+	if = {
+		limit = { hd_history_events_enabled_trigger = yes }
+		hd_j16_304_bawang_setup_effect = yes
+	}
+	# ===== 3-C（02 §4、§6.1、§6.3，impl_notes 第 3 期第一轮决定 3）：以下各段排在 3-A 八王装配之后，3-A 的段不改 =====
+	# 开局摆位「颖失邺」：与八王装配同一规则开关（B3、B9、决议 E 互锁的解法，只在史实事件开启时才有意义）
+	if = {
+		limit = { hd_history_events_enabled_trigger = yes }
+		hd_j16_304c_ying_lose_ye_effect = yes
+	}
+	# 晋廷朝官（02 §4，F6★A：只授史实人选，空席不补）。须在 3-A install 之后：丞相留给 install 授颙。规则关闭也照授（与头衔历史一样属开局数据）
+	hd_j16_304c_court_offices_effect = yes
+	# 宫廷安置（02 §6.1；张方已由 3-A 安置，不重复）
+	hd_j16_304c_court_place_effect = yes
+	# 吐谷浑储君（02 §6.3 第 4 步；头衔改指与删 hd_304_chief_tuyuhun 已由第 2 期 p2-A 合并完成）
+	hd_j16_304c_tuyuhun_heir_effect = yes
+}
+
+############################################################
+# 八王装配（02 §1.1；3-A）。由 hd_j16_startup_304_effect 调用（304.11.20 after_lobby）。
+# 旧 zz_hd_304_startup_effects.txt 已冻结：#1「颙不再朝贡」不改旧名单，改在这里先结束颙的朝贡、再改为天子封臣（顺序照原版 end_tributary 用法）。
+# #7 京城：开局仍为洛阳（hd_304_game_start_effect 已设 hd_court_capital_county = c_luoyang）；B1 西迁时改长安。
+# #8 储君：hd_304_heir_effect 已立司马炽，视为「废颖立炽」已发生，B1 不重做。
+############################################################
+hd_j16_304_bawang_setup_effect = {
+	# #6 八王时段闸门。带 days：304.11.20 + 2413 天 = 311.7.1，最迟到期自动消失；B12 了结或永嘉开战时由 hd_j16_bawang_end_effect 提前清
+	set_global_variable = { name = hd_j16_bawang_active value = yes days = 2413 }
+	character:si_ma_yong ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = yes
+				exists = title:h_china.holder
+				NOT = { this = title:h_china.holder }
+			}
+			save_scope_as = hd_j16_bw_yong
+			# 2026-10-28 boki：开局不再把颙并成惠帝封臣（#1 结束朝贡、#2 改封臣、#4 装权臣全部取消），颙保持独立朝贡国。
+			# 入朝辅政仍可走「入朝辅政」决议（hd_j16_join_court_effect 在 zz_hd_j16_304_decisions.txt 里调）；
+			# 西迁节点 B1 本就允许颙「在世持 d_jingzhao」而不是权臣，不受影响。原 #1/#2/#4 写法见备份 backup_1028。
+			# #3 张方入颙宫廷，任军事议员，挂 hd_j16_zhangfang_general
+			character:hd_304_zhang_fang ?= {
+				if = {
+					limit = {
+						is_alive = yes
+						is_landed = no
+					}
+					save_scope_as = hd_j16_bw_zf
+					if = {
+						limit = { NOT = { employer ?= scope:hd_j16_bw_yong } }
+						scope:hd_j16_bw_yong = { add_courtier = scope:hd_j16_bw_zf }
+					}
+					set_variable = { name = hd_j16_zhangfang_general value = yes }
+					if = {
+						limit = {
+							is_adult = yes
+							employer ?= scope:hd_j16_bw_yong
+						}
+						scope:hd_j16_bw_yong = {
+							assign_councillor_type = {
+								type = councillor_marshal
+								remove_existing_councillor = yes
+								target = scope:hd_j16_bw_zf
+							}
+						}
+					}
+				}
+			}
+			# 原 #4 装为权臣（install）、#5 任期旗标 2 年挡废帝决议：随上面一并取消（10-28）；丞相席位开局空着，待入朝辅政时再授
+			debug_log = "HD_J16 boot SKIP bawang_regent_deferred"
+		}
+	}
+	debug_log = "HD_J16 boot FIRE bawang_setup"
+}
+
+############################################################
+# 3-C 开局摆位「颖失邺」（汇总人 10-27 决定 3；史实 304.8 王浚破邺、颖挟帝奔洛阳，开局日 304.11.20 颖已失邺；D2 软摆位）
+# 魏郡 d_weijun 郡头衔及其法理辖县转天子本人直辖：
+#   颖本人持有的县（含男爵领，take_baronies）改持有者为天子；颖下属持有的魏郡县，持有者改投天子为直属封臣；颖保留冀州、司州其余郡。
+# 颖开局只直接持有魏郡 8 县（首府邺城，即 k_sizhou 首府），冀州、司州其余郡县全在郡守手里：照字面全转会让颖一县不剩。
+# 故先从颖的直属郡守手里取冀州高邑 c_uuii_p_4258（k_uuii_jizhou 法理首府；赵国郡守 7 县之一，非郡治；305 公师藩起于赵魏迎颖）
+# 给颖作保底并迁首府过去，再转魏郡。取不到保底县时整段不做（只记日志），不让颖变成无县之主。
+# 运行时做，不改 history/titles；d_weijun_sili（朝歌）不在本项。写法照 hd_nbc_give_county_effect / hd_nbc_swear_fealty_effect。
+############################################################
+hd_j16_304c_ying_lose_ye_effect = {
+	if = {
+		limit = { exists = scope:hd_j16_yl_ying }
+		clear_saved_scope = hd_j16_yl_ying
+	}
+	if = {
+		limit = { exists = scope:hd_j16_yl_tz }
+		clear_saved_scope = hd_j16_yl_tz
+	}
+	character:si_ma_ying ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = yes
+			}
+			save_scope_as = hd_j16_yl_ying
+		}
+	}
+	title:h_china.holder ?= {
+		if = {
+			limit = { is_alive = yes }
+			save_scope_as = hd_j16_yl_tz
+		}
+	}
+	# 收尾 pX-A（Q3；01 §7.2-3「不在没有选项的情况下夺走玩家的头衔」）：颖是玩家时整段不做，保留书签上的领地（含邺）
+	if = {
+		limit = { scope:hd_j16_yl_ying ?= { is_ai = no } }
+		debug_log = "HD_J16 startup_304 SKIP player_ruler"
+	}
+	else_if = {
+		limit = {
+			exists = scope:hd_j16_yl_ying
+			exists = scope:hd_j16_yl_tz
+			NOT = { scope:hd_j16_yl_ying = scope:hd_j16_yl_tz }
+			OR = {
+				scope:hd_j16_yl_ying = { has_title = title:d_weijun }
+				title:c_uuii_p_1172.holder ?= {
+					OR = {
+						this = scope:hd_j16_yl_ying
+						target_is_liege_or_above = scope:hd_j16_yl_ying
+					}
+				}
+			}
+		}
+		# ① 保底县：颖在魏郡以外已无任何县时，先取高邑（须在颖一方、非天子本人所持）
+		if = {
+			limit = {
+				scope:hd_j16_yl_ying = {
+					NOT = {
+						any_held_title = {
+							tier = tier_county
+							NOT = { target_is_de_jure_liege_or_above = title:d_weijun }
+						}
+					}
+				}
+			}
+			if = {
+				limit = {
+					title:c_uuii_p_4258.holder ?= {
+						is_ai = yes	# 收尾 pX-A（Q3 同理）：高邑持有者是玩家时不取其县（整段随之不做，见 SKIP ying_lose_ye_no_keep_county）
+						NOT = { this = scope:hd_j16_yl_tz }
+						target_is_liege_or_above = scope:hd_j16_yl_ying
+					}
+				}
+				hd_nbc_give_county_effect = { COUNTY = title:c_uuii_p_4258 TO = scope:hd_j16_yl_ying }
+				scope:hd_j16_yl_ying = { set_realm_capital = title:c_uuii_p_4258 }
+				debug_log = "HD_J16 startup_304 FIRE ying_keep_gaoyi"
+			}
+		}
+		if = {
+			limit = {
+				scope:hd_j16_yl_ying = {
+					any_held_title = {
+						tier = tier_county
+						NOT = { target_is_de_jure_liege_or_above = title:d_weijun }
+					}
+				}
+			}
+			# ② 首府若仍在魏郡（颖在魏郡外本已有县、未经 ① 的情形），先迁到魏郡以外的县
+			if = {
+				limit = {
+					scope:hd_j16_yl_ying.capital_county ?= { target_is_de_jure_liege_or_above = title:d_weijun }
+				}
+				scope:hd_j16_yl_ying = {
+					random_held_title = {
+						limit = {
+							tier = tier_county
+							NOT = { target_is_de_jure_liege_or_above = title:d_weijun }
+						}
+						save_scope_as = hd_j16_yl_cap
+					}
+					if = {
+						limit = { exists = scope:hd_j16_yl_cap }
+						set_realm_capital = scope:hd_j16_yl_cap
+					}
+				}
+			}
+			# ③ 郡头衔：颖本人持有则转天子；颖下属持有则其人改投天子
+			if = {
+				limit = { title:d_weijun.holder ?= scope:hd_j16_yl_ying }
+				create_title_and_vassal_change = { type = usurped save_scope_as = hd_j16_yl_change add_claim_on_loss = no }
+				title:d_weijun = {
+					change_title_holder = {
+						holder = scope:hd_j16_yl_tz
+						change = scope:hd_j16_yl_change
+					}
+				}
+				resolve_title_and_vassal_change = scope:hd_j16_yl_change
+			}
+			else_if = {
+				limit = {
+					title:d_weijun.holder ?= {
+						NOT = { this = scope:hd_j16_yl_tz }
+						target_is_liege_or_above = scope:hd_j16_yl_ying
+					}
+				}
+				title:d_weijun.holder = { hd_nbc_swear_fealty_effect = { LIEGE = scope:hd_j16_yl_tz } }
+			}
+			# ④ 魏郡法理辖县逐县处理
+			title:d_weijun = {
+				every_in_de_jure_hierarchy = {
+					limit = { tier = tier_county }
+					save_scope_as = hd_j16_yl_c
+					if = {
+						limit = { holder ?= scope:hd_j16_yl_ying }
+						hd_nbc_give_county_effect = { COUNTY = scope:hd_j16_yl_c TO = scope:hd_j16_yl_tz }
+					}
+					else_if = {
+						limit = {
+							holder ?= {
+								NOT = { this = scope:hd_j16_yl_tz }
+								target_is_liege_or_above = scope:hd_j16_yl_ying
+							}
+						}
+						holder = { hd_nbc_swear_fealty_effect = { LIEGE = scope:hd_j16_yl_tz } }
+					}
+				}
+			}
+			debug_log = "HD_J16 startup_304 FIRE ying_lose_ye"
+		}
+		else = {
+			debug_log = "HD_J16 startup_304 SKIP ying_lose_ye_no_keep_county"
+		}
+	}
+	else = {
+		debug_log = "HD_J16 startup_304 SKIP ying_lose_ye_not_ready"
+	}
+}
+
+############################################################
+# 3-C 晋廷朝官（02 §4）。前提：①不随机补空席（F6★A，不调 WJ_minister_seat_fill_effect）；
+# ②仿 190 改司徒、司空两府显示名；③授官前存 councillor_liege＝天子；④只授无地者（有地者走 appointment 会丢地）。
+# 本表与 §3 世族家主不重人。丞相留空（3-A install 授颙）；司空、太尉、大将军空；太傅空（B6 授越）。
+# 王戎 305.7.11 卒后由温羡接司徒属运行时，不在开局效果内（见 p3-C 报告「需汇总人处理」）。
+############################################################
+hd_j16_304c_court_offices_effect = {
+	title:h_china.holder ?= {
+		if = {
+			limit = { is_alive = yes }
+			save_scope_as = councillor_liege
+			title:e_minister_chancellor = { set_title_name = hd_han_situ_title }
+			title:e_minister_censor = { set_title_name = hd_han_sikong_title }
+			hd_j16_304c_minister_effect = { WHO = wang_rong_2 TITLE = e_minister_chancellor POS = councillor_chancellor }                 # 王戎 司徒
+			hd_j16_304c_minister_effect = { WHO = langya_wang_083 TITLE = e_minister_of_personnel POS = minister_personnel }             # 王衍 尚书令
+			hd_j16_304c_minister_effect = { WHO = beidi_fu_043 TITLE = e_minister_of_justice POS = minister_justice }                    # 傅祗 廷尉
+			hd_j16_304c_minister_effect = { WHO = runan_zhou_031 TITLE = e_minister_of_revenue POS = councillor_steward }                # 周馥 大司农
+			hd_j16_304c_minister_effect = { WHO = yingchuan_xun_044 TITLE = e_minister_of_rites POS = councillor_court_chaplain }        # 荀藩 太常
+			hd_j16_304c_minister_effect = { WHO = yingchuan_xun_049 TITLE = e_WJ_minister_guang_lu_xun POS = WJ_minister_guang_lu_xun }  # 荀组 光禄勋
+			hd_j16_304c_minister_effect = { WHO = si_ma_mo_2 TITLE = e_WJ_minister_zong_zheng POS = WJ_minister_zong_zheng }             # 司马模 宗正
+			hd_j16_304c_minister_effect = { WHO = chenjun_he_012 TITLE = e_minister_of_works POS = minister_works }                      # 何绥 太仆
+			debug_log = "HD_J16 startup_304 FIRE court_offices"
+		}
+	}
+}
+
+# 薄壳：前提④只授在世无地者，再调 hd_nbc_minister_effect（需 scope:councillor_liege）
+hd_j16_304c_minister_effect = {
+	if = {
+		limit = {
+			character:$WHO$ ?= {
+				is_alive = yes
+				is_landed = no
+			}
+		}
+		hd_nbc_minister_effect = { WHO = $WHO$ TITLE = $TITLE$ POS = $POS$ }
+	}
+	else = {
+		debug_log = "HD_J16 startup_304 SKIP minister_$WHO$"
+	}
+}
+
+############################################################
+# 3-C 宫廷安置（02 §6.1）。三人开局都无雇主（304 原生，hbirth 不管）。
+# 苟晞入越宫廷为将（B9b 胜后授东郡要求其无地，故只作廷臣）；
+# 王弥入东莱郡 d_uuii_p_4337（越的徐州王国下，持有者司马略）持有者宫廷（B13 要求其无地、未在汉主宫廷）；
+# 罗尚开局已持巴东等七郡，不动；张方已由 3-A 八王装配安置，不重复。
+############################################################
+hd_j16_304c_court_place_effect = {
+	character:hd_304_gou_xi ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = no
+				character:hd_304_si_ma_yue ?= {
+					is_alive = yes
+					is_landed = yes
+				}
+				NOT = { employer ?= character:hd_304_si_ma_yue }
+			}
+			save_scope_as = hd_j16_cp_gx
+			character:hd_304_si_ma_yue = { add_courtier = scope:hd_j16_cp_gx }
+			if = {
+				limit = {
+					is_adult = yes
+					employer ?= character:hd_304_si_ma_yue
+				}
+				set_knight_status = force
+			}
+			debug_log = "HD_J16 startup_304 FIRE place_gou_xi"
+		}
+	}
+	character:hd_304_wang_mi ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = no
+				title:d_uuii_p_4337.holder ?= {
+					is_alive = yes
+					is_landed = yes
+					NOT = { this = character:hd_304_wang_mi }
+				}
+				NOT = { employer ?= title:d_uuii_p_4337.holder }
+			}
+			save_scope_as = hd_j16_cp_wm
+			title:d_uuii_p_4337.holder = { add_courtier = scope:hd_j16_cp_wm }
+			if = {
+				limit = {
+					is_adult = yes
+					employer ?= title:d_uuii_p_4337.holder
+				}
+				set_knight_status = force
+			}
+			debug_log = "HD_J16 startup_304 FIRE place_wang_mi"
+		}
+	}
+}
+
+############################################################
+# 3-C 吐谷浑储君（02 §6.3 第 4 步）：吐谷浑 247346 立吐延 247347（其唯一子）；317、329 的继统由 M9 与卒年表管
+############################################################
+hd_j16_304c_tuyuhun_heir_effect = {
+	character:247346 ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = yes
+				character:247347 ?= {
+					is_alive = yes
+					father ?= character:247346
+				}
+			}
+			set_designated_heir = character:247347
+			debug_log = "HD_J16 startup_304 FIRE tuyuhun_heir"
+		}
+	}
+}

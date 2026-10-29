@@ -27,7 +27,7 @@ hd_court.0001 = {
 }
 
 # D24：攻下京城次日结算。Root：占领者；scope:hd_court_occ_war：该场战争。
-# 战争以白和结束，再立占领者为权臣；奉衣带诏者改为自择还政或挟持（hd_court.0010）。挟天子 CB 已删（boki 10-13）
+# 10-29 起不再直接白和：奉衣带诏者走 hd_court.0010（还政白和/挟持攻方胜利），其余走 hd_court.0004 自择是否挟天子。挟天子 CB 已删（boki 10-13）
 hd_court.0002 = {
 	type = character_event
 	hidden = yes
@@ -40,10 +40,12 @@ hd_court.0002 = {
 			primary_attacker = root
 			primary_defender = title:h_china.holder
 			NOT = { using_cb = hd_nbc_war_cb }	# 剧本史实战争不强制白和（boki 10-26）
+			NOT = { var:hd_tb_kind ?= flag:annex }	# 史实灭国（吞并 CB 的 annex 情境，10-28）同上
 		}
 	}
 	immediate = {
-		scope:hd_court_occ_war = { end_war = white_peace }
+		# 10-29：不再直接白和挟持，改由占领者选择；同一场战争只问一次
+		scope:hd_court_occ_war = { set_variable = { name = hd_court_occ_asked value = yes } }
 		if = {
 			limit = { var:hd_court_qinwang_edict ?= title:h_china.holder }
 			title:h_china.holder = { save_scope_as = hd_court_restore_emperor }
@@ -51,7 +53,119 @@ hd_court.0002 = {
 			trigger_event = hd_court.0010
 		}
 		else = {
-			hd_court_takeover_effect = yes
+			title:h_china.holder = { save_scope_as = hd_court_emperor }
+			trigger_event = hd_court.0004
+		}
+	}
+}
+
+# D24（10-29）：攻下京城，选择是否挟天子。挟天子：攻方胜利结束战争后立为权臣；不挟：战争照常进行。
+# Root：占领者；scope:hd_court_occ_war、scope:hd_court_emperor
+hd_court.0004 = {
+	type = character_event
+	title = hd_court.0004.t
+	desc = hd_court.0004.desc
+	theme = dynastic_cycle
+	left_portrait = {
+		character = root
+		animation = personality_bold
+	}
+	right_portrait = {
+		character = scope:hd_court_emperor
+		animation = worry
+	}
+	trigger = { exists = scope:hd_court_emperor }
+
+	option = {
+		name = hd_court.0004.a
+		trigger = { hd_court_occ_still_valid_trigger = yes }
+		hd_court_occ_seize_effect = yes
+		ai_chance = {
+			base = 60
+			modifier = {
+				factor = 3
+				hd_court_stance_moni_trigger = yes
+			}
+			modifier = {
+				factor = 2
+				has_trait = ambitious
+			}
+			modifier = {
+				factor = 0.5
+				hd_court_stance_zunhan_trigger = yes
+			}
+		}
+	}
+	option = {
+		name = hd_court.0004.b
+		ai_chance = {
+			base = 40
+			modifier = {
+				factor = 3
+				hd_court_stance_zunhan_trigger = yes
+			}
+			modifier = {
+				factor = 1.5
+				has_trait = content
+			}
+		}
+	}
+}
+
+# D8/S4（10-29）：天子已无一县、无人挟持，问京城之主是否挟天子。拒绝者永不再问（hd_court_vacancy_refused）。
+# Root：京城县持有者的最高领主；scope:hd_court_emperor。由 hd_court_vacancy_check_effect 触发
+hd_court.0005 = {
+	type = character_event
+	title = hd_court.0005.t
+	desc = hd_court.0005.desc
+	theme = dynastic_cycle
+	left_portrait = {
+		character = root
+		animation = personality_bold
+	}
+	right_portrait = {
+		character = scope:hd_court_emperor
+		animation = worry
+	}
+	trigger = { exists = scope:hd_court_emperor }
+	# 选完才清除待答标记（玩家事件可能开着，期间 0003 再跑不重复弹）
+	after = {
+		remove_character_flag = hd_court_vacancy_pending
+	}
+
+	option = {
+		name = hd_court.0005.a
+		trigger = { hd_court_vacancy_candidate_trigger = yes }
+		hd_court_takeover_effect = yes
+		ai_chance = {
+			base = 60
+			modifier = {
+				factor = 3
+				hd_court_stance_moni_trigger = yes
+			}
+			modifier = {
+				factor = 2
+				has_trait = ambitious
+			}
+			modifier = {
+				factor = 0.5
+				hd_court_stance_zunhan_trigger = yes
+			}
+		}
+	}
+	option = {
+		name = hd_court.0005.b
+		add_character_flag = hd_court_vacancy_refused
+		ai_chance = {
+			base = 40
+			modifier = {
+				factor = 3
+				hd_court_stance_zunhan_trigger = yes
+			}
+			modifier = {
+				factor = 1.5
+				has_trait = content
+			}
 		}
 	}
 }
@@ -87,6 +201,7 @@ hd_court.0010 = {
 
 	option = {
 		name = hd_court.0010.a
+		scope:hd_court_occ_war ?= { end_war = white_peace }	# 10-29：白和挪到选项里（原在 0002 统一白和）
 		hd_court_restore_emperor_effect = yes
 		ai_chance = {
 			base = 30
@@ -98,7 +213,8 @@ hd_court.0010 = {
 	}
 	option = {
 		name = hd_court.0010.b
-		hd_court_takeover_effect = yes
+		# 10-29：同 0004 挟天子，攻方胜利结束战争后立为权臣（含 j16 八王只换权臣）
+		hd_court_occ_seize_effect = yes
 		ai_chance = {
 			base = 30
 			modifier = {

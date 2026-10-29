@@ -1,0 +1,722 @@
+﻿# 两晋十六国统一史实线 304 节：八王之乱与 hd_court 的接口工具（02 §1.3、§1.4、§1.5、§1.8；08 §1.2）。
+# 写入者：3-A 首建 → 3-B → 3-C（节内交接）。节点在 zz_hd_j16_e1_304_effects.txt，决议在 common/decisions/zz_hd_j16_304_decisions.txt。
+# 八王时段闸门：全局变量 hd_j16_bawang_active（304 开局装配时设，最迟 311.7.1 自动过期；B12 宁平城了结或永嘉开战时由 hd_j16_bawang_end_effect 提前清）。
+# hd_court 共享文件里与本节有关的分支一律以它为闸，不影响 190、218 等其他开局。
+
+############################################################
+# 京城迁移（02 §1.4 第 6 步、§1.5 京城变量同步）。$COUNTY$ 是县头衔。
+# 只改 hd_court 的京城变量、天子 set_location（stick）与（若有）domicile；不改霸权首都、不转任何领地（304 的 h_china 有实地，长安在颙手里）
+############################################################
+hd_j16_set_court_capital_effect = {
+	title:h_china = {
+		set_variable = { name = hd_court_capital_county value = $COUNTY$ }
+	}
+	title:h_china.holder ?= {
+		if = {
+			limit = { is_alive = yes }
+			domicile ?= { move_domicile = $COUNTY$.title_province }
+			set_location = {
+				location = $COUNTY$.title_province
+				stick_to_location = yes
+			}
+		}
+	}
+	debug_log = "HD_J16 bawang FIRE court_capital_moved"
+}
+
+############################################################
+# 改投天子（入朝、换权臣第 3 步）。Scope：角色。
+# 先结束朝贡，再改主君（顺序照原版 00_war_effects.txt 的 end_tributary 用法）；原为天子朝贡国的记 hd_j16_was_tributary（出镇还藩、罢归藩国读它）
+############################################################
+hd_j16_join_court_effect = {
+	if = {
+		limit = { is_tributary = yes }
+		if = {
+			limit = {
+				exists = title:h_china.holder
+				is_tributary_of_suzerain_or_above = title:h_china.holder
+			}
+			set_variable = { name = hd_j16_was_tributary value = yes }
+		}
+		end_tributary = yes
+	}
+	if = {
+		limit = { exists = title:h_china.holder }
+		hd_nbc_swear_fealty_effect = { LIEGE = title:h_china.holder }
+	}
+	# 原为朝贡王：在其所持的原朝贡主头衔上打标（02 §1.8「权臣死后」：继承人据此自动罢归藩国；不用 primary_title，授太傅后它会变）
+	if = {
+		limit = { has_variable = hd_j16_was_tributary }
+		hd_j16_mark_trib_fief_effect = yes
+	}
+}
+
+############################################################
+# 原朝贡主头衔打标 / 清标（02 §1.8；审查修正）。6 个头衔与 E1-W30 名单相同。Scope：角色
+############################################################
+hd_j16_mark_trib_fief_effect = {
+	hd_j16_mark_one_trib_fief_effect = { TITLE = k_uuii_sili }
+	hd_j16_mark_one_trib_fief_effect = { TITLE = k_uuii_jizhou }
+	hd_j16_mark_one_trib_fief_effect = { TITLE = k_uuii_xuzhou }
+	hd_j16_mark_one_trib_fief_effect = { TITLE = d_taiyuan }
+	hd_j16_mark_one_trib_fief_effect = { TITLE = k_uuii_youzhou }
+	hd_j16_mark_one_trib_fief_effect = { TITLE = k_uuii_liangzhou }
+}
+hd_j16_mark_one_trib_fief_effect = {
+	if = {
+		limit = { has_title = title:$TITLE$ }
+		title:$TITLE$ = { set_variable = hd_j16_fief_was_tributary }
+	}
+}
+hd_j16_unmark_trib_fief_effect = {
+	hd_j16_unmark_one_trib_fief_effect = { TITLE = k_uuii_sili }
+	hd_j16_unmark_one_trib_fief_effect = { TITLE = k_uuii_jizhou }
+	hd_j16_unmark_one_trib_fief_effect = { TITLE = k_uuii_xuzhou }
+	hd_j16_unmark_one_trib_fief_effect = { TITLE = d_taiyuan }
+	hd_j16_unmark_one_trib_fief_effect = { TITLE = k_uuii_youzhou }
+	hd_j16_unmark_one_trib_fief_effect = { TITLE = k_uuii_liangzhou }
+}
+hd_j16_unmark_one_trib_fief_effect = {
+	if = {
+		limit = {
+			has_title = title:$TITLE$
+			title:$TITLE$ = { has_variable = hd_j16_fief_was_tributary }
+		}
+		title:$TITLE$ = { remove_variable = hd_j16_fief_was_tributary }
+	}
+}
+
+############################################################
+# 天朝朝贡（不加停战）。照 hd_304_tributary_effect（zz_hd_304_startup_effects.txt），只把人物换成当前 scope。Scope：角色
+############################################################
+hd_j16_make_tributary_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			is_independent_ruler = yes
+			is_tributary = no
+			exists = title:h_china.holder
+			NOT = { this = title:h_china.holder }
+			title:h_china.holder = {
+				is_alive = yes
+				has_government = celestial_government
+			}
+		}
+		start_tributary = {
+			contract_group = tributary_celestial
+			suzerain = title:h_china.holder
+		}
+		if = {
+			limit = { is_tributary = yes }
+			hidden_effect = {
+				tributary_contract_set_obligation_level = { type = celestial_tribute_gold level = 1 }
+				tributary_contract_set_obligation_level = { type = celestial_tribute_prestige level = 1 }
+			}
+			add_subject_standing = 10
+		}
+	}
+}
+
+############################################################
+# 罢归藩国（02 §1.3 ②③、§1.4 第 5 步、A2-F9★A）：带着自己的封臣独立，重建天朝朝贡，不加停战。Scope：原朝贡王（在世、有地）。
+# 调用方已先罢官、解除权臣记录（hd_court_strip_office_effect、hd_court_release_effect）
+############################################################
+hd_j16_return_fief_effect = {
+	# 2026-10-28 boki：颙西迁入朝时实封了河间国、河间王国；罢归前先销毁这两个头衔（并补回封爵王爵），再按原样独立
+	if = {
+		limit = {
+			exists = global_var:hd_j16_yong_fief
+			global_var:hd_j16_yong_fief.holder ?= this
+		}
+		hd_j16_yong_rf_dissolve_effect = yes
+	}
+	if = {
+		limit = { has_variable = hd_j16_was_tributary }
+		remove_variable = hd_j16_was_tributary
+	}
+	hd_j16_unmark_trib_fief_effect = yes
+	hd_nbc_become_independent_effect = yes
+	hd_j16_make_tributary_effect = yes
+	# 「已罢归」：B8 判颙之死用（颙已失权臣且已罢归）
+	set_variable = { name = hd_j16_bagui value = yes years = 10 }
+	debug_log = "HD_J16 bawang FIRE return_fief"
+}
+
+############################################################
+# 304 专用权臣换人（02 §1.4）。Scope：新权臣。
+# 旧权臣一律取 title:h_china.var:hd_court_regent（在世与否都可），调用方不必另存 scope:hd_j16_old_regent（02 原写法，自拟改为自取）。
+# 与 hd_court_takeover_effect 的根本区别：不碰 e_han、天子直辖地与天子其他封臣，不改京城（京城由调用方另调 hd_j16_set_court_capital_effect）
+############################################################
+hd_j16_swap_regent_effect = {
+	save_scope_as = hd_j16_sw_new
+	if = {
+		limit = { exists = scope:hd_j16_sw_old }
+		clear_saved_scope = hd_j16_sw_old
+	}
+	if = {
+		limit = {
+			exists = title:h_china.var:hd_court_regent
+			NOT = { title:h_china.var:hd_court_regent = scope:hd_j16_sw_new }
+		}
+		title:h_china.var:hd_court_regent = { save_scope_as = hd_j16_sw_old }
+	}
+	# 1 旧权臣罢官（解双头、免议员、销毁丞相等无地帝国级头衔）
+	if = {
+		limit = { scope:hd_j16_sw_old ?= { is_alive = yes } }
+		scope:hd_j16_sw_old = { hd_court_strip_office_effect = yes }
+	}
+	# 2 清 hd_court 记录与权臣施加的傀儡
+	hd_court_release_effect = yes
+	# 3 新权臣改为天子封臣
+	scope:hd_j16_sw_new = { hd_j16_join_court_effect = yes }
+	# 4 装权臣（不得用 takeover）
+	if = {
+		limit = {
+			scope:hd_j16_sw_new = {
+				liege ?= title:h_china.holder
+				hd_court_regent_eligible_trigger = yes
+			}
+		}
+		scope:hd_j16_sw_new = {
+			hd_court_install_regency_effect = yes
+			add_character_flag = { flag = hd_court_regent_tenure years = 1 }
+		}
+		debug_log = "HD_J16 bawang FIRE swap_regent"
+	}
+	else = {
+		debug_log = "HD_J16 bawang WAIT swap_regent_failed"
+	}
+	# 5 旧权臣原为朝贡王：罢归藩国（A2-F9★A）
+	scope:hd_j16_sw_old ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = yes
+				has_variable = hd_j16_was_tributary
+			}
+			hd_j16_return_fief_effect = yes
+		}
+	}
+}
+
+############################################################
+# 授郡（D16）：把 $DUCHY$ 郡头衔及该郡内原郡守直辖的县一并授给 $TO$（granted，不加宣称）。Scope：任意
+############################################################
+hd_j16_grant_duchy_effect = {
+	if = {
+		limit = { exists = scope:hd_j16_gd_from }
+		clear_saved_scope = hd_j16_gd_from
+	}
+	# 郡头衔无人持有时，取天子直辖的县（「邺无主/属天子」）
+	if = {
+		limit = { exists = $DUCHY$.holder }
+		$DUCHY$.holder = { save_scope_as = hd_j16_gd_from }
+	}
+	else = {
+		title:h_china.holder ?= { save_scope_as = hd_j16_gd_from }
+	}
+	create_title_and_vassal_change = {
+		type = granted
+		save_scope_as = hd_j16_gd_change
+		add_claim_on_loss = no
+	}
+	if = {
+		limit = { exists = scope:hd_j16_gd_from }
+		$DUCHY$ = {
+			every_de_jure_county = {
+				limit = { holder ?= scope:hd_j16_gd_from }
+				change_title_holder = {
+					holder = $TO$
+					change = scope:hd_j16_gd_change
+					take_baronies = yes
+				}
+			}
+		}
+	}
+	$DUCHY$ = {
+		change_title_holder = {
+			holder = $TO$
+			change = scope:hd_j16_gd_change
+		}
+	}
+	resolve_title_and_vassal_change = scope:hd_j16_gd_change
+	debug_log = "HD_J16 bawang FIRE grant_duchy"
+}
+
+############################################################
+# E1-W30 诸王朝贡补签（02 §1.8★A；A2-F4）。由 hd_j16_e1_304_effect 每跳调用，内部每 365 天真正查一次（全局变量计时 hd_j16_tribute_cd）。
+# 八王段（永嘉了结前、312 年前）：6 个原朝贡主头衔的持有者若独立、郡国制、非胡、非朝贡、未与天子交战，且天子为在世的司马氏郡国制君主 → 补签，不加停战。
+# 凉州（张氏）续到 345.1.1（张骏称假凉王止）。注意：E1 心跳粗筛到 327.1.1 为止，327–345 的凉州续签要 3-B 在 hd_j16_e2_304_effect 里也调一次本效果
+############################################################
+hd_j16_restore_tributary_effect = {
+	# 02 §1.8「权臣死后」（审查修正）：每跳查 6 个打过标的原朝贡主头衔（入朝时打标），持有者是天子的直属封臣、不是权臣、
+	# 不在战争中、未被囚 → 罢官后自动罢归藩国。覆盖：权臣死后的继承人；以及非换人途径（政变、release 等）失去权臣位的在世原朝贡王。
+	# 换人途径的旧权臣已由 hd_j16_swap_regent_effect 第 5 步当场罢归，不经这里。时段同五家补签：312 年前且永嘉未了结
+	if = {
+		limit = {
+			current_date < 312.1.1
+			NOT = { has_global_variable = hd_304_yongjia_done }
+			title:h_china.holder ?= {
+				is_alive = yes
+				has_government = celestial_government
+				house ?= house:henei_sima
+			}
+		}
+		hd_j16_heir_return_one_effect = { TITLE = k_uuii_sili }
+		hd_j16_heir_return_one_effect = { TITLE = k_uuii_jizhou }
+		hd_j16_heir_return_one_effect = { TITLE = k_uuii_xuzhou }
+		hd_j16_heir_return_one_effect = { TITLE = d_taiyuan }
+		hd_j16_heir_return_one_effect = { TITLE = k_uuii_youzhou }
+		hd_j16_heir_return_one_effect = { TITLE = k_uuii_liangzhou }
+	}
+	if = {
+		limit = {
+			NOT = { has_global_variable = hd_j16_tribute_cd }
+			current_date < 345.1.1
+			title:h_china.holder ?= {
+				is_alive = yes
+				has_government = celestial_government
+				house ?= house:henei_sima
+			}
+		}
+		set_global_variable = { name = hd_j16_tribute_cd value = yes days = 365 }
+		if = {
+			limit = {
+				current_date < 312.1.1
+				NOT = { has_global_variable = hd_304_yongjia_done }
+			}
+			hd_j16_restore_one_tributary_effect = { TITLE = k_uuii_sili }        # 颙
+			hd_j16_restore_one_tributary_effect = { TITLE = k_uuii_jizhou }      # 颖
+			hd_j16_restore_one_tributary_effect = { TITLE = k_uuii_xuzhou }      # 越
+			hd_j16_restore_one_tributary_effect = { TITLE = d_taiyuan }          # 腾
+			hd_j16_restore_one_tributary_effect = { TITLE = k_uuii_youzhou }     # 王浚
+		}
+		hd_j16_restore_one_tributary_effect = { TITLE = k_uuii_liangzhou }       # 张轨一系
+	}
+}
+hd_j16_heir_return_one_effect = {
+	if = {
+		limit = {
+			title:$TITLE$ = { has_variable = hd_j16_fief_was_tributary }
+			title:$TITLE$.holder ?= {
+				is_alive = yes
+				is_imprisoned = no
+				is_at_war = no
+				liege ?= title:h_china.holder
+				NOT = { this = title:h_china.holder }
+				NOT = { hd_court_is_regent_trigger = yes }
+			}
+		}
+		title:$TITLE$.holder = {
+			hd_court_strip_office_effect = yes
+			hd_j16_return_fief_effect = yes
+		}
+		debug_log = "HD_J16 e1_w30 FIRE heir_return_fief"
+	}
+}
+hd_j16_restore_one_tributary_effect = {
+	title:$TITLE$.holder ?= {
+		if = {
+			limit = {
+				is_independent_ruler = yes
+				is_tributary = no
+				has_government = celestial_government
+				hd_yiguan_is_hu_trigger = no
+				NOT = { this = title:h_china.holder }
+				NOT = { is_at_war_with = title:h_china.holder }
+			}
+			hd_j16_make_tributary_effect = yes
+			debug_log = "HD_J16 e1_w30 FIRE tributary_restored"
+		}
+	}
+}
+
+############################################################
+# 八王时段结束（02 §1.1 #6）：B12 宁平城了结、或 311.7.1、或永嘉之战已开打（hd_304_yongjia_decided），即清闸门。
+# 变量本身带 days，规则关闭（心跳不跑）时最迟 311.7.1 自动过期
+############################################################
+hd_j16_bawang_end_effect = {
+	if = {
+		limit = {
+			has_global_variable = hd_j16_bawang_active
+			OR = {
+				has_global_variable = hd_j16_ningping_done
+				current_date >= 311.7.1
+				has_global_variable = hd_304_yongjia_decided
+			}
+		}
+		remove_global_variable = hd_j16_bawang_active
+		debug_log = "HD_J16 e1_b60 FIRE bawang_end"
+	}
+}
+
+############################################################
+# 战争节点结局：攻守双方都已不在 $KIND$ 场次的战争里，按关键县 $COUNTY$ 归属判胜负（攻方本人、其最高领主或与攻方同一最高领主为胜）。
+# 变量 hd_j16_$KIND$_att/_def/_won/_lost/_done；结局时清 hd_nbc_$KIND$_active（01 §5）。Scope：任意
+############################################################
+hd_j16_304_war_result_effect = {
+	if = {
+		limit = {
+			NOT = { global_var:hd_j16_$KIND$_att ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:$KIND$ } } }
+			NOT = { global_var:hd_j16_$KIND$_def ?= { any_character_war = { var:hd_nbc_war_kind ?= flag:$KIND$ } } }
+		}
+		set_global_variable = hd_j16_$KIND$_done
+		if = {
+			limit = { hd_j16_county_on_side_trigger = { COUNTY = $COUNTY$ WHO = global_var:hd_j16_$KIND$_att } }
+			set_global_variable = hd_j16_$KIND$_won
+			debug_log = "HD_J16 $LOG$ FIRE result_won"
+		}
+		else = {
+			set_global_variable = hd_j16_$KIND$_lost
+			debug_log = "HD_J16 $LOG$ FIRE result_lost"
+		}
+		if = {
+			limit = { has_global_variable = hd_nbc_$KIND$_active }
+			remove_global_variable = hd_nbc_$KIND$_active
+		}
+	}
+}
+
+# 解析当事人（先清旧 scope，再按 ID 解析；照 TEMPLATE §2）
+hd_j16_304_res_effect = {
+	if = {
+		limit = { exists = scope:$AS$ }
+		clear_saved_scope = $AS$
+	}
+	hd_j16_resolve_effect = { ID = $ID$ AS = $AS$ }
+}
+
+# 节点跳过：设 done、skip，记一次日志
+hd_j16_304_skip_effect = {
+	set_global_variable = hd_j16_$KEY$_done
+	set_global_variable = hd_j16_$KEY$_skip
+	debug_log = "HD_J16 $LOG$ SKIP $WHY$"
+}
+
+# 节点等待：只在首次进入等待时记一次日志
+hd_j16_304_wait_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_$KEY$_wlog } }
+		set_global_variable = hd_j16_$KEY$_wlog
+		debug_log = "HD_J16 $LOG$ WAIT $WHY$"
+	}
+}
+
+# 史实事件兵：$WHO$（人物 scope）在其首府县起兵；无地时不生成
+hd_j16_304_army_effect = {
+	$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_landed = yes
+				exists = capital_county
+			}
+			hd_nbc_spawn_army_effect = { SIZE = $SIZE$ WHERE = capital_county NAME = $NAME$ }
+		}
+	}
+}
+
+############################################################
+# 决议 D 皇太弟之争：立 $WHO$ 为天子储君（hd_j16.0700、0701）。Scope：决定者。
+# 设 hd_j16_taidi_used（B8 不再覆盖储君）；落选者及其主君对决定者 −40；立颖时设 hd_j16_taidi_ying（颖卡 smying_taidi 可读，3-D）
+############################################################
+hd_j16_taidi_set_effect = {
+	save_scope_as = hd_j16_td_decider
+	set_global_variable = hd_j16_taidi_used
+	title:h_china.holder ?= {
+		if = {
+			limit = { character:$WHO$ ?= { is_alive = yes } }
+			set_designated_heir = character:$WHO$
+		}
+	}
+	hd_j16_taidi_loser_effect = { WHO = $WHO$ CAND = si_ma_ying }
+	hd_j16_taidi_loser_effect = { WHO = $WHO$ CAND = si_ma_chi }
+	hd_j16_taidi_loser_effect = { WHO = $WHO$ CAND = henei_sima_047 }
+	if = {
+		limit = { character:$WHO$ = character:si_ma_ying }
+		set_global_variable = hd_j16_taidi_ying
+	}
+	debug_log = "HD_J16 bawang FIRE taidi_set"
+}
+hd_j16_taidi_loser_effect = {
+	character:$CAND$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				NOT = { this = character:$WHO$ }
+				NOT = { this = scope:hd_j16_td_decider }
+			}
+			add_opinion = {
+				target = scope:hd_j16_td_decider
+				modifier = hd_j16_taidi_opinion
+			}
+			liege ?= {
+				if = {
+					limit = {
+						NOT = { this = scope:hd_j16_td_decider }
+						NOT = { this = prev }
+					}
+					add_opinion = {
+						target = scope:hd_j16_td_decider
+						modifier = hd_j16_taidi_opinion
+					}
+				}
+			}
+		}
+	}
+}
+
+############################################################
+# 2026-10-28 boki：颙西迁入朝后，直接走实封王（WJ_rf）把自己的关中四郡封王（河间王）。
+# 开局颙保持独立朝贡国（hd_j16_304_bawang_setup_effect 已不再改封臣、不装权臣）；B1 挟驾西迁执行时调 hd_j16_yong_enter_court_effect：
+#   ① 入朝：改投天子、装为权臣（原 304 开局 #1/#2/#4/#5 的写法，搬到这里）；
+#   ② 实封公：照 395 封宋公（hd_j16_songgong_exec_effect）新建王国级动态头衔「河间」（wj_rf_rank 1，名干 0 号走无爵名），
+#      关中四郡（京兆、扶风、始平、咸阳）逐郡 WJ_rf_transfer_duchy 并入，国都长安；开局的封爵王爵由 WJ_peer_clear 清掉（实封取代原爵，照 WJ_rf_commit）；
+#   ③ 进王：照 395 进宋王（hd_j16_songwang_exec_effect）新建帝国级「河间」（wj_rf_rank 2）套住公国。跳过 WJ_rf_can_promote 的门槛。
+# 指针 global_var:hd_j16_yong_fief / hd_j16_yong_wang。罢归藩国（hd_j16_return_fief_effect）时先销毁这两个头衔并补回封爵王爵，见 hd_j16_yong_rf_dissolve_effect。
+# 执行失败（颙失地、不是天子封臣等）只记日志不设指针，颙保留开局的封爵王爵。日志 HD_J16 xiqian FIRE/WAIT yong_*。
+############################################################
+hd_j16_yong_enter_court_effect = {
+	save_scope_as = hd_j16_yong_ec
+	if = {
+		limit = {
+			is_alive = yes
+			is_landed = yes
+			exists = title:h_china.holder
+			NOT = { this = title:h_china.holder }
+		}
+		# 开局到西迁之间已有别的宗王经「入朝辅政」决议当上权臣：照决议同一分支换权臣（旧权臣罢官，原朝贡王罢归）
+		if = {
+			limit = {
+				exists = title:h_china.var:hd_court_regent
+				NOT = { title:h_china.var:hd_court_regent = this }
+			}
+			hd_j16_swap_regent_effect = yes
+			debug_log = "HD_J16 xiqian FIRE yong_swap_regent"
+		}
+		# 颙已是权臣：不再入朝；否则改投天子、装权臣
+		else_if = {
+			limit = { NOT = { title:h_china.var:hd_court_regent ?= this } }
+			if = {
+				limit = { NOT = { liege ?= title:h_china.holder } }
+				hd_j16_join_court_effect = yes
+			}
+			if = {
+				limit = {
+					liege ?= title:h_china.holder
+					hd_court_regent_eligible_trigger = yes
+				}
+				hd_court_install_regency_effect = yes
+				add_character_flag = { flag = hd_court_regent_tenure years = 2 }
+				debug_log = "HD_J16 xiqian FIRE yong_regent"
+			}
+			else = {
+				debug_log = "HD_J16 xiqian WAIT yong_regent_failed"
+			}
+		}
+	}
+	hd_j16_yong_rf_effect = yes
+	# 权臣主头衔记录跟着新主头衔走（照 263 S5 / 395 封宋公），免 hd_court 权臣交接分支交错人
+	if = {
+		limit = { title:h_china.var:hd_court_regent ?= this }
+		title:h_china = { set_variable = { name = hd_court_regent_title value = scope:hd_j16_yong_ec.primary_title } }
+	}
+}
+
+# 实封公 + 进王。Scope：颙。已有指针、颙失地、不是天子封臣时不做
+hd_j16_yong_rf_effect = {
+	hidden_effect = { # 选项预览解析不了执行时才建的头衔（同 263 S5 / S6）
+		if = {
+			limit = {
+				NOT = { exists = global_var:hd_j16_yong_fief }
+				exists = title:h_china.holder
+				is_alive = yes
+				is_landed = yes
+				NOT = { this = top_liege }
+				top_liege = title:h_china.holder
+			}
+			save_scope_as = wj_rf_beneficiary
+			title:h_china.holder = { save_scope_as = wj_rf_sovereign }
+			title:d_jingzhao = {
+				save_scope_as = wj_rf_capital_duchy
+				title_capital_county = { save_scope_as = wj_rf_capital_county }
+			}
+			create_dynamic_title = { tier = kingdom name = hd_j16_hejian_fief_name }
+			scope:new_title = {
+				save_scope_as = wj_rf_new_fief
+				set_variable = { name = wj_rf_rank value = 1 }
+				set_definitive_form = yes
+				set_variable = { name = wj_rf_name_code value = 0 }    # 「河间」不在 WJ 1–13 号词干里：0 号走 wj_rf_stem_capital 的无爵名
+				set_variable = { name = wj_rf_stem_capital value = scope:wj_rf_new_fief }
+				set_capital_county = scope:wj_rf_capital_county
+				set_coa = title:d_jingzhao
+				set_color_from_title = title:d_jingzhao
+			}
+			set_global_variable = { name = hd_j16_yong_fief value = scope:wj_rf_new_fief }
+			create_title_and_vassal_change = { type = granted save_scope_as = wj_rf_change add_claim_on_loss = no }
+			scope:wj_rf_new_fief = {
+				change_title_holder = {
+					holder = scope:wj_rf_beneficiary
+					change = scope:wj_rf_change
+					government_base = scope:wj_rf_sovereign
+				}
+			}
+			hd_j16_yong_rf_duchy_effect = { DUCHY = d_jingzhao }
+			hd_j16_yong_rf_duchy_effect = { DUCHY = d_fufeng }
+			hd_j16_yong_rf_duchy_effect = { DUCHY = d_shiping }
+			hd_j16_yong_rf_duchy_effect = { DUCHY = d_xianyang }
+			# 国都长安县交颙（照 WJ_rf_commit；玩家持有不夺）
+			scope:wj_rf_capital_county = {
+				if = {
+					limit = {
+						NOT = { holder ?= scope:wj_rf_beneficiary }
+						OR = {
+							NOT = { exists = holder }
+							holder ?= {
+								top_liege = scope:wj_rf_sovereign
+								is_ai = yes
+							}
+						}
+					}
+					change_title_holder = {
+						holder = scope:wj_rf_beneficiary
+						change = scope:wj_rf_change
+						government_base = scope:wj_rf_sovereign
+					}
+				}
+				set_variable = { name = wj_rf_capital_of value = scope:wj_rf_new_fief }
+			}
+			resolve_title_and_vassal_change = scope:wj_rf_change
+			if = {
+				limit = { scope:wj_rf_new_fief.holder ?= this }
+				if = {
+					limit = { has_variable = wj_peer_rank }
+					WJ_peer_clear = yes    # 照 WJ_rf_commit：实封公取代原爵（开局的封爵王爵）
+				}
+				if = {
+					limit = { scope:wj_rf_capital_county.holder ?= this }
+					set_realm_capital = scope:wj_rf_capital_county
+				}
+				set_primary_title_to = scope:wj_rf_new_fief
+				set_variable = { name = wj_rf_cooldown value = yes years = 3 }
+				WJ_rf_refresh_holder = yes
+				scope:wj_rf_new_fief = { save_scope_as = wj_rf_law_title }
+				trigger_event = WJ_rf.4
+				debug_log = "HD_J16 xiqian FIRE yong_fief"
+				# 进王延后 1 天（on_action hd_j16_yong_wang_delayed）：公、王不在同一次执行里连建，和 263 S5/S6、395 J84/J88 的分两次执行一致，免 saved scope 串号
+				trigger_event = { on_action = hd_j16_yong_wang_delayed days = 1 }
+			}
+			else = {
+				debug_log = "HD_J16 xiqian WAIT yong_fief_title_bad"
+			}
+		}
+		else = {
+			debug_log = "HD_J16 xiqian WAIT yong_rf_not_ready"
+		}
+	}
+}
+
+# 关中一郡并入河间国：郡无人持有或持有者是颙本人、天子一系的 AI 才动（同 395 封宋公）
+hd_j16_yong_rf_duchy_effect = {
+	title:$DUCHY$ = {
+		if = {
+			limit = {
+				OR = {
+					holder ?= scope:wj_rf_beneficiary
+					holder ?= {
+						top_liege = scope:wj_rf_sovereign
+						is_ai = yes
+					}
+					AND = {
+						NOT = { exists = holder }
+						any_de_jure_county = { holder ?= { top_liege = scope:wj_rf_sovereign } }
+					}
+				}
+			}
+			WJ_rf_transfer_duchy = yes
+		}
+	}
+}
+
+# 进王：新建帝国级「河间」套住河间国（同 395 进宋王）。Scope：颙；scope:wj_rf_new_fief 等由调用方存好，这里重存
+hd_j16_yong_rf_wang_effect = {
+	if = {
+		limit = {
+			exists = global_var:hd_j16_yong_fief
+			has_title = global_var:hd_j16_yong_fief
+			NOT = { exists = global_var:hd_j16_yong_wang }
+			top_liege = {
+				has_title = title:h_china
+				NOT = { this = prev }
+			}
+		}
+		save_scope_as = wj_rf_beneficiary
+		top_liege = { save_scope_as = wj_rf_sovereign }
+		global_var:hd_j16_yong_fief = { save_scope_as = wj_rf_new_fief }
+		create_dynamic_title = { tier = empire name = hd_j16_hejian_fief_name }
+		scope:new_title = {
+			save_scope_as = wj_rf_new_kingdom
+			set_variable = { name = wj_rf_rank value = 2 }
+			set_variable = { name = wj_rf_constituent_fief value = scope:wj_rf_new_fief }
+			set_definitive_form = yes
+			set_variable = { name = wj_rf_name_code value = 0 }
+			set_variable = { name = wj_rf_stem_capital value = scope:wj_rf_new_fief }
+			set_capital_county = scope:wj_rf_new_fief.title_capital_county
+			set_coa = scope:wj_rf_new_fief
+			set_color_from_title = scope:wj_rf_new_fief
+		}
+		create_title_and_vassal_change = { type = granted save_scope_as = wj_rf_change add_claim_on_loss = no }
+		scope:wj_rf_new_kingdom = { change_title_holder = { holder = scope:wj_rf_beneficiary change = scope:wj_rf_change } }
+		change_liege = { liege = scope:wj_rf_sovereign change = scope:wj_rf_change }
+		resolve_title_and_vassal_change = scope:wj_rf_change
+		if = {
+			limit = { scope:wj_rf_new_kingdom.holder ?= scope:wj_rf_beneficiary }
+			set_global_variable = { name = hd_j16_yong_wang value = scope:wj_rf_new_kingdom }
+			scope:wj_rf_new_fief = { set_de_jure_liege_title = scope:wj_rf_new_kingdom }
+			set_primary_title_to = scope:wj_rf_new_kingdom
+			WJ_rf_refresh_holder = yes
+			scope:wj_rf_new_kingdom = { save_scope_as = wj_rf_law_title }
+			scope:wj_rf_new_fief.title_capital_county = { save_scope_as = wj_rf_capital_county }
+			trigger_event = WJ_rf.4
+			if = {
+				limit = { title:h_china.var:hd_court_regent ?= this }
+				title:h_china = { set_variable = { name = hd_court_regent_title value = scope:wj_rf_new_kingdom } }
+			}
+			debug_log = "HD_J16 xiqian FIRE yong_wang"
+		}
+		else = {
+			debug_log = "HD_J16 xiqian WAIT yong_wang_title_bad"
+		}
+	}
+}
+
+# 罢归藩国前销毁河间王国、河间国（照 hd263_jin_dissolve_effect：先王国后公国，法理由 WJ_rf_destroyed 钩子还原），
+# 再补回开局的封爵王爵（河间王，取河间郡首县）。Scope：持有河间国的人（颙，或继承了河间国的人；非颙时只销毁不补爵）
+hd_j16_yong_rf_dissolve_effect = {
+	save_scope_as = hd_j16_yong_dis
+	global_var:hd_j16_yong_wang ?= {
+		if = {
+			limit = { holder ?= scope:hd_j16_yong_dis }
+			scope:hd_j16_yong_dis = { destroy_title = global_var:hd_j16_yong_wang }
+		}
+	}
+	global_var:hd_j16_yong_fief ?= {
+		if = {
+			limit = { holder ?= scope:hd_j16_yong_dis }
+			scope:hd_j16_yong_dis = { destroy_title = global_var:hd_j16_yong_fief }
+		}
+	}
+	remove_global_variable = hd_j16_yong_wang
+	remove_global_variable = hd_j16_yong_fief
+	WJ_rf_refresh_holder = yes
+	if = {
+		limit = {
+			this = character:si_ma_yong
+			exists = title:h_china.holder
+		}
+		title:h_china.holder = { save_scope_as = hd304_peer_issuer }
+		hd304_peer_wang_effect = { WHO = si_ma_yong NAME = d_hejian }
+		clear_saved_scope = hd304_peer_issuer
+	}
+	debug_log = "HD_J16 bawang FIRE yong_rf_dissolved"
+}

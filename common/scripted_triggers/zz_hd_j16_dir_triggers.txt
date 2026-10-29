@@ -1,0 +1,176 @@
+﻿# 两晋十六国统一史实线（j16）前秦导演 hd_j16_dir 的触发器。设计：docs/两晋十六国统一史实线/03_346戡定岷峨.md §1；分工：08 §1.2（4-A）。
+# 照 190 导演 zz_hd184r_triggers.txt:106-177 改写，删去 190 专属子句（冀州交接、官渡前曹袁互不攻伐、刘协、hd_dong_transition）。
+# 除 hd_j16_border_county_ok_trigger 外都需要 scope:hd_j16_dir_actor（本跳解析出的秦主）。
+
+############################################################
+# 秦主可由导演开战。Scope：秦主
+############################################################
+hd_j16_dir_actor_ready_trigger = {
+	is_alive = yes
+	is_ai = yes
+	is_adult = yes
+	is_landed = yes
+	is_imprisoned = no
+	is_independent_ruler = yes
+	NOT = { government_has_flag = cannot_be_vassal_or_liege }
+}
+
+############################################################
+# 进攻名额（03 §1.1：本人作主攻方 ≤ 3 场；节点战争计入名额，防守战不占）。Scope：秦主
+# 计入：本人是主攻方的一切战争；本人在攻方、带节点场次标记 hd_nbc_war_kind 的战争（节点战争，秦主未必是主攻方）
+############################################################
+hd_j16_dir_war_slot_trigger = {
+	NOT = {
+		any_character_war = {
+			count >= 3
+			OR = {
+				primary_attacker = scope:hd_j16_dir_actor
+				AND = {
+					has_variable = hd_nbc_war_kind
+					is_attacker = scope:hd_j16_dir_actor
+				}
+			}
+		}
+	}
+}
+
+############################################################
+# 秦主正被晋攻（03 §1.3：E3-J20、J30、J60 等晋方为攻方时，本跳不新开战）。Scope：任意
+# 攻方里有天子本人或天子的封臣（桓温等是天子封臣，不是 h_china 持有者）
+############################################################
+hd_j16_dir_qin_under_jin_attack_trigger = {
+	exists = title:h_china.holder
+	scope:hd_j16_dir_actor = {
+		any_character_war = {
+			is_defender = scope:hd_j16_dir_actor
+			any_war_attacker = {
+				OR = {
+					this = title:h_china.holder
+					is_vassal_or_below_of = title:h_china.holder
+				}
+			}
+		}
+	}
+}
+
+############################################################
+# 合法守方（前线县的顶层领主）。Scope：角色
+# 通用部分照 hd184r_target_ok_trigger；另加：① 不打晋（D8）：不是 h_china 持有者，也不是其封臣；② 前燕门：E3-M90 未 done 时不打慕容氏
+############################################################
+hd_j16_dir_target_ok_trigger = {
+	is_alive = yes
+	is_landed = yes
+	NOT = { this = scope:hd_j16_dir_actor }
+	NOT = { is_allied_to = scope:hd_j16_dir_actor }
+	NOT = { is_at_war_with = scope:hd_j16_dir_actor }
+	NOT = { scope:hd_j16_dir_actor = { has_truce = prev } }
+	NOT = { has_title = title:h_china }
+	trigger_if = {
+		limit = { exists = title:h_china.holder }
+		NOT = { this = title:h_china.holder }
+		NOT = { is_vassal_or_below_of = title:h_china.holder }
+	}
+	current_military_strength <= scope:hd_j16_dir_actor.hd_strat_strength_ceiling_value
+	trigger_if = {
+		limit = { NOT = { has_global_variable = hd_370_yanfall_done } }
+		NOT = { dynasty ?= dynasty:murong }
+	}
+}
+
+############################################################
+# 前线县：不在秦主领内，与秦主领内的县接壤，且顶层领主是合法守方。Scope：县
+############################################################
+hd_j16_dir_county_front_trigger = {
+	exists = holder
+	NOT = {
+		holder = {
+			OR = {
+				this = scope:hd_j16_dir_actor
+				is_vassal_or_below_of = scope:hd_j16_dir_actor
+			}
+		}
+	}
+	any_neighboring_county = {
+		holder ?= {
+			OR = {
+				this = scope:hd_j16_dir_actor
+				is_vassal_or_below_of = scope:hd_j16_dir_actor
+			}
+		}
+	}
+	holder = { top_liege = { hd_j16_dir_target_ok_trigger = yes } }
+}
+
+# 郡里至少有一个前线县。Scope：郡
+hd_j16_dir_duchy_has_front_trigger = {
+	any_de_jure_county = { hd_j16_dir_county_front_trigger = yes }
+}
+
+############################################################
+# 停止续期（03 §1.1 下线一行；04 §1.1）：383.1.1、淝水 done、前秦瓦解、E4-W40 设下线变量，任一成立。Scope：任意
+############################################################
+hd_j16_dir_stop_trigger = {
+	OR = {
+		current_date >= 383.1.1
+		has_global_variable = hd_nbc_feishui_done
+		has_global_variable = hd_j16_qin_collapse
+		has_global_variable = hd_j16_dir_qin_off
+	}
+}
+
+# 整段暂停（03 §1.3 ②）：369.12.1 起，到 E3-M90 前燕亡 done 或 372.1.1 为止。Scope：任意
+hd_j16_dir_paused_trigger = {
+	current_date >= 369.12.1
+	current_date < 372.1.1
+	NOT = { has_global_variable = hd_370_yanfall_done }
+}
+
+############################################################
+# 阶段分派：当前阶段（global_var:hd_j16_dir_qin_stage）的 hd_j16_dir_qin_s<N>_$WHAT$ 是否已设。Scope：任意
+############################################################
+hd_j16_dir_stage_has_trigger = {
+	OR = {
+		AND = { global_var:hd_j16_dir_qin_stage = 1 has_global_variable = hd_j16_dir_qin_s1_$WHAT$ }
+		AND = { global_var:hd_j16_dir_qin_stage = 2 has_global_variable = hd_j16_dir_qin_s2_$WHAT$ }
+		AND = { global_var:hd_j16_dir_qin_stage = 3 has_global_variable = hd_j16_dir_qin_s3_$WHAT$ }
+		AND = { global_var:hd_j16_dir_qin_stage = 4 has_global_variable = hd_j16_dir_qin_s4_$WHAT$ }
+		AND = { global_var:hd_j16_dir_qin_stage = 6 has_global_variable = hd_j16_dir_qin_s6_$WHAT$ }
+		AND = { global_var:hd_j16_dir_qin_stage = 7 has_global_variable = hd_j16_dir_qin_s7_$WHAT$ }
+	}
+}
+
+# 本阶段的导演战争（战争标签 hd_j16_dir_war 与当前阶段对应）还在打。Scope：秦主
+hd_j16_dir_stage_war_ongoing_trigger = {
+	any_character_war = {
+		OR = {
+			AND = { global_var:hd_j16_dir_qin_stage = 1 var:hd_j16_dir_war ?= flag:guanzhong }
+			AND = { global_var:hd_j16_dir_qin_stage = 2 var:hd_j16_dir_war ?= flag:longyou }
+			AND = { global_var:hd_j16_dir_qin_stage = 3 var:hd_j16_dir_war ?= flag:yancan }
+			AND = { global_var:hd_j16_dir_qin_stage = 4 var:hd_j16_dir_war ?= flag:qiuchi }
+			AND = { global_var:hd_j16_dir_qin_stage = 6 var:hd_j16_dir_war ?= flag:liang }
+			AND = { global_var:hd_j16_dir_qin_stage = 7 var:hd_j16_dir_war ?= flag:dai }
+		}
+	}
+}
+
+############################################################
+# 边境战争 hd_j16_border_cb（A3-F2★A）的目标县：守方或其下属持有，且与攻方最高领主（scope:hd_j16_bd_att）的领土接壤。Scope：县
+# 需要 scope:hd_j16_bd_def、scope:hd_j16_bd_att（hd_j16_border_start_war_effect 设）
+############################################################
+hd_j16_border_county_ok_trigger = {
+	exists = holder
+	holder = {
+		OR = {
+			this = scope:hd_j16_bd_def
+			is_vassal_or_below_of = scope:hd_j16_bd_def
+		}
+	}
+	any_neighboring_county = {
+		holder ?= {
+			OR = {
+				this = scope:hd_j16_bd_att
+				is_vassal_or_below_of = scope:hd_j16_bd_att
+			}
+		}
+	}
+}

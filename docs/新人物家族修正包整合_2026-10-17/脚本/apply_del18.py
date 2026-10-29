@@ -15,6 +15,9 @@ M.update({r['删除ID']: r['并入ID'] for r in
 # 2026-10-25 貂蝉、二乔、清河公主、太原郭氏、潘岳、裴楷去重：同样删块改指
 M.update({r['删除ID']: r['并入ID'] for r in
           csv.DictReader(open(os.path.join(mod, 'docs/人物审查/合并记录_2026-10-25.csv'), encoding='utf-8-sig'))})
+# 2026-10-27 两晋十六国第 2 期（p2-A）同人合并：同样删块改指
+M.update({r['删除ID']: r['并入ID'] for r in
+          csv.DictReader(open(os.path.join(mod, 'docs/人物审查/合并记录_2026-10-27.csv'), encoding='utf-8-sig'))})
 # 2026-10-25「某氏」甄别：UUII 无关联的某氏 1,000 人纯删除，没有并入方，只删块、不改引用
 DROP = {r['角色ID'] for r in
         csv.DictReader(open(os.path.join(mod, 'docs/人物审查/某氏甄别记录_2026-10-25.csv'), encoding='utf-8-sig'))
