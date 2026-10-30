@@ -1,0 +1,212 @@
+# Monetary controls and bounded, integer maximum-accepted search.
+hd_peace_prepare_offer_identity_effect = {
+ set_variable = { name = hd_peace_locked_net value = hd_peace_treaty_net_value }
+ if = { limit = { NOT = { has_variable = hd_peace_offer_nonce } } set_variable = { name = hd_peace_offer_nonce value = 0 } }
+ change_variable = { name = hd_peace_offer_nonce add = 1 }
+}
+hd_peace_max_accepted_gold_effect = {
+ set_variable = { name = hd_peace_gold_search_original value = var:hd_peace_demand_gold }
+ set_variable = { name = hd_peace_gold_search_low value = 0 }
+ set_variable = { name = hd_peace_gold_search_high value = hd_peace_max_demand_gold_value }
+ set_variable = { name = hd_peace_gold_search_best value = -1 }
+ # 32 fixed iterations; the search never changes any clause except demanded gold.
+ while = {
+  count = 32
+  if = {
+   limit = { var:hd_peace_gold_search_low <= var:hd_peace_gold_search_high }
+   set_variable = { name = hd_peace_demand_gold value = hd_peace_gold_search_mid_value }
+   if = {
+    limit = { hd_peace_ai_accepts_treaty_trigger = yes }
+    set_variable = { name = hd_peace_gold_search_best value = var:hd_peace_demand_gold }
+    set_variable = { name = hd_peace_gold_search_low value = var:hd_peace_demand_gold }
+    change_variable = { name = hd_peace_gold_search_low add = 1 }
+   }
+   else = {
+    set_variable = { name = hd_peace_gold_search_high value = var:hd_peace_demand_gold }
+    change_variable = { name = hd_peace_gold_search_high subtract = 1 }
+   }
+  }
+ }
+ if = {
+  limit = { var:hd_peace_gold_search_best >= 0 }
+  set_variable = { name = hd_peace_demand_gold value = var:hd_peace_gold_search_best }
+ }
+ else = { set_variable = { name = hd_peace_demand_gold value = var:hd_peace_gold_search_original } }
+ remove_variable = hd_peace_gold_search_original
+ remove_variable = hd_peace_gold_search_low
+ remove_variable = hd_peace_gold_search_high
+ remove_variable = hd_peace_gold_search_best
+}
+hd_peace_populate_release_candidates_effect = {
+ if = { limit = { has_variable_list = hd_peace_offer_release_candidates } clear_variable_list = hd_peace_offer_release_candidates }
+ if = { limit = { has_variable_list = hd_peace_demand_release_candidates } clear_variable_list = hd_peace_demand_release_candidates }
+ # Drafts made before the lord-only rule may still hold barons or mayors.
+ # Collected first, then removed, so no list is edited while iterated.
+ if = {
+  limit = { has_variable_list = hd_peace_offer_released_vassals }
+  every_in_list = {
+   variable = hd_peace_offer_released_vassals
+   limit = { NOT = { hd_peace_can_release_vassal_trigger = { LIEGE = root } } }
+   root = { add_to_variable_list = { name = hd_peace_release_purge target = prev } }
+  }
+  if = {
+   limit = { has_variable_list = hd_peace_release_purge }
+   every_in_list = {
+    variable = hd_peace_release_purge
+    root = { remove_list_variable = { name = hd_peace_offer_released_vassals target = prev } }
+   }
+   clear_variable_list = hd_peace_release_purge
+  }
+ }
+ if = {
+  limit = { has_variable_list = hd_peace_demand_released_vassals }
+  every_in_list = {
+   variable = hd_peace_demand_released_vassals
+   limit = { NOT = { hd_peace_can_release_vassal_trigger = { LIEGE = root.var:hd_peace_treaty_opponent } } }
+   root = { add_to_variable_list = { name = hd_peace_release_purge target = prev } }
+  }
+  if = {
+   limit = { has_variable_list = hd_peace_release_purge }
+   every_in_list = {
+    variable = hd_peace_release_purge
+    root = { remove_list_variable = { name = hd_peace_demand_released_vassals target = prev } }
+   }
+   clear_variable_list = hd_peace_release_purge
+  }
+ }
+ every_vassal = {
+  limit = { hd_peace_can_release_vassal_trigger = { LIEGE = root } }
+  root = { add_to_variable_list = { name = hd_peace_offer_release_candidates target = prev } }
+ }
+ var:hd_peace_treaty_opponent = {
+  every_vassal = {
+   limit = { hd_peace_can_release_vassal_trigger = { LIEGE = root.var:hd_peace_treaty_opponent } }
+   root = { add_to_variable_list = { name = hd_peace_demand_release_candidates target = prev } }
+  }
+ }
+}
+# Called after the native war result. A surviving selected ruler leaves the realm
+# of either signatory, never that of an unrelated third party.
+hd_peace_release_selected_vassal_effect = {
+ if = {
+  limit = {
+   is_alive = yes
+   is_landed = yes
+   exists = liege
+   OR = {
+    is_vassal_or_below_of = scope:hd_peace_actor
+    is_vassal_or_below_of = scope:hd_peace_opponent
+   }
+  }
+  liege = { save_scope_as = hd_peace_former_liege }
+  create_title_and_vassal_change = { type = independency save_scope_as = hd_peace_independence_change add_claim_on_loss = yes }
+  becomes_independent = { change = scope:hd_peace_independence_change }
+  resolve_title_and_vassal_change = scope:hd_peace_independence_change
+  add_truce_both_ways = { character = scope:hd_peace_former_liege years = 10 name = TRUCE_GRANT_INDEPENDENCE }
+  add_opinion = { target = scope:hd_peace_actor modifier = granted_independence_opinion }
+ }
+}
+hd_peace_offer_gold_add_1000_effect = { change_variable = { name = hd_peace_offer_gold add = 1000 } hd_peace_clamp_offer_gold_effect = yes }
+hd_peace_offer_gold_subtract_1000_effect = { change_variable = { name = hd_peace_offer_gold subtract = 1000 } hd_peace_clamp_offer_gold_effect = yes }
+hd_peace_demand_gold_add_1000_effect = { change_variable = { name = hd_peace_demand_gold add = 1000 } hd_peace_clamp_demand_gold_effect = yes }
+hd_peace_demand_gold_subtract_1000_effect = { change_variable = { name = hd_peace_demand_gold subtract = 1000 } hd_peace_clamp_demand_gold_effect = yes }
+# Cache declared territorial targets for objective pricing and forced demands.
+hd_peace_cache_cb_territories_effect = {
+ if = { limit = { has_variable_list = hd_peace_cb_reserved_counties } clear_variable_list = hd_peace_cb_reserved_counties }
+ # 2026-10-29 boki：普通吞并的宣战目标只是占位，可索范围改为主守方全境（含其封臣）
+ if = {
+  limit = { var:hd_peace_treaty_war = { hd_peace_ordinary_annex_war_trigger = yes } }
+  var:hd_peace_treaty_war.primary_defender = {
+   every_sub_realm_county = {
+    root = { add_to_variable_list = { name = hd_peace_cb_reserved_counties target = prev } }
+   }
+  }
+ }
+ else = {
+ var:hd_peace_treaty_war = {
+  casus_belli = {
+   every_target_title = {
+    if = {
+     limit = { tier = tier_county }
+     root = {
+      if = { limit = { NOT = { is_target_in_variable_list = { name = hd_peace_cb_reserved_counties target = prev } } } add_to_variable_list = { name = hd_peace_cb_reserved_counties target = prev } }
+     }
+    }
+    else_if = {
+     limit = { tier > tier_county }
+     every_de_jure_county = {
+      root = {
+       if = { limit = { NOT = { is_target_in_variable_list = { name = hd_peace_cb_reserved_counties target = prev } } } add_to_variable_list = { name = hd_peace_cb_reserved_counties target = prev } }
+      }
+     }
+    }
+   }
+  }
+ }
+ }
+}
+hd_peace_snapshot_event_vassals_effect = {
+ set_variable = { name = hd_peace_snapshot_index value = 0 }
+ if = {
+  limit = { has_variable_list = hd_peace_offer_released_vassals }
+  every_in_list = {
+   variable = hd_peace_offer_released_vassals
+   scope:hd_peace_event_proposer = { change_variable = { name = hd_peace_snapshot_index add = 1 } }
+   if = { limit = { scope:hd_peace_event_proposer.var:hd_peace_snapshot_index = 1 } save_scope_as = hd_peace_offer_released_1 }
+   if = { limit = { scope:hd_peace_event_proposer.var:hd_peace_snapshot_index = 2 } save_scope_as = hd_peace_offer_released_2 }
+   if = { limit = { scope:hd_peace_event_proposer.var:hd_peace_snapshot_index = 3 } save_scope_as = hd_peace_offer_released_3 }
+  }
+ }
+ set_variable = { name = hd_peace_snapshot_index value = 0 }
+ if = {
+  limit = { has_variable_list = hd_peace_demand_released_vassals }
+  every_in_list = {
+   variable = hd_peace_demand_released_vassals
+   scope:hd_peace_event_proposer = { change_variable = { name = hd_peace_snapshot_index add = 1 } }
+   if = { limit = { scope:hd_peace_event_proposer.var:hd_peace_snapshot_index = 1 } save_scope_as = hd_peace_demand_released_1 }
+   if = { limit = { scope:hd_peace_event_proposer.var:hd_peace_snapshot_index = 2 } save_scope_as = hd_peace_demand_released_2 }
+   if = { limit = { scope:hd_peace_event_proposer.var:hd_peace_snapshot_index = 3 } save_scope_as = hd_peace_demand_released_3 }
+  }
+ }
+ remove_variable = hd_peace_snapshot_index
+
+ # Save named title scopes for the incoming offer description.
+ set_variable = { name = hd_peace_snapshot_index value = 0 }
+ if = {
+  limit = { has_variable_list = hd_peace_offer_counties }
+  every_in_list = {
+   variable = hd_peace_offer_counties
+   scope:hd_peace_event_proposer = { change_variable = { name = hd_peace_snapshot_index add = 1 } }
+   if = { limit = { scope:hd_peace_event_proposer.var:hd_peace_snapshot_index = 1 } save_scope_as = hd_peace_offer_county_1 }
+   if = { limit = { scope:hd_peace_event_proposer.var:hd_peace_snapshot_index = 2 } save_scope_as = hd_peace_offer_county_2 }
+   if = { limit = { scope:hd_peace_event_proposer.var:hd_peace_snapshot_index = 3 } save_scope_as = hd_peace_offer_county_3 }
+   if = { limit = { scope:hd_peace_event_proposer.var:hd_peace_snapshot_index = 4 } save_scope_as = hd_peace_offer_county_4 }
+   if = { limit = { scope:hd_peace_event_proposer.var:hd_peace_snapshot_index = 5 } save_scope_as = hd_peace_offer_county_5 }
+  }
+ }
+ set_variable = { name = hd_peace_snapshot_index value = 0 }
+ if = {
+  limit = { has_variable_list = hd_peace_demand_counties }
+  every_in_list = {
+   variable = hd_peace_demand_counties
+   scope:hd_peace_event_proposer = { change_variable = { name = hd_peace_snapshot_index add = 1 } }
+   if = { limit = { scope:hd_peace_event_proposer.var:hd_peace_snapshot_index = 1 } save_scope_as = hd_peace_demand_county_1 }
+   if = { limit = { scope:hd_peace_event_proposer.var:hd_peace_snapshot_index = 2 } save_scope_as = hd_peace_demand_county_2 }
+   if = { limit = { scope:hd_peace_event_proposer.var:hd_peace_snapshot_index = 3 } save_scope_as = hd_peace_demand_county_3 }
+   if = { limit = { scope:hd_peace_event_proposer.var:hd_peace_snapshot_index = 4 } save_scope_as = hd_peace_demand_county_4 }
+   if = { limit = { scope:hd_peace_event_proposer.var:hd_peace_snapshot_index = 5 } save_scope_as = hd_peace_demand_county_5 }
+  }
+ }
+ set_variable = { name = hd_peace_snapshot_index value = 0 }
+ if = {
+  limit = { has_variable_list = hd_peace_demand_titles }
+  every_in_list = {
+   variable = hd_peace_demand_titles
+   scope:hd_peace_event_proposer = { change_variable = { name = hd_peace_snapshot_index add = 1 } }
+   if = { limit = { scope:hd_peace_event_proposer.var:hd_peace_snapshot_index = 1 } save_scope_as = hd_peace_demand_title_1 }
+   if = { limit = { scope:hd_peace_event_proposer.var:hd_peace_snapshot_index = 2 } save_scope_as = hd_peace_demand_title_2 }
+   if = { limit = { scope:hd_peace_event_proposer.var:hd_peace_snapshot_index = 3 } save_scope_as = hd_peace_demand_title_3 }
+  }
+ }
+ remove_variable = hd_peace_snapshot_index
+}

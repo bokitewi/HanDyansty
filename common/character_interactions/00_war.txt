@@ -1,0 +1,343 @@
+declare_war_interaction = {
+	category = interaction_category_diplomacy
+	common_interaction = yes
+	special_interaction = declare_war_interaction
+	interface = declare_war
+	interface_priority = 80
+	popup_on_receive = yes
+	pause_on_receive = no # this is handled by the interface instead
+
+	desc = declare_war_desc
+
+	is_shown = {
+		scope:recipient != scope:puppet_or_actor
+		# Only differs from puppet_or_actor on puppet actions; a puppet cannot be ordered to attack their own puppeteer
+		scope:recipient != scope:actor
+		scope:recipient = {
+			is_playable_character = yes
+		}
+		scope:puppet_or_actor ?= {
+			NOT = {
+				is_at_war_with = scope:recipient
+			}
+		}
+	}
+
+	is_valid_showing_failures_only = {
+		scope:puppet_or_actor = {
+			trigger_if = {
+				limit = { government_has_flag = government_is_theocracy }
+				custom_tooltip = {
+					text = theocratic_government_war_restriction
+					has_any_display_cb_on = scope:recipient
+				}
+			}
+			trigger_else = {
+				has_any_display_cb_on = scope:recipient
+			}
+			allows_declaring_war_against_target_trigger = { TARGET = scope:recipient }
+		}
+	}
+
+	has_valid_target_showing_failures_only = {
+		custom_description = {
+			text = "declare_war_hook_on_liege"
+			OR = {
+				scope:puppet_or_actor = { war_declarer_needs_hook_on_liege = no }
+				always = scope:hook
+			}
+		}
+		scope:puppet_or_actor = {
+			NOR = {
+				is_at_war_with = scope:recipient
+				custom_description = { #A vassal cannot go to war against someone their Liege is already at war with
+					text = liege_is_at_war_with_recipient
+					object = scope:recipient
+					liege = {
+						is_at_war_with = scope:recipient
+					}
+				}
+			}
+		}
+	}
+
+	send_options_exclusive = no
+	send_option = {
+		is_shown = {
+			scope:puppet_or_actor = { war_declarer_needs_hook_on_liege = yes }
+		}
+		is_valid = {
+			scope:puppet_or_actor = {
+				has_usable_hook = liege
+			}
+		}
+		flag = hook
+		localization = WAR_LIEGE_HOOK
+		can_invalidate_interaction = yes
+	}
+	should_use_extra_icon = {
+		scope:puppet_or_actor = { war_declarer_needs_hook_on_liege = yes }
+		scope:puppet_or_actor = { has_usable_hook = liege }
+	}
+	extra_icon = "gfx/interface/icons/character_interactions/hook_icon.dds"
+
+	on_accept = {
+		scope:puppet_or_actor = {
+			#Feedback!
+			hidden_effect = {
+				send_interface_toast = {
+					type = event_toast_effect_neutral
+					title = declare_war_interaction_notification
+
+					left_icon = scope:puppet_or_actor
+					right_icon = scope:recipient
+
+					custom_tooltip = declare_war_interaction_notification_tooltip
+
+					show_as_tooltip = {
+						if = {
+							limit = { always = scope:hook }
+							use_hook = liege
+						}
+					}
+				}
+			}
+
+			#Has the instigator promised a vassal a war (vassal.2601)?
+			if = {
+				limit = {
+					exists = var:promised_war
+					var:promised_war = {
+						is_alive = yes
+						this != scope:recipient
+					}
+				}
+				trigger_event = {
+					id = vassal.2610
+					days = { 7 10 }
+				}
+			}
+
+			if = {
+				limit = { always = scope:hook }
+				use_hook = liege
+			}
+
+			#Send break up event if they are your lover
+			if = {
+				limit = {
+					has_relation_lover = scope:recipient
+					NOT = { has_relation_rival = scope:recipient } #To enable really strange love stories
+					any_character_war = {
+						casus_belli = {
+							primary_attacker = scope:puppet_or_actor
+							primary_defender = scope:recipient
+							any_target_title = { }
+						}
+					}
+				}
+				scope:recipient = {
+					trigger_event = {
+						id = lover.0103
+						days = { 14 30 }
+					}
+				}
+			}
+
+			#Invalidate any wars your vassals have going against recipient atm
+			scope:recipient = {
+				if = {
+					limit = {
+						any_character_war = {
+							primary_attacker = {
+								is_vassal_or_below_of = scope:puppet_or_actor
+								trigger_if = { #Ai should never invalidate a player's war!
+									limit = {
+										this = { is_ai = no }
+									}
+									scope:actor = {
+										is_ai = no
+									}
+								}
+							}
+						}
+					}
+					every_character_war = {
+						limit = {
+							primary_attacker = {
+								is_vassal_or_below_of = scope:puppet_or_actor
+								trigger_if = { #Ai should never invalidate a player's war!
+									limit = {
+										this = { is_ai = no }
+									}
+									scope:actor = {
+										is_ai = no
+									}
+								}
+							}
+						}
+						show_as_tooltip = { end_war = invalidated } #Actually ended in the event
+						primary_attacker = { trigger_event = war_event.1001 }
+					}
+				}
+			}
+			#Notify defender's vassals if the war is targeting one or more of their titles
+			scope:recipient = {
+				if = {
+					limit = {
+						any_vassal = {
+							save_temporary_scope_as = attacked_vassal
+							any_character_war = {
+								casus_belli = {
+									primary_attacker = scope:puppet_or_actor
+									primary_defender = scope:recipient
+									any_target_title = {
+										holder = {
+											OR = {
+												this = scope:attacked_vassal
+												is_vassal_or_below_of = scope:attacked_vassal
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+					every_vassal = {
+						save_temporary_scope_as = attacked_vassal
+						limit = {
+							any_character_war = {
+								casus_belli = {
+									primary_attacker = scope:puppet_or_actor
+									primary_defender = scope:recipient
+									any_target_title = {
+										holder = {
+											OR = {
+												this = scope:attacked_vassal
+												is_vassal_or_below_of = scope:attacked_vassal
+											}
+										}
+									}
+								}
+							}
+						}
+						send_interface_toast = {
+							type = msg_war_declared_on_liege
+							title = declare_war_interaction_notification
+
+							left_icon = scope:puppet_or_actor
+							right_icon = scope:recipient
+
+							custom_tooltip = declare_war_interaction_notification_tooltip
+						}
+					}
+				}
+			}
+
+			# If you are admin and had permission to start war, spend said permission
+			if = {
+				limit = {
+					has_variable = admin_permission_to_declare_war
+				}
+				remove_variable = admin_permission_to_declare_war
+			}
+		}
+		hidden_effect = {
+			if = {
+				limit = {
+					scope:is_puppet_action ?= yes
+				}
+				scope:actor = {
+					send_interface_toast = {
+						type = event_toast_effect_neutral
+						title = declare_war_interaction_notification
+
+						left_icon = scope:puppet_or_actor
+						right_icon = scope:recipient
+
+						custom_tooltip = declare_war_interaction_notification_tooltip
+					}
+				}
+			}
+		}
+	}
+
+	auto_accept = yes
+}
+
+end_war_attacker_victory_interaction = {
+	special_interaction = end_war_attacker_victory_interaction
+	hidden = yes
+	is_shown = { always = no }
+	is_valid = { always = no }
+	can_send = { always = no }
+	ai_potential = { always = no }
+	ai_frequency = 0
+	on_accept = {}
+}
+
+end_war_attacker_white_peace_interaction = {
+	special_interaction = end_war_attacker_white_peace_interaction
+	hidden = yes
+	is_shown = { always = no }
+	is_valid = { always = no }
+	can_send = { always = no }
+	ai_potential = { always = no }
+	ai_frequency = 0
+	on_accept = {}
+}
+
+end_war_attacker_defeat_interaction = {
+	special_interaction = end_war_attacker_defeat_interaction
+	hidden = yes
+	is_shown = { always = no }
+	is_valid = { always = no }
+	can_send = { always = no }
+	ai_potential = { always = no }
+	ai_frequency = 0
+	on_accept = {}
+}
+
+view_war_interaction = {
+	category = interaction_category_diplomacy
+	common_interaction = yes
+
+	special_interaction = offer_peace_interaction
+	interface = offer_peace
+	use_diplomatic_range = no
+	ignores_pending_interaction_block = yes
+
+	is_shown = {
+		scope:actor = {
+			is_at_war_with = scope:recipient
+			NOT = {
+				any_character_war = {
+					is_war_leader = scope:actor
+					is_participant = scope:recipient
+				}
+			}
+		}
+	}
+	auto_accept = yes
+}
+
+offer_peace_interaction = {
+	category = interaction_category_diplomacy
+	common_interaction = yes
+	icon = war_won_icon
+
+	special_interaction = offer_peace_interaction
+	interface = offer_peace
+	use_diplomatic_range = no
+
+	is_shown = {
+		scope:puppet_or_actor = {
+			is_at_war_with = scope:recipient
+			any_character_war = {
+				is_war_leader = scope:puppet_or_actor
+				is_participant = scope:recipient
+			}
+		}
+	}
+	auto_accept = yes
+}

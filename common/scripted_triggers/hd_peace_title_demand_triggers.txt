@@ -1,0 +1,132 @@
+# Occupation discounts and whole-title demands. ROOT is the proposer.
+
+# County scope. Held somewhere inside the opponent's realm.
+hd_peace_county_in_opponent_realm_trigger = {
+	tier = tier_county
+	is_landless_type_title = no
+	is_noble_family_title = no
+	exists = holder
+	trigger_if = {
+		limit = { exists = root.var:hd_peace_treaty_opponent }
+		holder = { OR = { this = root.var:hd_peace_treaty_opponent is_vassal_or_below_of = root.var:hd_peace_treaty_opponent } }
+	}
+	trigger_else = { always = no }
+}
+
+# County scope. The capital is controlled by the proposer's side of the treaty
+# war: the proposer or any co-belligerent, as in CK3's own occupation score.
+hd_peace_county_occupied_by_proposer_side_trigger = {
+	exists = county_controller
+	trigger_if = {
+		limit = { exists = root.var:hd_peace_treaty_war }
+		trigger_if = {
+			limit = { root.var:hd_peace_treaty_war = { primary_attacker = root } }
+			county_controller = { is_attacker_in_war = root.var:hd_peace_treaty_war }
+		}
+		trigger_else = {
+			county_controller = { is_defender_in_war = root.var:hd_peace_treaty_war }
+		}
+	}
+	trigger_else = { always = no }
+}
+
+# Landed title scope. No higher than the proposer's own highest rank.
+hd_peace_title_within_proposer_tier_trigger = {
+	OR = {
+		AND = { tier = tier_duchy root = { highest_held_title_tier >= tier_duchy } }
+		AND = { tier = tier_kingdom root = { highest_held_title_tier >= tier_kingdom } }
+		AND = { tier = tier_empire root = { highest_held_title_tier >= tier_empire } }
+	}
+}
+
+# Landed title scope. Strictly below the proposer's rank: 10% cheaper.
+hd_peace_title_below_proposer_tier_trigger = {
+	OR = {
+		AND = { tier = tier_duchy root = { highest_held_title_tier > tier_duchy } }
+		AND = { tier = tier_kingdom root = { highest_held_title_tier > tier_kingdom } }
+		AND = { tier = tier_empire root = { highest_held_title_tier > tier_empire } }
+	}
+}
+
+# Landed title scope. A whole de jure duchy, kingdom or empire with land in the
+# opponent's realm. Hegemonies are never transferred by treaty.
+hd_peace_demand_title_candidate_trigger = {
+	tier >= tier_duchy
+	tier <= tier_empire
+	is_landless_type_title = no
+	is_noble_family_title = no
+	hd_peace_title_within_proposer_tier_trigger = yes
+	any_de_jure_county = { hd_peace_county_in_opponent_realm_trigger = yes }
+}
+
+# County scope. Already included by a selected whole title.
+hd_peace_county_covered_by_demand_titles_trigger = {
+	save_temporary_scope_as = hd_peace_covered_county
+	root = {
+		any_in_list = {
+			variable = hd_peace_demand_titles
+			scope:hd_peace_covered_county = { target_is_de_jure_liege_or_above = prev }
+		}
+	}
+}
+
+# Landed title scope. Lies inside a different selected whole title.
+hd_peace_title_covered_by_demand_titles_trigger = {
+	save_temporary_scope_as = hd_peace_covered_title
+	root = {
+		any_in_list = {
+			variable = hd_peace_demand_titles
+			NOT = { this = scope:hd_peace_covered_title }
+			scope:hd_peace_covered_title = { target_is_de_jure_liege_or_above = prev }
+		}
+	}
+}
+
+# Landed title scope. Shares land with a different selected whole title.
+hd_peace_title_overlaps_demand_titles_trigger = {
+	save_temporary_scope_as = hd_peace_overlap_title
+	root = {
+		any_in_list = {
+			variable = hd_peace_demand_titles
+			NOT = { this = scope:hd_peace_overlap_title }
+			OR = {
+				target_is_de_jure_liege_or_above = scope:hd_peace_overlap_title
+				scope:hd_peace_overlap_title = { target_is_de_jure_liege_or_above = prev }
+			}
+		}
+	}
+}
+
+# Landed title scope. A forced treaty may take the title only when every county
+# it transfers lies inside the declared war goal.
+hd_peace_demand_title_forced_valid_trigger = {
+	NOT = {
+		any_de_jure_county = {
+			hd_peace_county_in_opponent_realm_trigger = yes
+			NOT = { root = { is_target_in_variable_list = { name = hd_peace_cb_reserved_counties target = prev } } }
+			NOT = { hd_peace_free_dejure_county_trigger = yes }	# 2026-10-29：自己法理内、已被己方占领的县随时可强索
+		}
+	}
+}
+
+# Rechecked at signature: rank, remaining land and no double-counted land.
+hd_peace_selected_titles_valid_trigger = {
+	trigger_if = {
+		limit = { has_variable_list = hd_peace_demand_titles }
+		NOT = {
+			any_in_list = {
+				variable = hd_peace_demand_titles
+				OR = {
+					NOT = { hd_peace_demand_title_candidate_trigger = yes }
+					hd_peace_title_overlaps_demand_titles_trigger = yes
+				}
+			}
+		}
+		NOT = {
+			any_in_list = {
+				variable = hd_peace_demand_counties
+				hd_peace_county_covered_by_demand_titles_trigger = yes
+			}
+		}
+	}
+}
