@@ -1,0 +1,117 @@
+﻿# 冒险者落地：旧部改编为事件兵（2026-11-01 boki）。
+# 冒险者变为有地角色后，原冒险者兵团按「同兵种、现有兵数」改编为事件兵（spawn_army），原兵团删除。
+#   - 玩家与 AI 同规则；玩家收一条通知。
+#   - 0 人的兵团直接删除，不生成。
+#   - 不动：原版荣誉兵团（accolade_maa_*，随骑士维护）、头衔兵团；生成器未收录的兵种保留原兵团并写 game.log。
+#   - 不在战争中时引擎只生成兵团、不出军队实体（进事件兵，开战随大军召集）；在战争中则在首府合成一支军队。
+# 钩子：zz_hd_lmc_on_actions.txt（换政体 / 冒险者政体下获得有地头衔，统一延后 1 天执行）。
+# 兵种分支：zz_hd_lmc_dispatch_effects.txt（tools/hd_lmc/gen_lmc_maa.py 生成）。
+# 诊断：game.log 搜 "hd_lmc:"。
+
+# 钩子调用。ROOT = 角色。同一时刻多个钩子只排一次。
+hd_lmc_queue_effect = {
+	if = {
+		limit = { NOT = { has_character_flag = hd_lmc_pending } }
+		add_character_flag = { flag = hd_lmc_pending days = 3 }
+		trigger_event = { on_action = hd_lmc_convert days = 1 }
+		debug_log = "hd_lmc: queued"
+		debug_log_scopes = yes
+	}
+}
+
+# 改编本体。ROOT = 已有地的原冒险者。
+hd_lmc_convert_effect = {
+	save_scope_as = hd_lmc_owner
+	clear_variable_list = hd_lmc_regs
+	clear_variable_list = hd_lmc_done
+	set_variable = { name = hd_lmc_men value = 0 }
+
+	# 先收集，再生成、再删除（不在 every_maa_regiment 循环里删兵团）。
+	every_maa_regiment = {
+		limit = {
+			is_personal_maa_regiment = yes
+			hd_lmc_accolade_maa_trigger = no
+		}
+		scope:hd_lmc_owner = { add_to_variable_list = { name = hd_lmc_regs target = prev } }
+	}
+
+	if = { limit = { exists = capital_province } capital_province = { save_scope_as = hd_lmc_loc } }
+	else_if = { limit = { exists = location } location = { save_scope_as = hd_lmc_loc } }
+
+	if = {
+		limit = {
+			exists = scope:hd_lmc_loc
+			has_variable_list = hd_lmc_regs
+		}
+		every_in_list = {
+			variable = hd_lmc_regs
+			save_scope_as = hd_lmc_reg
+			hd_lmc_dispatch_effect = yes
+		}
+		every_in_list = {
+			variable = hd_lmc_done
+			destroy_maa_regiment = yes
+		}
+		if = {
+			limit = {
+				is_ai = no
+				var:hd_lmc_men >= 1
+			}
+			send_interface_toast = {
+				type = event_toast_effect_neutral
+				title = hd_lmc_toast_title
+				left_icon = root
+				custom_tooltip = hd_lmc_toast_tt
+			}
+		}
+		debug_log = "hd_lmc: convert done"
+	}
+	else = {
+		debug_log = "hd_lmc: nothing to convert (no personal regiments or no location)"
+		debug_log_scopes = yes
+	}
+
+	clear_variable_list = hd_lmc_regs
+	clear_variable_list = hd_lmc_done
+	remove_variable = hd_lmc_men
+}
+
+# 单个兵团改编。作用域 = 兵团（scope:hd_lmc_reg）；TYPE = 兵种键（由分发器写死传入）。
+# 在战争中：第一支存为 scope:hd_lmc_army，其余并入同一支军队。
+hd_lmc_spawn_effect = {
+	if = {
+		limit = { maa_current_troops_count >= 1 }
+		scope:hd_lmc_owner = {
+			if = {
+				limit = { exists = scope:hd_lmc_army }
+				spawn_army = {
+					name = hd_lmc_army_name
+					men_at_arms = {
+						type = $TYPE$
+						men = { value = scope:hd_lmc_reg.maa_current_troops_count }
+					}
+					location = scope:hd_lmc_loc
+					army = scope:hd_lmc_army
+					inheritable = yes
+					uses_supply = yes
+				}
+			}
+			else = {
+				spawn_army = {
+					name = hd_lmc_army_name
+					men_at_arms = {
+						type = $TYPE$
+						men = { value = scope:hd_lmc_reg.maa_current_troops_count }
+					}
+					location = scope:hd_lmc_loc
+					inheritable = yes
+					uses_supply = yes
+					save_scope_as = hd_lmc_army
+				}
+			}
+			change_variable = { name = hd_lmc_men add = scope:hd_lmc_reg.maa_current_troops_count }
+		}
+		debug_log = "hd_lmc: regiment converted"
+	}
+	scope:hd_lmc_owner = { add_to_variable_list = { name = hd_lmc_done target = scope:hd_lmc_reg } }
+}
