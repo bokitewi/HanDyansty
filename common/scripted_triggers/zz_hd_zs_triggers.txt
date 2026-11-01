@@ -1,0 +1,128 @@
+﻿# 诸葛亮、司马懿事件链（boki 2026-10-31，设计见 docs/诸葛亮司马懿事件链_设计草案.md）共用触发器。
+# 前缀 hd_zs_（共用）、hd_zgl_（诸葛亮）、hd_smy_（司马懿）。
+
+# 事件链已启动（218 开局或其他开局入场后）
+hd_zs_on_trigger = {
+	exists = global_var:hd_zs_on
+}
+
+# 仕于曹氏：主君、雇主或最高领主是曹氏（218 年受禅前曹操、曹丕是汉帝封臣）。Scope：人物
+hd_zs_serves_cao_trigger = {
+	exists = character:cao_cao
+	OR = {
+		liege ?= { dynasty ?= character:cao_cao.dynasty }
+		employer ?= { dynasty ?= character:cao_cao.dynasty }
+		top_liege = { dynasty ?= character:cao_cao.dynasty }
+	}
+}
+
+# 仕于刘氏：最高领主是刘备一族（涿县刘氏）。Scope：人物
+hd_zs_serves_liu_trigger = {
+	exists = character:liu_bei
+	top_liege = {
+		dynasty ?= character:liu_bei.dynasty
+		NOT = { has_title = title:h_china }
+	}
+}
+
+# 诸葛亮主政：受遗诏（白帝托孤旗），或是蜀主的首辅，或在蜀主议政会任丞相席。需 scope:hd_zs_shu。无作用域要求
+hd_zgl_regent_trigger = {
+	exists = scope:hd_zs_shu
+	global_var:hd_zs_p_zhu_ge_liang ?= {
+		is_alive = yes
+		top_liege = scope:hd_zs_shu
+		OR = {
+			has_character_flag = hd_sg218_tuogu
+			scope:hd_zs_shu = { diarch ?= global_var:hd_zs_p_zhu_ge_liang }
+			AND = {
+				liege ?= scope:hd_zs_shu
+				has_council_position = councillor_chancellor
+			}
+		}
+	}
+}
+
+# 某人在世且在蜀主治下。需 scope:hd_zs_shu。Scope：人物
+hd_zs_in_shu_trigger = {
+	is_alive = yes
+	is_imprisoned = no
+	exists = scope:hd_zs_shu
+	top_liege = scope:hd_zs_shu
+	NOT = { this = scope:hd_zs_shu }
+}
+
+# 某人在世且在魏（天子治下，天子为曹氏）。需 scope:hd_zs_wei。Scope：人物
+hd_zs_in_wei_trigger = {
+	is_alive = yes
+	is_imprisoned = no
+	exists = scope:hd_zs_wei
+	top_liege = scope:hd_zs_wei
+	NOT = { this = scope:hd_zs_wei }
+}
+
+# 魏天子：h_china 持有者是曹氏。需 scope:hd_zs_wei
+hd_zs_wei_is_cao_trigger = {
+	exists = scope:hd_zs_wei
+	scope:hd_zs_wei = { dynasty ?= character:cao_cao.dynasty }
+}
+
+# 蜀对魏的战争（攻方最高领主为蜀主、守方最高领主为天子）。需 scope:hd_zs_shu、scope:hd_zs_wei。Scope：战争
+hd_zs_shu_wei_war_trigger = {
+	primary_attacker = { top_liege = scope:hd_zs_shu }
+	primary_defender = { top_liege = scope:hd_zs_wei }
+}
+
+# 有一场蜀对魏的战争在打。需 scope:hd_zs_shu、scope:hd_zs_wei。无作用域要求
+hd_zs_beifa_active_trigger = {
+	exists = scope:hd_zs_shu
+	exists = scope:hd_zs_wei
+	NOT = { scope:hd_zs_shu = scope:hd_zs_wei }
+	scope:hd_zs_shu = {
+		any_character_war = { hd_zs_shu_wei_war_trigger = yes }
+	}
+}
+
+# 某场 218 北伐（KIND = beifa / beifa2～beifa5）已了结，或因目标已归蜀而跳过
+hd_zgl_beifa_ended_trigger = {
+	OR = {
+		exists = global_var:hd_sg218_$KIND$_won
+		exists = global_var:hd_sg218_$KIND$_lost
+		exists = global_var:hd_sg218_$KIND$_white
+		exists = global_var:hd_sg218_$KIND$_invalid
+		exists = global_var:hd_zgl_$KIND$_skipped
+	}
+}
+
+# 已失国：名下再无县级以上实地（世族、无地头衔不算）。Scope：人物
+hd_zs_lost_realm_trigger = {
+	NOT = {
+		any_held_title = {
+			tier >= tier_county
+			is_noble_family_title = no
+			is_landless_type_title = no
+		}
+	}
+}
+
+# 北伐守方可打：存在、不是蜀主、与蜀主无上下级关系。需 scope:hd_zs_shu 与 scope:hd_sg218_def_$KIND$
+hd_zgl_defender_ok_trigger = {
+	exists = scope:hd_zs_shu
+	exists = scope:hd_sg218_def_$KIND$
+	scope:hd_sg218_def_$KIND$ = {
+		NOT = { this = scope:hd_zs_shu }
+		NOT = { is_vassal_or_below_of = scope:hd_zs_shu }
+	}
+	scope:hd_zs_shu = { NOT = { is_vassal_or_below_of = scope:hd_sg218_def_$KIND$ } }
+}
+
+# 平辽东之战（吞并史实灭国、KIND = liaodong）是否在进行。无作用域要求
+hd_smy_liaodong_active_trigger = {
+	OR = {
+		title:h_china.holder ?= {
+			any_character_war = { using_cb = hd_dc_tunbing_cb var:hd_nbc_war_kind ?= flag:liaodong }
+		}
+		global_var:hd_zs_p_gong_sun_yuan ?= {
+			any_character_war = { using_cb = hd_dc_tunbing_cb var:hd_nbc_war_kind ?= flag:liaodong }
+		}
+	}
+}

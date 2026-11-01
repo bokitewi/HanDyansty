@@ -1,0 +1,834 @@
+﻿# 诸葛亮事件链（boki 2026-10-31，设计见 docs/诸葛亮司马懿事件链_设计草案.md 第 2 节）。事件在 events/zz_hd_zgl_events.txt。
+# 由 hd_zs_pulse_effect 每 30 天调用；需 scope:hd_zs_shu（蜀主）、scope:hd_zs_wei（天子）。电脑照史实，玩家每节点可选。
+# 诸葛亮自然死亡；死后 on_death 设 global_var:hd_zgl_dead，下次心跳跑五丈原、魏延之乱、接班、李平之死。
+
+hd_zgl_pulse_effect = {
+	if = {
+		limit = { exists = scope:hd_zs_shu }
+		# 诸葛亮在世、在蜀
+		if = {
+			limit = { global_var:hd_zs_p_zhu_ge_liang ?= { hd_zs_in_shu_trigger = yes } }
+			hd_zgl_check_z1_effect = yes
+			hd_zgl_kaifu_maintain_effect = yes
+			hd_zgl_check_liyan_effect = yes
+			hd_zgl_check_weiyan_effect = yes
+			hd_zgl_check_disciples_effect = yes
+			hd_zgl_check_mibiao_effect = yes
+			hd_zgl_check_jiang_wei_effect = yes
+			hd_zgl_check_beifa_effect = yes
+			hd_zgl_check_inventions_effect = yes
+		}
+		# 诸葛亮死后
+		if = {
+			limit = { exists = global_var:hd_zgl_dead }
+			hd_zgl_check_wuzhangyuan_effect = yes
+			hd_zgl_check_weiyan_luan_effect = yes
+			hd_zgl_check_succession_effect = yes
+			hd_zgl_check_liping_death_effect = yes
+		}
+	}
+}
+
+############################################################
+# Z1 开府治事
+############################################################
+hd_zgl_check_z1_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_zgl_z1_done }
+			hd_zgl_regent_trigger = yes
+		}
+		if = {
+			limit = { NOT = { exists = global_var:hd_zgl_z1_seen } }
+			set_global_variable = hd_zgl_z1_seen
+			set_global_variable = { name = hd_zgl_z1_wait value = yes days = 30 }
+		}
+		else_if = {
+			limit = { NOT = { exists = global_var:hd_zgl_z1_wait } }
+			set_global_variable = hd_zgl_z1_done
+			hd_zgl_z1_effect = yes
+			global_var:hd_zs_p_zhu_ge_liang = {
+				if = {
+					limit = { is_ai = no }
+					trigger_event = hd_zgl.0010
+				}
+			}
+		}
+	}
+}
+
+hd_zgl_z1_effect = {
+	global_var:hd_zs_p_zhu_ge_liang = {
+		add_character_modifier = hd_zgl_kaifu_modifier
+		change_merit = 200
+		# 武乡侯：封爵 1 级（食邑上党铜鞮县的武乡男爵领），爵号特判显示「武乡侯」（WJ_peerage_names.txt）
+		hd_zs_family_peer_effect = { ISSUER = scope:hd_zs_shu RANK = 1 FOOD = b_uuii_p_1144 }
+		if = {
+			limit = { has_variable = wj_peer_rank var:wj_peer_name ?= title:b_uuii_p_1144 }
+			set_variable = hd_zgl_wuxiang
+		}
+		hd_zs_house_unity_effect = { VALUE = 20 DESC = hd_zs_unity_rise.desc }
+	}
+	hd_zs_party_nudge_effect = { WHO = global_var:hd_zs_p_zhu_ge_liang LORD = scope:hd_zs_shu POWER = 10 }
+	hd_zs_party_stance_effect = { WHO = global_var:hd_zs_p_zhu_ge_liang LORD = scope:hd_zs_shu STANCE = jinqu }
+	# 门生蒋琬（Z4）
+	if = {
+		limit = { global_var:hd_zs_p_jiang_wan ?= { hd_zs_in_shu_trigger = yes is_adult = yes } }
+		hd_zs_disciple_effect = { MASTER = zhu_ge_liang DISCIPLE = jiang_wan }
+	}
+	# 治蜀与发明的计时（Z7）；李严求开府的计时（Z2-2，非托孤开局在此起算）
+	set_global_variable = { name = hd_zgl_kejiao_wait value = yes days = 365 }
+	set_global_variable = { name = hd_zgl_bazhen_wait value = yes days = 1095 }
+	set_global_variable = { name = hd_zgl_liannu_wait value = yes days = 1825 }
+	if = {
+		limit = { NOT = { exists = global_var:hd_zgl_liyan_b_timer } }
+		set_global_variable = hd_zgl_liyan_b_timer
+		set_global_variable = { name = hd_zgl_liyan_b_wait value = yes days = 1095 }
+	}
+	hd_zs_news_effect = { A = global_var:hd_zs_p_zhu_ge_liang B = scope:hd_zs_shu EVENT = hd_zgl.0900 }
+	debug_log = "HD_ZGL Z1 KAIFU"
+}
+
+# 开府修正随主政而存废
+hd_zgl_kaifu_maintain_effect = {
+	if = {
+		limit = { exists = global_var:hd_zgl_z1_done }
+		global_var:hd_zs_p_zhu_ge_liang = {
+			if = {
+				limit = { has_character_modifier = hd_zgl_kaifu_modifier NOT = { hd_zgl_regent_trigger = yes } }
+				remove_character_modifier = hd_zgl_kaifu_modifier
+			}
+			else_if = {
+				limit = { NOT = { has_character_modifier = hd_zgl_kaifu_modifier } hd_zgl_regent_trigger = yes }
+				add_character_modifier = hd_zgl_kaifu_modifier
+			}
+		}
+	}
+}
+
+############################################################
+# Z2 李严之争
+############################################################
+hd_zgl_check_liyan_effect = {
+	# ① 同受遗诏：托孤后李严在蜀
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_zgl_liyan_a_done }
+			global_var:hd_zs_p_zhu_ge_liang = { has_character_flag = hd_sg218_tuogu }
+			global_var:hd_zs_p_li_yan ?= { hd_zs_in_shu_trigger = yes }
+		}
+		set_global_variable = hd_zgl_liyan_a_done
+		global_var:hd_zs_p_li_yan = {
+			add_character_modifier = { modifier = hd_zgl_zhongduhu_modifier years = 10 }
+			add_opinion = { target = global_var:hd_zs_p_zhu_ge_liang modifier = hd_zs_shou_yizhao_opinion }
+			reverse_add_opinion = { target = global_var:hd_zs_p_zhu_ge_liang modifier = hd_zs_shou_yizhao_opinion }
+		}
+		if = {
+			limit = { NOT = { exists = global_var:hd_zgl_liyan_b_timer } }
+			set_global_variable = hd_zgl_liyan_b_timer
+			set_global_variable = { name = hd_zgl_liyan_b_wait value = yes days = 1095 }
+		}
+		debug_log = "HD_ZGL LIYAN SHOU_YIZHAO"
+	}
+	# ② 求开府割巴州
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_zgl_liyan_b_done }
+			exists = global_var:hd_zgl_liyan_b_timer
+			NOT = { exists = global_var:hd_zgl_liyan_b_wait }
+			hd_zgl_regent_trigger = yes
+			global_var:hd_zs_p_li_yan ?= { hd_zs_in_shu_trigger = yes }
+		}
+		set_global_variable = hd_zgl_liyan_b_done
+		global_var:hd_zs_p_zhu_ge_liang = {
+			if = {
+				limit = { is_ai = no }
+				trigger_event = hd_zgl.0020
+			}
+			else = { hd_zgl_liyan_refuse_effect = yes }
+		}
+	}
+	# ③ 运粮不继：北伐打满 180 天
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_zgl_liyan_c_done }
+			hd_zgl_regent_trigger = yes
+			global_var:hd_zs_p_li_yan ?= { hd_zs_in_shu_trigger = yes }
+			scope:hd_zs_shu = {
+				any_character_war = {
+					hd_zs_shu_wei_war_trigger = yes
+					war_days >= 180
+				}
+			}
+		}
+		set_global_variable = hd_zgl_liyan_c_done
+		global_var:hd_zs_p_zhu_ge_liang = {
+			if = {
+				limit = { is_ai = no }
+				trigger_event = hd_zgl.0030
+			}
+			else = { hd_zgl_liyan_depose_effect = yes }
+		}
+	}
+}
+
+# 拒李严开府。Scope：任意
+hd_zgl_liyan_refuse_effect = {
+	global_var:hd_zs_p_li_yan ?= {
+		add_opinion = { target = global_var:hd_zs_p_zhu_ge_liang modifier = hd_zs_refused_opinion }
+		random = {
+			chance = 50
+			set_relation_rival = { target = global_var:hd_zs_p_zhu_ge_liang reason = rival_quarreled_over_land }
+		}
+	}
+	debug_log = "HD_ZGL LIYAN REFUSED"
+}
+
+# 许李严开府。Scope：任意
+hd_zgl_liyan_allow_effect = {
+	global_var:hd_zs_p_li_yan ?= {
+		add_character_modifier = { modifier = hd_zgl_bazhou_modifier years = 10 }
+		add_opinion = { target = global_var:hd_zs_p_zhu_ge_liang modifier = hd_zs_favored_opinion }
+	}
+	global_var:hd_zs_p_zhu_ge_liang = { change_influence = -100 }
+	debug_log = "HD_ZGL LIYAN ALLOWED"
+}
+
+# 废李严为庶人。Scope：任意；需 scope:hd_zs_shu
+hd_zgl_liyan_depose_effect = {
+	global_var:hd_zs_p_li_yan ?= {
+		if = {
+			limit = { is_alive = yes }
+			hd_zs_depose_effect = { WHO = global_var:hd_zs_p_li_yan LORD = scope:hd_zs_shu }
+			add_opinion = { target = global_var:hd_zs_p_zhu_ge_liang modifier = hd_zs_slighted_opinion }
+			if = {
+				limit = { is_ai = no }
+				trigger_event = hd_zgl.0031
+			}
+		}
+	}
+	global_var:hd_zs_p_zhu_ge_liang = { add_prestige = 150 }
+	hd_zs_news_effect = { A = global_var:hd_zs_p_li_yan B = global_var:hd_zs_p_zhu_ge_liang EVENT = hd_zgl.0910 }
+	debug_log = "HD_ZGL LIYAN DEPOSED"
+}
+
+# ④ 李平之死：诸葛亮死后，李严仍是庶人且为电脑（史实 234 激愤发病死）
+hd_zgl_check_liping_death_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_zgl_liyan_d_done }
+			global_var:hd_zs_p_li_yan ?= {
+				is_alive = yes
+				is_ai = yes
+				has_character_modifier = hd_zgl_shuren_modifier
+			}
+		}
+		set_global_variable = hd_zgl_liyan_d_done
+		global_var:hd_zs_p_li_yan = { death = { death_reason = death_ill } }
+		debug_log = "HD_ZGL LIPING DIED"
+	}
+}
+
+############################################################
+# Z3 魏延之争
+############################################################
+hd_zgl_check_weiyan_effect = {
+	# ① 子午谷奇谋：第一次北伐进行中
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_zgl_ziwu_done }
+			exists = global_var:hd_sg218_beifa_active
+			global_var:hd_zs_p_wei_yan ?= { hd_zs_in_shu_trigger = yes }
+		}
+		set_global_variable = hd_zgl_ziwu_done
+		if = {
+			limit = { global_var:hd_zs_p_zhu_ge_liang = { is_ai = no } }
+			global_var:hd_zs_p_zhu_ge_liang = { trigger_event = hd_zgl.0040 }
+		}
+		else_if = {
+			limit = { scope:hd_zs_shu = { is_ai = no } }
+			scope:hd_zs_shu = { trigger_event = hd_zgl.0040 }
+		}
+		else = { hd_zgl_ziwu_reject_effect = yes }
+	}
+	# ② 魏杨不和：每年 30%，最多 3 次
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_zgl_weiyang_wait }
+			NOT = { global_var:hd_zgl_weiyang_count ?= 3 }
+			hd_zgl_regent_trigger = yes
+			global_var:hd_zs_p_wei_yan ?= { hd_zs_in_shu_trigger = yes }
+			global_var:hd_zs_p_yang_yi_2 ?= { hd_zs_in_shu_trigger = yes }
+		}
+		set_global_variable = { name = hd_zgl_weiyang_wait value = yes days = 365 }
+		random = {
+			chance = 30
+			if = {
+				limit = { NOT = { exists = global_var:hd_zgl_weiyang_count } }
+				set_global_variable = { name = hd_zgl_weiyang_count value = 0 }
+			}
+			change_global_variable = { name = hd_zgl_weiyang_count add = 1 }
+			global_var:hd_zs_p_zhu_ge_liang = {
+				if = {
+					limit = { is_ai = no }
+					trigger_event = hd_zgl.0050
+				}
+				else = { hd_zgl_weiyang_both_effect = yes }
+			}
+		}
+	}
+}
+
+hd_zgl_ziwu_reject_effect = {
+	global_var:hd_zs_p_wei_yan ?= {
+		add_opinion = { target = global_var:hd_zs_p_zhu_ge_liang modifier = hd_zs_slighted_opinion }
+		add_character_modifier = { modifier = hd_zgl_yangyang_modifier years = 10 }
+	}
+	debug_log = "HD_ZGL ZIWU REJECTED"
+}
+
+# 用子午谷奇谋：蜀主在汉中得事件兵 5000。Scope：任意；需 scope:hd_zs_shu
+hd_zgl_ziwu_accept_effect = {
+	scope:hd_zs_shu = {
+		random_character_war = {
+			limit = { var:hd_sg218_war_kind ?= flag:beifa }
+			save_scope_as = hd_zgl_ziwu_war
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_zgl_ziwu_war }
+		scope:hd_zs_shu = {
+			spawn_army = {
+				levies = 5000
+				location = title:d_hanzhong.title_capital_county.title_province
+				origin = title:d_hanzhong.title_capital_county.title_province
+				inheritable = yes
+				uses_supply = yes
+				war = scope:hd_zgl_ziwu_war
+				name = hd_zgl_ziwu_army_name
+			}
+		}
+	}
+	global_var:hd_zs_p_wei_yan ?= { add_prestige = 100 }
+	debug_log = "HD_ZGL ZIWU ACCEPTED"
+}
+
+hd_zgl_weiyang_both_effect = {
+	global_var:hd_zs_p_wei_yan ?= { add_opinion = { target = global_var:hd_zs_p_zhu_ge_liang modifier = hd_zs_favored_opinion } }
+	global_var:hd_zs_p_yang_yi_2 ?= { add_opinion = { target = global_var:hd_zs_p_zhu_ge_liang modifier = hd_zs_favored_opinion } }
+	global_var:hd_zs_p_zhu_ge_liang = { add_stress = 20 }
+	debug_log = "HD_ZGL WEIYANG BOTH"
+}
+
+# ③ 魏延之乱：诸葛亮死后，魏延、杨仪都在蜀
+hd_zgl_check_weiyan_luan_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_zgl_luan_done }
+			global_var:hd_zs_p_wei_yan ?= { hd_zs_in_shu_trigger = yes }
+			global_var:hd_zs_p_yang_yi_2 ?= { hd_zs_in_shu_trigger = yes }
+		}
+		set_global_variable = hd_zgl_luan_done
+		set_global_variable = { name = hd_zgl_yangyi_wait value = yes days = 365 }
+		global_var:hd_zs_p_wei_yan = {
+			if = {
+				limit = { is_ai = no }
+				trigger_event = hd_zgl.0060
+			}
+			else = {
+				hd_zs_news_effect = { A = global_var:hd_zs_p_wei_yan B = global_var:hd_zs_p_yang_yi_2 EVENT = hd_zgl.0920 }
+				death = { death_reason = death_execution }
+			}
+		}
+		debug_log = "HD_ZGL WEIYAN_LUAN"
+	}
+	# 杨仪怨望（史实 235）：魏延之乱一年后
+	if = {
+		limit = {
+			exists = global_var:hd_zgl_luan_done
+			NOT = { exists = global_var:hd_zgl_yangyi_wait }
+			NOT = { exists = global_var:hd_zgl_yangyi_done }
+		}
+		set_global_variable = hd_zgl_yangyi_done
+		global_var:hd_zs_p_yang_yi_2 ?= {
+			if = {
+				limit = { hd_zs_in_shu_trigger = yes is_ai = yes }
+				add_character_modifier = { modifier = hd_zgl_yuanwang_modifier years = 10 }
+				hd_zs_depose_effect = { WHO = global_var:hd_zs_p_yang_yi_2 LORD = scope:hd_zs_shu }
+				debug_log = "HD_ZGL YANGYI DEPOSED"
+			}
+		}
+	}
+}
+
+# 玩家魏延举兵：以郡国制「要求独立」CB 攻蜀主，挂议和专用标记。Scope：魏延
+hd_zgl_weiyan_rebel_effect = {
+	if = {
+		limit = { is_landed = yes liege ?= { is_alive = yes } }
+		liege = { save_scope_as = hd_zgl_weiyan_target }
+		start_war = {
+			cb = hd_dc_demand_independence_war
+			target = scope:hd_zgl_weiyan_target
+		}
+		random_character_war = {
+			limit = { using_cb = hd_dc_demand_independence_war primary_attacker = root }
+			set_variable = { name = hd_peace_scripted_war value = 1 }
+		}
+		debug_log = "HD_ZGL WEIYAN REBEL"
+	}
+}
+
+############################################################
+# Z4 提拔蒋琬、费祎
+############################################################
+hd_zgl_check_disciples_effect = {
+	# 蒋琬（Z1 时未成年或不在蜀的补收）、费祎、董允：成年后收为门生
+	if = {
+		limit = { exists = global_var:hd_zgl_z1_done }
+		if = {
+			limit = { global_var:hd_zs_p_jiang_wan ?= { hd_zs_in_shu_trigger = yes is_adult = yes NOT = { has_relation_elder = global_var:hd_zs_p_zhu_ge_liang } } NOT = { exists = global_var:hd_zgl_jiangwan_d } }
+			set_global_variable = hd_zgl_jiangwan_d
+			hd_zs_disciple_effect = { MASTER = zhu_ge_liang DISCIPLE = jiang_wan }
+		}
+		if = {
+			limit = { global_var:hd_zs_p_fei_yi ?= { hd_zs_in_shu_trigger = yes is_adult = yes NOT = { has_relation_elder = global_var:hd_zs_p_zhu_ge_liang } } NOT = { exists = global_var:hd_zgl_feiyi_d } }
+			set_global_variable = hd_zgl_feiyi_d
+			hd_zs_disciple_effect = { MASTER = zhu_ge_liang DISCIPLE = fei_yi }
+		}
+		if = {
+			limit = { global_var:hd_zs_p_dong_yun ?= { hd_zs_in_shu_trigger = yes is_adult = yes NOT = { has_relation_elder = global_var:hd_zs_p_zhu_ge_liang } } NOT = { exists = global_var:hd_zgl_dongyun_d } }
+			set_global_variable = hd_zgl_dongyun_d
+			hd_zs_disciple_effect = { MASTER = zhu_ge_liang DISCIPLE = dong_yun }
+		}
+		# 蒋琬入府：功勋 +200；电脑蜀主任内政席
+		if = {
+			limit = {
+				NOT = { exists = global_var:hd_zgl_jiangwan_fu }
+				global_var:hd_zs_p_jiang_wan ?= { hd_zs_in_shu_trigger = yes is_adult = yes }
+			}
+			set_global_variable = hd_zgl_jiangwan_fu
+			global_var:hd_zs_p_jiang_wan = { change_merit = 200 add_character_flag = hd_cp_merit_exempt }
+			scope:hd_zs_shu = {
+				if = {
+					limit = { is_ai = yes NOT = { global_var:hd_zs_p_jiang_wan = { is_councillor_of = scope:hd_zs_shu } } }
+					assign_councillor_type = { type = councillor_steward target = global_var:hd_zs_p_jiang_wan }
+				}
+			}
+			debug_log = "HD_ZGL JIANGWAN FU"
+		}
+		# 费祎出使东吴：满 20、吴蜀结盟
+		if = {
+			limit = {
+				NOT = { exists = global_var:hd_zgl_feiyi_wu }
+				global_var:hd_zs_p_fei_yi ?= { hd_zs_in_shu_trigger = yes age >= 20 }
+				exists = title:e_jiangdong.holder
+				scope:hd_zs_shu = { is_allied_to = title:e_jiangdong.holder }
+			}
+			set_global_variable = hd_zgl_feiyi_wu
+			global_var:hd_zs_p_fei_yi = {
+				add_prestige = 200
+				change_merit = 150
+				if = {
+					limit = { is_ai = no }
+					trigger_event = hd_zgl.0070
+				}
+			}
+			title:e_jiangdong.holder = { add_opinion = { target = scope:hd_zs_shu modifier = hd_zs_favored_opinion } }
+			debug_log = "HD_ZGL FEIYI WU"
+		}
+	}
+}
+
+# 密表：诸葛亮年满 50 且主政
+hd_zgl_check_mibiao_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_zgl_mibiao_done }
+			hd_zgl_regent_trigger = yes
+			global_var:hd_zs_p_zhu_ge_liang = { age >= 50 }
+		}
+		set_global_variable = hd_zgl_mibiao_done
+		global_var:hd_zs_p_zhu_ge_liang = {
+			if = {
+				limit = { is_ai = no }
+				trigger_event = hd_zgl.0080
+			}
+			else_if = {
+				limit = { global_var:hd_zs_p_jiang_wan ?= { hd_zs_in_shu_trigger = yes } }
+				set_global_variable = { name = hd_zgl_heir value = global_var:hd_zs_p_jiang_wan }
+			}
+			else_if = {
+				limit = { global_var:hd_zs_p_fei_yi ?= { hd_zs_in_shu_trigger = yes } }
+				set_global_variable = { name = hd_zgl_heir value = global_var:hd_zs_p_fei_yi }
+			}
+		}
+		debug_log = "HD_ZGL MIBIAO"
+	}
+}
+
+# 接班：诸葛亮死后，遗表所荐者任丞相席并设首辅；其死后费祎接任
+hd_zgl_check_succession_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_zgl_succ_done }
+			global_var:hd_zgl_heir ?= { hd_zs_in_shu_trigger = yes }
+			scope:hd_zs_shu = { is_alive = yes is_landed = yes }
+		}
+		set_global_variable = hd_zgl_succ_done
+		scope:hd_zs_shu = {
+			if = {
+				limit = { is_ai = no }
+				trigger_event = hd_zgl.0090
+			}
+			else = { hd_zgl_appoint_effect = { WHO = global_var:hd_zgl_heir } }
+		}
+	}
+	if = {
+		limit = {
+			exists = global_var:hd_zgl_succ_done
+			NOT = { exists = global_var:hd_zgl_succ2_done }
+			global_var:hd_zs_p_jiang_wan ?= { is_alive = no }
+			global_var:hd_zs_p_fei_yi ?= { hd_zs_in_shu_trigger = yes }
+			scope:hd_zs_shu = { is_alive = yes is_landed = yes is_ai = yes }
+		}
+		set_global_variable = hd_zgl_succ2_done
+		hd_zgl_appoint_effect = { WHO = global_var:hd_zs_p_fei_yi }
+	}
+}
+
+# 任丞相席并设首辅（照 hd_sg218_tuogu_effect）。需 scope:hd_zs_shu
+hd_zgl_appoint_effect = {
+	$WHO$ = { add_character_flag = hd_cp_merit_exempt save_scope_as = hd_zgl_appointee }
+	scope:hd_zs_shu = {
+		assign_councillor_type = { type = councillor_chancellor target = scope:hd_zgl_appointee }
+		WJ_start_grand_secretariat_effect = yes
+		if = {
+			limit = {
+				has_diarchy_type = grand_secretariat
+				scope:hd_zgl_appointee = { is_diarch_valid_trigger = yes }
+			}
+			set_diarch = scope:hd_zgl_appointee
+		}
+	}
+	scope:hd_zgl_appointee = { change_merit = 300 }
+	hd_zs_news_effect = { A = scope:hd_zgl_appointee B = scope:hd_zs_shu EVENT = hd_zgl.0940 }
+	debug_log = "HD_ZGL SUCCESSOR APPOINTED"
+}
+
+############################################################
+# Z5 姜维门生
+############################################################
+hd_zgl_check_jiang_wei_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_zgl_jiangwei_done }
+			global_var:hd_zs_p_jiang_wei ?= { hd_zs_in_shu_trigger = yes is_adult = yes }
+		}
+		set_global_variable = hd_zgl_jiangwei_done
+		hd_zs_disciple_effect = { MASTER = zhu_ge_liang DISCIPLE = jiang_wei }
+		global_var:hd_zs_p_jiang_wei = { change_merit = 150 }
+		scope:hd_zs_shu = {
+			spawn_army = {
+				levies = 3000
+				location = title:d_hanzhong.title_capital_county.title_province
+				origin = title:d_hanzhong.title_capital_county.title_province
+				inheritable = yes
+				uses_supply = yes
+				name = hd_zgl_hubu_army_name
+			}
+		}
+		global_var:hd_zs_p_zhu_ge_liang = {
+			if = {
+				limit = { is_ai = no }
+				trigger_event = hd_zgl.0100
+			}
+		}
+		debug_log = "HD_ZGL JIANGWEI DISCIPLE"
+	}
+}
+
+############################################################
+# Z6 后续北伐
+############################################################
+hd_zgl_check_beifa_effect = {
+	if = {
+		limit = {
+			hd_zgl_regent_trigger = yes
+			hd_sg218_nanzhong_rebels_active_trigger = no
+			scope:hd_zs_shu = { is_alive = yes is_landed = yes }
+			exists = scope:hd_zs_wei
+			NOT = { hd_zs_beifa_active_trigger = yes }
+		}
+		# 非 218 开局：第一次北伐由本链发动（218 由现有 hd_sg218_check_beifa_effect 发动）
+		if = {
+			limit = {
+				NOT = { game_start_date = 218.1.1 }
+				NOT = { exists = global_var:hd_sg218_beifa_started }
+				NOT = { exists = global_var:hd_zgl_beifa_asked }
+			}
+			hd_zgl_beifa_ask_effect = { KIND = beifa EVENT = hd_zgl.0201 }
+		}
+		hd_zgl_beifa_next_effect = { PREV = beifa KIND = beifa2 EVENT = hd_zgl.0210 TARGET = d_fufeng }
+		hd_zgl_beifa_next_effect = { PREV = beifa2 KIND = beifa3 EVENT = hd_zgl.0220 TARGET = d_wudou }
+		hd_zgl_beifa_next_effect = { PREV = beifa3 KIND = beifa4 EVENT = hd_zgl.0230 TARGET = d_tianshui }
+		hd_zgl_beifa_next_effect = { PREV = beifa4 KIND = beifa5 EVENT = hd_zgl.0240 TARGET = d_fufeng }
+	}
+}
+
+# 前一次北伐了结满一年后发下一次；TARGET 为这一次的主目标郡
+hd_zgl_beifa_next_effect = {
+	if = {
+		limit = {
+			hd_zgl_beifa_ended_trigger = { KIND = $PREV$ }
+			NOT = { exists = global_var:hd_sg218_$KIND$_started }
+		}
+		if = {
+			limit = { NOT = { exists = global_var:hd_zgl_$PREV$_cd_set } }
+			set_global_variable = hd_zgl_$PREV$_cd_set
+			set_global_variable = { name = hd_zgl_beifa_cd value = yes days = 365 }
+		}
+		# 目标郡已归蜀（前一次北伐打下了同一处）：跳过这一次，链条接着往下走
+		else_if = {
+			limit = {
+				NOT = { exists = global_var:hd_zgl_beifa_cd }
+				title:$TARGET$ = { holder ?= { top_liege = scope:hd_zs_shu } }
+			}
+			set_global_variable = hd_zgl_$KIND$_skipped
+			set_global_variable = hd_sg218_$KIND$_started
+			debug_log = "HD_ZGL BEIFA_SKIPPED_OWNED $KIND$"
+		}
+		else_if = {
+			limit = {
+				NOT = { exists = global_var:hd_zgl_beifa_cd }
+				NOT = { exists = global_var:hd_zgl_$KIND$_asked }
+			}
+			hd_zgl_beifa_ask_effect = { KIND = $KIND$ EVENT = $EVENT$ }
+		}
+	}
+}
+
+# 问蜀主（电脑直接发动；玩家罢议则一年后再问）
+hd_zgl_beifa_ask_effect = {
+	set_global_variable = { name = hd_zgl_$KIND$_asked value = yes days = 365 }
+	scope:hd_zs_shu = {
+		if = {
+			limit = { is_ai = no }
+			trigger_event = $EVENT$
+		}
+		else = { hd_zgl_beifa_war_$KIND$_effect = yes }
+	}
+}
+
+# 各次北伐的宣战。攻方一律为 scope:hd_zs_shu（心跳里 root 是霸权头衔，不能用 root）。
+# 守方用现有 hd_sg218_find_defender_effect（天子直属封臣；司马懿都督雍凉后即为司马懿）；开战成功才记 started，失败则一年后再问
+hd_zgl_beifa_war_beifa_effect = {
+	hd_sg218_find_defender_effect = { TARGET = title:d_tianshui KIND = beifa }
+	if = {
+		limit = { hd_zgl_defender_ok_trigger = { KIND = beifa } }
+		hd_sg218_add_target_effect = { TARGET = title:d_nanan }
+		hd_sg218_start_war_effect = { ATTACKER = scope:hd_zs_shu KIND = beifa TARGET = title:d_tianshui }
+	}
+	hd_zgl_beifa_post_effect = { KIND = beifa }
+}
+hd_zgl_beifa_war_beifa2_effect = {
+	hd_sg218_find_defender_effect = { TARGET = title:d_fufeng KIND = beifa2 }
+	if = {
+		limit = { hd_zgl_defender_ok_trigger = { KIND = beifa2 } }
+		hd_sg218_start_war_effect = { ATTACKER = scope:hd_zs_shu KIND = beifa2 TARGET = title:d_fufeng }
+	}
+	hd_zgl_beifa_post_effect = { KIND = beifa2 }
+	if = {
+		limit = { exists = global_var:hd_sg218_beifa2_active }
+		set_global_variable = { name = hd_zgl_chencang_wait value = yes days = 90 }
+	}
+}
+hd_zgl_beifa_war_beifa3_effect = {
+	hd_sg218_find_defender_effect = { TARGET = title:d_wudou KIND = beifa3 }
+	if = {
+		limit = { hd_zgl_defender_ok_trigger = { KIND = beifa3 } }
+		hd_sg218_add_target_effect = { TARGET = title:d_yinping1 }
+		hd_sg218_start_war_effect = { ATTACKER = scope:hd_zs_shu KIND = beifa3 TARGET = title:d_wudou }
+	}
+	hd_zgl_beifa_post_effect = { KIND = beifa3 }
+}
+hd_zgl_beifa_war_beifa4_effect = {
+	hd_sg218_find_defender_effect = { TARGET = title:d_tianshui KIND = beifa4 }
+	if = {
+		limit = { hd_zgl_defender_ok_trigger = { KIND = beifa4 } }
+		hd_sg218_add_target_effect = { TARGET = title:d_nanan }
+		hd_sg218_start_war_effect = { ATTACKER = scope:hd_zs_shu KIND = beifa4 TARGET = title:d_tianshui }
+	}
+	hd_zgl_beifa_post_effect = { KIND = beifa4 }
+	if = {
+		limit = { exists = global_var:hd_sg218_beifa4_active }
+		hd_zgl_invention_effect = { KEY = muniu MOD = hd_zgl_muniu_modifier YEARS = 10 EVENT = hd_zgl.0330 }
+	}
+}
+hd_zgl_beifa_war_beifa5_effect = {
+	hd_sg218_find_defender_effect = { TARGET = title:d_fufeng KIND = beifa5 }
+	if = {
+		limit = { hd_zgl_defender_ok_trigger = { KIND = beifa5 } }
+		hd_sg218_add_target_effect = { TARGET = title:d_jingzhao }
+		hd_sg218_start_war_effect = { ATTACKER = scope:hd_zs_shu KIND = beifa5 TARGET = title:d_fufeng }
+	}
+	hd_zgl_beifa_post_effect = { KIND = beifa5 }
+	if = {
+		limit = { exists = global_var:hd_sg218_beifa5_active }
+		hd_zgl_invention_effect = { KEY = liuma MOD = hd_zgl_liuma_modifier YEARS = 10 EVENT = hd_zgl.0340 }
+		scope:hd_zs_shu = { add_character_modifier = { modifier = hd_zgl_tuntian_modifier years = 1 } }
+	}
+}
+
+hd_zgl_beifa_post_effect = {
+	if = {
+		limit = { exists = global_var:hd_sg218_$KIND$_active }
+		set_global_variable = hd_sg218_$KIND$_started
+		debug_log = "HD_ZGL BEIFA_STARTED $KIND$"
+	}
+	else = { debug_log = "HD_ZGL BEIFA_FAILED $KIND$" }
+}
+
+# 陈仓（第二次北伐满 90 天）：蜀主选强攻或退兵（电脑强攻）
+hd_zgl_check_chencang_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_zgl_chencang_done }
+			exists = global_var:hd_sg218_beifa2_active
+			exists = global_var:hd_sg218_beifa2_started
+			NOT = { exists = global_var:hd_zgl_chencang_wait }
+		}
+		set_global_variable = hd_zgl_chencang_done
+		scope:hd_zs_shu = {
+			if = {
+				limit = { is_ai = no }
+				trigger_event = hd_zgl.0211
+			}
+		}
+	}
+}
+
+# 第三次北伐（武都阴平）得胜：诸葛亮复为丞相（史实），威望 +
+hd_zgl_check_beifa3_win_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_zgl_beifa3_win_done }
+			exists = global_var:hd_sg218_beifa3_won
+		}
+		set_global_variable = hd_zgl_beifa3_win_done
+		global_var:hd_zs_p_zhu_ge_liang = { add_prestige = 300 }
+		debug_log = "HD_ZGL BEIFA3 WON"
+	}
+}
+
+############################################################
+# Z7 治蜀与发明
+############################################################
+hd_zgl_check_inventions_effect = {
+	hd_zgl_check_chencang_effect = yes
+	hd_zgl_check_beifa3_win_effect = yes
+	if = {
+		limit = {
+			exists = global_var:hd_zgl_z1_done
+			hd_zgl_regent_trigger = yes
+		}
+		if = {
+			limit = { NOT = { exists = global_var:hd_zgl_kejiao_wait } }
+			hd_zgl_invention_effect = { KEY = kejiao MOD = hd_zgl_kejiao_modifier YEARS = 10 EVENT = hd_zgl.0300 }
+		}
+		if = {
+			limit = { NOT = { exists = global_var:hd_zgl_liannu_wait } }
+			hd_zgl_invention_effect = { KEY = liannu MOD = hd_zgl_liannu_modifier YEARS = 20 EVENT = hd_zgl.0320 }
+		}
+		# 八阵图给诸葛亮本人（终身）
+		if = {
+			limit = {
+				NOT = { exists = global_var:hd_zgl_bazhen_wait }
+				NOT = { exists = global_var:hd_zgl_bazhen_done }
+			}
+			set_global_variable = hd_zgl_bazhen_done
+			global_var:hd_zs_p_zhu_ge_liang = {
+				add_character_modifier = hd_zgl_bazhen_modifier
+				if = {
+					limit = { is_ai = no }
+					trigger_event = hd_zgl.0310
+				}
+			}
+			debug_log = "HD_ZGL INVENTION bazhen"
+		}
+	}
+}
+
+# 给蜀主一项治蜀修正（每项一次）。需 scope:hd_zs_shu
+hd_zgl_invention_effect = {
+	if = {
+		limit = { NOT = { exists = global_var:hd_zgl_$KEY$_done } }
+		set_global_variable = hd_zgl_$KEY$_done
+		scope:hd_zs_shu = {
+			add_character_modifier = { modifier = $MOD$ years = $YEARS$ }
+			if = {
+				limit = { is_ai = no }
+				trigger_event = $EVENT$
+			}
+		}
+		debug_log = "HD_ZGL INVENTION $KEY$"
+	}
+}
+
+############################################################
+# Z8 五丈原（诸葛亮死后第一次心跳）
+############################################################
+hd_zgl_check_wuzhangyuan_effect = {
+	if = {
+		limit = { NOT = { exists = global_var:hd_zgl_z8_done } }
+		set_global_variable = hd_zgl_z8_done
+		# 生前未密表：照史实依次荐蒋琬、费祎
+		if = {
+			limit = {
+				NOT = { exists = global_var:hd_zgl_heir }
+				NOT = { exists = global_var:hd_zgl_no_heir }
+			}
+			if = {
+				limit = { global_var:hd_zs_p_jiang_wan ?= { hd_zs_in_shu_trigger = yes } }
+				set_global_variable = { name = hd_zgl_heir value = global_var:hd_zs_p_jiang_wan }
+			}
+			else_if = {
+				limit = { global_var:hd_zs_p_fei_yi ?= { hd_zs_in_shu_trigger = yes } }
+				set_global_variable = { name = hd_zgl_heir value = global_var:hd_zs_p_fei_yi }
+			}
+		}
+		if = {
+			limit = { exists = global_var:hd_zgl_died_campaign }
+			hd_zs_news_effect = { A = global_var:hd_zs_p_zhu_ge_liang B = scope:hd_zs_shu EVENT = hd_zgl.0930 }
+			scope:hd_zs_shu = {
+				if = {
+					limit = { is_ai = no }
+					trigger_event = hd_zgl.0400
+				}
+				else = { hd_zgl_retreat_effect = yes }
+			}
+			# 死诸葛走生仲达（司马懿链）
+			global_var:hd_zs_p_si_ma_yi ?= {
+				if = {
+					limit = { is_alive = yes hd_zs_serves_cao_trigger = yes }
+					hd_smy_zhonda_flee_effect = yes
+				}
+			}
+		}
+		debug_log = "HD_ZGL WUZHANGYUAN"
+	}
+}
+
+# 蜀军退兵：蜀主作为攻方的蜀对魏战争一律白和。需 scope:hd_zs_shu、scope:hd_zs_wei
+hd_zgl_retreat_effect = {
+	scope:hd_zs_shu = {
+		every_character_war = {
+			limit = {
+				hd_zs_shu_wei_war_trigger = yes
+				primary_attacker = scope:hd_zs_shu
+			}
+			set_variable = { name = hd_peace_vanilla_white_peace value = 1 }
+			end_war = white_peace
+		}
+	}
+	debug_log = "HD_ZGL RETREAT"
+}

@@ -1,5 +1,7 @@
 ﻿##################
-# 汉晋春秋：有地政体花钱立即补满常备军（自动补员照旧）
+# 汉晋春秋：有地政体花钱立即补员（自动补员照旧）
+# 2026-10-31（boki）：私兵按钮只补私兵；头衔兵由军事窗口各头衔下的按钮各补各的（含借出的），冷却各自 6 个月
+# 有国库扣国库，否则扣金币；数值见 common/script_values/zz_hd_refill_maa_values.txt
 ##################
 
 hd_refill_maa_gold_interaction = {
@@ -24,13 +26,18 @@ hd_refill_maa_gold_interaction = {
 
 	is_valid_showing_failures_only = {
 		custom_tooltip = {
-			text = reinforce_soldiers_any_regiment_tt
-			scope:actor.maa_regiments_count >= 1
+			text = hd_refill_maa_any_personal_regiment_tt
+			scope:actor = {
+				any_maa_regiment = { is_personal_maa_regiment = yes }
+			}
 		}
 		custom_tooltip = {
-			text = reinforce_soldiers_unfull_regiment_tt
+			text = hd_refill_maa_unfull_personal_regiment_tt
 			scope:actor = {
-				any_maa_regiment = { maa_regiments_valid_to_refill_trigger = yes }
+				any_maa_regiment = {
+					is_personal_maa_regiment = yes
+					maa_regiments_valid_to_refill_trigger = yes
+				}
 			}
 		}
 		custom_tooltip = {
@@ -48,18 +55,118 @@ hd_refill_maa_gold_interaction = {
 				}
 			}
 		}
-		scope:actor.gold >= 5
+		scope:actor.treasury_or_gold >= 5
 	}
 
 	on_accept = {
 		scope:actor = {
 			if = {
-				limit = { gold > replenishable_troops_payed_gold_tt_value }
-				custom_tooltip = refill_maa_gold_full_tt
+				limit = { treasury_or_gold >= hd_refill_personal_maa_full_cost_tt_value }
+				custom_tooltip = hd_refill_personal_maa_full_tt
 			}
-			else = { custom_tooltip = refill_maa_gold_tt }
-			custom_tooltip = refill_maa_gold_cost_tt
-			refill_maa_with_gold_effect = yes
+			else = { custom_tooltip = hd_refill_personal_maa_partial_tt }
+			if = {
+				limit = { has_treasury = yes }
+				custom_tooltip = hd_refill_personal_maa_cost_treasury_tt
+			}
+			else = { custom_tooltip = hd_refill_personal_maa_cost_gold_tt }
+			hidden_effect = {
+				hd_refill_maa_setup_effect = { RESERVE = 0 }
+				hd_refill_personal_maa_effect = yes
+			}
+		}
+	}
+
+	auto_accept = yes
+}
+
+# 头衔兵：军事窗口每个头衔下一个按钮，只补该头衔的头衔兵（含借出的），冷却记在头衔上（变量 hd_refill_title_maa_cd），换人持有不重置
+hd_refill_title_maa_gold_interaction = {
+	icon = icon_soldier_survivor
+	category = interaction_category_uncategorized
+	hidden = yes
+	desc = hd_refill_title_maa_gold_interaction_desc
+
+	target_type = title
+	target_filter = actor_domain_titles
+
+	is_shown = {
+		scope:recipient = scope:actor
+		scope:actor = {
+			is_ai = no
+			OR = {
+				has_government = celestial_government
+				has_government = tribal_government
+				has_government = feudal_government
+				has_government = herder_government
+			}
+		}
+	}
+
+	is_valid_showing_failures_only = {
+		custom_tooltip = {
+			text = REFILL_MAA_AT_WAR_TT
+			scope:actor = {
+				NOT = {
+					any_army = {
+						location.county.holder = {
+							OR = {
+								is_at_war_with = scope:actor
+								any_liege_or_above = { is_at_war_with = scope:actor }
+							}
+						}
+					}
+				}
+			}
+		}
+		scope:actor.treasury_or_gold >= 5
+	}
+
+	can_be_picked_title = {
+		scope:target = {
+			holder = scope:actor
+			any_owned_title_maa_regiment = { exists = this }
+		}
+	}
+
+	has_valid_target_showing_failures_only = {
+		scope:target = {
+			custom_tooltip = {
+				text = hd_refill_title_maa_unfull_regiment_tt
+				any_owned_title_maa_regiment = { maa_regiments_valid_to_refill_trigger = yes }
+			}
+			custom_tooltip = {
+				text = hd_refill_title_maa_cooldown_tt
+				NOT = { has_variable = hd_refill_title_maa_cd }
+			}
+		}
+	}
+
+	on_accept = {
+		scope:target = {
+			if = {
+				limit = { holder.treasury_or_gold >= hd_refill_title_maa_full_cost_tt_value }
+				custom_tooltip = hd_refill_title_maa_full_tt
+			}
+			else = { custom_tooltip = hd_refill_title_maa_partial_tt }
+			if = {
+				limit = { holder = { has_treasury = yes } }
+				custom_tooltip = hd_refill_title_maa_cost_treasury_tt
+			}
+			else = { custom_tooltip = hd_refill_title_maa_cost_gold_tt }
+			custom_tooltip = hd_refill_title_maa_cooldown_set_tt
+		}
+		hidden_effect = {
+			scope:target = {
+				set_variable = {
+					name = hd_refill_title_maa_cd
+					months = 6
+				}
+			}
+			scope:actor = {
+				hd_refill_maa_setup_effect = { RESERVE = 0 }
+			}
+			scope:target = { hd_refill_title_maa_effect = yes }
 		}
 	}
 

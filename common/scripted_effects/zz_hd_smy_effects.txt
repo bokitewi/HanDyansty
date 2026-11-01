@@ -1,0 +1,971 @@
+﻿# 司马懿事件链（boki 2026-10-31，设计见 docs/诸葛亮司马懿事件链_设计草案.md 第 3 节）。事件在 events/zz_hd_smy_events.txt。
+# 由 hd_zs_pulse_effect 每 30 天调用；需 scope:hd_zs_shu（蜀主）、scope:hd_zs_wei（天子）。电脑照史实，玩家每节点可选。
+# 曹丕、曹叡之死由 on_death 设 global_var:hd_smy_pi_dead / hd_smy_rui_dead，下次心跳接 S3 / S6。
+
+hd_smy_pulse_effect = {
+	if = {
+		limit = {
+			global_var:hd_zs_p_si_ma_yi ?= {
+				is_alive = yes
+				is_adult = yes
+				hd_zs_serves_cao_trigger = yes
+			}
+		}
+		global_var:hd_zs_p_si_ma_yi = { save_scope_as = hd_smy_y }
+		hd_smy_check_s1_effect = yes
+		hd_smy_check_s2_effect = yes
+		hd_smy_check_s3_effect = yes
+		hd_smy_check_s4_effect = yes
+		hd_smy_check_s4_sub_effect = yes
+		hd_smy_check_s5_effect = yes
+		hd_smy_check_s6_effect = yes
+		hd_smy_check_s7_effect = yes
+		hd_smy_check_s8_effect = yes
+	}
+}
+
+############################################################
+# S1 太子四友、嗣位、受禅授尚书令
+############################################################
+hd_smy_check_s1_effect = {
+	# 四友：开局（入场）后 60 天，曹丕在世且为曹操继承人或已为君主
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_smy_s1_done }
+			NOT = { exists = global_var:hd_smy_s1_wait }
+			global_var:hd_zs_p_cao_pi ?= {
+				is_alive = yes
+				OR = {
+					is_landed = yes
+					AND = {
+						exists = character:cao_cao
+						character:cao_cao = { is_alive = yes }
+						is_primary_heir_of = character:cao_cao
+					}
+				}
+			}
+		}
+		set_global_variable = hd_smy_s1_done
+		scope:hd_smy_y = {
+			if = {
+				limit = { NOT = { has_relation_friend = global_var:hd_zs_p_cao_pi } }
+				set_relation_friend = { target = global_var:hd_zs_p_cao_pi reason = friend_introduced_heir }
+			}
+			change_merit = 100
+			if = {
+				limit = { is_ai = no }
+				trigger_event = hd_smy.0010
+			}
+		}
+		global_var:hd_zs_p_yingchuan_chen_004 ?= {
+			if = {
+				limit = { is_alive = yes hd_zs_serves_cao_trigger = yes NOT = { has_relation_friend = global_var:hd_zs_p_cao_pi } }
+				set_relation_friend = { target = global_var:hd_zs_p_cao_pi reason = friend_introduced_heir }
+			}
+		}
+		debug_log = "HD_SMY S1 SIYOU"
+	}
+	# 嗣位：曹操已死、曹丕有地
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_smy_s1b_done }
+			character:cao_cao ?= { is_alive = no }
+			global_var:hd_zs_p_cao_pi ?= { is_alive = yes is_landed = yes }
+		}
+		set_global_variable = hd_smy_s1b_done
+		scope:hd_smy_y = {
+			change_merit = 150
+			if = {
+				limit = { is_ai = no }
+				trigger_event = hd_smy.0020
+			}
+		}
+		global_var:hd_zs_p_cao_pi = {
+			if = {
+				limit = {
+					is_ai = yes
+					scope:hd_smy_y = { top_liege = global_var:hd_zs_p_cao_pi.top_liege NOT = { is_councillor_of = global_var:hd_zs_p_cao_pi } }
+				}
+				scope:hd_smy_y = { add_character_flag = hd_cp_merit_exempt }
+				assign_councillor_type = { type = councillor_steward target = scope:hd_smy_y }
+			}
+		}
+		debug_log = "HD_SMY S1 SIWEI"
+	}
+	# 受禅：曹丕为天子，授尚书令；抚军计时 3 年
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_smy_s1c_done }
+			global_var:hd_zs_p_cao_pi ?= { is_alive = yes has_title = title:h_china }
+			scope:hd_smy_y = { hd_zs_in_wei_trigger = yes }
+		}
+		set_global_variable = hd_smy_s1c_done
+		set_global_variable = { name = hd_smy_fujun_wait value = yes days = 1095 }
+		global_var:hd_zs_p_cao_pi = {
+			if = {
+				limit = { is_ai = no }
+				trigger_event = hd_smy.0030
+			}
+			else = { hd_smy_shangshu_effect = yes }
+		}
+	}
+}
+
+# 授尚书令（先 granted 交给本人，再走 WJ 拜官；照 hd218_grant_chengxiang_effect，免 appointment 辞地）。需 scope:hd_zs_wei、scope:hd_smy_y
+hd_smy_shangshu_effect = {
+	scope:hd_smy_y = {
+		if = {
+			limit = { NOT = { has_title = title:e_minister_of_personnel } }
+			add_character_flag = hd_cp_merit_exempt
+			create_title_and_vassal_change = { type = granted save_scope_as = hd_smy_ss_change add_claim_on_loss = no }
+			title:e_minister_of_personnel = {
+				change_title_holder = { holder = scope:hd_smy_y change = scope:hd_smy_ss_change }
+			}
+			resolve_title_and_vassal_change = scope:hd_smy_ss_change
+			scope:hd_zs_wei = { save_scope_as = councillor_liege }
+			got_minister_position_effect = { MINISTER_TITLE = e_minister_of_personnel MINISTER_POSITION = minister_personnel }
+			clear_saved_scope = councillor_liege
+		}
+		if = {
+			limit = { has_title = title:e_minister_of_personnel }
+			debug_log = "HD_SMY S1 SHANGSHU OK"
+		}
+		else = { debug_log = "HD_SMY S1 SHANGSHU FAIL" }
+	}
+}
+
+############################################################
+# S2 抚军录尚书：舞阳侯、授河内郡
+############################################################
+hd_smy_check_s2_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_smy_s2_done }
+			exists = global_var:hd_smy_s1c_done
+			NOT = { exists = global_var:hd_smy_fujun_wait }
+			hd_zs_wei_is_cao_trigger = yes
+			scope:hd_smy_y = { hd_zs_in_wei_trigger = yes }
+		}
+		set_global_variable = hd_smy_s2_done
+		scope:hd_smy_y = {
+			if = {
+				limit = { is_ai = no }
+				trigger_event = hd_smy.0040
+			}
+			else = { hd_smy_fujun_effect = yes }
+		}
+	}
+}
+
+hd_smy_fujun_effect = {
+	scope:hd_smy_y = {
+		add_character_modifier = { modifier = hd_smy_fujun_modifier years = 10 }
+		change_merit = 150
+		hd_smy_grant_henei_effect = yes
+		hd_zs_family_peer_effect = { ISSUER = scope:hd_zs_wei RANK = 2 FOOD = c_uuii_p_1638 }
+		hd_zs_house_unity_effect = { VALUE = 15 DESC = hd_zs_unity_rise.desc }
+	}
+	hd_zs_party_nudge_effect = { WHO = scope:hd_smy_y LORD = scope:hd_zs_wei POWER = 10 }
+	debug_log = "HD_SMY S2 FUJUN"
+}
+
+# 授河内郡（温县在内），作天子直属封臣；不夺玩家的县。Scope：司马懿；需 scope:hd_zs_wei
+hd_smy_grant_henei_effect = {
+	save_scope_as = hd_smy_y
+	if = {
+		limit = { NOT = { has_title = title:d_henei } }
+		create_title_and_vassal_change = { type = granted save_scope_as = hd_smy_henei_change add_claim_on_loss = no }
+		title:d_henei = {
+			every_de_jure_county = {
+				limit = {
+					holder ?= { top_liege = scope:hd_zs_wei is_ai = yes NOT = { this = scope:hd_smy_y } }
+				}
+				change_title_holder = { holder = scope:hd_smy_y change = scope:hd_smy_henei_change take_baronies = yes }
+			}
+			if = {
+				limit = {
+					OR = {
+						NOT = { exists = holder }
+						holder ?= { is_ai = yes top_liege = scope:hd_zs_wei }
+					}
+				}
+				change_title_holder = { holder = scope:hd_smy_y change = scope:hd_smy_henei_change }
+			}
+		}
+		resolve_title_and_vassal_change = scope:hd_smy_henei_change
+	}
+	if = {
+		limit = { is_landed = yes NOT = { liege ?= scope:hd_zs_wei } NOT = { this = scope:hd_zs_wei } }
+		create_title_and_vassal_change = { type = swear_fealty save_scope_as = hd_smy_fealty add_claim_on_loss = no }
+		change_liege = { liege = scope:hd_zs_wei change = scope:hd_smy_fealty }
+		resolve_title_and_vassal_change = scope:hd_smy_fealty
+	}
+	if = {
+		limit = { has_title = title:c_uuii_p_1077 }
+		set_realm_capital = title:c_uuii_p_1077
+	}
+	if = {
+		limit = { is_landed = yes }
+		debug_log = "HD_SMY HENEI OK"
+	}
+	else = { debug_log = "HD_SMY HENEI FAIL" }
+}
+
+############################################################
+# S3 受遗诏辅政（曹丕死后）
+############################################################
+hd_smy_check_s3_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_smy_s3_done }
+			exists = global_var:hd_smy_pi_dead
+			hd_zs_wei_is_cao_trigger = yes
+			scope:hd_smy_y = {
+				hd_zs_in_wei_trigger = yes
+				OR = {
+					merit_level >= 5
+					has_character_modifier = hd_smy_fujun_modifier
+				}
+			}
+		}
+		set_global_variable = hd_smy_s3_done
+		scope:hd_zs_wei = {
+			if = {
+				limit = { is_ai = no }
+				trigger_event = hd_smy.0050
+			}
+			else = { hd_smy_yizhao_effect = yes }
+		}
+	}
+}
+
+hd_smy_yizhao_effect = {
+	hd_smy_yizhao_one_effect = { WHO = si_ma_yi }
+	hd_smy_yizhao_one_effect = { WHO = cao_zhen }
+	hd_smy_yizhao_one_effect = { WHO = cao_xiu }
+	hd_smy_yizhao_one_effect = { WHO = yingchuan_chen_004 }
+	scope:hd_smy_y = { change_merit = 200 }
+	hd_zs_party_nudge_effect = { WHO = scope:hd_smy_y LORD = scope:hd_zs_wei POWER = 10 }
+	hd_zs_news_effect = { A = scope:hd_smy_y B = scope:hd_zs_wei EVENT = hd_smy.0940 }
+	debug_log = "HD_SMY S3 YIZHAO"
+}
+hd_smy_yizhao_one_effect = {
+	global_var:hd_zs_p_$WHO$ ?= {
+		if = {
+			limit = { hd_zs_in_wei_trigger = yes }
+			add_character_modifier = { modifier = hd_smy_yizhao_modifier years = 10 }
+			scope:hd_zs_wei = { add_opinion = { target = global_var:hd_zs_p_$WHO$ modifier = hd_zs_shou_yizhao_opinion } }
+		}
+	}
+}
+
+############################################################
+# S4 都督雍凉拒亮
+############################################################
+hd_smy_check_s4_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_smy_s4_done }
+			NOT = { exists = global_var:hd_smy_s4_wait }
+			hd_zs_wei_is_cao_trigger = yes
+			hd_zs_beifa_active_trigger = yes
+			scope:hd_smy_y = {
+				hd_zs_in_wei_trigger = yes
+				is_landed = yes
+				NOT = { title:h_china.var:hd_court_regent ?= scope:hd_smy_y }
+			}
+			OR = {
+				NOT = { global_var:hd_zs_p_cao_zhen ?= { hd_zs_in_wei_trigger = yes } }
+				global_var:hd_beifa_wei >= 40
+			}
+		}
+		set_global_variable = hd_smy_s4_done
+		scope:hd_zs_wei = {
+			if = {
+				limit = { is_ai = no }
+				trigger_event = hd_smy.0060
+			}
+			else = { hd_smy_dudu_effect = yes }
+		}
+	}
+}
+
+# 授雍州、建使持节都督区（照 hd253_jiang_wei_district_effect）、事件兵参战。需 scope:hd_zs_shu、scope:hd_zs_wei、scope:hd_smy_y
+hd_smy_dudu_effect = {
+	# 都督不可兼朝官（WJ 都督区条件）：先解尚书令等
+	scope:hd_smy_y = {
+		if = {
+			limit = {
+				any_held_title = {
+					tier = tier_empire
+					is_landless_type_title = yes
+					is_noble_family_title = no
+				}
+			}
+			hd_court_strip_office_effect = yes
+		}
+	}
+	# 雍州：关中、陇右十郡改挂雍州（三国开局为空壳）
+	title:k_yongzhou = { set_de_jure_liege_title = title:e_hd218_wei }
+	title:d_jingzhao = { set_de_jure_liege_title = title:k_yongzhou }
+	title:d_fufeng = { set_de_jure_liege_title = title:k_yongzhou }
+	title:d_xianyang = { set_de_jure_liege_title = title:k_yongzhou }
+	title:d_shiping = { set_de_jure_liege_title = title:k_yongzhou }
+	title:d_tianshui = { set_de_jure_liege_title = title:k_yongzhou }
+	title:d_nanan = { set_de_jure_liege_title = title:k_yongzhou }
+	title:d_longxi = { set_de_jure_liege_title = title:k_yongzhou }
+	title:d_guangwei = { set_de_jure_liege_title = title:k_yongzhou }
+	title:d_long1 = { set_de_jure_liege_title = title:k_yongzhou }
+	title:d_longdong = { set_de_jure_liege_title = title:k_yongzhou }
+	create_title_and_vassal_change = { type = granted save_scope_as = hd_smy_yong_change add_claim_on_loss = no }
+	title:k_yongzhou = { change_title_holder = { holder = scope:hd_smy_y change = scope:hd_smy_yong_change } }
+	resolve_title_and_vassal_change = scope:hd_smy_yong_change
+	# 十郡郡守（电脑、直属天子）改投司马懿
+	create_title_and_vassal_change = { type = swear_fealty save_scope_as = hd_smy_yong_fealty add_claim_on_loss = no }
+	hd_smy_yong_pull_effect = { DUCHY = d_jingzhao }
+	hd_smy_yong_pull_effect = { DUCHY = d_fufeng }
+	hd_smy_yong_pull_effect = { DUCHY = d_xianyang }
+	hd_smy_yong_pull_effect = { DUCHY = d_shiping }
+	hd_smy_yong_pull_effect = { DUCHY = d_tianshui }
+	hd_smy_yong_pull_effect = { DUCHY = d_nanan }
+	hd_smy_yong_pull_effect = { DUCHY = d_longxi }
+	hd_smy_yong_pull_effect = { DUCHY = d_guangwei }
+	hd_smy_yong_pull_effect = { DUCHY = d_long1 }
+	hd_smy_yong_pull_effect = { DUCHY = d_longdong }
+	resolve_title_and_vassal_change = scope:hd_smy_yong_fealty
+	scope:hd_smy_y = {
+		if = {
+			limit = { has_title = title:k_yongzhou }
+			set_primary_title_to = title:k_yongzhou
+			vassal_contract_set_obligation_level = { type = celestial_provinces level = 3 }
+			WJ_mr_initialize_rank = yes
+		}
+		add_character_modifier = hd_smy_dudu_modifier
+		change_merit = 200
+	}
+	scope:hd_zs_wei = { save_scope_as = actor }
+	scope:hd_smy_y = { save_scope_as = recipient }
+	WJ_dd_create_effect = { JIE = 3 }
+	clear_saved_scope = actor
+	clear_saved_scope = recipient
+	if = {
+		limit = { title:k_yongzhou = { has_variable = wj_dd_core } }
+		debug_log = "HD_SMY S4 DISTRICT OK"
+	}
+	else = { debug_log = "HD_SMY S4 DISTRICT BAD" }
+	# 参战并得事件兵（1 万 + 北伐之威 × 300）
+	scope:hd_zs_shu = {
+		every_character_war = {
+			limit = { hd_zs_shu_wei_war_trigger = yes }
+			if = {
+				limit = { NOT = { is_participant = scope:hd_smy_y } }
+				add_defender = scope:hd_smy_y
+			}
+			save_scope_as = hd_smy_war
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_smy_war }
+		scope:hd_smy_y = {
+			spawn_army = {
+				levies = hd_smy_dudu_levies_value
+				location = title:d_jingzhao.title_capital_county.title_province
+				origin = title:d_jingzhao.title_capital_county.title_province
+				inheritable = yes
+				uses_supply = yes
+				war = scope:hd_smy_war
+				name = hd_smy_dudu_army_name
+			}
+		}
+	}
+	hd_zs_party_nudge_effect = { WHO = scope:hd_smy_y LORD = scope:hd_zs_wei POWER = 10 }
+	hd_zs_news_effect = { A = scope:hd_smy_y B = scope:hd_zs_wei EVENT = hd_smy.0900 }
+	debug_log = "HD_SMY S4 DUDU"
+}
+hd_smy_yong_pull_effect = {
+	title:$DUCHY$.holder ?= {
+		if = {
+			limit = {
+				is_ai = yes
+				liege ?= scope:hd_zs_wei
+				NOT = { this = scope:hd_smy_y }
+				NOT = { this = scope:hd_zs_wei }
+			}
+			change_liege = { liege = scope:hd_smy_y change = scope:hd_smy_yong_fealty }
+		}
+	}
+}
+
+# 坚壁拒守、巾帼之辱、挡住北伐
+hd_smy_check_s4_sub_effect = {
+	# 坚壁拒守：司马懿参战的蜀魏战争打满 120 天（每场一次）
+	if = {
+		limit = {
+			exists = scope:hd_zs_shu
+			scope:hd_zs_shu = {
+				any_character_war = {
+					hd_zs_shu_wei_war_trigger = yes
+					is_participant = scope:hd_smy_y
+					war_days >= 120
+					NOT = { has_variable = hd_smy_jianbi_asked }
+				}
+			}
+		}
+		scope:hd_zs_shu = {
+			random_character_war = {
+				limit = {
+					hd_zs_shu_wei_war_trigger = yes
+					is_participant = scope:hd_smy_y
+					war_days >= 120
+					NOT = { has_variable = hd_smy_jianbi_asked }
+				}
+				set_variable = hd_smy_jianbi_asked
+			}
+		}
+		scope:hd_smy_y = {
+			if = {
+				limit = { is_ai = no }
+				trigger_event = hd_smy.0061
+			}
+			else = { hd_smy_jianbi_effect = yes }
+		}
+	}
+	# 巾帼之辱：坚守 30 天后，诸葛亮在世并主政（一次）
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_smy_jinguo_done }
+			exists = global_var:hd_smy_jianbi_chosen
+			NOT = { exists = global_var:hd_smy_jinguo_wait }
+			hd_zgl_regent_trigger = yes
+		}
+		set_global_variable = hd_smy_jinguo_done
+		scope:hd_smy_y = {
+			if = {
+				limit = { is_ai = no }
+				trigger_event = hd_smy.0062
+			}
+			else = { hd_smy_jinguo_accept_effect = yes }
+		}
+	}
+	# 挡住北伐：北伐开始时记下蜀持魏县数；北伐全部结束时未增加，都督司马懿得赏
+	if = {
+		limit = { hd_zs_beifa_active_trigger = yes }
+		if = {
+			limit = { NOT = { exists = global_var:hd_smy_beifa_watch } }
+			set_global_variable = hd_smy_beifa_watch
+			hd_zs_count_held_effect = yes
+			set_global_variable = { name = hd_smy_held_at_start value = global_var:hd_zs_held_now }
+		}
+	}
+	else_if = {
+		limit = { exists = global_var:hd_smy_beifa_watch }
+		remove_global_variable = hd_smy_beifa_watch
+		hd_zs_count_held_effect = yes
+		if = {
+			limit = {
+				global_var:hd_zs_held_now <= global_var:hd_smy_held_at_start
+				scope:hd_smy_y = { has_character_modifier = hd_smy_dudu_modifier }
+			}
+			scope:hd_smy_y = {
+				change_merit = hd_smy_repel_merit_value
+				change_influence = hd_smy_repel_influence_value
+				add_prestige = 200
+			}
+			hd_zs_party_nudge_effect = { WHO = scope:hd_smy_y LORD = scope:hd_zs_wei POWER = 10 }
+			debug_log = "HD_SMY S4 BEIFA_REPELLED"
+		}
+	}
+}
+
+hd_smy_jianbi_effect = {
+	scope:hd_smy_y = {
+		add_character_modifier = { modifier = hd_smy_jianbi_modifier years = 1 }
+		add_prestige = -50
+	}
+	set_global_variable = hd_smy_jianbi_chosen
+	set_global_variable = { name = hd_smy_jinguo_wait value = yes days = 30 }
+	debug_log = "HD_SMY S4 JIANBI"
+}
+hd_smy_qiuzhan_effect = {
+	scope:hd_smy_y = { add_character_modifier = { modifier = hd_smy_qiuzhan_modifier years = 1 } }
+	debug_log = "HD_SMY S4 QIUZHAN"
+}
+hd_smy_jinguo_accept_effect = {
+	scope:hd_smy_y = { add_stress = 20 }
+	global_var:hd_zs_p_zhu_ge_liang ?= { add_prestige = 100 }
+	debug_log = "HD_SMY S4 JINGUO ACCEPTED"
+}
+
+# 死诸葛走生仲达（诸葛亮死于北伐中，hd_zgl_check_wuzhangyuan_effect 调用）。Scope：司马懿
+hd_smy_zhonda_flee_effect = {
+	add_prestige = -100
+	add_stress = 10
+	hd_zs_news_effect = { A = global_var:hd_zs_p_si_ma_yi B = global_var:hd_zs_p_zhu_ge_liang EVENT = hd_smy.0910 }
+	debug_log = "HD_SMY S4 ZHONGDA_FLED"
+}
+
+############################################################
+# S5 平辽东（237 年起，公孙渊独立）
+############################################################
+hd_smy_check_s5_effect = {
+	# 发兵
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_smy_s5_started }
+			NOT = { exists = global_var:hd_smy_s5_done }
+			NOT = { exists = global_var:hd_smy_s5_wait }
+			current_date >= 237.1.1
+			hd_zs_wei_is_cao_trigger = yes
+			scope:hd_smy_y = { hd_zs_in_wei_trigger = yes }
+			global_var:hd_zs_p_gong_sun_yuan ?= {
+				is_alive = yes
+				is_landed = yes
+				is_independent_ruler = yes
+				NOT = { this = scope:hd_zs_wei }
+			}
+		}
+		set_global_variable = { name = hd_smy_s5_wait value = yes days = 365 }
+		scope:hd_zs_wei = {
+			if = {
+				limit = { is_ai = no }
+				trigger_event = hd_smy.0070
+			}
+			else = { hd_smy_liaodong_start_effect = yes }
+		}
+	}
+	# 战后
+	if = {
+		limit = {
+			exists = global_var:hd_smy_s5_started
+			NOT = { exists = global_var:hd_smy_s5_done }
+			NOT = { hd_smy_liaodong_active_trigger = yes }
+		}
+		if = {
+			limit = {
+				OR = {
+					global_var:hd_zs_p_gong_sun_yuan ?= { is_alive = no }
+					global_var:hd_zs_p_gong_sun_yuan ?= { hd_zs_lost_realm_trigger = yes }
+				}
+			}
+			set_global_variable = hd_smy_s5_done
+			scope:hd_smy_y = {
+				change_merit = 300
+				add_prestige = 500
+				if = {
+					limit = { is_ai = no }
+					trigger_event = hd_smy.0071
+				}
+			}
+			hd_zs_party_nudge_effect = { WHO = scope:hd_smy_y LORD = scope:hd_zs_wei POWER = 10 }
+			hd_zs_news_effect = { A = scope:hd_smy_y B = global_var:hd_zs_p_gong_sun_yuan EVENT = hd_smy.0930 }
+			debug_log = "HD_SMY S5 LIAODONG_WON"
+		}
+		else = {
+			remove_global_variable = hd_smy_s5_started
+			set_global_variable = { name = hd_smy_s5_wait value = yes days = 365 }
+			debug_log = "HD_SMY S5 LIAODONG_FAILED"
+		}
+	}
+}
+
+# 天子以吞并史实灭国情境讨公孙渊，司马懿处屯 4 万。Scope：任意；需 scope:hd_zs_wei、scope:hd_smy_y
+hd_smy_liaodong_start_effect = {
+	hd_tb_annex_start_war_effect = { ATTACKER = scope:hd_zs_wei DEFENDER = global_var:hd_zs_p_gong_sun_yuan KIND = liaodong }
+	if = {
+		limit = { exists = scope:hd_nbc_war_liaodong }
+		set_global_variable = hd_smy_s5_started
+		scope:hd_nbc_war_liaodong = {
+			if = {
+				limit = { NOT = { is_participant = scope:hd_smy_y } }
+				add_attacker = scope:hd_smy_y
+			}
+		}
+		scope:hd_smy_y = {
+			if = {
+				limit = { is_landed = yes exists = capital_province }
+				capital_province = { save_scope_as = hd_smy_ld_loc }
+			}
+			else = { location ?= { save_scope_as = hd_smy_ld_loc } }
+		}
+		if = {
+			limit = { exists = scope:hd_smy_ld_loc }
+			scope:hd_zs_wei = {
+				spawn_army = {
+					levies = 40000
+					location = scope:hd_smy_ld_loc
+					origin = scope:hd_smy_ld_loc
+					inheritable = yes
+					uses_supply = yes
+					war = scope:hd_nbc_war_liaodong
+					name = hd_smy_liaodong_army_name
+				}
+			}
+		}
+		debug_log = "HD_SMY S5 LIAODONG_WAR_OK"
+	}
+	else = { debug_log = "HD_SMY S5 LIAODONG_WAR_FAILED" }
+}
+
+############################################################
+# S6 曹爽共辅与称病（曹叡死后）
+############################################################
+hd_smy_check_s6_effect = {
+	# 托孤：新天子未成年，曹爽为首辅
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_smy_s6a_done }
+			exists = global_var:hd_smy_rui_dead
+			hd_zs_wei_is_cao_trigger = yes
+		}
+		set_global_variable = hd_smy_s6a_done
+		if = {
+			limit = {
+				scope:hd_zs_wei = { is_adult = no }
+				global_var:hd_zs_p_cao_shuang ?= { hd_zs_in_wei_trigger = yes }
+			}
+			scope:hd_zs_wei = {
+				WJ_start_grand_secretariat_effect = yes
+				if = {
+					limit = {
+						has_diarchy_type = grand_secretariat
+						global_var:hd_zs_p_cao_shuang = { is_diarch_valid_trigger = yes }
+					}
+					set_diarch = global_var:hd_zs_p_cao_shuang
+				}
+			}
+			scope:hd_smy_y = { add_character_modifier = { modifier = hd_smy_yizhao_modifier years = 10 } }
+			set_global_variable = { name = hd_smy_zhuanquan_wait value = yes days = 730 }
+			debug_log = "HD_SMY S6 TUOGU"
+		}
+		else = { debug_log = "HD_SMY S6 NO_TUOGU" }
+	}
+	# 曹爽专权：曹爽为天子首辅（托孤满 2 年，或自然成为首辅）
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_smy_s6b_done }
+			NOT = { exists = global_var:hd_smy_zhuanquan_wait }
+			hd_zs_wei_is_cao_trigger = yes
+			global_var:hd_zs_p_cao_shuang ?= { hd_zs_in_wei_trigger = yes }
+			scope:hd_zs_wei = { diarch ?= global_var:hd_zs_p_cao_shuang }
+			scope:hd_smy_y = { hd_zs_in_wei_trigger = yes }
+		}
+		set_global_variable = hd_smy_s6b_done
+		# 尊为太傅，夺其兵权
+		title:k_yongzhou = {
+			if = {
+				limit = { has_variable = wj_dd_core }
+				WJ_dd_dissolve_core_effect = yes
+			}
+		}
+		scope:hd_smy_y = {
+			if = {
+				limit = { has_character_modifier = hd_smy_dudu_modifier }
+				remove_character_modifier = hd_smy_dudu_modifier
+			}
+			add_character_modifier = hd_smy_taifu_modifier
+			if = {
+				limit = { is_ai = no }
+				trigger_event = hd_smy.0080
+			}
+			else = { hd_smy_chengbing_effect = yes }
+		}
+		debug_log = "HD_SMY S6 ZHUANQUAN"
+	}
+}
+
+hd_smy_chengbing_effect = {
+	scope:hd_smy_y = { add_character_modifier = hd_smy_chengbing_modifier }
+	set_global_variable = { name = hd_smy_chengbing_wait value = yes days = 730 }
+	debug_log = "HD_SMY S6 CHENGBING"
+}
+
+############################################################
+# S7 高平陵之变
+############################################################
+hd_smy_check_s7_effect = {
+	if = {
+		limit = {
+			NOT = { exists = global_var:hd_smy_s7_done }
+			NOT = { exists = global_var:hd_smy_chengbing_wait }
+			NOT = { exists = global_var:hd_smy_gpl_retry }
+			scope:hd_smy_y = { has_character_modifier = hd_smy_chengbing_modifier }
+			global_var:hd_zs_p_cao_shuang ?= { hd_zs_in_wei_trigger = yes }
+			scope:hd_zs_wei = { diarch ?= global_var:hd_zs_p_cao_shuang }
+		}
+		random = {
+			chance = 10
+			scope:hd_smy_y = {
+				if = {
+					limit = { is_ai = no }
+					set_global_variable = { name = hd_smy_gpl_retry value = yes days = 60 }
+					trigger_event = hd_smy.0090
+				}
+				else = { hd_smy_gaopingling_effect = yes }
+			}
+		}
+	}
+}
+
+hd_smy_gaopingling_effect = {
+	set_global_variable = hd_smy_s7_done
+	set_global_variable = { name = hd_smy_jiuxi_wait value = yes days = 365 }
+	scope:hd_zs_wei = {
+		if = {
+			limit = { has_active_diarchy = yes diarch ?= global_var:hd_zs_p_cao_shuang }
+			end_diarchy = yes
+		}
+	}
+	global_var:hd_zs_p_cao_shuang ?= {
+		if = {
+			limit = { is_alive = yes is_ai = yes }
+			hd_zs_news_effect = { A = scope:hd_smy_y B = global_var:hd_zs_p_cao_shuang EVENT = hd_smy.0920 }
+			death = { death_reason = death_execution killer = scope:hd_smy_y }
+		}
+		else_if = {
+			limit = { is_alive = yes }
+			hd_zs_news_effect = { A = scope:hd_smy_y B = global_var:hd_zs_p_cao_shuang EVENT = hd_smy.0920 }
+			hd_zs_depose_effect = { WHO = global_var:hd_zs_p_cao_shuang LORD = scope:hd_zs_wei }
+		}
+	}
+	scope:hd_smy_y = {
+		remove_character_modifier = hd_smy_chengbing_modifier
+		if = {
+			limit = { has_character_modifier = hd_smy_taifu_modifier }
+			remove_character_modifier = hd_smy_taifu_modifier
+		}
+		if = {
+			limit = { is_landed = no }
+			hd_smy_grant_henei_effect = yes
+		}
+		else_if = {
+			limit = { NOT = { liege ?= scope:hd_zs_wei } }
+			create_title_and_vassal_change = { type = swear_fealty save_scope_as = hd_smy_gpl_fealty add_claim_on_loss = no }
+			change_liege = { liege = scope:hd_zs_wei change = scope:hd_smy_gpl_fealty }
+			resolve_title_and_vassal_change = scope:hd_smy_gpl_fealty
+		}
+		hd_smy_regency_effect = yes
+		hd_zs_house_unity_effect = { VALUE = 30 DESC = hd_zs_unity_rise.desc }
+		if = {
+			limit = { global_var:hd_beifa_wei >= 70 }
+			add_character_modifier = { modifier = hd_smy_yizhong_modifier years = 5 }
+		}
+	}
+	hd_zs_party_nudge_effect = { WHO = scope:hd_smy_y LORD = scope:hd_zs_wei POWER = 30 }
+	hd_zs_party_stance_effect = { WHO = scope:hd_smy_y LORD = scope:hd_zs_wei STANCE = shoujiu }
+	debug_log = "HD_SMY S7 GAOPINGLING"
+}
+
+# 挟天子：司马懿为权臣兼丞相（照 hd253_regency_effect，换人）。Scope：司马懿；需 scope:hd_zs_wei
+hd_smy_regency_effect = {
+	if = {
+		limit = {
+			is_alive = yes
+			is_landed = yes
+			scope:hd_zs_wei = { is_alive = yes has_title = title:h_china }
+			liege ?= scope:hd_zs_wei
+		}
+		if = {
+			limit = {
+				is_ai = no
+				merit_level < merit_level_expected_empire_value
+			}
+			while = {
+				count = 10
+				if = {
+					limit = { merit_level < merit_level_expected_empire_value }
+					change_merit_level = 1
+				}
+			}
+		}
+		hd218_grant_chengxiang_effect = yes
+		WJ_install_historical_secretariat_effect = { OFFICE = e_WJ_minister_cheng_xiang POSITION = WJ_minister_cheng_xiang LAW = WJ_grand_chengxiang_law }
+		hd_court_install_regency_effect = yes
+		hd_court_set_stance_effect = { STANCE = moni }
+		title:h_china = { set_variable = { name = hd_dc_ten_qjc_regent value = scope:hd_smy_y } }
+		add_character_flag = { flag = hd_court_regent_tenure years = 12 }
+		if = {
+			limit = { title:h_china.var:hd_court_regent ?= scope:hd_smy_y }
+			debug_log = "HD_SMY S7 REGENCY OK"
+		}
+		else = { debug_log = "HD_SMY S7 REGENCY BAD" }
+	}
+	else = { debug_log = "HD_SMY S7 REGENCY SKIPPED" }
+}
+
+############################################################
+# S8 九锡与封王（玩家可受，电脑辞让）
+############################################################
+hd_smy_check_s8_effect = {
+	if = {
+		limit = {
+			exists = global_var:hd_smy_s7_done
+			NOT = { exists = global_var:hd_smy_jiuxi_wait }
+			NOT = { exists = global_var:hd_smy_s8_done }
+			title:h_china.var:hd_court_regent ?= scope:hd_smy_y
+		}
+		set_global_variable = hd_smy_s8_done
+		scope:hd_smy_y = {
+			if = {
+				limit = { is_ai = no }
+				trigger_event = hd_smy.0100
+			}
+			else = {
+				add_prestige = 200
+				debug_log = "HD_SMY S8 JIUXI_DECLINED_AI"
+			}
+		}
+	}
+	# 晋王：受晋公满 2 年
+	if = {
+		limit = {
+			exists = global_var:hd_smy_jin_fief
+			NOT = { exists = global_var:hd_smy_jinwang_wait }
+			NOT = { exists = global_var:hd_smy_s8b_done }
+			scope:hd_smy_y = { has_title = global_var:hd_smy_jin_fief is_ai = no }
+		}
+		set_global_variable = hd_smy_s8b_done
+		scope:hd_smy_y = { trigger_event = hd_smy.0101 }
+	}
+}
+
+# 晋公：照 hd263_s5_effect（WJ_rf_commit）新建王国级「晋国」，国都太原，并州七郡逐郡并入。Scope：任意；需 scope:hd_smy_y、scope:hd_zs_wei
+hd_smy_jin_gong_effect = {
+	hidden_effect = {
+		scope:hd_smy_y = { save_scope_as = wj_rf_beneficiary }
+		scope:hd_zs_wei = { save_scope_as = wj_rf_sovereign }
+		if = {
+			limit = {
+				scope:hd_smy_y = {
+					is_alive = yes
+					is_landed = yes
+					NOT = { this = top_liege }
+					top_liege = scope:hd_zs_wei
+				}
+			}
+			title:d_taiyuan = { save_scope_as = wj_rf_capital_duchy title_capital_county = { save_scope_as = wj_rf_capital_county } }
+			create_dynamic_title = { tier = kingdom name = hd263_jin_fief_name }
+			scope:new_title = {
+				save_scope_as = wj_rf_new_fief
+				set_variable = { name = wj_rf_rank value = 1 }
+				set_variable = { name = wj_rf_name_source value = title:k_uuii_bingzhou }
+				set_definitive_form = yes
+				set_variable = { name = wj_rf_stem_capital value = title:d_taiyuan }
+				set_variable = { name = wj_rf_name_code value = 13 }
+				set_capital_county = scope:wj_rf_capital_county
+				set_coa = title:d_taiyuan set_color_from_title = title:d_taiyuan
+			}
+			set_global_variable = { name = hd_smy_jin_fief value = scope:wj_rf_new_fief }
+			create_title_and_vassal_change = { type = granted save_scope_as = wj_rf_change add_claim_on_loss = no }
+			scope:wj_rf_new_fief = { change_title_holder = { holder = scope:hd_smy_y change = scope:wj_rf_change government_base = scope:hd_zs_wei } }
+			hd_smy_jin_duchy_effect = { DUCHY = d_taiyuan }
+			hd_smy_jin_duchy_effect = { DUCHY = d_shangdang }
+			hd_smy_jin_duchy_effect = { DUCHY = d_shangdang_sili }
+			hd_smy_jin_duchy_effect = { DUCHY = d_xinxing }
+			hd_smy_jin_duchy_effect = { DUCHY = d_yanmen_youzhou }
+			hd_smy_jin_duchy_effect = { DUCHY = d_wuxiang }
+			hd_smy_jin_duchy_effect = { DUCHY = d_jianxing }
+			scope:wj_rf_capital_county = {
+				if = {
+					limit = {
+						NOT = { holder ?= scope:hd_smy_y }
+						OR = {
+							NOT = { exists = holder }
+							holder ?= { top_liege = scope:hd_zs_wei is_ai = yes }
+						}
+					}
+					change_title_holder = { holder = scope:hd_smy_y change = scope:wj_rf_change government_base = scope:hd_zs_wei }
+				}
+				set_variable = { name = wj_rf_capital_of value = scope:wj_rf_new_fief }
+			}
+			resolve_title_and_vassal_change = scope:wj_rf_change
+			scope:hd_smy_y = {
+				if = {
+					limit = { scope:wj_rf_new_fief.holder ?= scope:hd_smy_y }
+					if = { limit = { has_variable = wj_peer_rank } WJ_peer_clear = yes }
+					set_primary_title_to = scope:wj_rf_new_fief
+					set_variable = { name = wj_rf_cooldown value = yes years = 3 }
+					WJ_rf_refresh_holder = yes
+					scope:wj_rf_new_fief = { save_scope_as = wj_rf_law_title }
+					trigger_event = WJ_rf.4
+					title:h_china = { set_variable = { name = hd_court_regent_title value = scope:hd_smy_y.primary_title } }
+					add_prestige = 500
+					set_global_variable = { name = hd_smy_jinwang_wait value = yes days = 730 }
+					debug_log = "HD_SMY S8 JIN_GONG OK"
+				}
+				else = { debug_log = "HD_SMY S8 JIN_GONG BAD" }
+			}
+		}
+		else = { debug_log = "HD_SMY S8 JIN_GONG SKIPPED" }
+	}
+}
+hd_smy_jin_duchy_effect = {
+	title:$DUCHY$ = {
+		if = {
+			limit = {
+				any_de_jure_county = { exists = holder holder.top_liege = scope:hd_zs_wei }
+				OR = {
+					NOT = { exists = holder }
+					holder ?= { top_liege = scope:hd_zs_wei }
+				}
+			}
+			if = {
+				limit = { holder ?= { is_ai = no NOT = { this = scope:hd_smy_y } } }
+				if = { limit = { NOT = { has_variable = wj_rf_original_liege } exists = de_jure_liege }
+					set_variable = { name = wj_rf_original_liege value = de_jure_liege }
+				}
+				scope:wj_rf_new_fief = { add_to_variable_list = { name = wj_rf_duchies target = title:$DUCHY$ } }
+				set_de_jure_liege_title = scope:wj_rf_new_fief
+			}
+			else = { WJ_rf_transfer_duchy = yes }
+		}
+	}
+}
+
+# 晋王：照 hd263_s6_effect（WJ_rf_promote）新建帝国级套住晋公国。Scope：任意；需 scope:hd_smy_y
+hd_smy_jin_wang_effect = {
+	hidden_effect = {
+		scope:hd_smy_y = {
+			if = {
+				limit = {
+					is_alive = yes
+					has_title = global_var:hd_smy_jin_fief
+					NOT = { any_held_title = { has_variable = wj_rf_rank var:wj_rf_rank = 2 } }
+					top_liege = { has_title = title:h_china NOT = { this = scope:hd_smy_y } }
+				}
+				save_scope_as = wj_rf_beneficiary
+				top_liege = { save_scope_as = wj_rf_sovereign }
+				global_var:hd_smy_jin_fief = { save_scope_as = wj_rf_new_fief }
+				create_dynamic_title = { tier = empire name = hd263_jin_fief_name }
+				scope:new_title = {
+					save_scope_as = wj_rf_new_kingdom
+					set_variable = { name = wj_rf_rank value = 2 }
+					set_variable = { name = wj_rf_constituent_fief value = scope:wj_rf_new_fief }
+					set_definitive_form = yes
+					set_variable = { name = wj_rf_name_code value = scope:wj_rf_new_fief.var:wj_rf_name_code }
+					set_variable = { name = wj_rf_stem_capital value = scope:wj_rf_new_fief.var:wj_rf_stem_capital }
+					set_capital_county = scope:wj_rf_new_fief.title_capital_county
+					set_coa = scope:wj_rf_new_fief set_color_from_title = scope:wj_rf_new_fief
+				}
+				create_title_and_vassal_change = { type = granted save_scope_as = wj_rf_change add_claim_on_loss = no }
+				scope:wj_rf_new_kingdom = { change_title_holder = { holder = scope:wj_rf_beneficiary change = scope:wj_rf_change } }
+				change_liege = { liege = scope:wj_rf_sovereign change = scope:wj_rf_change }
+				resolve_title_and_vassal_change = scope:wj_rf_change
+				if = {
+					limit = { scope:wj_rf_new_kingdom.holder ?= scope:wj_rf_beneficiary }
+					set_global_variable = { name = hd_smy_jin_wang value = scope:wj_rf_new_kingdom }
+					scope:wj_rf_new_fief = { set_de_jure_liege_title = scope:wj_rf_new_kingdom }
+					set_primary_title_to = scope:wj_rf_new_kingdom
+					WJ_rf_refresh_holder = yes
+					scope:wj_rf_new_kingdom = { save_scope_as = wj_rf_law_title }
+					scope:wj_rf_new_fief.title_capital_county = { save_scope_as = wj_rf_capital_county }
+					trigger_event = WJ_rf.4
+					title:h_china = { set_variable = { name = hd_court_regent_title value = scope:wj_rf_new_kingdom } }
+					add_prestige = 500
+					debug_log = "HD_SMY S8 JIN_WANG OK"
+				}
+				else = { debug_log = "HD_SMY S8 JIN_WANG BAD" }
+			}
+			else = { debug_log = "HD_SMY S8 JIN_WANG SKIPPED" }
+		}
+	}
+}

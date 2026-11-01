@@ -1,0 +1,63 @@
+##################
+# 汉晋春秋：出钱补员（私兵按钮、各头衔按钮、AI 季度补员共用）
+# 有国库扣国库（remove_treasury），否则扣金币（remove_short_term_gold，同原版 refill_maa_with_gold_effect）
+# 每支军团只补一次：原版 while 循环在兵补不进去时会反复扣钱，这里改用 every
+# 数值见 common/script_values/zz_hd_refill_maa_values.txt
+##################
+
+# 付款人作用域：先存好付款人、留底、单价。RESERVE = 留底（玩家 0，AI 100）
+hd_refill_maa_setup_effect = {
+	save_scope_as = hd_refill_payer
+	save_scope_value_as = {
+		name = hd_refill_reserve
+		value = $RESERVE$
+	}
+	save_scope_value_as = {
+		name = hd_refill_rate
+		value = hd_refill_maa_rate_value
+	}
+}
+
+# 军团作用域：补这一支（需先 hd_refill_maa_setup_effect）
+hd_refill_one_maa_regiment_effect = {
+	save_scope_value_as = {
+		name = hd_refill_soldiers
+		value = hd_refill_maa_soldiers_value
+	}
+	save_scope_value_as = {
+		name = hd_refill_pay
+		value = hd_refill_maa_pay_value
+	}
+	if = {
+		limit = { scope:hd_refill_pay > 0 }
+		scope:hd_refill_payer = {
+			if = {
+				limit = { has_treasury = yes }
+				remove_treasury = scope:hd_refill_pay
+			}
+			else = {
+				remove_short_term_gold = scope:hd_refill_pay
+			}
+		}
+		change_maa_troops_count = scope:hd_refill_soldiers
+	}
+}
+
+# 付款人作用域：补私兵
+hd_refill_personal_maa_effect = {
+	every_maa_regiment = {
+		limit = {
+			is_personal_maa_regiment = yes
+			maa_regiments_valid_to_refill_trigger = yes
+		}
+		hd_refill_one_maa_regiment_effect = yes
+	}
+}
+
+# 头衔作用域：补本头衔全部头衔兵（含借出的），钱由 scope:hd_refill_payer 出
+hd_refill_title_maa_effect = {
+	every_owned_title_maa_regiment = {
+		limit = { maa_regiments_valid_to_refill_trigger = yes }
+		hd_refill_one_maa_regiment_effect = yes
+	}
+}

@@ -1,0 +1,310 @@
+﻿# 263「钟会伐蜀」禅代前后的蜀、吴善后（boki 2026-10-31）。
+# ① 安乐公：蜀主出降（hd263_s2_surrender_effect）约三个月后，天子以封爵系统封「安乐公」（个人爵位 3 级、退位天子身份，名号与食邑都是安乐县），
+#    蜀主与在世子女迁洛阳作天子廷臣。禅代后爵位由晋沿袭（爵位登记在霸权头衔上）。
+# ② 灭吴：279.11.1 起每 30 天查一次，天子（霸权持有者，禅代与否都算）以吞并史实灭国情境（hd_tb_annex_start_war_effect，KIND = miewu）伐吴主，
+#    胜即全取吴境；杜预、王濬在世且在天子治下时各给事件兵 1.5 万。玩家天子可暂缓，一年后再问；290.1.1 截止。
+# ③ 归命侯：吴亡（吴主名下再无实地）后，电脑吴主出降，玩家吴主选出降或拒降；出降则入晋、子女迁洛阳，
+#    以封爵系统封 2 级侯（世族爵位，食邑河南郡一县），爵号特判显示「归命」（common/customizable_localization/WJ_peerage_names.txt）。
+# 入口：common/on_action/zz_hd_263_startup.txt（hd263_anle_grant、hd263_miewu_watch）；事件在 events/zz_hd_263_aftermath_events.txt。
+
+############################################################
+# 通用
+############################################################
+
+# 归顺：无地的作 $LORD$ 的廷臣；仍是统治者（持世族头衔等）的向 $LORD$ 称臣。Scope：归顺者
+hd263_submit_to_effect = {
+	if = {
+		limit = { is_ruler = no NOT = { is_courtier_of = $LORD$ } }
+		set_employer = $LORD$
+	}
+	else_if = {
+		limit = {
+			is_ruler = yes
+			NOT = { this = $LORD$ }
+			NOT = { liege ?= $LORD$ }
+		}
+		create_title_and_vassal_change = { type = swear_fealty save_scope_as = hd263_submit_change add_claim_on_loss = no }
+		change_liege = { liege = $LORD$ change = scope:hd263_submit_change }
+		resolve_title_and_vassal_change = scope:hd263_submit_change
+	}
+}
+
+# 宗室迁洛：在世、非统治者、不在 $LORD$ 宫廷的子女作 $LORD$ 的廷臣。Scope：旧君
+hd263_move_children_to_effect = {
+	every_child = {
+		limit = {
+			is_alive = yes
+			is_ruler = no
+			NOT = { is_courtier_of = $LORD$ }
+		}
+		set_employer = $LORD$
+	}
+}
+
+############################################################
+# ① 安乐公
+############################################################
+
+# 由 hd263_anle_grant（出降后 90 天）调用。旧蜀主存在 global_var:hd263_shu_lord
+hd263_anle_grant_effect = {
+	title:h_china.holder ?= { save_scope_as = hd263_tianzi }
+	global_var:hd263_shu_lord ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				exists = scope:hd263_tianzi
+				NOT = { this = scope:hd263_tianzi }
+			}
+			save_scope_as = hd263_anle
+			hd263_submit_to_effect = { LORD = scope:hd263_tianzi }
+			hd263_move_children_to_effect = { LORD = scope:hd263_tianzi }
+			if = {
+				limit = {
+					NOT = { has_variable = wj_peer_rank }
+					NOT = { has_trait = WJ_peerage_trait }
+					top_liege ?= scope:hd263_tianzi
+					NOT = { this = top_liege }
+					scope:hd263_tianzi = { WJ_peer_realm_head = yes }
+					title:c_uuii_p_1246 = { WJ_peer_county_free = yes WJ_peer_name_free = yes }
+				}
+				# 照 WJ_peer_commit 个人分支直写（hd190_peer_wang_effect 同法）；退位天子身份才许个人「公」爵（WJ_peer_personal_valid）
+				set_variable = { name = wj_peer_personal value = yes }
+				set_variable = { name = wj_peer_retired_emperor value = 1 }
+				set_variable = { name = wj_peer_rank value = 3 }
+				set_variable = { name = wj_peer_name value = title:c_uuii_p_1246 }
+				set_variable = { name = wj_peer_food value = title:c_uuii_p_1246 }
+				set_variable = { name = wj_peer_realm value = scope:hd263_tianzi.primary_title }
+				set_variable = { name = wj_peer_last_paid value = current_year }
+				WJ_peer_bind_personal = yes
+				hd263_news_effect = { A = scope:hd263_anle B = scope:hd263_tianzi EVENT = hd263.1100 }
+				debug_log = "HD263 ANLE OK"
+			}
+			else = { debug_log = "HD263 ANLE PEER_SKIPPED" }
+		}
+		else = { debug_log = "HD263 ANLE SKIPPED_NO_LORD" }
+	}
+}
+
+############################################################
+# ② 灭吴
+############################################################
+
+# 由 hd263_miewu_watch 每 30 天调用
+hd263_miewu_watch_effect = {
+	if = {
+		limit = { NOT = { exists = global_var:hd263_miewu_done } }
+		# 战争进行中：吴主若战中身故、由继承人接战，把记录刷新为该战现在的主守方
+		if = {
+			limit = {
+				exists = global_var:hd263_miewu_started
+				hd263_miewu_war_active_trigger = yes
+			}
+			title:h_china.holder ?= {
+				random_character_war = {
+					limit = { using_cb = hd_dc_tunbing_cb var:hd_nbc_war_kind ?= flag:miewu }
+					primary_defender = { set_global_variable = { name = hd263_wu_lord value = this } }
+				}
+			}
+		}
+		# 战争开过且已结束：吴亡（吴主在世且再无实地）则善后，否则一年后再议
+		else_if = {
+			limit = {
+				exists = global_var:hd263_miewu_started
+				NOT = { hd263_miewu_war_active_trigger = yes }
+			}
+			if = {
+				limit = { global_var:hd263_wu_lord ?= { is_alive = yes hd263_lost_realm_trigger = yes } }
+				set_global_variable = hd263_miewu_done
+				hd263_wu_fall_effect = yes
+			}
+			else = {
+				remove_global_variable = hd263_miewu_started
+				set_global_variable = { name = hd263_miewu_wait value = yes days = 365 }
+				debug_log = "HD263 MIEWU WAR_ENDED WU_SURVIVES"
+			}
+		}
+		else_if = {
+			limit = {
+				NOT = { exists = global_var:hd263_miewu_started }
+				NOT = { exists = global_var:hd263_miewu_wait }
+				NOT = { exists = global_var:hd263_miewu_asked }
+				current_date >= 279.11.1
+				current_date < 290.1.1
+				hd263_miewu_ready_trigger = yes
+			}
+			title:h_china.holder = {
+				if = {
+					limit = { is_ai = yes }
+					hd263_miewu_start_effect = yes
+				}
+				else = {
+					set_global_variable = { name = hd263_miewu_asked value = yes days = 60 }
+					trigger_event = hd263.1000
+				}
+			}
+		}
+	}
+}
+
+# 宣战。Scope：天子
+hd263_miewu_start_effect = {
+	save_scope_as = hd263_jin
+	title:e_jiangdong.holder ?= { save_scope_as = hd263_wu }
+	if = {
+		limit = { exists = scope:hd263_wu }
+		set_global_variable = { name = hd263_wu_lord value = scope:hd263_wu }
+		hd_tb_annex_start_war_effect = { ATTACKER = scope:hd263_jin DEFENDER = scope:hd263_wu KIND = miewu }
+	}
+	if = {
+		limit = { exists = scope:hd_nbc_war_miewu }
+		set_global_variable = hd263_miewu_started
+		if = {
+			limit = { exists = global_var:hd263_miewu_asked }
+			remove_global_variable = hd263_miewu_asked
+		}
+		hd263_miewu_army_effect = { WHO = du_yu NAME = hd263_du_yu_army_name }
+		hd263_miewu_army_effect = { WHO = wang_jun NAME = hd263_wang_jun_army_name }
+		hd263_news_effect = { A = scope:hd263_jin B = scope:hd263_wu EVENT = hd263.1110 }
+		debug_log = "HD263 MIEWU WAR_OK"
+	}
+	else = {
+		set_global_variable = { name = hd263_miewu_wait value = yes days = 365 }
+		debug_log = "HD263 MIEWU WAR_FAILED"
+	}
+}
+
+# 事件兵：$WHO$ 在世、未被囚、在天子治下时，天子在其首府（无地则其所在地）得 1.5 万。需 scope:hd263_jin、scope:hd_nbc_war_miewu
+hd263_miewu_army_effect = {
+	character:$WHO$ ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				is_imprisoned = no
+				top_liege ?= scope:hd263_jin
+			}
+			if = {
+				limit = { is_landed = yes exists = capital_province }
+				capital_province = { save_scope_as = hd263_army_loc }
+			}
+			else = {
+				location ?= { save_scope_as = hd263_army_loc }
+			}
+		}
+	}
+	if = {
+		limit = { exists = scope:hd263_army_loc }
+		scope:hd263_jin = {
+			spawn_army = {
+				levies = 15000
+				location = scope:hd263_army_loc
+				origin = scope:hd263_army_loc
+				inheritable = yes
+				uses_supply = yes
+				war = scope:hd_nbc_war_miewu
+				name = $NAME$
+			}
+		}
+		clear_saved_scope = hd263_army_loc
+		debug_log = "HD263 MIEWU ARMY $WHO$"
+	}
+	else = { debug_log = "HD263 MIEWU ARMY_SKIPPED $WHO$" }
+}
+
+# 吴亡：通报，电脑吴主出降受封，玩家吴主收事件
+hd263_wu_fall_effect = {
+	title:h_china.holder ?= { save_scope_as = hd263_jin }
+	global_var:hd263_wu_lord ?= {
+		if = {
+			limit = {
+				is_alive = yes
+				exists = scope:hd263_jin
+				NOT = { this = scope:hd263_jin }
+			}
+			save_scope_as = hd263_wu
+			hd263_news_effect = { A = scope:hd263_wu B = scope:hd263_jin EVENT = hd263.1120 }
+			if = {
+				limit = { is_ai = yes }
+				hd263_guiming_effect = yes
+			}
+			else = { trigger_event = hd263.1010 }
+			debug_log = "HD263 MIEWU WU_FALLEN"
+		}
+		else = { debug_log = "HD263 MIEWU WU_LORD_GONE" }
+	}
+}
+
+############################################################
+# ③ 归命侯
+############################################################
+
+# 出降入晋并受封。Scope：吴主
+hd263_guiming_effect = {
+	save_scope_as = hd263_wu
+	title:h_china.holder ?= { save_scope_as = hd263_jin }
+	if = {
+		limit = {
+			is_alive = yes
+			exists = scope:hd263_jin
+			NOT = { this = scope:hd263_jin }
+		}
+		hd263_submit_to_effect = { LORD = scope:hd263_jin }
+		hd263_move_children_to_effect = { LORD = scope:hd263_jin }
+		hd263_guiming_peer_effect = yes
+	}
+	else = { debug_log = "HD263 GUIMING SKIPPED_NO_LORD" }
+}
+
+# 封爵 2 级侯（世族爵位，照 WJ_peer_commit 世族分支直写，hd190_peer_hou_effect 同法）。Scope：吴主；需 scope:hd263_jin
+hd263_guiming_peer_effect = {
+	if = {
+		limit = {
+			NOT = { has_variable = wj_peer_rank }
+			NOT = { has_trait = WJ_peerage_trait }
+			top_liege ?= scope:hd263_jin
+			NOT = { this = top_liege }
+			scope:hd263_jin = { WJ_peer_realm_head = yes }
+		}
+		# 食邑：金墉、河南、偃师、缑氏，取第一个未被占用的
+		if = {
+			limit = { title:c_uuii_p_786 = { WJ_peer_county_free = yes WJ_peer_name_free = yes } }
+			title:c_uuii_p_786 = { save_scope_as = hd263_guiming_food }
+		}
+		else_if = {
+			limit = { title:c_uuii_p_793 = { WJ_peer_county_free = yes WJ_peer_name_free = yes } }
+			title:c_uuii_p_793 = { save_scope_as = hd263_guiming_food }
+		}
+		else_if = {
+			limit = { title:c_uuii_p_784 = { WJ_peer_county_free = yes WJ_peer_name_free = yes } }
+			title:c_uuii_p_784 = { save_scope_as = hd263_guiming_food }
+		}
+		else_if = {
+			limit = { title:c_uuii_p_775 = { WJ_peer_county_free = yes WJ_peer_name_free = yes } }
+			title:c_uuii_p_775 = { save_scope_as = hd263_guiming_food }
+		}
+		if = {
+			limit = { exists = scope:hd263_guiming_food }
+			WJ_peer_get_family = yes
+			if = {
+				limit = {
+					exists = scope:wj_peer_family
+					scope:wj_peer_family = { holder = scope:hd263_wu NOT = { has_variable = wj_peer_rank } }
+				}
+				scope:wj_peer_family = {
+					set_variable = { name = wj_peer_rank value = 2 }
+					set_variable = { name = wj_peer_name value = scope:hd263_guiming_food }
+					set_variable = { name = wj_peer_food value = scope:hd263_guiming_food }
+					set_variable = { name = wj_peer_realm value = scope:hd263_jin.primary_title }
+					set_variable = { name = wj_peer_last_paid value = current_year }
+					WJ_peer_bind_family = yes
+				}
+				# 爵号显示「归命」只认受封本人（WJ_PeerName 特判）；袭爵者照常显示食邑县名
+				set_variable = hd263_guiming
+				debug_log = "HD263 GUIMING OK"
+			}
+			else = { debug_log = "HD263 GUIMING NO_FAMILY" }
+			clear_saved_scope = hd263_guiming_food
+		}
+		else = { debug_log = "HD263 GUIMING NO_FOOD" }
+	}
+	else = { debug_log = "HD263 GUIMING PEER_SKIPPED" }
+}

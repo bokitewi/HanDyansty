@@ -1,0 +1,138 @@
+##################
+# 汉晋春秋：出钱补员数值（私兵按钮、各头衔按钮、AI 季度补员共用）
+# 有国库扣国库，否则扣金币。金币每 1 补 3 人（同原版 gold_refill_value）；
+# 国库按原版国库常备军 7 折（MAA_TREASURY_HIGH_COST_MULT）取整为每 1 补 4 人（boki 2026-10-31）
+# 原版 gold_refill_value 依赖 scope:laamp_temp，提示用的 gold_refill_value_tt 基数又写成 2（实扣是 3），
+# 这里合成一个角色作用域的值，实扣与提示共用
+##################
+
+# 角色作用域（付款人）：每 1 国库/金币补多少兵
+hd_refill_maa_rate_value = {
+	value = 3
+	if = {
+		limit = { has_perk = cutting_corners_perk }
+		multiply = 1.25
+	}
+	if = {
+		limit = {
+			has_perk = personal_touch_perk
+			landless_inspector_king_of_the_wilds = yes
+		}
+		multiply = 1.25
+	}
+	if = {
+		limit = {
+			is_ai = no
+			has_game_rule = hard_difficulty
+		}
+		multiply = 0.5
+	}
+	else_if = {
+		limit = {
+			is_ai = no
+			has_game_rule = very_hard_difficulty
+		}
+		multiply = 0.2
+	}
+	if = {
+		limit = { has_treasury = yes }
+		multiply = 4
+		divide = 3
+	}
+}
+
+# 角色作用域（付款人）：本次能花的钱 = 国库或金币 − 留底（scope:hd_refill_reserve，AI 留 100；提示里没有该 scope，按不留底算）
+hd_refill_maa_budget_value = {
+	value = treasury_or_gold
+	if = {
+		limit = { exists = scope:hd_refill_reserve }
+		subtract = scope:hd_refill_reserve
+	}
+	min = 0
+}
+
+# 军团作用域：缺员人数
+hd_refill_maa_missing_value = {
+	value = maa_max_troops_count
+	subtract = maa_current_troops_count
+	min = 0
+}
+
+# 军团作用域：本支实补人数（钱够就补满，不够按钱折算）。需 scope:hd_refill_payer、scope:hd_refill_rate
+hd_refill_maa_soldiers_value = {
+	value = hd_refill_maa_missing_value
+	max = {
+		value = scope:hd_refill_payer.hd_refill_maa_budget_value
+		multiply = scope:hd_refill_rate
+	}
+}
+
+# 军团作用域：本支实扣
+hd_refill_maa_pay_value = {
+	value = hd_refill_maa_missing_value
+	divide = scope:hd_refill_rate
+	max = scope:hd_refill_payer.hd_refill_maa_budget_value
+}
+
+##################
+# 以下供提示框用（本地化里 MakeScope.ScriptValue 调用，没有 scope:hd_refill_* 等）
+##################
+
+# 角色作用域：私兵缺员合计
+hd_refill_personal_maa_missing_tt_value = {
+	value = 0
+	every_maa_regiment = {
+		limit = { is_personal_maa_regiment = yes }
+		add = hd_refill_maa_missing_value
+	}
+}
+
+# 角色作用域：补满私兵所需
+hd_refill_personal_maa_full_cost_tt_value = {
+	value = hd_refill_personal_maa_missing_tt_value
+	divide = hd_refill_maa_rate_value
+}
+
+# 角色作用域：私兵实补人数
+hd_refill_personal_maa_soldiers_tt_value = {
+	value = hd_refill_personal_maa_missing_tt_value
+	max = {
+		value = hd_refill_maa_budget_value
+		multiply = hd_refill_maa_rate_value
+	}
+}
+
+# 角色作用域：私兵实扣
+hd_refill_personal_maa_cost_tt_value = {
+	value = hd_refill_personal_maa_full_cost_tt_value
+	max = hd_refill_maa_budget_value
+}
+
+# 头衔作用域：本头衔头衔兵（含借出的）缺员合计；付款人为头衔持有者
+hd_refill_title_maa_missing_tt_value = {
+	value = 0
+	every_owned_title_maa_regiment = {
+		add = hd_refill_maa_missing_value
+	}
+}
+
+# 头衔作用域：补满本头衔头衔兵所需
+hd_refill_title_maa_full_cost_tt_value = {
+	value = hd_refill_title_maa_missing_tt_value
+	divide = holder.hd_refill_maa_rate_value
+}
+
+# 头衔作用域：本头衔实补人数
+hd_refill_title_maa_soldiers_tt_value = {
+	value = hd_refill_title_maa_missing_tt_value
+	max = {
+		value = holder.hd_refill_maa_budget_value
+		multiply = holder.hd_refill_maa_rate_value
+	}
+}
+
+# 头衔作用域：本头衔实扣
+hd_refill_title_maa_cost_tt_value = {
+	value = hd_refill_title_maa_full_cost_tt_value
+	max = holder.hd_refill_maa_budget_value
+}

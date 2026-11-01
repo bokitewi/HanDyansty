@@ -18,7 +18,9 @@ hd_j16_e3_346_effect = {
 	hd_j16_node_shijian_effect = yes        # E3-Z40 石鉴弑遵
 	hd_j16_node_shahu_effect = yes          # E3-R05 杀胡令
 	hd_j16_node_ranmin_effect = yes     # E3-R10 冉闵建魏
+	hd_j16_node_zhaobeng_effect = yes       # E3-R12 后赵崩解（石祗继统、按州割据；10-31 新增）
 	hd_j16_node_shizhi_effect = yes         # E3-Z50 石祗称帝于襄国
+	hd_j16_node_cangting_effect = yes       # E3-R15 冉闵讨赵（苍亭之战；10-31 新增）
 	hd_j16_node_xiangguo351_effect = yes    # E3-R20 襄国之战
 	hd_j16_node_liuxian_coup_effect = yes   # E3-Z60 第一跳：刘显弑石祗
 	hd_j16_node_liuxian_effect = yes        # E3-Z60 第二跳：刘显亡于冉闵
@@ -121,6 +123,8 @@ hd_j16_node_ranmin_effect = {
 					}
 				}
 				set_global_variable = hd_nbc_ranmin_done
+				# E3-R12 后赵崩解用：记下赵主的主头衔，石鉴被杀后它的持有者即继承人（10-31）
+				set_global_variable = { name = hd_j16_zhaobeng_title value = title:d_weijun.holder.top_liege.primary_title }
 				scope:hd_j16_rm_ran = { trigger_event = hd_nbc.0130 }
 				debug_log = "HD_J16 e3_r10 FIRE event_sent"
 			}
@@ -1147,6 +1151,160 @@ hd_j16_shahu_effect = {
 }
 
 ############################################################
+# E3-R12 后赵崩解【软】（10-31 玩家反馈「冉闵没有主动进攻后赵」新增）
+# 起因：E3-R10 政变只取魏郡，后赵主体（三帝国、七州）整块留给石鉴的继承人（石鉴无子，谁接由继承法定），此后没有节点处置。
+# 上游 E3-R10 已 fire（hd_hev_346_ranmin）。赵主 = R10 发事件时记下的赵主主头衔的现持有者（hd_j16_b4_res_zhao2_effect）。
+# ① 继统：赵主是电脑、不是石祗；石祗 shangdang_shi_022 在世、未下狱、在赵主一方 → 石祗（有地先独立）接收赵主全部头衔与封臣，原赵主入石祗宫廷。
+#    赵主是玩家：不转主头衔（A1 §7.2），②③照做（boki 10-31 拍板「照样崩解」）。
+# ② 按州割据：冀州 k_uuii_jizhou、司州 k_sizhou 留赵；其余七州各取赵主直属的州内郡守（hd_j16_b4_zhaobeng_gov_trigger）中首府发展度最高者为州主：
+#    独立；州头衔在赵主手里或无人持有、且不是赵主主头衔时授给他，州内其他同类郡守改投他。段龛除外（留给 E3-M40 据广固，须尚非独立）。
+# ③ 天下通报 hd_j16.1035（所有玩家，玩家赵主借此得知）。
+# 跳过：R10 跳过；或 352.6.1 仍无 hd_hev_346_ranmin（玩家冉闵选 b）；或取不到赵主。跨开局：370、404 自保护。
+# 变量：hd_j16_zhaobeng_done/_result/_skip、hd_j16_zhaobeng_title（R10 设）；面板 hd_hev_j16_zhaobeng
+############################################################
+hd_j16_node_zhaobeng_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_zhaobeng_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 370 }
+			set_global_variable = hd_j16_zhaobeng_done
+			debug_log = "HD_J16 e3_r12 SKIP prestart"
+		}
+		else_if = {
+			limit = {
+				OR = {
+					has_global_variable = hd_j16_ranmin_skip
+					AND = {
+						current_date >= 352.6.1
+						NOT = { has_global_variable = hd_hev_346_ranmin }
+					}
+				}
+			}
+			hd_j16_304_skip_effect = { KEY = zhaobeng LOG = e3_r12 WHY = no_coup }
+		}
+		else_if = {
+			limit = { has_global_variable = hd_hev_346_ranmin }
+			hd_j16_b4_res_zhao2_effect = { AS = hd_j16_zb_zhao }
+			if = {
+				limit = { exists = scope:hd_j16_zb_zhao }
+				hd_j16_zhaobeng_effect = yes
+			}
+			else = {
+				hd_j16_304_skip_effect = { KEY = zhaobeng LOG = e3_r12 WHY = no_zhao }
+			}
+		}
+	}
+}
+
+# 后赵崩解执行体。赵主 scope:hd_j16_zb_zhao（已存在）
+hd_j16_zhaobeng_effect = {
+	set_global_variable = hd_j16_zhaobeng_done
+	set_global_variable = hd_j16_zhaobeng_result
+	set_global_variable = hd_hev_j16_zhaobeng
+	# ① 石祗继统
+	hd_j16_304_res_effect = { ID = shangdang_shi_022 AS = hd_j16_zb_zhi }
+	if = {
+		limit = {
+			scope:hd_j16_zb_zhao = { is_ai = yes }
+			scope:hd_j16_zb_zhi ?= {
+				is_alive = yes
+				is_imprisoned = no
+			}
+			hd_j16_b4_under_trigger = { WHO = scope:hd_j16_zb_zhi LORD = scope:hd_j16_zb_zhao }
+		}
+		if = {
+			limit = { exists = scope:hd_j16_zb_old }
+			clear_saved_scope = hd_j16_zb_old
+		}
+		scope:hd_j16_zb_zhao = { save_scope_as = hd_j16_zb_old }
+		scope:hd_j16_zb_zhi = { hd_nbc_become_independent_effect = yes }
+		hd_370_take_realm_effect = { NEW = scope:hd_j16_zb_zhi OLD = scope:hd_j16_zb_old }
+		hd_j16_b4_join_court_effect = { RULER = scope:hd_j16_zb_zhi WHO = scope:hd_j16_zb_old }
+		clear_saved_scope = hd_j16_zb_zhao
+		scope:hd_j16_zb_zhi = { save_scope_as = hd_j16_zb_zhao }
+		debug_log = "HD_J16 e3_r12 FIRE shizhi_succeeds"
+	}
+	# ② 按州割据（冀州、司州留赵）
+	hd_j16_304_res_effect = { ID = liaoxi_duan_028 AS = hd_j16_zb_kan }
+	hd_j16_zhaobeng_split_effect = { K = k_uuii_bingzhou }
+	hd_j16_zhaobeng_split_effect = { K = k_uuii_youzhou }
+	hd_j16_zhaobeng_split_effect = { K = k_uuii_qingzhou }
+	hd_j16_zhaobeng_split_effect = { K = k_uuii_yanzhou }
+	hd_j16_zhaobeng_split_effect = { K = k_uuii_yuzhou }
+	hd_j16_zhaobeng_split_effect = { K = k_luozhou }
+	hd_j16_zhaobeng_split_effect = { K = k_uuii_sili }
+	# ③ 天下通报
+	hd_j16_b4_res_wei_effect = { AS = hd_j16_zb_wei }
+	scope:hd_j16_zb_zhao = { save_scope_as = hd_news_a }
+	if = {
+		limit = { exists = scope:hd_j16_zb_wei }
+		scope:hd_j16_zb_wei = { save_scope_as = hd_news_b }
+	}
+	else = {
+		scope:hd_j16_zb_zhao = { save_scope_as = hd_news_b }
+	}
+	hd_world_news_send_all_effect = { EVENT = hd_j16.1035 }
+	debug_log = "HD_J16 e3_r12 FIRE zhaobeng"
+}
+
+# 按州割据一州。$K$ = 州（王国）头衔键。赵主 scope:hd_j16_zb_zhao；段龛 scope:hd_j16_zb_kan（可不存在）
+hd_j16_zhaobeng_split_effect = {
+	if = {
+		limit = { exists = scope:hd_j16_zbs_w }
+		clear_saved_scope = hd_j16_zbs_w
+	}
+	scope:hd_j16_zb_zhao = {
+		ordered_vassal = {
+			limit = {
+				hd_j16_b4_zhaobeng_gov_trigger = { K = $K$ }
+				NOT = { scope:hd_j16_zb_kan ?= this }
+			}
+			order_by = capital_county.development_level
+			save_scope_as = hd_j16_zbs_w
+		}
+	}
+	if = {
+		limit = { exists = scope:hd_j16_zbs_w }
+		scope:hd_j16_zbs_w = { hd_nbc_become_independent_effect = yes }
+		if = {
+			limit = {
+				OR = {
+					NOT = { exists = title:$K$.holder }
+					title:$K$.holder ?= scope:hd_j16_zb_zhao
+				}
+				NOT = { scope:hd_j16_zb_zhao.primary_title = title:$K$ }
+			}
+			create_title_and_vassal_change = { type = granted save_scope_as = hd_j16_zbs_change add_claim_on_loss = no }
+			title:$K$ = {
+				change_title_holder = {
+					holder = scope:hd_j16_zbs_w
+					change = scope:hd_j16_zbs_change
+				}
+			}
+			resolve_title_and_vassal_change = scope:hd_j16_zbs_change
+			scope:hd_j16_zbs_w = { set_primary_title_to = title:$K$ }
+			# 州头衔到手后州主高于郡级，州内其他郡守才能改投（报错清单：被收编者最高头衔须低于新主）
+			scope:hd_j16_zb_zhao = {
+				every_vassal = {
+					limit = {
+						hd_j16_b4_zhaobeng_gov_trigger = { K = $K$ }
+						NOT = { this = scope:hd_j16_zbs_w }
+					}
+					hd_nbc_swear_fealty_effect = { LIEGE = scope:hd_j16_zbs_w }
+				}
+			}
+			debug_log = "HD_J16 e3_r12 FIRE split_$K$"
+		}
+		else = {
+			debug_log = "HD_J16 e3_r12 FIRE split_$K$_lord_only"
+		}
+	}
+	else = {
+		debug_log = "HD_J16 e3_r12 SKIP split_$K$_no_candidate"
+	}
+}
+
+############################################################
 # E3-Z50 石祗称帝于襄国（后赵分裂）【软】（03 §2.1）
 # 窗口 350.3.1 – 350.12.31。上游 E3-R10 已 fire（hd_hev_346_ranmin）；襄国郡 d_xiangguo 的持有者属上党石氏（E2-Z90 授地后即石祗）。
 # AI：持有者独立，国号赵、称帝（hd_nbc_found_realm_effect STYLE = huangdi FIXED = no）；无主或主君已亡的石氏小君主（郡级以下、AI、独立）改投他；
@@ -1228,6 +1386,92 @@ hd_j16_shizhi_effect = {
 	save_scope_as = hd_news_a
 	hd_world_news_send_effect = { EVENT = hd_j16.1046 }
 	debug_log = "HD_J16 e3_z50 FIRE shizhi"
+}
+
+############################################################
+# E3-R15 冉闵讨赵（苍亭之战）【软】KIND = cangting350（10-31 玩家反馈新增；史实 350 年冉闵破石祗诸将于苍亭）
+# 窗口 350.4.1 – 350.12.31。上游 E3-R12 后赵崩解已 fire（hd_j16_zhaobeng_result）；魏主（冉魏之主，独立）与赵主（hd_j16_b4_res_zhao2_effect）接壤、未交战。
+# 目标：赵国内与魏接壤、发展度最高的县（襄国郡除外，留给 E3-R20）所在郡；关键县改为该接壤县（照 hd_j16_b4_civil_war_go_effect：wct 规则 2 从接壤县出发，必在目标内）。
+# 魏主 AI 宣战；魏主玩家 hd_j16.1036 a 出兵 / b 不打（跳过）。开战后冉闵事件兵 1 万；天下通报 hd_j16.1037（攻守双方不收）。
+# 只此一场（boki 10-31 拍板），胜负不另加效果，接 351 年襄国之战。R12 跳过即跳过。跨开局：370、404 自保护。
+# 变量：hd_j16_cangting350_done/_skip/_wlog/_go/_asked/_started/_won/_lost/_att/_def/_key；面板 hd_hev_j16_cangting350
+############################################################
+hd_j16_node_cangting_effect = {
+	if = {
+		limit = { NOT = { has_global_variable = hd_j16_cangting350_done } }
+		if = {
+			limit = { global_var:hd_j16_start_year >= 370 }
+			set_global_variable = hd_j16_cangting350_done
+			debug_log = "HD_J16 e3_r15 SKIP prestart"
+		}
+		else_if = {
+			limit = { has_global_variable = hd_j16_cangting350_started }
+			hd_j16_304_war_result_effect = { KIND = cangting350 COUNTY = global_var:hd_j16_cangting350_key LOG = e3_r15 }
+		}
+		else_if = {
+			limit = { current_date >= 350.4.1 }
+			if = {
+				limit = { current_date >= 351.1.1 }
+				hd_j16_304_skip_effect = { KEY = cangting350 LOG = e3_r15 WHY = window_closed }
+			}
+			else_if = {
+				limit = { has_global_variable = hd_j16_zhaobeng_skip }
+				hd_j16_304_skip_effect = { KEY = cangting350 LOG = e3_r15 WHY = no_zhaobeng }
+			}
+			else = {
+				hd_j16_b4_res_wei_effect = { AS = hd_j16_ct_wei }
+				hd_j16_b4_res_zhao2_effect = { AS = hd_j16_ct_zhao }
+				if = {
+					limit = { exists = scope:hd_j16_ct_cnty }
+					clear_saved_scope = hd_j16_ct_cnty
+				}
+				if = {
+					limit = {
+						has_global_variable = hd_j16_zhaobeng_result
+						exists = scope:hd_j16_ct_wei
+						exists = scope:hd_j16_ct_zhao
+						NOT = { scope:hd_j16_ct_wei = scope:hd_j16_ct_zhao }
+					}
+					scope:hd_j16_ct_zhao = {
+						ordered_sub_realm_county = {
+							limit = {
+								exists = duchy
+								NOT = { duchy = title:d_xiangguo }
+								any_neighboring_county = {
+									holder ?= {
+										OR = {
+											this = scope:hd_j16_ct_wei
+											top_liege = scope:hd_j16_ct_wei
+										}
+									}
+								}
+							}
+							order_by = development_level
+							save_scope_as = hd_j16_ct_cnty
+						}
+					}
+				}
+				if = {
+					limit = {
+						exists = scope:hd_j16_ct_cnty
+						NOT = { scope:hd_j16_ct_wei = { is_at_war_with = scope:hd_j16_ct_zhao } }
+					}
+					hd_j16_b4_war_decide_effect = { ATT = scope:hd_j16_ct_wei DEF = scope:hd_j16_ct_zhao TARGET = scope:hd_j16_ct_cnty.duchy KIND = cangting350 LOG = e3_r15 EVENT = hd_j16.1036 }
+					if = {
+						limit = { exists = scope:hd_nbc_war_cangting350 }
+						set_global_variable = { name = hd_j16_cangting350_key value = scope:hd_j16_ct_cnty }
+						hd_j16_304_army_effect = { WHO = scope:hd_j16_ct_wei SIZE = 10000 NAME = hd_nbc_ranmin_army_name }
+						scope:hd_j16_ct_wei = { save_scope_as = hd_news_a }
+						scope:hd_j16_ct_zhao = { save_scope_as = hd_news_b }
+						hd_world_news_send_skip_both_effect = { EVENT = hd_j16.1037 }
+					}
+				}
+				else = {
+					hd_j16_304_wait_effect = { KEY = cangting350 LOG = e3_r15 WHY = not_ready }
+				}
+			}
+		}
+	}
 }
 
 ############################################################
@@ -3843,6 +4087,30 @@ hd_j16_b4_res_zhao_effect = {
 	else_if = {
 		limit = { title:d_xiangguo.holder.top_liege ?= { hd_j16_b4_shi_lord_trigger = yes } }
 		title:d_xiangguo.holder.top_liege = { save_scope_as = $AS$ }
+	}
+}
+
+# 赵主（E3-R12 后赵崩解、E3-R15 讨赵用，10-31）：R10 记下的赵主主头衔（hd_j16_zhaobeng_title）的现持有者——在世、独立、有地、不是冉魏之主；
+#   石鉴被杀后继承人未必姓石（继承法定），所以先按头衔取；取不到退回 hd_j16_b4_res_zhao_effect
+hd_j16_b4_res_zhao2_effect = {
+	if = {
+		limit = { exists = scope:$AS$ }
+		clear_saved_scope = $AS$
+	}
+	if = {
+		limit = {
+			has_global_variable = hd_j16_zhaobeng_title
+			global_var:hd_j16_zhaobeng_title.holder ?= {
+				is_alive = yes
+				is_independent_ruler = yes
+				is_landed = yes
+				NOT = { hd_j16_b4_ran_lord_trigger = yes }
+			}
+		}
+		global_var:hd_j16_zhaobeng_title.holder = { save_scope_as = $AS$ }
+	}
+	else = {
+		hd_j16_b4_res_zhao_effect = { AS = $AS$ }
 	}
 }
 
