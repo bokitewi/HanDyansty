@@ -95,9 +95,9 @@ birth.0001 = {
 		#It is not a bastard and not complicated
 		if = {
 			limit = {
-				NOR = {
-					has_character_flag = unmarried_bastard_pregnancy
-					has_character_flag = bastard_pregnancy
+				has_none_of_variables = {
+					name = unmarried_bastard_pregnancy
+					name = bastard_pregnancy
 				}
 			}
 			random_list = {
@@ -150,6 +150,7 @@ birth.0001 = {
 		# Married mother with secret bastard
 		else_if = {
 			limit = {
+				NOT = { scope:mother = { has_variable = suppress_bastardy } }
 				has_character_flag = bastard_pregnancy
 				NOT = { has_character_flag = pregnancy_real_father_of_bastard_is_known_flag }
 			}
@@ -158,6 +159,7 @@ birth.0001 = {
 		#Unmarried mother with unknown father of child
 		else_if = {
 			limit = {
+				NOT = { scope:mother = { has_variable = suppress_bastardy } }
 				has_character_flag = unmarried_bastard_pregnancy
 				NOT = { has_character_flag = pregnancy_real_father_of_bastard_is_known_flag }
 			}
@@ -167,9 +169,10 @@ birth.0001 = {
 		#Known bastard
 		else_if = {
 			limit = {
-				OR = {
-					has_character_flag = bastard_pregnancy
-					has_character_flag = unmarried_bastard_pregnancy
+				NOT = { scope:mother = { has_variable = suppress_bastardy } }
+				has_variable = {
+					name = bastard_pregnancy
+					name = unmarried_bastard_pregnancy
 				}
 				has_character_flag = pregnancy_real_father_of_bastard_is_known_flag
 			}
@@ -210,6 +213,15 @@ birth.0001 = {
 				}
 			}
 		}
+		else_if = {
+			limit = {
+				scope:mother = { has_variable = suppress_bastardy }
+			}
+			scope:child = {
+				remove_trait = bastard
+				add_trait = wild_oat
+			}
+		}
 
 		scope:mother = {
 			every_parent = { # Grandparents
@@ -246,21 +258,20 @@ birth.0001 = {
 					OR = {
 						any_consort = {
 							this = scope:mother
-							NOT = { has_character_flag = pregnancy_real_father_of_bastard_is_known_flag }
 						}
 						#If you split up before the pregnancy was showing etc.
 						any_former_spouse = {
 							this = scope:mother
-							NOT = { has_character_flag = pregnancy_real_father_of_bastard_is_known_flag }
 						}
 						any_former_concubine = {
 							this = scope:mother
-							NOT = { has_character_flag = pregnancy_real_father_of_bastard_is_known_flag }
 						}
 						any_former_concubinist = {
 							this = scope:mother
-							NOT = { has_character_flag = pregnancy_real_father_of_bastard_is_known_flag }
 						}
+					}
+					scope:mother = {
+						NOT = { has_character_flag = pregnancy_real_father_of_bastard_is_known_flag }
 					}
 					NOT = { is_in_list = illegitimacy_secret_knowers }
 				}
@@ -288,7 +299,7 @@ birth.0001 = {
 							}
 						}
 						else = { #Normal event
-							trigger_event = birth.1003 	
+							trigger_event = birth.1003
 						}
 					}
 					5 = { #Other parent (mother) suggest a name
@@ -298,6 +309,9 @@ birth.0001 = {
 							scope:child = {
 								mother ?= { is_ai = yes }
 								NOT = { has_trait = twin }
+							}
+							scope:mother = {
+								NOT = { has_variable = suppress_bastardy }
 							}
 						}
 						opinion_modifier = {
@@ -356,6 +370,25 @@ birth.0001 = {
 							custom_tooltip = msg_grandchild_born_toast_desc
 						}
 					}
+				}
+			}
+		}
+
+		# borte case. temujin will get an option to deny the child in this case.
+		scope:mother = {
+			if = {
+				limit = {
+					has_variable = suppress_bastardy
+				}
+				primary_spouse ?= {
+					if = {
+						limit = {
+							is_male = yes
+						}
+						clear_saved_scope = father
+						save_scope_as = father
+					}
+					trigger_event = birth.1003
 				}
 			}
 		}
@@ -2233,6 +2266,7 @@ birth.2001 = {
 			value = bastard_legitimization_prestige_cost
 			multiply = -1
 		}
+		pam_childbirth_piety_reward_effect = yes
 
 		#To block multiple notifications
 		save_scope_value_as = {
@@ -2265,7 +2299,8 @@ birth.2001 = {
 				}
 				add_courtier = scope:child
 			}
-			else = {
+			else_if = {
+				limit = { scope:child = { is_imprisoned = no } }
 				scope:child = { visit_court_of = root.court_owner }
 			}
 		}
@@ -2280,8 +2315,9 @@ birth.2001 = {
 						}
 					}
 
+					save_temporary_scope_as = other_child
 					legitimize_bastard_interaction_opinions_effect = {
-						BASTARD = this
+						BASTARD = scope:other_child
 						HOUSE_HEAD = root.house.house_head
 						LEGITIMIZER = root
 					}
@@ -2339,6 +2375,7 @@ birth.2001 = {
 		}
 
 		custom_tooltip = bastard_remains_bastard_tt
+		pam_childbirth_piety_reward_effect = yes
 
 		#other_parent gets the correct birth event
 		scope:other_parent = {
@@ -2348,13 +2385,32 @@ birth.2001 = {
 		#Spouse of mother must know about baby
 		if = {
 			limit = {
-				scope:mother = {
-					is_married = yes
-					primary_spouse != scope:real_father
+				scope:mother.primary_spouse ?= {
+					NOR = {
+						this = scope:legitimizer
+						this = scope:other_parent
+						this = scope:real_father
+					}
 				}
 			}
 			scope:mother.primary_spouse = {
 				trigger_event = birth.2102
+			}
+		}
+
+		# Spouse of father must know about baby
+		if = {
+			limit = {
+				scope:real_father.primary_spouse ?= {
+					NOR = {
+						this = scope:legitimizer
+						this = scope:other_parent
+						this = scope:mother
+					}
+				}
+			}
+			scope:real_father.primary_spouse = {
+				trigger_event = birth.2104
 			}
 		}
 
@@ -3072,8 +3128,22 @@ birth.3032 = {
 	type = character_event
 	title = birth.3031.t
 	desc = {
-		desc = birth.3031.start.desc
 		first_valid = {
+			triggered_desc = {
+				trigger = {
+					scope:child = { newborn_is_bastard = yes }
+				}
+				desc = birth.3032.start.bastard.desc
+			}
+			desc = birth.3031.start.desc
+		}
+		first_valid = {
+			triggered_desc = {
+				trigger = {
+					scope:child = { newborn_is_bastard = yes }
+				}
+				desc = birth.3032.bastard.desc
+			}
 			triggered_desc = {
 				trigger = {
 					scope:child = { any_parent = { highest_held_title_tier >= tier_kingdom } }

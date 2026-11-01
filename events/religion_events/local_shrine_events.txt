@@ -13,7 +13,7 @@ scripted_trigger has_two_local_shrine_options_trigger = {
 		exists = scope:temple_holding_location
 		exists = scope:forest_location
 		exists = scope:point_of_interest_location
-		exists = scope:mount_tai_location
+		# HD 2026-11-01：删 exists = scope:mount_tai_location（泰山分支已移除）
 	}
 }
 
@@ -58,10 +58,284 @@ local_rites.10 = {
 	}
 }
 
+# HD 2026-11-01：恢复原版（按决定整段删除泰山封禅分支：immediate 里 h_china/b_qianfeng 判定与「前往泰山」选项；泰山由 mod 自制封禅活动 zz_hd_hanfl_fengshan 负责）
 local_rites.1 = {
 	type = character_event
-	hidden = yes
-	trigger = { always = no }
+	title = local_rites.1.t
+	desc = local_rites.1.desc
+	theme = faith
+
+	override_background = {
+		reference = throne_room
+	}
+
+	left_portrait = {
+		character = root
+		animation = personality_rational
+	}
+
+	immediate = {
+		# Stop characters from planning multiple activities at once.
+		add_character_flag = {
+			flag = planning_an_activity
+			days = 30
+		}
+
+		capital_barony.title_province = {
+			save_scope_as = capital_location
+		}
+
+		# Pick out possible locations
+		# First any Special Building Shrines
+		# Everyone else
+		if = {
+			limit = {
+				has_two_local_shrine_options_trigger = no
+			}
+			random_sub_realm_barony = {
+				limit = {
+					this != root.capital_barony
+					title_province = {
+						has_building_with_flag = travel_point_of_interest_religious
+					}
+				}
+				title_province = { save_scope_as = point_of_interest_location }
+			}
+		}
+		#Now we look for Mountains
+		if = {
+			limit = {
+				has_two_local_shrine_options_trigger = no
+			}
+			random_sub_realm_barony = {
+				limit = {
+					this != root.capital_barony
+					trigger_if = {
+						limit = { exists = scope:point_of_interest_location }
+						title_province != scope:point_of_interest_location
+					}
+					title_province = {
+						OR = {
+							terrain = mountains
+							terrain = desert_mountains
+						}
+					}
+				}
+				title_province = { save_scope_as = mountains_location }
+			}
+		}
+		#Now we look for any Temple Holding
+		if = {
+			limit = {
+				has_two_local_shrine_options_trigger = no
+			}
+			random_sub_realm_barony = {
+				limit = {
+					this != root.capital_barony
+					trigger_if = {
+						limit = { exists = scope:point_of_interest_location }
+						title_province != scope:point_of_interest_location
+					}
+					title_province = {
+						has_holding_type = church_holding
+					}
+				}
+				title_province = { save_scope_as = temple_holding_location }
+			}
+		}
+		#Now we look for Hills
+		if = {
+			limit = {
+				has_two_local_shrine_options_trigger = no
+			}
+			random_sub_realm_barony = {
+				limit = {
+					this != root.capital_barony
+					trigger_if = {
+						limit = { exists = scope:point_of_interest_location }
+						title_province != scope:point_of_interest_location
+					}
+					title_province = {
+						OR = {
+							terrain = hills
+							terrain = terraced_hills
+						}
+					}
+				}
+				title_province = { save_scope_as = hills_location }
+			}
+		}
+		#Any Forests?
+		if = {
+			limit = {
+				has_two_local_shrine_options_trigger = no
+			}
+			random_sub_realm_barony = {
+				limit = {
+					this != root.capital_barony
+					trigger_if = {
+						limit = { exists = scope:point_of_interest_location }
+						title_province != scope:point_of_interest_location
+					}
+					title_province = {
+						OR = {
+							terrain = forest
+							terrain = taiga
+						}
+					}
+				}
+				title_province = { save_scope_as = forest_location }
+			}
+		}
+		#If we found nothing we look to the top realm
+		if = {
+			limit = {
+				NOT = { exists = scope:point_of_interest_location } #Because this is the one we try to save.
+				has_two_local_shrine_options_trigger = no
+			}
+			top_liege = {
+				random_sub_realm_barony = {
+					limit = {
+						this != root.capital_barony
+						this.kingdom = root.capital_barony.kingdom #If possible we should keep close to where we started
+						title_province = {
+							has_building_with_flag = travel_point_of_interest_religious
+						}
+					}
+					alternative_limit = {
+						this != root.capital_barony
+						title_province = {
+							has_building_with_flag = travel_point_of_interest_religious
+						}
+					}
+					title_province = { save_scope_as = point_of_interest_location }
+				}
+			}
+		}
+		#We also try this a second time for landless vassals.
+		if = {
+			limit = {
+				has_two_local_shrine_options_trigger = no
+				NOT = { exists = scope:point_of_interest_location }
+			}
+			top_liege = {
+				random_sub_realm_barony = {
+					limit = {
+						this != root.capital_barony
+						this.kingdom = root.capital_barony.kingdom #If possible we should keep close to where we started
+						title_province = {
+							has_building_with_flag = travel_point_of_interest_religious
+						}
+					}
+					alternative_limit = {
+						this != root.capital_barony
+						title_province = {
+							has_building_with_flag = travel_point_of_interest_religious
+						}
+					}
+					title_province = { save_scope_as = point_of_interest_location }
+				}
+			}
+		}
+		#And last but not least we try to save one for adventurers
+		if = {
+			limit = {
+				has_two_local_shrine_options_trigger = no
+				NOT = { exists = scope:point_of_interest_location }
+				exists = location.county
+			}
+			location.county.holder.top_liege = {
+				random_sub_realm_barony = {
+					limit = {
+						this != root.capital_barony
+						this.kingdom = root.capital_barony.kingdom #If possible we should keep close to where we started
+						title_province = {
+							has_building_with_flag = travel_point_of_interest_religious
+						}
+					}
+					alternative_limit = {
+						this != root.capital_barony
+						title_province = {
+							has_building_with_flag = travel_point_of_interest_religious
+						}
+					}
+					title_province = { save_scope_as = point_of_interest_location }
+				}
+			}
+		}
+	}
+
+	# Option 1: Rituals at home - Low Impact
+	option = { #This option does not set the flag for being unavailable
+		name = local_rites.1.home
+		set_variable = {
+			name = shrine_location
+			value = scope:capital_location
+		}
+		add_character_modifier = {
+			modifier = visit_local_shrine_modifier
+			days = local_shrine_duration
+		}
+		scope:capital_location = { #to show the location name in the difficulty custom tooltip
+			save_scope_as = tooltip_loc			
+		}
+		custom_tooltip = local_rites.1.home.tt
+		trigger_event = local_rites.3 #When you sacrifice at home this is instant.
+	}
+
+	# Visit Famous Shrine - High Impact, High Offering Expectation
+	option = {
+		trigger = { exists = scope:point_of_interest_location }
+		name = local_rites.1.major_shrine
+		local_shrine_at_location_effect = { SHRINE = point_of_interest }
+		custom_tooltip = local_rites.1.major_shrine.tt
+	}
+
+	# Shrine in the hills. Medium Impact
+	option = {
+		trigger = { exists = scope:hills_location }
+		name = local_rites.1.hills
+		local_shrine_at_location_effect = { SHRINE = hills }
+	}
+
+	# Shrine in the forest. Medium Impact
+	option = {
+		trigger = { exists = scope:forest_location }
+		name = local_rites.1.forest
+		local_shrine_at_location_effect = { SHRINE = forest }
+	}
+
+	# Shrine in the mountains. Medium Impact
+	option = {
+		trigger = { exists = scope:mountains_location }
+		name = local_rites.1.mountains
+		local_shrine_at_location_effect = { SHRINE = mountains }
+	}
+
+	# Shrine in the temple holding - High Impact, High Offerings.
+	option = {
+		trigger = { exists = scope:temple_holding_location }
+		name = local_rites.1.temple_holding
+		local_shrine_at_location_effect = { SHRINE = temple_holding }
+		custom_tooltip = local_rites.1.major_shrine.tt
+	}
+
+	# Option 3: Opt-out
+	option = {
+		name = local_shrine.optout
+		flavor = local_shrine.optout.flavor
+
+		ai_chance = {
+			base = 0
+		}
+
+		remove_decision_cooldown = visit_local_shrine_decision
+	}
+
+	after = {
+		remove_character_flag = planning_an_activity
+		trigger_event = local_rites.5
+	}
 }
 
 local_rites.5 = {
@@ -82,8 +356,12 @@ local_rites.5 = {
 				}
 				save_scope_as = companion
 			}
-			root.current_travel_plan ?= {
-				add_companion = scope:companion
+			# HD 2026-11-01：恢复原版（无随行者时不调用 add_companion）
+			if = {
+				limit = { exists = scope:companion }
+				current_travel_plan ?= {
+					add_companion = scope:companion
+				}
 			}
 		}
 	}
@@ -368,7 +646,7 @@ local_rites.3 = { #Destination - Making a Sacrifice
 		name = local_rites.3.pay_gold
 		trigger = {
 			scope:at_home = no
-			NOT = { has_title = title:h_china }
+			# HD 2026-11-01：删 NOT = { has_title = title:h_china }（泰山分支已移除，天子到别处神祠也须有可选项）
 		}
 		#Pay Gold - Get Piety
 		switch = {
@@ -399,7 +677,7 @@ local_rites.3 = { #Destination - Making a Sacrifice
 		name = local_rites.3.pay_prestige
 		trigger = {
 			scope:at_home = no
-			NOT = { has_title = title:h_china }
+			# HD 2026-11-01：删 NOT = { has_title = title:h_china }（同上）
 		}
 		#Pay Prestige - Get Piety
 		switch = {

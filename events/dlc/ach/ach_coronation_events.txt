@@ -5398,10 +5398,705 @@ scripted_effect ach_coronation_0018_choose_title_effect = {
 	}
 }
 
+# HD 2026-11-01：恢复原版（删 c_byzantion 背景覆盖）
 ach_coronation.0018 = {
 	type = activity_event
-	hidden = yes
-	trigger = { always = no }
+	title = ach_coronation.0018.t
+	desc = {
+		desc = ach_coronation.0018.desc
+		first_valid = {
+			triggered_desc = { # There's a Seneschal
+				trigger = {
+					scope:servant_boss = { has_court_position = seneschal_court_position }
+				}
+				desc = ach_coronation.0018.desc.seneschal
+			}
+			triggered_desc = { # There's a Steward
+				trigger = {
+					scope:servant_boss = { has_council_position = councillor_steward }
+				}
+				desc = ach_coronation.0018.desc.steward
+			}
+			triggered_desc = { # There is no Seneschal or Steward
+				trigger = { NOT = { exists = scope:servant_boss } }
+				desc = ach_coronation.0018.desc.fallback
+			}
+		}
+		first_valid = {
+			triggered_desc = {
+				trigger = { exists = scope:servant_boss }
+				desc = ach_coronation.0018.desc.ending.servant_boss
+			}
+			desc = ach_coronation.0018.desc.ending.no_servant_boss
+		}
+	}
+
+	left_portrait = {
+		character = root
+		animation = thinking
+		camera = camera_event_left
+	}
+
+	center_portrait = {
+		character = scope:servant
+		triggered_animation = {
+			trigger = { exists = scope:servant_boss }
+			animation = throne_room_messenger_3
+		}
+		animation = stress
+		camera = camera_event_right_pointing_left_fov50
+		hide_info = yes
+	}
+
+	right_portrait = {
+		character = scope:servant_boss
+		animation = stress
+		camera = camera_event_very_right_fov50
+	}
+
+	lower_left_portrait = {
+		character = scope:host
+	}
+
+	weight_multiplier = {
+		base = 1
+		# Far more likely if there is no Seneschal
+		modifier = {
+			NOT = { exists = court_position:seneschal_court_position }
+			factor = 3
+		}
+		# If there is a Seneschal than low Aptitude raises likeliness
+		activity_court_position_aptitude_negative_modifier = { LIEGE = root POS = seneschal }
+	}
+
+	theme = coronation_activity
+
+	cooldown = { years = 1 }
+	override_background = {
+		reference = courtyard
+	}
+
+	override_effect_2d = {
+		trigger = { exists = scope:rain_day }
+		reference = rain
+	}
+
+	trigger = {
+		ach_coronation_0018_eligible_family_member_trigger = yes
+		coronation_hostile_to_host_trigger = no
+		involved_activity = {
+			activity_host = {
+				# Don't potentially screw over a player Seneschal
+				trigger_if = {
+					limit = { exists = court_position:seneschal_court_position }
+					court_position:seneschal_court_position = { is_ai = yes }
+				}
+				# If we need a Steward but they're absent, make sure they're not a player so we can teleport them
+				trigger_else = {
+					cp:councillor_steward ?= { is_ai = yes }
+				}
+			}
+		}
+	}
+
+	immediate = {
+		# For the event art
+		create_character = {
+			save_scope_as = servant
+			employer = involved_activity.activity_host
+			template = servant_character
+			gender_female_chance = root_faith_dominant_gender_adjusted_female_chance
+		}
+		random_rain_snow_chance_effect = yes
+
+		involved_activity = {
+			hidden_effect = {
+				if = { # Grab a secret for the opt-out option
+					limit = {
+						any_attending_character = {
+							this != root
+							is_available_in_activity_trigger = yes
+							any_secret = {
+								NOT = { is_known_by = root }
+							}
+						}
+					}
+					random_attending_character = {
+						limit = {
+							this != root
+							is_available_in_activity_trigger = yes
+							any_secret = {
+								NOT = { is_known_by = root }
+							}
+						}
+						save_scope_as = secret_holder
+						random_secret = {
+							limit = { NOT = { is_known_by = root } }
+							save_scope_as = secret_to_reveal
+						}
+					}
+				}
+				else = { # Create one if you can't find one
+					random_attending_character = {
+						limit = {
+							this != root
+							is_available_in_activity_trigger = yes
+						}
+
+						weight = {
+							base = 1
+							# Prefer interesting characters (but not by too much)
+							modifier = {
+								add = 4
+								is_of_major_interest_to_root_trigger = yes
+							}
+							modifier = {
+								add = 2
+								is_of_minor_interest_to_root_trigger = yes
+							}
+						}
+
+						give_random_likely_secret_effect = yes
+						save_scope_as = secret_holder
+						random_secret = {
+							limit = { NOT = { is_known_by = root } }
+							save_scope_as = secret_to_reveal
+						}
+					}
+				}
+				activity_host = {
+					save_scope_as = host
+					if = { # If the Seneschal exists and isn't AI then they're the Servant Boss
+						limit = {
+							court_position:seneschal_court_position ?= { is_ai = yes }
+						}
+						court_position:seneschal_court_position = { save_scope_as = servant_boss }
+					}
+					else = { # Else it's the Steward
+						cp:councillor_steward = {
+							save_scope_as = servant_boss
+						}
+					}
+				}
+				scope:servant_boss = {
+					if = { # Teleport them if they're not at the coronation
+						limit = { location != scope:host.involved_activity.activity_location }
+						set_location = { location = scope:host.involved_activity.activity_location }
+					}
+					if = { # And add them to the activity if they're not in it
+						limit = { can_join_activity = scope:host.involved_activity }
+						add_to_activity_without_travel = scope:host.involved_activity
+					}
+				}
+			}
+		}
+	}
+
+	option = { # A: Seize Advantages | Offer Support: Take charge of the servants
+		name = ach_coronation.0018.a.intent
+		reason = activity_intent
+		add_internal_flag = special
+
+		trigger = {
+			OR = {
+				has_activity_intent = coronation_seize_advantages
+				has_activity_intent = coronation_offer_support
+			}
+		}
+
+		if = {
+			limit = { has_trait = diligent }
+			custom_tooltip = because_you_have_diligent_tt
+		}
+		else = {
+			add_character_modifier = {
+				modifier = exhausted_modifier
+				years = 10
+			}
+		}
+
+		duel = {
+			skill = stewardship
+			value = average_skill_rating
+			8 = {
+				compare_modifier = {
+					value = scope:duel_value
+					multiplier = 2
+				}
+				desc = ach_coronation.0018.a.tt_success
+
+				custom_tooltip = ach_can_refuse_reward
+
+				if = { # Offer a title
+					limit = { # Host has a title to give
+						scope:host = {
+							any_held_title = { ach_coronation_0018_grantable_title_trigger = yes }
+							# And doesn't hate you
+							NOR = {
+								opinion = {
+									target = scope:host
+									value <= medium_negative_opinion
+								}
+								has_any_bad_relationship_with_character_trigger = { CHARACTER = root }
+							}
+						}
+						# Host can actually give you the title
+						can_be_granted_titles_by = { RULER = scope:host }
+						# Host isn't giving a vassal more land just for being mildly helpful
+						is_landed = no
+					}
+
+					custom_tooltip = ach_coronation.0018.a.tt.vassal
+
+					hidden_effect = {
+						save_scope_value_as = {
+							name = reward_type
+							value = flag:title
+						}
+					}
+				}
+				else_if = { # Offer the Seneschal spot
+					limit = {
+						scope:host = {
+							can_appoint_char_to_court_position = {
+								CHAR = scope:host
+								COURT_POS = seneschal_court_position
+							}
+						}
+					}
+
+					show_as_tooltip = {
+						court_position_grant_effect = {
+							POS = seneschal
+							EMPLOYER = scope:host
+							CANDIDATE = root
+						}
+					}
+
+					hidden_effect = {
+						save_scope_value_as = {
+							name = reward_type
+							value = flag:court_position
+						}
+					}
+				}
+				else = { # Give public praise
+					show_as_tooltip = {
+						add_prestige = medium_prestige_gain
+
+						involved_activity = {
+							every_attending_character = {
+								limit = {
+									this != root
+									this != scope:host
+								}
+								custom = every_guest_scope_tt
+								add_opinion = {
+									target = root
+									modifier = impressed_opinion
+									opinion = 10
+								}
+							}
+						}
+					}
+
+					hidden_effect = {
+						save_scope_value_as = {
+							name = reward_type
+							value = flag:praise
+						}
+					}
+				}
+
+				send_interface_toast = {
+					title = ach_coronation.0018.a.tt_success
+					reverse_add_opinion = {
+						modifier = helpful_opinion
+						target = scope:host
+						opinion = 15
+					}
+					hidden_effect = {
+						# Player gets a chance to refuse the reward
+						trigger_event = ach_coronation.0019
+					}
+				}
+			}
+			12 = {
+				compare_modifier = {
+					value = scope:duel_value
+					multiplier = -2
+					min = -9
+				}
+				desc = ach_coronation.0018.a.tt_failure
+				send_interface_toast = {
+					title = ach_coronation.0018.a.tt_failure
+					stress_and_fulfillment_impact = {
+						base = medium_stress_impact_gain
+						arrogant = minor_stress_impact_gain
+					}
+				}
+			}
+		}
+		stress_and_fulfillment_impact = {
+			base = minor_stress_impact_gain
+			arrogant = minor_stress_impact_gain
+			lazy = medium_stress_impact_gain
+			diligent = medium_stress_impact_loss
+		}
+
+		ai_chance = {
+			base = 150
+			modifier = {
+				has_trait = diligent
+				add = 100
+			}
+			modifier = {
+				has_trait = lazy
+				add = -50
+			}
+			modifier = {
+				has_trait = arrogant
+				add = -25
+			}
+		}
+	}
+
+	option = { # A: Try to help with preparations
+		name = ach_coronation.0018.a
+		skill = stewardship
+
+		highlight_portrait = scope:servant_boss
+
+		trigger = {
+			NOR = {
+				has_activity_intent = coronation_seize_advantages
+				has_activity_intent = coronation_offer_support
+			}
+		}
+
+		if = {
+			limit = {
+				NOT = { has_trait = diligent }
+			}
+			add_character_modifier = {
+				modifier = exhausted_modifier
+				years = 10
+			}
+		}
+
+		# Does servant_boss	feel like you did them a solid or tried to steal their job?
+		if = {
+			limit = {
+				exists = scope:servant_boss
+			}
+			if = {
+				limit = { # You're diplomatic and smooth things over
+					OR = {
+						has_trait = gregarious
+						has_trait = diplomat
+					}
+				}
+				custom_tooltip = ach_coronation.0018.diplomacy_trait.tt
+				send_interface_toast = {
+					title = ach_coronation.0018.d.pleased_servant_boss
+					left_icon = scope:servant_boss
+					reverse_add_opinion = {
+						modifier = thankful_opinion
+						target = scope:servant_boss
+						opinion = 25
+					}
+				}
+			}
+			else_if = {
+				limit = { # They're not the type of person to perceive this as a slight
+					scope:servant_boss = {
+						NOR = {
+							has_trait = arrogant
+							has_trait = ambitious
+							has_trait = diligent
+							has_trait = vengeful
+						}
+					}
+				}
+				send_interface_toast = {
+					title = ach_coronation.0018.d.pleased_servant_boss
+					left_icon = scope:servant_boss
+					reverse_add_opinion = {
+						modifier = thankful_opinion
+						target = scope:servant_boss
+						opinion = 20
+					}
+				}
+			}
+			else = { # Else they get annoyed
+				custom_tooltip = ach_coronation.0018.d.annoyed_servant_boss
+				send_interface_toast = {
+					title = ach_coronation.0018.d.annoyed_servant_boss
+					left_icon = scope:servant_boss
+					reverse_add_opinion = {
+						modifier = annoyed_opinion
+						target = scope:servant_boss
+						opinion = -20
+					}
+				}
+			}
+		}
+
+		duel = {
+			skill = stewardship
+			value = average_skill_rating
+			8 = {
+				compare_modifier = {
+					value = scope:duel_value
+					multiplier = 2
+				}
+				desc = ach_coronation.0018.a.tt_success
+				send_interface_toast = {
+					title = ach_coronation.0018.a.tt_success
+					scope:host = {
+						add_opinion = {
+							modifier = helpful_opinion
+							target = root
+							opinion = 15
+						}
+					}
+				}
+			}
+			12 = {
+				compare_modifier = {
+					value = scope:duel_value
+					multiplier = -2
+					min = -9
+				}
+				desc = ach_coronation.0018.a.tt_failure
+				send_interface_toast = {
+					title = ach_coronation.0018.a.tt_failure
+					stress_and_fulfillment_impact = {
+						base = minor_stress_impact_gain
+						arrogant = minor_stress_impact_gain
+					}
+				}
+			}
+		}
+
+		stress_and_fulfillment_impact = {
+			# Work is hard
+			base = minor_stress_impact_gain
+			# But not for some
+			diligent = medium_stress_impact_loss
+			# And for others it's worth it
+			ambitious = minor_stress_impact_loss
+			# Doesn't want the clout
+			content = minor_stress_impact_gain
+			# This sounds a lot like labor
+			arrogant = minor_stress_impact_gain
+			lazy = medium_stress_impact_gain
+		}
+
+		ai_chance = {
+			base = 100
+			modifier = {
+				has_trait = diligent
+				add = 25
+			}
+			modifier = {
+				has_trait = ambitious
+				add = 25
+			}
+			modifier = {
+				has_trait = content
+				add = -25
+			}
+			modifier = {
+				has_trait = arrogant
+				add = -25
+			}
+			modifier = {
+				has_trait = lazy
+				add = -50
+			}
+		}
+	}
+
+	option = { # B: Gossip with the servants instead
+		name = ach_coronation.0018.b
+		skill = intrigue
+
+		highlight_portrait = scope:servant
+
+		duel = {
+			skill = intrigue
+			value = average_skill_rating
+			75 = {
+				desc = ach_coronation.0018.b.tt.gossip_with_servants
+				compare_modifier = {
+					value = scope:duel_value
+					multiplier = 5
+				}
+				show_chance = no
+				send_interface_toast = {
+					title = ach_coronation.0018.b.tt.gossip_with_servants
+					left_icon = root
+					add_character_modifier = {
+						modifier = ach_coronation_gossips_with_servants_modifier
+						years = 5
+					}
+				}
+			}
+			25 = {
+				compare_modifier = {
+					value = scope:duel_value
+					multiplier = -5
+				}
+				min = 10
+				show_chance = no
+				desc = ach_coronation.0018.b.tt.secret_unknown_desc
+				custom_tooltip = ach_coronation.0018.b.tt.secret_unknown
+				hidden_effect = {
+					send_interface_toast = {
+						title = ach_coronation.0018.b.tt.secret
+						left_icon = root
+						scope:secret_to_reveal = {
+							expose_secret = root
+						}
+					}
+				}
+			}
+		}
+		stress_and_fulfillment_impact = {
+			gregarious = minor_stress_impact_loss
+			# Sitting around and talking sucks, actually
+			impatient = minor_stress_impact_gain
+			shy = minor_stress_impact_gain
+			diligent = minor_stress_impact_gain
+			# Doesn't want to talk to poors
+			arrogant = medium_stress_impact_gain
+			# Looooves gossip
+			schemer = medium_stress_impact_loss
+			deceitful = medium_stress_impact_loss
+		}
+
+		ai_chance = {
+			base = 100
+			modifier = {
+				has_trait = lazy
+				add = 25
+			}
+			modifier = {
+				has_trait = gregarious
+				add = 25
+			}
+			modifier = {
+				has_trait = impatient
+				factor = 0.5
+			}
+			modifier = {
+				has_trait = diligent
+				NOR = { # Only wasting time if gossiping isn't your whole deal
+					has_trait = education_intrigue
+					has_trait = deceitful
+					has_trait = schemer
+				}
+				factor = 0.5
+			}
+			modifier = {
+				has_trait = shy
+				factor = 0.5
+			}
+			modifier = {
+				has_trait = arrogant
+				factor = 0.5
+			}
+			modifier = {
+				OR = {
+					has_trait = education_intrigue
+					has_trait = deceitful
+					has_trait = schemer
+				}
+				factor = 2
+			}
+		}
+	}
+
+	option = { # C: Stewardship Lifestyle: Study the ceremony
+		name = ach_coronation.0018.c
+		trigger = {
+			has_lifestyle = stewardship_lifestyle
+		}
+		skill = stewardship
+		reason = lifestyle
+
+		highlight_portrait = scope:servant
+		highlight_portrait = scope:servant_boss
+
+		add_stewardship_lifestyle_xp = minor_lifestyle_xp
+		add_character_modifier = {
+			modifier = ach_coronation_studying_ceremony_modifier
+			years = 5
+		}
+
+		stress_and_fulfillment_impact = {
+			diligent = minor_stress_impact_loss
+			# Super down for not talking
+			shy = minor_stress_impact_loss
+		}
+
+		ai_chance = {
+			base = 100
+			modifier = {
+				has_trait = diligent
+				add = 25
+			}
+			modifier = {
+				has_trait = shy
+				add = 25
+			}
+		}
+	}
+
+	option = { # D: Just chill
+		name = ach_coronation.0018.d
+
+		highlight_portrait = root
+
+		stress_and_fulfillment_impact = {
+			base = medium_stress_impact_loss
+			# Wants to do something
+			diligent = minor_stress_impact_gain
+			# Who really wants Host's approval?
+			content = minor_stress_impact_loss
+			# Super down for not talking
+			shy = minor_stress_impact_loss
+			# Doing *absolutely* nothing is based
+			lazy = medium_stress_impact_loss
+		}
+
+		ai_chance = {
+			base = 100
+			modifier = {
+				has_trait = content
+				add = 25
+			}
+			modifier = {
+				has_trait = shy
+				add = 25
+			}
+			modifier = {
+				has_trait = lazy
+				add = 50
+			}
+			modifier = {
+				has_trait = diligent
+				factor = 0.5
+			}
+		}
+	}
+
+	after = {
+		hidden_effect = {
+			scope:servant = { silent_disappearance_effect = yes }
+		}
+	}
 }
 
 ach_coronation.0019 = {

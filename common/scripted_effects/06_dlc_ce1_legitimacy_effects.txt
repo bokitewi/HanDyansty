@@ -108,16 +108,111 @@ grand_activity_participation_legitimacy_effect = {
 }
 
 # LEGITIMACY GAIN FOR WINNING A WAR
+# HD 2026-11-01：恢复原版 1.20.1.2（外层传参 + 函数体；删铁木真分支、拜占庭分支）
 add_legitimacy_attacker_victory_effect = {
-	war_end_legitimacy_effect = yes
+	war_end_legitimacy_effect = {
+		WINNER = scope:attacker
+		LOSER = scope:defender
+	}
 }
 
 add_legitimacy_attacker_defeat_effect = {
-	war_end_legitimacy_effect = yes
+	war_end_legitimacy_effect = {
+		WINNER = scope:defender
+		LOSER = scope:attacker
+	}
 }
 
 war_end_legitimacy_effect = {
-	# Vanilla-world historical setup is intentionally disabled.
+	# HD 2026-11-01：删原版铁木真对札木合分支（character:125501 / mpo_mongol_1），原 else 内容提到顶层
+	if = {
+		limit = {
+			any_in_list = { list = target_titles }
+		}
+		ordered_in_list = {
+			list = target_titles
+			order_by = tier
+			save_scope_as = target_title
+			save_scope_value_as = {
+				name = title_tier_minus_1
+				value = {
+					value = scope:target_title.tier
+					subtract = 1
+				}
+			}
+		}
+	}
+	$WINNER$ = {
+		if = {
+			limit = {
+				is_valid_for_legitimacy_change = yes
+				primary_title.tier <= $LOSER$.primary_title.tier
+			}
+			send_interface_toast = {
+				type = msg_legitimacy_gain
+				title = legitimacy_gain_toast
+				left_icon = $WINNER$
+				right_icon = $LOSER$
+
+				add_legitimacy = {
+					value = {
+						value = 1
+
+						# You get a lot of Legitimacy for punching above your weight
+						add = $LOSER$.primary_title.tier
+						subtract = primary_title.tier
+
+						multiply = 50
+					}
+
+					if = { # We give you extra Legitimacy for Religious Wars
+						limit = {
+							root.war ?= {
+								OR = {
+									using_cb = minor_religious_war
+									using_cb = religious_war
+								}
+							}
+						}
+						multiply = 2
+					}
+					else_if = { # And even more for Holy Wars
+						limit = {
+							root.war ?= {
+								OR = {
+									using_cb = major_religious_war
+									using_cb = undirected_great_holy_war
+									using_cb = directed_great_holy_war
+								}
+							}
+						}
+						multiply = 3
+					}
+
+					if = { # We give you extra Legitimacy for special On Start Wars
+						limit = {
+							root.war ?= {
+								OR = {
+									using_cb = norman_conquest_cb
+									using_cb = norwegian_invasion_cb
+									using_cb = sons_of_lothbrok_invasion_cb
+								}
+							}
+						}
+						multiply = 4
+					}
+
+					if = { # And we 50% increase whatever you have if you are a nomad
+						limit = {
+							government_has_flag = government_is_nomadic
+						}
+						multiply = 1.5
+					}
+				}
+			}
+		}
+		# HD 2026-11-01：删原版拜占庭额外正统性分支（title:e_byzantium 本 mod 不存在）
+	}
 }
 
 # LEGITIMACY FOR LOSING A FACTION WAR

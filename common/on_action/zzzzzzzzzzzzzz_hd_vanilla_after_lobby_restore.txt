@@ -1,0 +1,113 @@
+﻿# HD 2026-11-01：恢复原版 1.20.1.2 on_game_start_after_lobby 中的两段内容。
+# 本 mod 的 common/on_action/game_start.txt 整份遮蔽原版 game_start.txt，原版 after_lobby 的内容全部不执行。
+# 同名 on_action 全部文件里只能有一个 effect，所以这里挂一个新的子 on_action，不直接给 on_game_start_after_lobby 写 effect。
+#   1) 开局正统性：原版 every_ruler 里的「CE1 LEGITIMACY SETUP」，以及紧接着的曼荼罗政体正统性加倍。
+#      按用户选择：所有统治者都给，与原版相同；剧本脚本已经给过正统性的人也照给。
+#   2) 全局变量 game_has_started：原版在 after_lobby 的 effect 末尾设置（game_start.txt 7345 行），这里同样放在最后，不延迟。
+#      文件名用一串 z 开头，意在让本子项排在 mod 其他 after_lobby 开局子项（任命官员等）之后，与原版「开局设置全部完成后才设」一致。
+#      这依赖同名 on_action 列表按文件名顺序执行，尚未实测。
+
+on_game_start_after_lobby = {
+	on_actions = { hd_vanilla_after_lobby_restore }
+}
+
+hd_vanilla_after_lobby_restore = {
+	effect = {
+		every_ruler = {
+			### CE1 LEGITIMACY SETUP ###
+			if = {
+				limit = {
+					exists = this
+					has_legitimacy = yes
+				}
+				add_legitimacy = base_legitimacy_value
+			}
+
+			### MANDALA SETUP ###
+			# HD 2026-11-01：只恢复原版曼荼罗段里的正统性加倍；该段其余内容（开局政令、继承变量、家族特性计数、事件）不在本次恢复范围
+			if = {
+				limit = { government_has_flag = government_is_mandala }
+
+				#Triple Mandala's Legitimacy to make them not start at a negative expectation at game start
+				add_legitimacy = {
+					value = legitimacy
+					multiply = 2
+					if = {
+						limit = {
+							highest_held_title_tier > tier_duchy
+						}
+						multiply = 3
+					}
+					else = { multiply = 2 }
+				}
+			}
+		}
+
+		### 开局宫廷威仪：有王廷的统治者起步威仪设为期望值，并给朝会宽限（原版 on_game_start 979 段）
+		if = {
+			limit = { has_dlc_feature = royal_court }
+			every_character_with_royal_court = {
+				set_current_court_grandeur = court_grandeur_minimum_expected
+				apply_hold_court_grace_effect = yes
+				# Stops Hold Court reminders at game start
+				set_variable = {
+					name = last_hold_court_date
+					value = current_year
+				}
+			}
+		}
+
+		### 开局游戏规则（原版 after_lobby 3712 段；规则默认值均为关，只在玩家于大厅选了才生效）
+		### 性取向默认分布的少年重掷（原版 3598 段）不在恢复范围
+		if = {
+			limit = { has_game_rule = accepted_same_sex_relations }
+			game_rule_accepted_same_sex_relations_effect = yes
+		}
+		if = {
+			limit = { NOT = { has_game_rule = random_ruler_placement_off } }
+			game_rule_random_ruler_placement_effect = yes
+		}
+		if = {
+			limit = { has_game_rule = randomized_faiths_on }
+			game_rule_randomize_faith_effect = yes
+		}
+		if = {
+			limit = { has_game_rule = full_faith_acceptance }
+			game_rule_faith_acceptance_effect = yes
+		}
+		if = {
+			limit = { has_game_rule = full_gender_equality }
+			game_rule_full_gender_equality_effect = yes
+		}
+		else_if = {
+			limit = { has_game_rule = inversed_gender_equality }
+			game_rule_inversed_gender_equality_effect = yes
+		}
+		else_if = {
+			limit = { has_game_rule = lenient_gender_equality }
+			game_rule_lenient_gender_equality_effect = yes
+		}
+		if = {
+			limit = { NOT = { has_game_rule = sexuality_distribution_default } }
+			game_rule_sexuality_distribution_effect = yes
+		}
+		# 自动生成家族（本 mod 规则默认关；zz_hd_population_rules.txt）
+		every_ruler = {
+			limit = {
+				trigger_if = {
+					limit = { has_game_rule = on_generate_families_ai_only }
+					is_ai = yes
+				}
+				trigger_else = { has_game_rule = on_generate_families }
+			}
+			trigger_event = game_rule.1001
+		}
+
+		set_global_variable = game_has_started
+	}
+
+	# 圣地开局圣物（原版 after_lobby events 列表）
+	events = {
+		historical_artifacts.0050
+	}
+}

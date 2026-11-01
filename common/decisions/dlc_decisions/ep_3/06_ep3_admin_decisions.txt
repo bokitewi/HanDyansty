@@ -469,6 +469,7 @@ estate_granary_decision = {
 #############################################
 
 ### Governorship Confirmation ###
+# HD 2026-11-01：恢复原版 1.20.1.2（此前只因配图引用君士坦丁堡被停用；天朝总督可用）
 admin_confirmation_decision = {
 	picture = {
 		trigger = {
@@ -498,7 +499,7 @@ admin_confirmation_decision = {
 				top_liege ?= {
 					OR = {
 						culture = { has_cultural_pillar = heritage_byzantine }
-						always = no # UUII: absent vanilla title condition
+						always = no # HD 2026-11-01：原版判君士坦丁堡（本图无此头衔）
 						is_roman_emperor_primary_title_trigger = yes
 					}
 				}
@@ -516,27 +517,115 @@ admin_confirmation_decision = {
 	}
 
 	is_shown = {
-		always = no
+		is_governor = yes
+		liege ?= top_liege
+		top_liege ?= { tgp_is_ceremonial_regent_trigger = no } # Not 'actual' ruler
+		has_ep3_dlc_trigger = yes
+		is_playable_character = yes
 	}
 
 	is_valid = {
-		always = no
+		custom_tooltip = {
+			text = admin_confirmation_rank_tt
+			primary_title.tier >= main_administrative_tier # Governs a Province
+		}
+		custom_tooltip = {
+			text = admin_confirmation_liege_tt
+			top_liege != this
+			liege ?= top_liege
+		}
+		custom_tooltip = {
+			text = admin_confirmation_time_tt
+			primary_title ?= {
+				title_held_years >= 1
+			}
+		}
+		custom_tooltip = {
+			text = admin_confirmation_grace_valid_tt
+			has_none_of_variables = {
+				name = confirmation_grace
+				name = confirmation_cooldown_vassal
+			}
+		}
 	}
 
 	is_valid_showing_failures_only = {
-		always = no
+		is_available_adult = yes
+		liege ?= { is_available_adult = yes }
+		is_at_war_with_liege = no
+		trigger_if = {
+			limit = {
+				is_ai = no
+				has_royal_court = yes
+			}
+			has_spawned_court_events = no # should only be used for human players
+		}
+		trigger_if = {
+			limit = { is_ai = yes }
+			NOT = {
+				liege = { has_variable = confirmation_cooldown }
+			}
+		}
 	}
 
 	effect = {
-
+		set_variable = {
+			name = confirmation_liege_scope
+			value = liege
+		}
+		custom_tooltip = admin_confirmation_decision_effects
+		show_as_tooltip = {
+			stress_and_fulfillment_impact = {
+				shy = medium_stress_impact_gain
+				humble = medium_stress_impact_gain
+			}
+			custom_description_no_bullet = {
+				text = admin_confirmation_decision_tt_if_accepted
+				subject = root
+			}
+			admin_confirmation_vassal_reward_guts_effect = yes
+		}
+		save_scope_as = confirmation_vassal
+		liege ?= { save_scope_as = confirmation_liege }
+		switch = {
+			trigger = has_trait
+			shy = { add_stress = medium_stress_impact_gain }
+			humble = { add_stress = medium_stress_impact_gain }
+		}
+		start_travel_plan = {
+			destination = liege.capital_province
+			on_start_on_action = admin_confirmation_start
+			on_travel_planner_cancel_on_action = admin_confirmation_travel_planner_exit
+			on_arrival_event = ep3_decisions_event.2090
+			on_arrival_destinations = all_but_last
+		}
 	}
-	
+
 	ai_potential = {
-		always = no
+		is_at_war = no
 	}
 
 	ai_will_do = {
-		base = 0 # ai_will_do takes base, not value
+		base = 0
+		modifier = {
+			add = 50
+			prestige > standard_activity_base_cost
+		}
+		modifier = {
+			add = -50
+			has_relation_rival = liege
+		}
+		modifier = {
+			add = -25
+			opinion = {
+				target = liege
+				value < 0
+			}
+		}
+		modifier = { # Kings should be more weighted
+			add = 25
+			primary_title.tier >= tier_kingdom
+		}
 	}
 }
 
@@ -600,7 +689,7 @@ consolidate_rule_decision = {
 	}
 
 	ai_potential = {
-		highest_held_title_tier = tier_empire # Only for Emperors
+		highest_held_title_tier >= tier_empire # Only for Emperors
 		culture = { # Byzantium and others
 			has_cultural_tradition = tradition_religious_patronage
 		}
@@ -687,6 +776,8 @@ convert_to_administrative_decision = {
 		empire = 36
 		hegemony = 0
 	}
+
+	cooldown = { years = 20 }
 
 	is_shown = {
 		OR = {

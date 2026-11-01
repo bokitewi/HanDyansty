@@ -244,10 +244,28 @@ generic_scheme_process_ending_effect = {
 	save_scope_as = scheme
 	scheme_owner = { save_scope_as = owner }
 	## Targets.
-	scheme_target_character ?= { save_scope_as = target }
-	scheme_target_culture ?= { save_scope_as = target }
-	scheme_target_faith ?= { save_scope_as = target }
-	scheme_target_title ?= { save_scope_as = target }
+	scheme_target_character ?= {
+		save_scope_as = target
+		save_scope_as = target_character
+	}
+	scheme_target_culture ?= {
+		save_scope_as = target
+		culture_head ?= { save_scope_as = target_character }
+	}
+	scheme_target_faith ?= {
+		save_scope_as = target
+		main_rite.head_of_rite ?= { save_scope_as = target_character }
+	}
+	scheme_target_title ?= {
+		save_scope_as = target
+		if = {
+			limit = { exists = holder }
+			holder = { save_scope_as = target_character }
+		}
+		else = {
+			title_capital_county.holder = { save_scope_as = target_character }
+		}
+	}
 	# Success roll.
 	random = {
 		chance = scheme_success_chance
@@ -314,7 +332,7 @@ generic_scheme_process_ending_effect = {
 				scope:target.host = { save_scope_as = murder_exposer }
 			}
 			else = {
-				scope:target = { save_scope_as = murder_exposer }
+				scope:target_character = { save_scope_as = murder_exposer }
 			}
 			# Set up assorted cosmetics for murders.
 			scope:owner = {
@@ -324,7 +342,7 @@ generic_scheme_process_ending_effect = {
 				random_memory = {
 					limit = {
 						has_memory_category = negative
-						has_memory_participant = scope:target
+						has_memory_participant = scope:target_character
 						NOR = { # These read poorly
 							has_memory_type = became_rivals
 							has_memory_type = became_nemesis
@@ -369,6 +387,19 @@ generic_scheme_process_ending_effect = {
 			play_sound_effect = "event:/DLC/EP3/SFX/Stingers/Scheme_Rework/ep3_mx_sting_schemerework_positive"
 			mandala_trickster_increment_successful_schemes_effect = yes
 		}		
+
+		# Keep the commanding puppeteer informed of the outcome of the scheme they ordered.
+		if = {
+			limit = { scheme_type = murder }
+			notify_puppeteer_of_scheme_outcome_effect = { OWNER = scope:owner TARGET = scope:target TYPE = event_toast_effect_good TITLE = scheme_outcome_murder_success_puppeteer }
+		}
+		else_if = {
+			limit = { scheme_type = abduct }
+			notify_puppeteer_of_scheme_outcome_effect = { OWNER = scope:owner TARGET = scope:target TYPE = event_toast_effect_good TITLE = scheme_outcome_abduct_success_puppeteer }
+		}
+		else = {
+			notify_puppeteer_of_scheme_outcome_effect = { OWNER = scope:owner TARGET = scope:target TYPE = event_toast_effect_good TITLE = scheme_outcome_generic_success_puppeteer }
+		}
 	}
 	## Scheme failed.
 	else = {
@@ -385,6 +416,19 @@ generic_scheme_process_ending_effect = {
 		task_contract ?= { complete_task_contract = failure_standard }
 		trigger_event = { $FAILURE_EVENT_TYPE$ = $FAILURE_EVENT_ID$ }
 		scope:owner = { play_sound_effect = "event:/DLC/EP3/SFX/Stingers/Scheme_Rework/ep3_mx_sting_schemerework_negative" }
+
+		# Keep the commanding puppeteer informed of the outcome of the scheme they ordered.
+		if = {
+			limit = { scheme_type = murder }
+			notify_puppeteer_of_scheme_outcome_effect = { OWNER = scope:owner TARGET = scope:target TYPE = event_toast_effect_bad TITLE = scheme_outcome_murder_failure_puppeteer }
+		}
+		else_if = {
+			limit = { scheme_type = abduct }
+			notify_puppeteer_of_scheme_outcome_effect = { OWNER = scope:owner TARGET = scope:target TYPE = event_toast_effect_bad TITLE = scheme_outcome_abduct_failure_puppeteer }
+		}
+		else = {
+			notify_puppeteer_of_scheme_outcome_effect = { OWNER = scope:owner TARGET = scope:target TYPE = event_toast_effect_bad TITLE = scheme_outcome_generic_failure_puppeteer }
+		}
 	}
 }
 
@@ -12738,13 +12782,26 @@ scheme_owner_pov_murder_success_effect = {
 		}
 		add_piety = minor_piety_gain
 	}
+	if = {
+		limit = {
+			has_personal_tenet_flag = tenet_sacred_shadows_intrigue_scheme_fulfillment
+		}
+		change_spiritual_fulfillment = miniscule_spiritual_fulfillment_value
+	}
+	if = {
+		limit = {
+			has_personal_tenet_flag = tenet_fp3_fedayeen_other_faith_kill_fulfillment
+			NOT = { faith = scope:target.faith }
+		}
+		change_spiritual_fulfillment = minor_spiritual_fulfillment_value
+	}
 	# Stress.
 	## Murdered a rival.
 	if = {
 		limit = {
 			scope:owner = { has_relation_rival = scope:target }
 		}
-		stress_impact = {
+		stress_and_fulfillment_impact = {
 			base = murder_base_stress_value
 			vengeful = massive_stress_impact_loss
 			sadistic = minor_stress_impact_loss
@@ -12763,7 +12820,7 @@ scheme_owner_pov_murder_success_effect = {
 				}
 			}
 		}
-		stress_impact = {
+		stress_and_fulfillment_impact = {
 			base = murder_base_stress_value
 			sadistic = major_stress_impact_loss
 			callous = minor_stress_impact_loss
@@ -12772,7 +12829,7 @@ scheme_owner_pov_murder_success_effect = {
 	}
 	## Murdered anyone else.
 	else = {
-		stress_impact = {
+		stress_and_fulfillment_impact = {
 			base = murder_base_stress_value
 			sadistic = minor_stress_impact_loss
 			callous = miniscule_stress_impact_loss
@@ -14208,6 +14265,20 @@ abduct_success_effect = {
 			days = 2
 		}
 		trigger_event = abduct_outcome.5001
+	}
+
+	if = {
+		limit = {
+			scope:target = {
+				is_ai = no
+			}
+		}
+		show_as_tooltip = {
+			abduction_rivalry_progress_effect = yes
+		}
+	}
+	else = {
+		abduction_rivalry_progress_effect = yes
 	}
 
 	hard_imprison_character_effect = {
@@ -15928,6 +15999,7 @@ end_court_scheme_effect = {
 						limit = {
 							has_trait = lustful
 							is_ai = yes
+							accepts_adultery_without_penalty_trigger = no
 							any_relation = {
 								type = lover
 								this != scope:owner
@@ -15952,9 +16024,10 @@ end_court_scheme_effect = {
 										}
 									}
 								}
+								save_temporary_scope_as = lover
 								lover_breakup_effect = {
 									BREAKER = scope:target
-									LOVER = this
+									LOVER = scope:lover
 								}
 							}
 						}
@@ -15982,6 +16055,44 @@ end_court_scheme_effect = {
 			limit = { scope:court_outcome = flag:failure_hard }
 			#Shared effect with Seduce because failure in one scheme should block the other
 			scope:target = { seduction_block_character_effect = { CHARACTER = scope:owner } }
+		}
+
+		if = {
+			limit = {
+				OR = {
+					scope:court_outcome = flag:success_soulmate
+					scope:court_outcome = flag:success_kiss
+				}
+			}
+			polyamory_personal_tenet_scheme_reward_effect = yes
+		}
+
+		if = {
+			limit = {
+				OR = {
+					scope:court_outcome = flag:success_soulmate
+					scope:court_outcome = flag:success_kiss
+				}
+				is_spouse_of = scope:target
+				rite = { rite_has_parameter = tenet_be_fruitful_and_multiply_easy_spouse_romance }
+			}
+			add_character_modifier = {
+				modifier = tenet_be_fruitful_and_multiply_spouse_romance_fertility
+				years = 5
+			}
+			scope:target = {
+				add_character_modifier = {
+					modifier = tenet_be_fruitful_and_multiply_spouse_romance_fertility
+					years = 5
+				}
+			}
+			if = {
+				limit = { can_set_relation_friend_trigger = { CHARACTER = scope:target } }
+				set_relation_friend = {
+					target = scope:target
+					reason = friend_rekindled_spouse_romance
+				}
+			}
 		}
 		
 		# Tradition bonuses
@@ -16131,11 +16242,36 @@ begin_scheme_with_agents_effect = {
 			name = secrecy_grace_period
 			value = secrecy_grace_character_total_starting_value
 		}
+
+		# puppet schemes are always exposed to their puppeteer
+		if = {
+			limit = {
+				exists = scope:scheme_launcher.puppeteer
+			}
+			expose_scheme_to = scope:scheme_launcher.puppeteer
+		}
+
+		# We tag commanding_puppeteer only on puppeteer-ordered schemes
+		if = {
+			limit = {
+				exists = scope:actor
+				exists = scope:puppet_or_actor
+				scope:is_puppet_action ?= yes
+				scheme_owner = scope:puppet_or_actor
+			}
+			set_variable = {
+				name = commanding_puppeteer
+				value = scope:actor
+			}
+		}
 	}
 
-	open_view = {
-		view = intrigue_window
-		player = scope:new_scheme.scheme_owner
+	if = { # start_scheme can fail, leaving no scheme to open the view on
+		limit = { exists = scope:new_scheme }
+		open_view = {
+			view = intrigue_window
+			player = scope:new_scheme.scheme_owner
+		}
 	}
 }
 
@@ -16220,6 +16356,18 @@ begin_scheme_basic_effect = {
 		save_scope_as = new_scheme
 	}
 	scope:new_scheme ?= {
+		if = {
+			limit = {
+				exists = scope:actor
+				exists = scope:puppet_or_actor
+				scope:is_puppet_action ?= yes
+				scheme_owner = scope:puppet_or_actor
+			}
+			set_variable = {
+				name = commanding_puppeteer
+				value = scope:actor
+			}
+		}
 		# If we have a custom charge threshold to complete, set that here.
 		## Sway.
 		if = {

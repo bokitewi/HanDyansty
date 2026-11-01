@@ -1134,8 +1134,293 @@ ep3_adventurer_ai_contract_find_next_contract_effect = {
 	}
 }
 
+# HD 2026-11-01：恢复原版 1.20.1.2（删 Hereward 分支：character:90028 与 province:1525~1601）
 ep3_adventurer_ai_contract_find_next_kingdom_effect = {
-	# Vanilla-world historical setup is intentionally disabled.
+	save_scope_as = story
+	# Save previous kingdom for easy reference
+	var:previous_kingdom ?= { save_scope_as = previous_kingdom }
+	# Find de jure kingdom neighboring active kingdom
+	var:active_kingdom ?= {
+		save_scope_as = current_kingdom
+		# If we've pre-scripted story content, stay in our current kingdom.
+		if = {
+			limit = {
+				scope:story.story_owner = { has_character_flag = laamp_stay_same_kingdom }
+			}
+			save_scope_as = new_kingdom
+		}
+		# If we're an explorer, go further afield.
+		else_if = {
+			limit = {
+				scope:story.story_owner = {
+					OR = {
+						has_realm_law = camp_purpose_explorers
+						#Normans gonna Norman
+						AND = {
+							culture = { has_cultural_parameter = much_more_likely_to_be_laamps }
+							#But not all of them...
+							ai_boldness >= high_positive_ai_value
+							ai_energy >= high_positive_ai_value
+						}
+						#Vikings gonna Viking
+						AND = {
+							culture = {
+								has_cultural_parameter = more_likely_to_be_laamps
+								has_cultural_parameter = unlock_maa_varangian_veterans
+							}
+							religion = { is_in_family = rf_pagan }
+							#But not all of them...
+							ai_greed >= 0
+						}
+					}
+				}
+			}
+			empire = {
+				random_title_to_title_neighboring_and_across_water_empire = {
+					weight = {
+						base = 1
+						ep3_adventurer_ai_contract_find_next_kingdom_modifier = { ADVENTURER = scope:story.story_owner }
+					}
+					random_in_de_jure_hierarchy = {
+						continue = { tier > tier_kingdom }
+						limit = { tier = tier_kingdom }
+						weight = {
+							base = 1
+							ep3_adventurer_ai_contract_find_next_kingdom_modifier = { ADVENTURER = scope:story.story_owner }
+						}
+						save_scope_as = new_kingdom
+					}
+				}
+			}
+		}
+		# Otherwise, we're not, so stay at home.
+		else = {
+			random_title_to_title_neighboring_and_across_water_kingdom = {
+				limit = {
+					save_temporary_scope_as = new_kingdom_temp
+					NOT = { # Prefer variety
+						scope:story = {
+							is_target_in_variable_list = {
+								name = recent_kingdoms
+								target = scope:new_kingdom_temp
+							}
+						}
+					}
+					any_title_to_title_neighboring_kingdom = { this = scope:current_kingdom } # Prefer to not sail
+				}
+				alternative_limit = {
+					any_title_to_title_neighboring_kingdom = { this = scope:current_kingdom } # Prefer to not sail
+				}
+				alternative_limit = { always = yes }
+				weight = {
+					base = 1
+					# Prefer to stay around the same general area
+					modifier = {
+						scope:previous_kingdom ?= this
+						factor = 2
+					}
+					modifier = {
+						scope:previous_kingdom.empire ?= this.empire
+						factor = 2
+					}
+					modifier = {
+						scope:current_kingdom.empire ?= this.empire
+						factor = 2
+					}
+					ep3_adventurer_ai_contract_find_next_kingdom_modifier = { ADVENTURER = scope:story.story_owner }
+				}
+				save_scope_as = new_kingdom
+			}
+		}
+	}
+	if = {
+		limit = {
+			NOT = { exists = scope:new_kingdom }
+		}
+		story_owner.location.empire ?= {
+			random_direct_de_jure_vassal_title = {
+				limit = {
+					this != scope:current_kingdom
+				}
+				alternative_limit = { always = yes }
+				weight = {
+					base = 1
+					# Prefer to stay around the same general area
+					modifier = {
+						scope:previous_kingdom ?= this
+						factor = 2
+					}
+					modifier = {
+						scope:previous_kingdom.empire ?= this.empire
+						factor = 2
+					}
+					modifier = {
+						scope:current_kingdom.empire ?= this.empire
+						factor = 2
+					}
+					ep3_adventurer_ai_contract_find_next_kingdom_modifier = { ADVENTURER = scope:story.story_owner }
+				}
+				save_scope_as = new_kingdom
+			}
+		}
+	}
+	else_if = {
+		limit = {
+			NOT = { exists = scope:new_kingdom }
+		}
+		random_empire = {
+			limit = {
+				is_landless_type_title = no
+				any_direct_de_jure_vassal_title = { is_landless_type_title = no }
+			}
+			random_direct_de_jure_vassal_title = {
+				limit = {
+					this != scope:current_kingdom
+					is_landless_type_title = no
+				}
+				alternative_limit = { is_landless_type_title = no }
+				weight = {
+					base = 1
+					# Prefer to stay around the same general area
+					modifier = {
+						scope:previous_kingdom ?= this
+						factor = 2
+					}
+					modifier = {
+						scope:previous_kingdom.empire ?= this.empire
+						factor = 2
+					}
+					modifier = {
+						scope:current_kingdom.empire ?= this.empire
+						factor = 2
+					}
+					ep3_adventurer_ai_contract_find_next_kingdom_modifier = { ADVENTURER = scope:story.story_owner }
+				}
+				save_scope_as = new_kingdom
+			}
+		}
+	}
+	if = {
+		limit = { exists = scope:new_kingdom }
+		# Save previous kingdom for checks and debugging
+		set_variable = {
+			name = previous_kingdom
+			value = scope:current_kingdom
+		}
+		add_to_variable_list = {
+			name = recent_kingdoms
+			target = scope:current_kingdom
+			years = 2
+		}
+		# Save active kingdom
+		set_variable = {
+			name = active_kingdom
+			value = scope:new_kingdom
+		}
+		# Reset contract counter
+		set_variable = {
+			name = remaining_contract_counter
+			value = {
+				integer_range = {
+					min = ep3_adventurer_ai_contracts_per_employer_min_value
+					max = ep3_adventurer_ai_contracts_per_employer_max_value
+				}
+			}
+		}
+		# Reset employer counter
+		set_variable = {
+			name = remaining_employer_counter
+			value = {
+				integer_range = {
+					min = ep3_adventurer_ai_employers_per_kingdom_min_value
+					max = ep3_adventurer_ai_employers_per_kingdom_max_value
+				}
+			}
+		}
+		# HD 2026-11-01：删原版 Hereward 专用分支（character:90028 + province:1525~1601），后面的 else_if 改为 if
+		scope:new_kingdom = {
+			if = {
+				limit = { this = scope:current_kingdom }
+				random_de_jure_county = {
+					limit = {
+						title_province != scope:story.story_owner.domicile.domicile_location
+					}
+					title_province = { save_scope_as = destination_province }
+				}
+			}
+			else = {
+				title_capital_county.title_province = { save_scope_as = destination_province }
+			}
+		}
+		# Travel
+		story_owner = {
+			domicile = { # the AI doesn't have to know how to use provisions efficiently, so just add a couple so that they don't suicide
+				if = {
+					limit = { provisions < max_provisions }
+					change_provisions = max_provisions
+				}
+			}
+			start_travel_plan = {
+				destination = scope:destination_province
+				travel_with_domicile = yes
+				return_trip = no
+				on_arrival_on_action = on_adventurer_ai_new_kingdom_arrival
+				on_arrival_destinations = last
+			}
+		}
+	}
+	story_owner = {
+		# Military Upgrades
+		if = {
+			limit = {
+				is_at_war = no
+				OR = {
+					has_realm_law = camp_purpose_mercenaries
+					has_realm_law = camp_purpose_brigands
+					has_realm_law = camp_purpose_legitimists
+				}
+			}
+			while = {
+				count = 5
+				random_maa_regiment = {
+					limit = { maa_current_troops_count < maa_max_troops_count }
+					change_maa_troops_count = replenishable_troops_value
+				}
+			}
+			random_maa_regiment = {
+				limit = { can_upgrade_maa = yes }
+				change_maa_regiment_size = {
+					size = 1
+					reinforce = yes
+				}
+			}
+			if = {
+				limit = {
+					OR = {
+					 	has_realm_law = camp_purpose_mercenaries
+						has_realm_law = camp_purpose_legitimists
+					}
+				}
+				random_maa_regiment = {
+					limit = { can_upgrade_maa = yes }
+					change_maa_regiment_size = {
+						size = 1
+						reinforce = yes
+					}
+				}
+			}
+			if = {
+				limit = { has_realm_law = camp_purpose_mercenaries }
+				random_maa_regiment = {
+					limit = { can_upgrade_maa = yes }
+					change_maa_regiment_size = {
+						size = 1
+						reinforce = yes
+					}
+				}
+			}
+		}
+	}
 }
 
 # Move adventurer to the war target, if necessary

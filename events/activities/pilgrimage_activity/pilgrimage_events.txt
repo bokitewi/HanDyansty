@@ -905,11 +905,618 @@ scripted_trigger pilgrim_heathen_raider_trigger = {
 
 #Heathen Raiders
 # by Joe Parkin
+# HD 2026-11-01：恢复原版 1.20.1.2（原为 always = no 空壳）
 pilgrimage.1110 = {
-	# Absent vanilla-map title links isolated.
 	type = character_event
-	hidden = yes
-	trigger = { always = no }
+	title = pilgrimage.1110.t
+	desc = {
+		desc = pilgrimage.1110.desc
+		first_valid = {
+			# HD 2026-11-01：删去引用 b_makka / b_jerusalem 的 4 个描述分支（本 mod 地图无此二地）
+			triggered_desc = {
+				trigger = {
+					scope:shared_holy_site ?= {
+						this = root.involved_activity.activity_location.barony
+						county.county_controller.religion = scope:heathen_raider.religion
+					}
+				}
+				desc = pilgrimage.1110.shared_target_heathen
+			}
+			triggered_desc = {
+				trigger = {
+					scope:shared_holy_site ?= {
+						this = root.involved_activity.activity_location.barony
+						county.county_controller.religion = root.religion
+						county.county_controller.religion != scope:heathen_raider.religion
+					}
+				}
+				desc = pilgrimage.1110.shared_target_controlled
+			}
+			desc = pilgrimage.1110.fallback
+		}
+	}
+	theme = travel_pilgrimage
+	override_background = { reference = terrain }
+	right_portrait = {
+		character = scope:heathen_raider
+		animation = marshal
+	}
+	cooldown = { years = 1 }
+
+	trigger = {
+		is_travelling = yes
+		is_location_valid_for_travel_event_on_land = yes
+		location.county = {
+			faith = {
+				faith_hostility_level = { target = root.faith value > 1 }
+			}
+			holder = {
+				NOR = {
+					this = root
+					any_liege_or_above = { this = root }
+				}
+			}
+		}
+		current_travel_plan = {
+			any_entourage_character = {
+				this != root
+				count >= 2
+			}
+		}
+	}
+
+	weight_multiplier = {
+		base = 1
+		modifier = {
+			factor = 0.5
+			location.county.rite = { rite_has_tenet = tenet_dharmic_pacifism }
+		}
+	}
+
+	immediate = {
+		location.county = { save_scope_as = heathen_raider_county }
+		location.county.holder.top_liege = { save_scope_as = county_liege }
+		# Save or create a heathen raider
+		random_list = {
+			9 = {
+				trigger = { # Does a valid heather raider exist in the county?
+					any_pool_character = {
+						province = root.location
+						pilgrim_heathen_raider_trigger = yes
+					}
+				}
+				random_pool_character = {
+					province = root.location
+					limit = { pilgrim_heathen_raider_trigger = yes }
+					weight = {
+						base = 1
+						modifier = {
+							add = 10
+							has_trait = reaver
+						}
+					}
+					save_scope_as = heathen_raider
+					if = {
+						limit = {
+							location != root.location
+						}
+						hidden_effect = { move_to_pool_at = root.location }
+					}
+				}
+			}
+			1 = {
+				create_character = {
+					template = new_raider_character
+					culture = root.location.culture
+					faith = root.location.faith
+					rite = root.location.rite
+					dynasty = none
+					location = root.location
+					gender_female_chance = scope:county_liege.root_soldier_female_chance
+					save_scope_as = heathen_raider
+				}
+			}
+		}
+		scope:heathen_raider = {
+			add_character_flag = wear_armor
+		}
+		# Save potential victim
+		current_travel_plan = {
+			random_entourage_character = {
+				limit = {
+					this != root
+					can_be_combatant_based_on_gender_trigger = { ARMY_OWNER = root }
+				}
+				alternative_limit = {
+					this != root
+				}
+				weight = {
+					base = 1
+					modifier = {
+						factor = 2
+						prowess < decent_skill_rating
+					}
+					modifier = {
+						factor = 0
+						has_trait = wounded
+					}
+				}
+				save_scope_as = victim_pilgrim_1
+			}
+			if = {
+				limit = { exists = scope:victim_pilgrim_1 }
+				random_entourage_character = {
+					limit = {
+						NOR = {
+							this = root
+							this = scope:victim_pilgrim_1
+						}
+						can_be_combatant_based_on_gender_trigger = { ARMY_OWNER = root }
+					}
+					alternative_limit = {
+						this != root
+					}
+					weight = {
+						base = 1
+						modifier = {
+							factor = 2
+							prowess < decent_skill_rating
+						}
+						modifier = {
+							factor = 0
+							has_trait = wounded
+						}
+					}
+					save_scope_as = victim_pilgrim_2
+				}
+			}
+		}
+		# Does raider faith share the holy site?
+		involved_activity.activity_location.barony = {
+			if = {
+				limit = { is_holy_site_of = scope:heathen_raider.faith }
+				save_scope_as = shared_holy_site
+			}
+		}
+		save_scope_value_as = {
+			name = duel_variety
+			value = { 1 4 }
+		}
+	}
+	# Come on then
+	option = { 
+		name = pilgrimage.1110.a
+		duel = {
+			skill = martial
+			target = scope:heathen_raider
+			20 = {
+				desc = pilgrimage.1110.a.fled
+				compare_modifier = {
+					value = scope:duel_value
+					multiplier = 1
+					min = 5
+				}
+				modifier = {
+					add = {
+						value = dread
+						divide = 6
+					}
+				}
+				modifier = {
+					current_travel_plan = {	num_entourage_characters >= 15 }
+					factor = 1.5
+				}
+				modifier = {
+					current_travel_plan = {	
+						num_entourage_characters < 15
+						num_entourage_characters > 8 
+					}
+					factor = 1.3
+				}
+				modifier = {
+					current_travel_plan = {	
+						num_entourage_characters < 8
+						num_entourage_characters > 4 
+					}
+					factor = 1.1
+				}
+				send_interface_toast = {
+					title = pilgrimage.1110.a.fled
+					left_icon = scope:heathen_raider
+					add_dread = minor_dread_gain
+					add_prestige = minor_prestige_gain
+				}
+			}
+			20 = {
+				desc = pilgrimage.1110.a.skirmish
+				compare_modifier = {
+					value = scope:duel_value
+					multiplier = 3.5
+					min = 5
+				}
+				show_as_tooltip = { add_prestige = miniscule_prestige_gain }
+				if = {
+					limit = { exists = scope:victim_pilgrim_2 }
+					custom_tooltip = two_entourage_members_wounded_tt
+				}
+				else = { custom_tooltip = one_entourage_members_wounded_tt }
+				hidden_effect = {
+					send_interface_toast = {
+						title = pilgrimage.1110.a.skirmish
+						left_icon = scope:victim_pilgrim_1
+						right_icon = scope:victim_pilgrim_2
+						add_prestige = miniscule_prestige_gain
+						if = {
+							limit = { exists = scope:victim_pilgrim_2 }
+							scope:victim_pilgrim_2 = {
+								random = {
+									chance = 50
+									modifier = {
+										add = {
+											value = 0
+											subtract = prowess
+										}
+									}
+									change_trait_rank = {
+										trait = wounded
+										rank = 1
+										max = 3
+									}
+								}
+							}
+						}
+						if = {
+							limit = { exists = scope:victim_pilgrim_1 }
+							scope:victim_pilgrim_1 = {
+								random = {
+									chance = 50
+									modifier = {
+										add = {
+											value = 0
+											subtract = prowess
+										}
+									}
+									change_trait_rank = {
+										trait = wounded
+										rank = 1
+										max = 3
+									}
+								}
+							}
+						}
+						else = {
+							random = {
+								chance = 50
+								modifier = {
+									add = {
+										value = 0
+										subtract = prowess
+									}
+								}
+								change_trait_rank = {
+									trait = wounded
+									rank = 1
+									max = 3
+								}
+							}
+						}
+					}
+				}
+			}
+			5 = {
+				desc = pilgrimage.1110.a.beaten
+				compare_modifier = {
+					value = scope:duel_value
+					multiplier = -3.5
+					min = 5
+				}
+				modifier = {
+					current_travel_plan = {	num_entourage_characters >= 15 }
+					factor = 0.5
+				}
+				modifier = {
+					current_travel_plan = {	
+						num_entourage_characters < 15
+						num_entourage_characters > 8 
+					}
+					factor = 0.7
+				}
+				modifier = {
+					current_travel_plan = {	
+						num_entourage_characters < 8
+						num_entourage_characters > 4 
+					}
+					factor = 0.9
+				}
+				show_as_tooltip = {
+					add_prestige = minor_prestige_loss
+					pay_short_term_gold = {
+						target = scope:heathen_raider
+						gold = {
+							value = medium_gold_value
+							max = 50
+						}
+					}
+				}
+				if = {
+					limit = { exists = scope:victim_pilgrim_2 }
+					custom_tooltip = two_entourage_members_die_tt
+				}
+				else = { custom_tooltip = one_entourage_members_die_tt }
+				hidden_effect = {
+					send_interface_toast = {
+						title = pilgrimage.1110.a.beaten
+						left_icon = scope:victim_pilgrim_1
+						right_icon = scope:victim_pilgrim_2
+						add_prestige = minor_prestige_loss
+						pay_short_term_gold = {
+							target = scope:heathen_raider
+							gold = {
+								value = medium_gold_value
+								max = 50
+							}
+						}
+						if = {
+							limit = { exists = scope:victim_pilgrim_2 }
+							scope:victim_pilgrim_2 = {
+								random_list = {
+									50 = {
+										modifier = { add = prowess }
+										change_trait_rank = {
+											trait = wounded
+											rank = 1
+											max = 3
+										}
+									}
+									50 = {
+										death = { death_reason = death_pilgrimage_bandit_attack }
+									}
+								}
+							}
+						}
+						if = {
+							limit = { exists = scope:victim_pilgrim_1 }
+							scope:victim_pilgrim_1 = {
+								random_list = {
+									50 = {
+										modifier = { add = prowess }
+										change_trait_rank = {
+											trait = wounded
+											rank = 1
+											max = 3
+										}
+									}
+									50 = {
+										death = { death_reason = death_pilgrimage_bandit_attack }
+									}
+								}
+							}
+						}
+						else = {
+							random_list = {
+								50 = {
+									modifier = { add = prowess }
+									change_trait_rank = {
+										trait = wounded
+										rank = 1
+										max = 3
+									}
+								}
+								50 = {
+									death = { death_reason = death_pilgrimage_bandit_attack }
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		add_internal_flag = dangerous
+		stress_and_fulfillment_impact = {
+			craven = minor_stress_impact_gain
+			patient = minor_stress_impact_gain
+		}
+		ai_chance = {
+			base = 50
+			ai_value_modifier = {
+				ai_zeal = 0.5
+				ai_boldness = 1
+			}
+		}
+	}
+	# Leave us in peace
+	option = { 
+		name = {
+			trigger = { religion = scope:heathen_raider.religion }
+			text = pilgrimage.1110.b.religion
+		}
+		name = {
+			trigger = {
+				NOT = {
+					faith = { has_doctrine = unreformed_faith_doctrine }
+				}
+				scope:heathen_raider.faith = { has_doctrine = unreformed_faith_doctrine }
+			}
+			text = pilgrimage.1110.b.unreformed
+		}
+		name = {
+			trigger = {
+				religion != scope:heathen_raider.religion
+				NAND = {
+					NOT = {
+						faith = { has_doctrine = unreformed_faith_doctrine }
+					}
+					scope:heathen_raider.faith = { has_doctrine = unreformed_faith_doctrine }
+				}
+			}
+			text = pilgrimage.1110.b
+		}
+		duel = {
+			skill = diplomacy
+			target = scope:heathen_raider
+			5 = {
+				desc = pilgrimage.1110.c.success
+				compare_modifier = {
+					value = scope:duel_value
+					multiplier = 3.5
+					min = 5
+				}
+				modifier = {
+					has_perk = zealous_proselytizer_perk
+					factor = 2
+				}
+				send_interface_toast = {
+					title = pilgrimage.1110.c.success
+					left_icon = scope:heathen_raider
+					add_piety = minor_piety_gain
+				}
+			}
+			5 = {
+				desc = pilgrimage.1110.c.failure
+				compare_modifier = {
+					value = scope:duel_value
+					multiplier = -3.5
+					min = 5
+				}
+				send_interface_toast = {
+					title = pilgrimage.1110.c.failure
+					left_icon = scope:heathen_raider
+					pay_short_term_gold = {
+						target = scope:heathen_raider
+						gold = {
+							value = medium_gold_value
+							max = 50
+						}
+					}
+				}
+			}
+		}
+		stress_and_fulfillment_impact = {
+			wrathful = minor_stress_impact_gain
+			zealous = minor_stress_impact_loss
+			arrogant = minor_stress_impact_gain
+		}
+		ai_chance = {
+			base = 50
+			ai_value_modifier = {
+				ai_zeal = 1
+				ai_boldness = -0.5
+			}
+		}
+	}
+	# Join me, God is pretty cool
+	option = { 
+		name = pilgrimage.1110.c
+		trigger = {
+			OR = {
+				AND = {
+					NOT = {
+						faith = { has_doctrine = unreformed_faith_doctrine }
+					}
+					scope:heathen_raider.faith = { has_doctrine = unreformed_faith_doctrine }
+				}
+				scope:heathen_raider.religion = root.religion
+			}
+		}
+		duel = {
+			skill = learning
+			target = scope:heathen_raider
+			10 = {
+				desc = pilgrimage.1110.c.success
+				compare_modifier = {
+					value = scope:duel_value
+					multiplier = 3.5
+					min = 5
+				}
+				modifier = {
+					scope:heathen_raider = { has_trait = cynical }
+					add = 5
+				}
+				send_interface_toast = {
+					title = pilgrimage.1110.c.success
+					left_icon = scope:heathen_raider
+					scope:heathen_raider = {
+						hidden_effect = { set_character_faith_with_conversion = root.faith }
+						set_character_faith = root.faith
+						set_character_rite = root.rite
+					}
+					add_to_entourage_court_and_activity_effect = { 
+						CHAR_TO_ADD = scope:heathen_raider 
+						NEW_COURT_OWNER = root 
+					}
+					spawn_army = {
+						name = event_troop_default_name
+						levies = 250
+						location = root.location
+						origin = root.location
+					}
+				}
+			}
+			10 = {
+				desc = pilgrimage.1110.c.failure
+				compare_modifier = {
+					value = scope:duel_value
+					multiplier = -3.5
+					min = 5
+				}
+				modifier = {
+					scope:heathen_raider = { has_trait = zealous }
+					add = 5
+				}
+				send_interface_toast = {
+					title = pilgrimage.1110.c.failure
+					left_icon = scope:heathen_raider
+					add_prestige = minor_prestige_loss
+					pay_short_term_gold = {
+						target = scope:heathen_raider
+						gold = {
+							value = medium_gold_value
+							max = 50
+						}
+					}
+				}
+			}
+		}
+		stress_and_fulfillment_impact = {
+			cynical = minor_stress_impact_gain
+			arrogant = minor_stress_impact_gain
+		}
+		ai_chance = {
+			base = 50
+			ai_value_modifier = {
+				ai_boldness = 0.5
+				ai_sociability = 0.5
+				ai_rationality = 0.5
+			}
+		}
+	}
+
+	option = { # Take your damned money
+		name = pilgrimage.1110.d
+		pay_short_term_gold = {
+			target = scope:heathen_raider
+			gold = {
+				value = medium_gold_value
+				max = 25
+			}
+		}
+		stress_and_fulfillment_impact = {
+			brave = medium_stress_impact_gain
+			greedy = minor_stress_impact_gain
+		}
+		ai_chance = {
+			base = 50
+			ai_value_modifier = {
+				ai_greed = -1
+				ai_rationality = 0.5
+			}
+		}
+	}
+	after = {
+		scope:heathen_raider = {
+			remove_character_flag = wear_armor
+		}
+	}
 }
 
 scripted_trigger pilgrim_admire_temple_person_trigger = {
@@ -6996,71 +7603,10 @@ pilgrimage.6001 = {
 				NEW_COURT_OWNER = root 
 			}
 		}
-		if = { # Get schwasted at the tavern
-			limit = {
-				drinks_alcohol_trigger = yes
-				scope:friend = {
-					drinks_alcohol_trigger = yes
-					OR = {
-						has_trait = drunkard 
-						has_trait = lifestyle_reveler
-					}
-				}
-			}
-			trigger_event = {
-				id = pilgrimage.6002
-				days = 5
-			}
-		}
-		else_if = {
-			limit = {
-				NOT = {
-					rite = { rite_has_doctrine = doctrine_pluralism_pluralistic }
-				}
-				scope:friend = {
-					any_secret = { type = secret_non_believer }
-				}
-			}
-			trigger_event = {
-				id = pilgrimage.6006
-				days = 5
-			}
-		}
-		else_if = {
-			limit = {
-				scope:friend = {
-					OR = {
-						# Physical Traits 
-						has_trait = wounded_1
-						has_trait = wounded_2
-						has_trait = wounded_3
-						has_trait = impotent 
-						has_trait = infirm 
-						# Diseases 
-						has_trait = ill
-						has_trait = bubonic_plague
-						has_trait = cancer 
-						has_trait = consumption 
-						has_trait = great_pox 
-						has_trait = gout_ridden
-						has_trait = leper 
-						has_trait = lovers_pox 
-						has_trait = pneumonic 
-						has_trait = smallpox 
-						has_trait = typhus 
-					}
-				}
-			}
-			trigger_event = {
-				id = pilgrimage.6007
-				days = 5
-			}
-		}
-		else = { # Fallback event
-			trigger_event = {
-				id = pilgrimage.6002
-				days = 5
-			}
+		# HD 2026-11-01：同步原版 1.20.1.2：改为 5 天后进 pilgrimage.6009（已恢复于 zz_hd_restored_vanilla_events.txt），先查朋友是否在世再分流
+		trigger_event = {
+			id = pilgrimage.6009
+			days = 5
 		}
 		reverse_add_opinion = {
 			target = scope:friend
@@ -7073,7 +7619,7 @@ pilgrimage.6001 = {
 				value = scope:friend 
 			}
 		}
-		stress_impact = {
+		stress_and_fulfillment_impact = {
 			zealous = miniscule_stress_impact_gain
 			shy = medium_stress_impact_gain
 			gregarious = minor_stress_impact_loss
@@ -7094,7 +7640,7 @@ pilgrimage.6001 = {
 			modifier = insulted_opinion
 			opinion = -25
 		}
-		stress_impact = {
+		stress_and_fulfillment_impact = {
 			gregarious = medium_stress_impact_gain
 			callous = minor_stress_impact_gain
 		}
@@ -7232,6 +7778,13 @@ pilgrimage.6003 = {
 		character = scope:friend
 		animation = toast_goblet
 	}
+	trigger = {
+		scope:friend = { is_alive = yes }
+	}
+	on_trigger_fail = {
+		remove_character_flag = in_pilgrimage_event_chain
+		current_travel_plan = { resume_travel_plan = yes }
+	}
 	immediate = {
 		play_music_cue = "mx_cue_in_taberna_instrumental"
 	}
@@ -7275,6 +7828,7 @@ pilgrimage.6003 = {
 	option = {
 		name = pilgrimage.6003.b
 		custom_tooltip = pilgrimage.6003.b.tt
+		remove_character_flag = in_pilgrimage_event_chain
 		current_travel_plan = { resume_travel_plan = yes }
 	}
 }
@@ -7293,6 +7847,13 @@ pilgrimage.6004 = {
 	right_portrait = { 
 		character = scope:friend
 		animation = shock
+	}
+	trigger = {
+		scope:friend = { is_alive = yes }
+	}
+	on_trigger_fail = {
+		remove_character_flag = in_pilgrimage_event_chain
+		current_travel_plan = { resume_travel_plan = yes }
 	}
 	immediate = {
 		play_music_cue = "mx_cue_in_taberna_instrumental"
@@ -7386,6 +7947,13 @@ pilgrimage.6005 = {
 	right_portrait = { 
 		character = scope:friend
 		animation = paranoia
+	}
+	trigger = {
+		scope:friend = { is_alive = yes }
+	}
+	on_trigger_fail = {
+		remove_character_flag = in_pilgrimage_event_chain
+		current_travel_plan = { resume_travel_plan = yes }
 	}
 	immediate = {
 		random_list = {
@@ -7849,7 +8417,23 @@ pilgrimage.3101 = {
 # pilgrimage.4002 - The Mystic you met on your journey is there!
 # pilgrimage.4010 - Obligatory Pilgrimage - Skip Destination Events
 # pilgrimage.4020 - Bury old host at Destination
+# pilgrimage.4100 - Wanna buy a Pilgrimage Badge?
 #
+
+# HD 2026-11-01：恢复原版 1.20.1.2 徽章检查效果；删去圣地亚哥（b_santiago）专用分支，本 mod 地图无此地
+scripted_effect check_for_pilgrimage_badge_event_effect = {
+	if = {
+		limit = {
+			NOT = {
+				any_character_artifact = { var:pilgrim_badge_location ?= root.location }
+			}
+		}
+		trigger_event = {
+			id = pilgrimage.4100
+			days = 1
+		}
+	}
+}
 
 #Generic Destination
 # by Petter Vilberg
@@ -7895,6 +8479,10 @@ pilgrimage.4001 = {
 		name = pilgrimage.4001.a
 		give_pilgrim_trait_or_xp_effect = yes
 		pilgrimage_arrival_stress_loss_effect = yes
+	}
+	# HD 2026-11-01：同步原版 1.20.1.2，抵达后检查朝圣徽章（pilgrimage.4100 在 zz_hd_restored_vanilla_events.txt）
+	after = {
+		check_for_pilgrimage_badge_event_effect = yes
 	}
 }
 
@@ -7991,6 +8579,8 @@ pilgrimage.4002 = {
 	after = {
 		give_pilgrim_trait_or_xp_effect = yes
 		pilgrimage_arrival_stress_loss_effect = yes
+		# HD 2026-11-01：同步原版 1.20.1.2，抵达后检查朝圣徽章（pilgrimage.4100 在 zz_hd_restored_vanilla_events.txt）
+		check_for_pilgrimage_badge_event_effect = yes
 	}
 }
 
@@ -8035,7 +8625,7 @@ pilgrimage.4010 = {
 				}
 				has_trait = zealous
 			}
-			stress_impact = {
+			stress_and_fulfillment_impact = {
 				impatient = medium_stress_impact_gain
 				zealous = minor_stress_impact_loss
 				patient = minor_stress_impact_loss
@@ -8061,18 +8651,22 @@ pilgrimage.4010 = {
 				}
 				has_trait = zealous
 			}
-			stress_impact = {
+			stress_and_fulfillment_impact = {
 				zealous = massive_stress_impact_gain
 				impatient = medium_stress_impact_loss
 				lazy = minor_stress_impact_gain
 			}
 		}
 		else = {
-			stress_impact = {
+			stress_and_fulfillment_impact = {
 				impatient = medium_stress_impact_loss
 				lazy = minor_stress_impact_gain
 			}
 		}
+	}
+	# HD 2026-11-01：同步原版 1.20.1.2：stress_impact 改 stress_and_fulfillment_impact；抵达后检查朝圣徽章
+	after = {
+		check_for_pilgrimage_badge_event_effect = yes
 	}
 }
 
@@ -8156,6 +8750,7 @@ pilgrimage.4020 = {
 				dynasty = none
 				location = root.location
 				culture = root.location.culture
+				faith = root.faith # HD 2026-11-01：同步原版 1.20.1.2
 				rite = root.rite
 				save_scope_as = burial_bishop
 			}
@@ -8213,6 +8808,8 @@ pilgrimage.4020 = {
 			name = pilgrimage_burial_location
 			value = root.location
 		}
+		# HD 2026-11-01：同步原版 1.20.1.2，抵达后检查朝圣徽章（pilgrimage.4100 在 zz_hd_restored_vanilla_events.txt）
+		check_for_pilgrimage_badge_event_effect = yes
 	}
 }
 

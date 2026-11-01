@@ -155,6 +155,7 @@ adopt_puppy_decision = {
 #############################################
 
 ### Introduce a New Fashion at Court ###
+# HD 2026-11-01：恢复原版 1.20.1.2（此前只因配图和 k_fashion 头衔被停用）
 introduce_a_new_fashion_at_court_decision = {
 	picture = {
 		trigger = {
@@ -170,10 +171,7 @@ introduce_a_new_fashion_at_court_decision = {
 				top_liege ?= {
 					OR = {
 						culture = { has_cultural_pillar = heritage_byzantine }
-						always = no # UUII: absent vanilla title condition
-						always = no # UUII: absent vanilla title condition
-						always = no # UUII: absent vanilla title condition
-						always = no # UUII: absent vanilla title condition
+						always = no # HD 2026-11-01：原版这里判君士坦丁堡/e_byzantium/h_roman_empire/h_eastern_roman_empire 四个头衔，本图都没有
 					}
 				}
 			}
@@ -195,15 +193,146 @@ introduce_a_new_fashion_at_court_decision = {
 	sort_order = 80
 
 	is_shown = {
-		always = no
+		is_landed = yes
+		# Either has a royal court with high fashion or is part of a royal court with high fashion
+		OR = {
+			AND = {
+				liege ?= { has_royal_court = yes }
+				has_royal_court = no # Narrative flow of the event is a bit weird if it's unclear which royal court it's taking place in
+				OR = {
+					liege ?= {
+						amenity_level = {
+							target = court_fashion
+							value >= 4
+						}
+					}
+					has_nickname = nick_prince_of_fashion
+				}
+			}
+			AND = {
+				has_royal_court = yes
+				OR = {
+					amenity_level = {
+						target = court_fashion
+						value >= 4
+					}
+					has_nickname = nick_prince_of_fashion
+				}
+				has_dlc_feature = royal_court
+			}
+		}
+		trigger_if = {
+			limit = {
+				OR = {
+					government_has_flag = government_is_celestial
+					government_has_flag = government_is_meritocratic
+				}
+			}
+			this = top_liege
+		}
+		is_available_at_peace_adult = yes
+		NOT = { culture = { has_cultural_parameter = naked_culture_active } } # Must wear clothes
+		NOT = { rite = { rite_has_parameter = naked_adherents_active } } # Must wear clothes
+		# HD 2026-11-01：删去原版 NOT = { has_title = title:k_fashion }（本图无时尚王国头衔）
 	}
 
 	is_valid_showing_failures_only = {
-		always = no
+		# Standard checks
+		is_available_at_peace_adult = yes
+		# Court does not currently have a fashion trend
+		trigger_if = {
+			limit = {
+				OR = {
+					AND = {
+						root = { has_royal_court = yes }
+						root = { has_character_flag = fashion_trend_flag }
+					}
+					AND = {
+						exists = root.liege
+						liege != root
+						root.liege = { has_royal_court = yes }
+						root = { has_royal_court = no }
+						root.liege = { has_character_flag = fashion_trend_flag }
+					}
+				}
+			}
+			custom_description = {
+				text = court_already_has_a_fashion_tend_tt
+				always = no
+			}
+		}
+		any_courtier_or_guest = {
+			NOT = { rite = { rite_has_parameter = naked_adherents_active } }
+			is_available_at_peace_adult = yes
+		}
 	}
 
 	effect = {
-
+		hidden_effect = {
+			if = {
+				limit = {
+					has_royal_court = yes
+				}
+				add_character_flag = {
+					flag = fashion_trend_flag
+					years = 3
+				}
+			}
+			else = {
+				liege = {
+					add_character_flag = {
+						flag = fashion_trend_flag
+						years = 3
+					}
+				}
+			}
+			random_list = {
+				# Determine what the strange fashion choice is
+				10 = {
+					add_character_flag = { flag = flag_big_collar years = 1 }
+				}
+				10 = {
+					add_character_flag = { flag = flag_head_dress years = 1 }
+				}
+				10 = {
+					add_character_flag = { flag = flag_gold_boots years = 1 }
+				}
+				10 = {
+					add_character_flag = { flag = flag_sleeveless years = 1 }
+				}
+				10 = {
+					add_character_flag = { flag = flag_commoner_clothes years = 1 }
+				}
+			}
+			save_scope_as = actor
+			# Get someone to potentially oppose the fashion choice
+			random_courtier_or_guest = {
+				limit = {
+					NOT = { rite = { rite_has_parameter = naked_adherents_active } }
+					is_available_at_peace_adult = yes
+				}
+				weight = {
+					base = 1
+					compare_modifier = { # Diplo duel should look for high diplo characters
+						value = diplomacy
+						multiplier = 0.25
+					}
+					modifier = { # Rivals should want to insult their rival
+						has_relation_rival = root
+						add = 10
+					}
+					modifier = { # Increase visibility for other players
+						is_ai = no
+						factor = 2
+					}
+				}
+				save_scope_as = recipient
+				trigger_event = court_amenities_interactions.0010
+			}
+		}
+		custom_tooltip = {
+			text = introduce_new_fashion_duel_tooltip
+		}
 	}
 
 	cost = {
@@ -222,11 +351,24 @@ introduce_a_new_fashion_at_court_decision = {
 	}
 
 	ai_potential = {
-		always = no
+		# Has enough gold.
+		short_term_gold >= minor_gold_value
+		liege = { # Shouldn't snipe the opportunity away from the player
+			is_ai = yes
+		}
 	}
 
 	ai_will_do = {
-		base = 0 # ai_will_do takes base, not value
+		base = 25
+		# You're a fashionista
+		modifier = {
+			add = 50
+			has_trait = seducer
+		}
+		modifier = {
+			add = 50
+			has_trait = avaricious
+		}
 	}
 }
 

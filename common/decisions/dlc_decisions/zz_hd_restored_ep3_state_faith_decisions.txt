@@ -1,0 +1,564 @@
+﻿# HD 2026-11-01：从原版 1.20.1.2 dlc_decisions/ep3_decisions.txt 恢复 3 个通用决议。
+# 本 mod 的同名 ep3_decisions.txt 是有意清空的覆盖文件（其余决议依赖拜占庭/欧洲头衔），保持不动；
+# 这里只放与地图无关的：更换国教 change_state_faith、改奉国教 adopt_state_faith（天朝政体 state_faith = yes，
+# gui/window_government_administration.gui 与 00_religious_interactions.txt 引用）、冒险者钓鱼 go_fishing_decision。
+# 改动仅限：配图里的君士坦丁堡条件改 always = no；删去伊斯兰专属配图分支。
+
+change_state_faith = {
+	picture = {
+		trigger = {
+			NOR = {
+				government_has_flag = government_is_tribal
+				government_has_flag = government_is_theocracy
+				top_liege ?= { government_has_flag = government_is_tribal }
+				top_liege ?= { government_has_flag = government_is_theocracy }
+			}
+			OR = {
+				culture = { has_cultural_pillar = heritage_byzantine }
+				top_liege ?= {
+					OR = {
+						culture = { has_cultural_pillar = heritage_byzantine }
+						always = no # HD 2026-11-01：原版判君士坦丁堡（本图无此头衔）
+						is_roman_emperor_primary_title_trigger = yes
+					}
+				}
+			}
+		}
+		reference = "gfx/interface/illustrations/decisions/ep3_cerimonial_decision.dds"
+	}
+	# HD 2026-11-01：删去原版伊斯兰专属配图分支（faith.religion = religion:islam_religion）
+	picture = {
+		reference = "gfx/interface/illustrations/decisions/decision_major_religion.dds"
+	}
+
+	ai_check_interval_by_tier = {
+		barony = 0
+		county = 0
+		duchy = 0
+		kingdom = 60
+		empire = 60
+		hegemony = 0
+	}
+	sort_order = 110
+	decision_group_type = admin
+
+	desc = change_state_faith_decision_desc
+	selection_tooltip = change_state_faith_decision_selection_tooltip
+
+	is_shown = {
+		government_allows = state_faith
+		exists = primary_title.state_rite
+		rite != primary_title.state_rite
+		has_ep3_dlc_trigger = yes
+	}
+
+	is_valid = {
+		government_allows = state_faith
+		NOT = { rite ?= top_liege.primary_title.state_rite }
+	}
+
+	is_valid_showing_failures_only = {
+		is_available = yes
+	}
+
+	cost = {
+		influence = {
+			value = 5000
+			if = {
+				limit = {
+					has_character_flag = ep3_hof_state_faith_discount
+				}
+				multiply = {
+					value = 0.7
+					desc = hof_state_faith_discount
+				}
+			}
+			if = {
+				limit = {
+					domicile ?= { has_domicile_parameter = reduce_state_faith_cost }
+				}
+				multiply = {
+					value = 0.9
+					desc = domicile_large_temple
+				}
+			}
+			if = {
+				limit = {
+					has_perk = prophet_perk
+				}
+				multiply = {
+					value = 1
+					subtract = admin_state_faith_cost_perk_value
+					desc = "[GetPerk('prophet_perk').GetName(GetPlayer)]"
+				}
+			}
+		}
+		piety = {
+			value = 5000
+			if = {
+				limit = {
+					has_character_flag = ep3_hof_state_faith_discount
+				}
+				multiply = {
+					value = 0.7
+					desc = hof_state_faith_discount
+				}
+			}
+			if = {
+				limit = {
+					domicile ?= { has_domicile_parameter = reduce_state_faith_cost }
+				}
+				multiply = {
+					value = 0.9
+					desc = domicile_large_temple
+				}
+			}
+			if = {
+				limit = {
+					has_perk = prophet_perk
+				}
+				multiply = {
+					value = 1
+					subtract = admin_state_faith_cost_perk_value
+					desc = "[GetPerk('prophet_perk').GetName(GetPlayer)]"
+				}
+			}
+		}
+	}
+
+	effect = {
+		hidden_effect = {
+			primary_title.state_rite = { save_scope_as = old_rite }
+			root.rite = { save_scope_as = new_rite }
+			create_character_memory = { type = changed_state_faith_memory }
+			scope:new_memory = {
+				set_variable = {
+					name = old_rite
+					value = scope:old_rite
+				}
+				set_variable = {
+					name = new_rite
+					value = scope:new_rite
+				}
+				# Keep old_faith/new_faith for savegame and non-English loc compatibility
+				set_variable = {
+					name = old_faith
+					value = scope:old_rite.faith
+				}
+				set_variable = {
+					name = new_faith
+					value = scope:new_rite.faith
+				}
+				set_variable = {
+					name = title
+					value = root.primary_title
+				}
+			}
+		}
+
+		primary_title = {
+			set_state_rite = root.rite
+			pam_tenet_popularity_boost_rite_effect = { RITE = state_rite }
+		}
+		capital_county = { set_county_rite = root.rite }
+
+		# Some vassals who like you the most will convert
+		every_vassal = {
+			custom = vassals_change_state_faith
+			limit = {
+				opinion = {
+					target = root
+					value >= 30
+				}
+				rite != root.rite
+				NOT = { has_vassal_stance = zealot }
+				is_ai = yes
+				# Mirror the conversion-rule gates the effect cannot pass
+				is_adult = yes
+				NOT = { faith.religious_head ?= this }
+				pam_is_antipope_trigger = no
+			}
+
+			hidden_effect = {
+				rite = { save_scope_as = old_rite }
+				root.rite = { save_scope_as = new_rite }
+				create_character_memory = { type = adopted_state_faith_memory }
+				scope:new_memory = {
+					set_variable = {
+						name = old_rite
+						value = scope:old_rite
+					}
+					set_variable = {
+						name = new_rite
+						value = scope:new_rite
+					}
+					# Savegame and non-English loc compatibility; do not rename or remove
+					set_variable = {
+						name = old_faith
+						value = scope:old_rite.faith
+					}
+					set_variable = {
+						name = new_faith
+						value = scope:new_rite.faith
+					}
+					set_variable = {
+						name = title
+						value = root.primary_title
+					}
+				}
+			}
+
+			set_character_rite_with_conversion = root.rite
+		}
+
+		# Opinion malus with Zealot vassals
+		save_scope_as = root_scope
+		every_vassal = {
+			vassal_stance = zealot
+			limit = {
+				rite != root.rite
+			}
+			custom = every_zealot_vassal
+			add_opinion = {
+				target = root
+				modifier = changed_state_faith_opinion
+				opinion = -30
+			}
+		}
+
+		# Notify and let the players choose
+		every_vassal = {
+			limit = {
+				is_ai = no
+			}
+			trigger_event = {
+				id = ep3_emperor_yearly.2300
+				days = 1
+			}
+		}
+	}
+
+	ai_potential = {
+		# HD 2026-11-01：天朝政体没有 government_is_administrative 标记，放宽到同样 mechanic_type = administrative 的政体
+		government_has_mechanic = administrative
+		primary_title.tier >= tier_empire
+		rite != primary_title.state_rite
+	}
+
+	ai_will_do = {
+		base = 50
+		modifier = {
+			has_trait = ambitious
+			add = 30
+		}
+		modifier = {
+			has_trait = arbitrary
+			add = 30
+		}
+		modifier = {
+			has_trait = arrogant
+			add = 25
+		}
+		modifier = {
+			has_trait = lazy
+			add = -20
+		}
+		modifier = {
+			has_trait = content
+			add = -50
+		}
+		modifier = {
+			has_trait = cynical
+			add = -50
+		}
+		modifier = {
+			has_trait = zealous
+			factor = 2
+		}
+	}
+}
+
+adopt_state_faith = {
+	picture = {
+		trigger = {
+			NOR = {
+				government_has_flag = government_is_tribal
+				government_has_flag = government_is_theocracy
+				top_liege ?= { government_has_flag = government_is_tribal }
+				top_liege ?= { government_has_flag = government_is_theocracy }
+			}
+			OR = {
+				culture = { has_cultural_pillar = heritage_byzantine }
+				top_liege ?= {
+					OR = {
+						culture = { has_cultural_pillar = heritage_byzantine }
+						always = no # HD 2026-11-01：原版判君士坦丁堡（本图无此头衔）
+						is_roman_emperor_primary_title_trigger = yes
+					}
+				}
+			}
+		}
+		reference = "gfx/interface/illustrations/decisions/ep3_cerimonial_decision.dds"
+	}
+	# HD 2026-11-01：删去原版伊斯兰专属配图分支（国教属伊斯兰时用朝圣图）
+	picture = {
+		reference = "gfx/interface/illustrations/decisions/decision_major_religion.dds"
+	}
+
+	ai_check_interval_by_tier = {
+		barony = 0
+		county = 60
+		duchy = 60
+		kingdom = 60
+		empire = 60
+		hegemony = 0
+	}
+	sort_order = 110
+	decision_group_type = admin
+
+	desc = adopt_state_faith_decision_desc
+	selection_tooltip = adopt_state_faith_decision_selection_tooltip
+
+	is_shown = {
+		top_liege ?= { government_allows = state_faith }
+		NOT = { rite ?= top_liege.primary_title.state_rite }
+		exists = top_liege.primary_title.state_rite
+		has_ep3_dlc_trigger = yes
+	}
+
+	is_valid = {
+		top_liege = { government_allows = state_faith }
+		NOT = { rite ?= top_liege.primary_title.state_rite }
+	}
+
+	is_valid_showing_failures_only = {
+		is_physically_able = yes
+		is_in_activity = no
+		NOT = { faith.religious_head ?= root }
+		custom_tooltip = {
+			text = adopt_state_faith_heresy_cooldown_tt
+			NOT = { has_character_flag = embraced_heresy_recently }
+		}
+	}
+
+	cost = {}
+
+	effect = {
+		hidden_effect = {
+			rite = { save_scope_as = old_rite }
+			top_liege.primary_title.state_rite = { save_scope_as = new_rite }
+			create_character_memory = { type = adopted_state_faith_memory }
+			scope:new_memory = {
+				set_variable = {
+					name = old_rite
+					value = scope:old_rite
+				}
+				set_variable = {
+					name = new_rite
+					value = scope:new_rite
+				}
+				# Savegame and non-English loc compatibility; do not rename or remove
+				set_variable = {
+					name = old_faith
+					value = scope:old_rite.faith
+				}
+				set_variable = {
+					name = new_faith
+					value = scope:new_rite.faith
+				}
+				set_variable = {
+					name = title
+					value = root.top_liege.primary_title
+				}
+			}
+		}
+
+		# Changing rite into another faith costs piety and can fail silently, so we change the faith first
+		if = {
+			limit = { NOT = { faith = top_liege.primary_title.state_rite.faith } }
+			set_character_faith_with_conversion = top_liege.primary_title.state_rite.faith
+		}
+		if = {
+			limit = { NOT = { rite = top_liege.primary_title.state_rite } }
+			set_character_rite_with_conversion = top_liege.primary_title.state_rite
+		}
+
+		if = {
+			limit = { NOT = { has_character_flag = adopted_state_faith } }
+			if = {
+				limit = { government_has_flag = government_has_influence }
+				change_influence = monumental_influence_gain
+			}
+			add_piety = massive_piety_gain
+			top_liege = {
+				if = {
+					limit = {
+						rite = primary_title.state_rite
+						this != root
+					}
+					add_opinion = {
+						target = root
+						modifier = converted_to_state_faith_opinion
+						opinion = 30
+					}
+				}
+				every_vassal = {
+					custom = every_governor_of_state_faith
+					limit = {
+						rite = top_liege.primary_title.state_rite
+						this != root
+					}
+					add_opinion = {
+						target = root
+						modifier = converted_to_state_faith_opinion
+						opinion = 30
+					}
+				}
+			}
+			add_character_flag = adopted_state_faith
+		}
+	}
+
+	ai_potential = {
+		NOT = { has_trait = zealous } # A zealous vassal would presumably not want to change their faith
+		exists = top_liege.primary_title.state_rite
+		rite != top_liege.primary_title.state_rite
+	}
+
+	ai_will_do = {
+		base = 20
+		modifier = {
+			is_governor = yes
+			add = 40
+		}
+
+		# Personality
+		modifier = {
+			is_governor = yes
+			has_trait = ambitious
+			add = 20
+		}
+		modifier = {
+			has_trait = fickle
+			add = 30
+		}
+		modifier = {
+			has_trait = arbitrary
+			add = 10
+		}
+		modifier = {
+			has_trait = ambitious
+			add = -15
+		}
+		modifier = {
+			has_trait = arrogant
+			add = -15
+		}
+		modifier = {
+			has_trait = content
+			add = -20
+		}
+		modifier = {
+			has_trait = cynical
+			add = -30
+		}
+		modifier = {
+			has_trait = stubborn
+			add = -50
+		}
+
+		# Faith
+		modifier = { # More likely to switch away from an unreformed faith
+			faith ?= { has_doctrine_parameter = unreformed }
+			add = 20
+		}
+		modifier = { # Communal Identity make it more likely to adopt faith if they share same culture with the top liege
+			rite ?= { rite_has_parameter = same_culture_conversion_bonus_active }
+			culture ?= top_liege.culture
+			add = 10
+		}
+		modifier = { # Some faith are more likely to be abandoned
+			rite ?= { rite_has_parameter = unattractive_for_character_conversions }
+			add = 10
+		}
+		modifier = { # Don't adopt the state faith if you have the same rite as the top liege (if the emperor can have this rite, so can we!)
+			rite = top_liege.rite
+			top_liege != this
+			factor = 0
+		}
+
+		# Other
+		modifier = {
+			has_vassal_stance = zealot
+			factor = 0.3
+		}
+
+		# Non-admin vassals only consider converting if their rite hostility is low enough
+		modifier = {
+			NOT = { government_has_flag = government_is_administrative }
+			rite ?= {
+				rite_hostility_level = {
+					target = root.top_liege.primary_title.state_rite
+					value >= faith_hostile_level
+				}
+			}
+			factor = 0
+		}
+	}
+}
+
+### Go Fishing ###
+go_fishing_decision = {
+	picture = { reference = "gfx/interface/illustrations/event_scenes/bp1_docks_tribal.dds" }
+	desc = go_fishing_decision_desc
+	selection_tooltip = go_fishing_decision_tooltip
+
+	ai_check_interval_by_tier = {
+		barony = 0
+		county = 0
+		duchy = 24
+		kingdom = 0
+		empire = 0
+		hegemony = 0
+	}
+	cooldown = { years = 2 }
+	decision_group_type = adventurer_minor
+
+	is_shown = {
+		has_government = landless_adventurer_government
+		#DLC check.
+		has_ep3_dlc_trigger = yes
+	}
+
+	is_valid_showing_failures_only = {
+		is_available = yes
+		custom_tooltip = {
+			text = go_fishing_decision_unlock_tt
+			location = {
+				OR = {
+					is_coastal = yes
+					is_riverside_province = yes
+				}
+			}
+		}
+	}
+
+	effect = {
+		custom_tooltip = {
+			text = go_fishing_decision_effect_tt
+			trigger_event = ep3_decisions_event.9001
+		}
+		close_view = {
+			view = decisions
+			player = root
+		}
+	}
+
+	ai_potential = {
+		always = yes
+	}
+
+	ai_will_do = {
+		base = 100
+	}
+}

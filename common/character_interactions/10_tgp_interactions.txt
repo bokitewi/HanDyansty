@@ -8728,6 +8728,15 @@ request_great_project_contribution_interaction = {
 
 		#Dynasty Legacy
 		modifier = {
+			scope:actor = { dynasty ?= { has_dynasty_perk = pam_legacy_2 } }
+			scope:recipient = {
+				faith ?= scope:actor.faith
+				government_has_flag = government_is_ecclesiastical
+			}
+			add = 25
+			desc = REQUEST_ECCLESIASTICAL_TREASURY_LEGACY_DYNASTY_REASON
+		}
+		modifier = {
 			scope:actor = {
 				dynasty ?= { has_dynasty_perk = tgp_sea_legacy_3 }
 			}
@@ -10478,6 +10487,16 @@ landless_admin_switch_non_admin_top_liege_interaction = {
 				}
 			}
 		}
+		modifier = {
+			add = -75
+			desc = refused_transfer_reason
+			scope:actor = { var:refused_transfer_target ?= { this = scope:recipient } }
+		}
+		modifier = {
+			add = -200
+			desc = refused_transfer_liege_reason
+			scope:actor = { var:refused_transfer_liege ?= { this = scope:recipient } }
+		}
 	}
 	on_accept = {
 		scope:actor.liege = {
@@ -11040,10 +11059,19 @@ pay_treasury_debt_interaction = {
 	common_interaction = no
 	interface_priority = 65
 	desc = pay_treasury_debt_interaction_desc
+	notification_text = pay_treasury_debt_interaction_notification
+
+	is_available = {
+		has_treasury = yes
+		trigger_if = {
+			limit = { is_ai = yes }
+			treasury > 1000 # Let's make sure the AI don't spend their treasury needlessly
+			is_adult = yes
+		}
+	}
 
 	is_shown = {
 		scope:actor = {
-			has_treasury = yes
 			OR = {
 				has_title = title:e_minister_of_war
 				has_title = title:e_minister_of_revenue
@@ -11051,7 +11079,7 @@ pay_treasury_debt_interaction = {
 			}
 		}
 		scope:recipient = {
-			top_liege = scope:actor.top_liege
+			top_liege ?= scope:actor.top_liege
 			has_treasury = yes
 			trigger_if = {
 				limit = {
@@ -11081,6 +11109,51 @@ pay_treasury_debt_interaction = {
 		}
 	}
 
+	is_highlighted = {
+		scope:actor = {
+			is_character_interaction_potentially_accepted = {
+				recipient = scope:recipient
+				interaction = pay_treasury_debt_interaction
+			}
+		}
+	}
+
+	can_send = {
+		custom_tooltip = {
+			text = HAS_NO_OPTION_SELECTED
+			OR = {
+				scope:strong_hook = yes
+				scope:weak_hook = yes
+				scope:kindness = yes
+			}
+		}
+	}
+	#request strong hook
+	send_option = {
+		flag = strong_hook
+		localization = pay_treasury_debt_interaction_request_strong_hook
+	}
+	#request weak hook
+	send_option = {
+		flag = weak_hook
+		localization = pay_treasury_debt_interaction_request_weak_hook
+	}
+	# just out of kindness
+	send_option = {
+		flag = kindness
+		localization = pay_treasury_debt_interaction_request_kindness
+		is_shown = {
+			scope:actor = {
+				OR = {
+					has_trait = generous
+					has_trait = compassionate
+				}
+			}
+		}
+	}
+
+	send_options_exclusive = yes
+
 	on_accept = {
 		scope:actor = {
 			pay_short_term_treasury	= {
@@ -11090,9 +11163,35 @@ pay_treasury_debt_interaction = {
 					multiply = -1
 				}
 			}
-			add_hook = {
-				type = strong_indebted_hook
-				target = scope:recipient
+			if = {
+				limit = {
+					scope:strong_hook = yes
+				}
+				add_hook = {
+					type = strong_indebted_hook
+					target = scope:recipient
+				}
+			}
+			if = {
+				limit = {
+					scope:weak_hook = yes
+				}
+				add_hook = {
+					type = indebted_hook
+					target = scope:recipient
+				}
+			}
+			if = {
+				limit = {
+					scope:kindness = yes
+				}
+				scope:recipient = {
+					progress_towards_friend_effect = {
+						REASON = friend_paid_debt
+						CHARACTER = scope:actor
+						OPINION = default_friend_opinion
+					}
+				}
 			}
 			change_influence = major_influence_value
 		}
@@ -11113,7 +11212,7 @@ pay_treasury_debt_interaction = {
 	}
 
 	ai_accept = {
-		base = 5
+		base = 20
 		# Don't want to give hooks to rivals
  		house_relation_ai_accept_modifiers = { # House Relations
  			HOUSE_1_MEMBER = scope:actor
@@ -11139,6 +11238,77 @@ pay_treasury_debt_interaction = {
 			}
 			add = -50
 		}
+		## Debt is a great motivator for acceptance
+		### Is slightly in debt.
+		modifier = {
+			add = 10
+			OR = {
+				debt_level = 1
+				treasury_debt_level = 1
+			}
+			desc = PT_AI_IS_IN_DEBT
+		}
+		### Is one year in debt.
+		modifier = {
+			add = 25
+			OR = {
+				debt_level = 2
+				treasury_debt_level = 2
+			}
+			desc = PT_AI_IS_IN_DEBT
+		}
+		### Is two years in debt.
+		modifier = {
+			add = 40
+			OR = {
+				debt_level = 3
+				treasury_debt_level = 3
+			}
+			desc = PT_AI_IS_IN_DEBT
+		}
+		### Is three years in debt.
+		modifier = {
+			add = 60
+			OR = {
+				debt_level = 4
+				treasury_debt_level = 4
+			}
+			desc = PT_AI_IS_IN_DEBT
+		}
+		### Is four years in debt.
+		modifier = {
+			add = 100
+			OR = {
+				debt_level = 5
+				treasury_debt_level = 5
+			}
+			desc = PT_AI_IS_IN_DEBT
+		}
+		### Is over five years in debt.
+		modifier = {
+			add = 200
+			OR = {
+				debt_level >= 6
+				treasury_debt_level >= 6
+			}
+			desc = PT_AI_IS_IN_DEBT
+		}
+		# Are you asking for a strong hook?
+		modifier = {
+			trigger = {
+				scope:strong_hook ?= yes
+			}
+			add = -50
+			desc = ASKING_FOR_STRONG_HOOK_ACCEPTANCE_TT
+		}
+		# Are you asking for a weak hook?
+		modifier = {
+			trigger = {
+				scope:weak_hook ?= yes
+			}
+			add = -25
+			desc = ASKING_FOR_WEAK_HOOK_ACCEPTANCE_TT
+		}
 	}
 
 	ai_frequency_by_tier = {
@@ -11157,11 +11327,6 @@ pay_treasury_debt_interaction = {
 		ai_recipients = situation_participant_group
 		parameter = dynastic_cycle
 		max = 20
-	}
-
-	ai_potential = {
-		is_adult = yes
-		treasury > 1000 # Let's make sure the AI don't spend their treasury needlessly
 	}
 
 	ai_will_do = {

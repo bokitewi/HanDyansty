@@ -1,26 +1,883 @@
 ﻿# Unsupported vanilla regional event chain retained only as inert public shells.
+# HD 2026-11-01：天朝可触发的通用事件已恢复原版（见各处 HD 注释）；拜占庭门控或本地图无法触发的仍为空壳。
 namespace = ep3_emperor_yearly
 
-ep3_emperor_yearly.8000 = { type = character_event hidden = yes trigger = { always = no } }
-ep3_emperor_yearly.8010 = { type = character_event hidden = yes trigger = { always = no } }
+# HD 2026-11-01：恢复原版（删君士坦丁堡（province:496）描述分支）
+# Capital depopulated: move from somewhere else?
+
+scripted_trigger ep3_emperor_yearly_8000_county_holder_trigger = {
+	NOT = { has_county_modifier = ep3_development_sacrifice_modifier }
+	holder = {
+		NOR = {
+			this = root
+			scope:suggestor ?= this
+		}
+		OR = {
+			is_governor = yes
+			liege = { is_governor = yes }
+		}
+	}
+}
+
+scripted_effect ep3_emperor_yearly_8000_save_governor_county_pair_effect = {
+	save_scope_as = governor_$COUNT$
+	random_in_list = {
+		list = developed_counties
+		limit = {
+			OR = {
+				holder = scope:governor_$COUNT$
+				holder = { is_vassal_of = scope:governor_$COUNT$ }
+			}
+		}
+		save_scope_as = county_$COUNT$
+	}
+}
+
+scripted_effect ep3_emperor_yearly_8000_county_effect = {
+	scope:governor_$COUNT$ = {
+		add_opinion = {
+			target = root
+			modifier = annoyed_opinion
+			opinion = -20
+		}
+	}
+	save_scope_value_as = {
+		name = development_loss
+		value = {
+			value = scope:county_$COUNT$.development_level
+			multiply = 0.1
+			ceiling = yes
+			multiply = -1
+		}
+	}
+	scope:county_$COUNT$ = {
+		change_development_level = scope:development_loss
+		add_county_modifier = {
+			modifier = ep3_development_sacrifice_modifier
+			years = 10
+		}
+	}
+}
+
+ep3_emperor_yearly.8000 = {
+	type = character_event
+	title = ep3_emperor_yearly.8000.t
+	desc = {
+		desc = ep3_emperor_yearly.8000.intro
+		desc = ep3_emperor_yearly.8000.desc
+	}
+	theme = emperor
+	left_portrait = {
+		character = root
+		animation = thinking
+	}
+	right_portrait = {
+		character = scope:suggestor
+		triggered_animation = {
+			trigger = { has_trait = blind }
+			animation = admiration
+		}
+		animation = chancellor
+	}
+	lower_left_portrait = scope:governor_1
+	lower_center_portrait = scope:governor_2
+	lower_right_portrait = scope:governor_3
+	cooldown = { years = 10 }
+
+	trigger = {
+		has_ep3_dlc_trigger = yes
+		# Ensure you are l'empereur
+		highest_held_title_tier >= tier_empire
+		is_independent_ruler = yes
+		government_has_mechanic = administrative
+		# Ensure there are people to annoy
+		any_vassal = {
+			count >= 3
+			is_governor = yes
+		}
+		# Ensure this has not happened already
+		NOT = {
+			capital_county = { has_county_modifier = ep3_development_waning_modifier }
+		}
+		# Recent conflict
+		OR = {
+			any_truce_holder = { }
+			any_truce_target = { }
+			is_at_war = yes
+		}
+		# Be nice
+		NOR = {
+			any_character_epidemic = { }
+			capital_province = {
+				any_province_epidemic = { }
+			}
+		}
+	}
+
+	weight_multiplier = {
+		base = 1
+		modifier = {
+			any_truce_holder = { highest_held_title_tier >= tier_kingdom }
+			add = 1
+		}
+		modifier = {
+			any_truce_target = { highest_held_title_tier >= tier_kingdom }
+			add = 1
+		}
+		modifier = {
+			is_at_war = yes
+			add = 1
+		}
+	}
+
+	immediate = {
+		if = { # Steward
+			limit = {
+				cp:councillor_steward ?= { is_available_adult = yes }
+			}
+			cp:councillor_steward = { save_scope_as = suggestor }
+		}
+		else = { # Fallback
+			random_courtier = {
+				limit = { is_available_adult = yes }
+				weight = {
+					base = 1
+					modifier = {
+						has_trait = education_stewardship
+						factor = 10
+					}
+					modifier = { add = stewardship }
+					modifier = {
+						has_trait = blind
+						factor = 0
+					}
+				}
+				save_scope_as = suggestor
+			}
+		}
+		# Find development target
+		ordered_sub_realm_county = {
+			limit = { ep3_emperor_yearly_8000_county_holder_trigger = yes }
+			order_by = development_level
+			position = 2
+			save_scope_value_as = {
+				name = minimum_development
+				value = development_level
+			}
+		}
+		# Find matching counties
+		every_sub_realm_county = {
+			limit = {
+				development_level >= scope:minimum_development
+				ep3_emperor_yearly_8000_county_holder_trigger = yes
+			}
+			add_to_list = developed_counties
+			holder = {
+				if = {
+					limit = { is_governor = yes }
+					add_to_list = developed_governors
+				}
+				else_if = {
+					limit = {
+						liege = { is_governor = yes }
+					}
+					liege = { add_to_list = developed_governors }
+				}
+			}
+		}
+		hidden_effect = {
+			while = {
+				count = 3
+				random_in_list = {
+					list = developed_governors
+					limit = {
+						trigger_if = {
+							limit = { exists = scope:governor_1 }
+							this != scope:governor_1
+						}
+						trigger_if = {
+							limit = { exists = scope:governor_2 }
+							this != scope:governor_2
+						}
+					}
+					weight = {
+						base = 1
+						modifier = {
+							OR = {
+								is_of_major_interest_trigger = { CHARACTER = root }
+								liege = { is_of_major_interest_trigger = { CHARACTER = root } }
+							}
+							add = 5
+						}
+						modifier = {
+							OR = {
+								is_of_major_interest_trigger = { CHARACTER = scope:suggestor }
+								liege = { is_of_major_interest_trigger = { CHARACTER = scope:suggestor } }
+							}
+							add = 3
+						}
+						modifier = {
+							OR = {
+								is_of_minor_interest_trigger = { CHARACTER = root }
+								liege = { is_of_minor_interest_trigger = { CHARACTER = root } }
+							}
+							add = 5
+						}
+						modifier = {
+							OR = {
+								is_of_minor_interest_trigger = { CHARACTER = scope:suggestor }
+								liege = { is_of_minor_interest_trigger = { CHARACTER = scope:suggestor } }
+							}
+							add = 3
+						}
+					}
+					if = {
+						limit = { exists = scope:governor_2 }
+						ep3_emperor_yearly_8000_save_governor_county_pair_effect = { COUNT = 3 }
+					}
+					else_if = {
+						limit = { exists = scope:governor_1 }
+						ep3_emperor_yearly_8000_save_governor_county_pair_effect = { COUNT = 2 }
+					}
+					else = {
+						ep3_emperor_yearly_8000_save_governor_county_pair_effect = { COUNT = 1 }
+					}
+				}
+			}
+		}
+	}
+
+	option = {
+		name = ep3_emperor_yearly.8000.a
+		highlight_portrait = scope:governor_1
+		ep3_emperor_yearly_8000_county_effect = { COUNT = 1 }
+		ai_chance = {
+			base = 1
+			ai_value_modifier = {
+				ai_greed = 0.5
+			}
+			opinion_modifier = {
+				who = root
+				opinion_target = scope:governor_1
+				multiplier = -0.5
+			}
+		}
+	}
+
+	option = {
+		name = ep3_emperor_yearly.8000.b
+		trigger = { exists = scope:governor_2 }
+		highlight_portrait = scope:governor_2
+		ep3_emperor_yearly_8000_county_effect = { COUNT = 2 }
+		ai_chance = {
+			base = 1
+			ai_value_modifier = {
+				ai_greed = 0.5
+			}
+			opinion_modifier = {
+				who = root
+				opinion_target = scope:governor_2
+				multiplier = -0.5
+			}
+		}
+	}
+
+	option = {
+		name = ep3_emperor_yearly.8000.c
+		trigger = { exists = scope:governor_3 }
+		highlight_portrait = scope:governor_3
+		ep3_emperor_yearly_8000_county_effect = { COUNT = 3 }
+		ai_chance = {
+			base = 1
+			ai_value_modifier = {
+				ai_greed = 0.5
+			}
+			opinion_modifier = {
+				who = root
+				opinion_target = scope:governor_3
+				multiplier = -0.5
+			}
+		}
+	}
+
+	option = {
+		name = ep3_emperor_yearly.8000.d
+		capital_county = {
+			change_development_level = -2
+			add_county_modifier = {
+				modifier = ep3_development_waning_modifier
+				years = 10
+			}
+		}
+		ai_chance = {
+			base = 1
+			ai_value_modifier = {
+				ai_greed = -1
+				ai_compassion = 0.25
+			}
+		}
+	}
+}
+
+# HD 2026-11-01：恢复原版（删罗马皇帝开头分支）
+# The fake letter of introduction
+
+scripted_trigger emperor_yearly_8010_valid_governor_trigger = {
+	is_governor = yes
+	is_available_adult = yes
+	NOR = {
+		is_close_family_of = root
+		is_spouse_of = root
+		has_any_scripted_relation = root
+	}
+}
+
+ep3_emperor_yearly.8010 = {
+	type = letter_event
+	opening = ep3_emperor_yearly.8010.opening
+	desc = ep3_emperor_yearly.8010.desc
+	sender = {
+		character = scope:governor
+		animation = sadness
+	}
+	cooldown = { years = 10 }
+
+	trigger = {
+		has_ep3_dlc_trigger = yes
+		# Ensure you are l'empereur
+		highest_held_title_tier >= tier_empire
+		is_independent_ruler = yes
+		government_has_mechanic = administrative
+		# Ensure there is a governor to be duped
+		any_vassal = { emperor_yearly_8010_valid_governor_trigger = yes }
+	}
+
+	immediate = {
+		random_vassal = {
+			limit = { emperor_yearly_8010_valid_governor_trigger = yes }
+			weight = {
+				base = 1
+				modifier = {
+					highest_held_title_tier = tier_duchy
+					add = 1
+				}
+				modifier = {
+					is_powerful_vassal = yes
+					add = -1
+				}
+				is_of_major_interest_to_weight_up_modifier = { CHARACTER = root }
+				is_of_minor_interest_to_weight_up_modifier = { CHARACTER = root }
+			}
+			save_scope_as = governor
+		}
+		create_character = {
+			template = pool_repopulate_intrigue
+			location = scope:governor.capital_province
+			dynasty = none
+			save_scope_as = liar
+		}
+		hidden_effect = {
+			rightfully_imprison_character_effect = {
+				TARGET = scope:liar
+				IMPRISONER = scope:governor
+			}
+		}
+		show_as_tooltip = {
+			scope:governor = {
+				imprison = {
+					target = scope:liar
+					type = house_arrest
+				}
+			}
+		}
+	}
+
+	option = { # Reward
+		name = ep3_emperor_yearly.8010.a
+		pay_short_term_gold = {
+			gold = tiny_gold_value
+			target = scope:governor
+		}
+		reverse_add_opinion = {
+			target = scope:governor
+			modifier = grateful_opinion
+			opinion = 15
+		}
+		stress_and_fulfillment_impact = {
+			greedy = minor_stress_impact_gain
+			callous = minor_stress_impact_gain
+		}
+		ai_chance = {
+			base = 1
+			ai_value_modifier = {
+				ai_greed = -0.5
+			}
+			opinion_modifier = {
+				who = root
+				opinion_target = scope:governor
+				multiplier = 0.25
+			}
+		}
+	}
+
+	option = { # Corroborate
+		name = ep3_emperor_yearly.8010.b
+		change_influence = medium_influence_loss
+		add_prestige = minor_prestige_gain
+		scope:liar = { release_from_prison = yes }
+		scope:governor = { add_courtier = scope:liar }
+		reverse_add_opinion = {
+			target = scope:liar
+			modifier = grateful_opinion
+			opinion = 30
+		}
+		add_hook = {
+			target = scope:liar
+			type = loyalty_hook
+		}
+		stress_and_fulfillment_impact = {
+			just = minor_stress_impact_gain
+			honest = minor_stress_impact_gain
+		}
+		ai_chance = {
+			base = 0.5
+			ai_value_modifier = {
+				ai_honor = -0.5
+			}
+		}
+	}
+
+	option = { # Imprison
+		name = ep3_emperor_yearly.8010.c
+		scope:governor = { change_influence = minor_influence_gain }
+		hidden_effect = {
+			scope:liar = { release_from_prison = yes }
+		}
+		send_interface_toast = {
+			title = ep3_emperor_yearly.8010.c.tt
+			left_icon = scope:liar
+			imprison = {
+				target = scope:liar
+				type = house_arrest
+			}
+		}
+		hidden_effect = {
+			scope:liar = { change_prison_type = dungeon }
+		}
+		stress_and_fulfillment_impact = {
+			lazy = minor_stress_impact_gain
+			arbitrary = minor_stress_impact_gain
+		}
+		ai_chance = {
+			base = 1
+			ai_value_modifier = {
+				ai_vengefulness = 0.5
+			}
+		}
+	}
+
+	option = { # Dismiss
+		name = ep3_emperor_yearly.8010.d
+		scope:governor = { change_influence = medium_influence_gain }
+		add_dread = miniscule_dread_gain
+		scope:liar = {
+			death = {
+				death_reason = death_execution
+				killer = scope:governor
+			}
+		}
+		stress_and_fulfillment_impact = {
+			forgiving = minor_stress_impact_gain
+			compassionate = minor_stress_impact_gain
+		}
+		ai_chance = {
+			base = 1
+			ai_value_modifier = {
+				ai_boldness = -0.25
+				ai_energy = -0.25
+			}
+		}
+	}
+}
+
 ep3_emperor_yearly.8020 = { type = character_event hidden = yes trigger = { always = no } }
 ep3_emperor_yearly.8030 = { type = character_event hidden = yes trigger = { always = no } }
 ep3_emperor_yearly.8040 = { type = character_event hidden = yes trigger = { always = no } }
-ep3_emperor_yearly.8050 = { type = character_event hidden = yes trigger = { always = no } }
-ep3_emperor_yearly.8060 = { type = character_event hidden = yes trigger = { always = no } }
+ep3_emperor_yearly.8050 = { type = character_event hidden = yes trigger = { always = no } } # HD 2026-11-01：保持停用（需诺斯文化有县、日耳曼信仰有信众、欧洲海岸，本地图不可能触发）
 
-scripted_trigger emperor_yearly_8010_valid_governor_trigger = { always = no }
+# HD 2026-11-01：恢复原版
+# Defecting governor
+
+scripted_trigger ep3_emperor_yearly_8060_defector_trigger = {
+	is_ai = yes
+	is_governor = yes
+	is_at_war = no
+	# Something is rotten
+	OR = {
+		root.legitimacy_level <= 2
+		governor_efficiency <= 0.75
+	}
+	NOR = {
+		has_character_flag = ep3_defector_cooldown
+		has_trait = loyal
+		has_relation_friend = root
+		has_relation_lover = root
+		is_close_family_of = root
+		is_spouse_of = root
+		house = root.house
+	}
+	opinion = {
+		target = root
+		value < -25
+	}
+	save_temporary_scope_as = defector_temp
+	NOT = {
+		root = { has_hook = scope:defector_temp }
+	}
+	root = {
+		# Valid defection sponsor
+		any_neighboring_and_across_water_top_liege_realm_owner = {
+			ep3_emperor_yearly_8060_neighbour_trigger = { DEFECTOR = scope:defector_temp }
+		}
+		# Avoid any factions which are ongoing
+		NOT = {
+			any_targeting_faction = {
+				any_faction_member = { this = scope:defector_temp }
+				OR = {
+					faction_can_press_demands = yes
+					faction_is_at_war = yes
+				}
+			}
+		}
+	}
+}
+
+scripted_trigger ep3_emperor_yearly_8060_neighbour_trigger = {
+	highest_held_title_tier > $DEFECTOR$.highest_held_title_tier
+	opinion = {
+		target = $DEFECTOR$
+		value >= 25
+	}
+	reverse_opinion = {
+		target = $DEFECTOR$
+		value >= 25
+	}
+	OR = {
+		AND = {
+			culture = $DEFECTOR$.culture
+			culture != root.culture
+		}
+		AND = {
+			faith = $DEFECTOR$.faith
+			faith != root.faith
+		}
+		AND = {
+			dynasty = $DEFECTOR$.dynasty
+			dynasty != root.dynasty
+		}
+		is_spouse_of = $DEFECTOR$
+		is_close_family_of = $DEFECTOR$
+		has_relation_friend = $DEFECTOR$
+		has_relation_lover = $DEFECTOR$
+	}
+}
+
+scripted_effect ep3_emperor_yearly_8060_defect_effect = {
+	add_legitimacy = medium_legitimacy_loss
+	create_title_and_vassal_change = {
+		type = conquest
+		save_scope_as = title_change
+		add_claim_on_loss = no
+	}
+	scope:defector = {
+		change_liege = {
+			liege = scope:sponsor
+			change = scope:title_change
+		}
+	}
+	resolve_title_and_vassal_change = scope:title_change
+	custom_tooltip = {
+		text = ep3_emperor_yearly.8060.every_title
+		scope:defector = {
+			every_held_title = {
+				title_tier >= county
+				save_scope_as = title
+				root = { add_pressed_claim = scope:title }
+			}
+		}
+	}
+	add_opinion = {
+		target = scope:defector
+		modifier = treachery_opinion
+	}
+	scope:defector = {
+		if = {
+			limit = {
+				scope:sponsor = {
+					NOT = { government_has_mechanic = administrative }
+				}
+			}
+			assign_feudal_governments_effect = yes
+		}
+		hidden_effect = {
+			every_vassal = {
+				limit = { government_has_mechanic = administrative }
+				if = {
+					limit = {
+						scope:sponsor = {
+							NOT = { government_has_mechanic = administrative }
+						}
+					}
+					assign_feudal_governments_effect = yes
+				}
+			}
+		}
+	}
+}
+
+ep3_emperor_yearly.8060 = {
+	type = character_event
+	title = ep3_emperor_yearly.8060.t
+	desc = {
+		desc = ep3_emperor_yearly.8060.intro
+		first_valid = {
+			triggered_desc = {
+				trigger = {
+					scope:defector = { is_spouse_of = scope:sponsor }
+					NOT = { is_spouse_of = scope:defector }
+				}
+				desc = ep3_emperor_yearly.8060.spouse
+			}
+			triggered_desc = {
+				trigger = {
+					scope:defector = { is_close_family_of = scope:sponsor }
+					NOT = { is_close_family_of = scope:defector }
+				}
+				desc = ep3_emperor_yearly.8060.family
+			}
+			triggered_desc = {
+				trigger = {
+					scope:defector.house = scope:sponsor.house
+					house != scope:defector.house
+				}
+				desc = ep3_emperor_yearly.8060.house
+			}
+			triggered_desc = {
+				trigger = {
+					scope:defector.dynasty = scope:sponsor.dynasty
+					dynasty != scope:defector.dynasty
+				}
+				desc = ep3_emperor_yearly.8060.dynasty
+			}
+			triggered_desc = {
+				trigger = {
+					scope:defector.culture = scope:sponsor.culture
+					culture != scope:defector.culture
+					scope:defector.faith = scope:sponsor.faith
+					faith != scope:defector.faith
+				}
+				desc = ep3_emperor_yearly.8060.faith_and_culture
+			}
+			triggered_desc = {
+				trigger = {
+					scope:defector.culture = scope:sponsor.culture
+					culture != scope:defector.culture
+				}
+				desc = ep3_emperor_yearly.8060.culture
+			}
+			triggered_desc = {
+				trigger = {
+					scope:defector.faith = scope:sponsor.faith
+					faith != scope:defector.faith
+				}
+				desc = ep3_emperor_yearly.8060.faith
+			}
+			desc = ep3_emperor_yearly.8060.fallback
+		}
+	}
+	theme = emperor
+	override_background = { reference = throne_room }
+	left_portrait = {
+		character = root
+		animation = worry
+	}
+	lower_center_portrait = scope:defector
+	lower_right_portrait = scope:sponsor
+	cooldown = { years = 50 }
+
+	trigger = {
+		has_ep3_dlc_trigger = yes
+		# Ensure you are l'empereur
+		highest_held_title_tier >= tier_empire
+		is_independent_ruler = yes
+		government_has_mechanic = administrative
+		# To avoid edge cases
+		is_at_war = no
+		# Valid defector exists
+		any_vassal = { ep3_emperor_yearly_8060_defector_trigger = yes }
+	}
+
+	immediate = {
+		ordered_vassal = {
+			limit = { ep3_emperor_yearly_8060_defector_trigger = yes }
+			order_by = {
+				value = 0
+				add = {
+					value = "opinion(root)"
+					abs = yes
+				}
+			}
+			save_scope_as = defector
+			add_character_flag = ep3_defector_cooldown
+			root = {
+				ordered_neighboring_and_across_water_top_liege_realm_owner = {
+					limit = {
+						any_sub_realm_county = {
+							any_neighboring_county = {
+								OR = {
+									holder = scope:defector
+									holder.liege ?= scope:defector
+									holder.liege.liege ?= scope:defector
+								}
+							}
+						}
+						ep3_emperor_yearly_8060_neighbour_trigger = { DEFECTOR = scope:defector }
+					}
+					alternative_limit = {
+						ep3_emperor_yearly_8060_neighbour_trigger = { DEFECTOR = scope:defector }
+					}
+					order_by = max_military_strength
+					save_scope_as = sponsor
+				}
+			}
+		}
+	}
+
+	option = { # Arrest
+		name = ep3_emperor_yearly.8060.a
+		duel = {
+			skill = intrigue
+			target = scope:defector
+			8 = {
+				compare_modifier = {
+					value = scope:duel_value
+					multiplier = 3.5
+					min = 1
+				}
+				desc = ep3_emperor_yearly.8060.success
+				send_interface_toast = {
+					title = ep3_emperor_yearly.8060.success
+					left_icon = scope:defector
+					right_icon = scope:sponsor
+					change_influence = medium_influence_gain
+					add_dread = medium_dread_gain
+					rightfully_imprison_character_less_verbose_effect = {
+						TARGET = scope:defector
+						IMPRISONER = root
+					}
+					reverse_add_opinion = {
+						target = scope:sponsor
+						modifier = annoyed_opinion
+						opinion = -20
+					}
+				}
+			}
+			12 = {
+				compare_modifier = {
+					value = scope:duel_value
+					multiplier = -3.5
+					min = 1
+				}
+				desc = ep3_emperor_yearly.8060.failure
+				send_interface_toast = {
+					title = ep3_emperor_yearly.8060.failure
+					left_icon = scope:defector
+					right_icon = scope:sponsor
+					ep3_emperor_yearly_8060_defect_effect = yes
+				}
+			}
+		}
+		add_tyranny = medium_tyranny_gain
+		stress_and_fulfillment_impact = {
+			just = medium_stress_impact_gain
+			forgiving = medium_stress_impact_gain
+		}
+		ai_chance = {
+			base = 1
+			ai_value_modifier = {
+				ai_honor = -0.5
+				ai_energy = 0.5
+			}
+		}
+	}
+
+	option = { # Pay off
+		name = ep3_emperor_yearly.8060.b
+		pay_short_term_gold = {
+			gold = medium_gold_value
+			target = scope:defector
+		}
+		reverse_add_opinion = {
+			modifier = grateful_opinion
+			opinion = 25
+			target = scope:defector
+		}
+		stress_and_fulfillment_impact = {
+			greedy = medium_stress_impact_gain
+			vengeful = medium_stress_impact_gain
+		}
+		ai_chance = {
+			base = 1
+			ai_value_modifier = {
+				ai_vengefulness = -0.5
+				ai_greed = -0.5
+			}
+		}
+	}
+
+	option = { # May defect
+		name = ep3_emperor_yearly.8060.c
+		random = {
+			chance = 33
+			save_scope_as = failure
+			send_interface_toast = {
+				type = event_toast_effect_bad
+				title = ep3_emperor_yearly.8060.defect
+				left_icon = scope:defector
+				right_icon = scope:sponsor
+				ep3_emperor_yearly_8060_defect_effect = yes
+			}
+		}
+		hidden_effect = {
+			if = {
+				limit = { NOT = { exists = scope:failure } }
+				send_interface_toast = {
+					type = event_toast_effect_neutral
+					title = ep3_emperor_yearly.8060.no_defect
+					left_icon = scope:defector
+					right_icon = scope:sponsor
+				}
+			}
+		}
+		stress_and_fulfillment_impact = {
+			just = medium_stress_impact_gain
+			diligent = medium_stress_impact_gain
+		}
+		ai_chance = {
+			base = 1
+			ai_value_modifier = {
+				ai_vengefulness = 0.5
+				ai_boldness = 0.5
+			}
+		}
+	}
+}
+
 scripted_trigger emperor_yearly_8020_valid_purpler_trigger = { always = no }
-scripted_trigger ep3_emperor_yearly_8000_county_holder_trigger = { always = no }
 scripted_trigger ep3_emperor_yearly_8030_bosporos_trigger = { always = no }
 scripted_trigger ep3_emperor_yearly_8050_culture_trigger = { always = no }
-scripted_trigger ep3_emperor_yearly_8060_defector_trigger = { always = no }
-scripted_trigger ep3_emperor_yearly_8060_neighbour_trigger = { always = no }
 
 scripted_effect emperor_yearly_8020_valid_purpler_effect = { }
-scripted_effect ep3_emperor_yearly_8000_county_effect = { }
-scripted_effect ep3_emperor_yearly_8000_save_governor_county_pair_effect = { }
 scripted_effect ep3_emperor_yearly_8030_coast_modifier_effect = { }
 scripted_effect ep3_emperor_yearly_8030_sea_modifier_effect = { }
 scripted_effect ep3_emperor_yearly_8050_unchecked_county_effect = { }
-scripted_effect ep3_emperor_yearly_8060_defect_effect = { }
