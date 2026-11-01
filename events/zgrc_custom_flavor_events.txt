@@ -1,0 +1,1227 @@
+﻿namespace = zgrc_custom_flavor
+
+# ============================================================
+# 传统 · 风味事件
+# 以「文化传统」为题材的风味事件集
+# 触发：均由 on_action / 决策 / 控制台按需触发（本文件不写钩子）
+# ============================================================
+
+# ------------------------------------------------------------
+# 0001 —— 样张：风俗纪要（占位）
+# 调试用孤立事件：仅 root 单人场景，无触发条件
+# 控制台：event zgrc_custom_flavor.0001
+# 用途：验证自定义背景图（见 common/event_backgrounds/zgrc_backgrounds.txt）
+# ------------------------------------------------------------
+zgrc_custom_flavor.0001 = {
+	type = character_event
+	title = zgrc_custom_flavor.0001.t
+	desc = zgrc_custom_flavor.0001.desc
+
+	# 主题：提供图标与音效；背景由下方 override_background 覆盖
+	theme = culture_change
+	override_background = { reference = zgrc_custom_flavor_bei }
+
+	left_portrait = {
+		character = root
+		animation = thinking
+		# animation = lantern 招魂
+		# animation = shiver 冰雪
+		# animation = delirium 沙漠
+		# animation = paranoia 恐惧
+		# animation = incapable
+	}
+
+	option = {
+		name = zgrc_custom_flavor.0001.a
+	}
+}
+
+# ============================================================
+# 招魂 · 魂不守舍者（1001-1006）／招魂 · 三年内亡故者（1011-1012）
+# 入口：on_action zgrc_flavor_zhaohun_0 / _1
+# 作用域：scope:zgrc_hun_helper = 招魂者｜scope:zgrc_hun_target = 魂不守舍者或亡者
+# ============================================================
+
+# ------------------------------------------------------------
+# 1001 —— 巫觋叩门（帮助者）
+# ------------------------------------------------------------
+zgrc_custom_flavor.1001 = {
+	type = character_event
+	title = zgrc_custom_flavor.1001.t
+	desc = zgrc_custom_flavor.1001.desc
+
+	theme = study_faith
+	# override_background = { reference = zgrc_custom_flavor_zhaohun }
+
+	left_portrait = {
+		character = root
+		animation = thinking
+	}
+	right_portrait = {
+		character = scope:zgrc_hun_target
+		animation = incapable
+	}
+
+	immediate = {
+		save_scope_as = zgrc_hun_helper
+
+		# 择一魂不守舍者：亲人 → 朋友 → 至交 → 情人 → 灵魂伴侣
+		if = {
+			limit = { any_close_family_member = { has_trait = incapable } }
+			random_close_family_member = {
+				limit = { has_trait = incapable }
+				save_scope_as = zgrc_hun_target
+			}
+		}
+		else_if = {
+			limit = { any_relation = { type = friend this = { has_trait = incapable } } }
+			random_relation = {
+				type = friend
+				limit = { this = { has_trait = incapable } }
+				this = { save_scope_as = zgrc_hun_target }
+			}
+		}
+		else_if = {
+			limit = { any_relation = { type = best_friend this = { has_trait = incapable } } }
+			random_relation = {
+				type = best_friend
+				limit = { this = { has_trait = incapable } }
+				this = { save_scope_as = zgrc_hun_target }
+			}
+		}
+		else_if = {
+			limit = { any_relation = { type = lover this = { has_trait = incapable } } }
+			random_relation = {
+				type = lover
+				limit = { this = { has_trait = incapable } }
+				this = { save_scope_as = zgrc_hun_target }
+			}
+		}
+		else_if = {
+			limit = { any_relation = { type = soulmate this = { has_trait = incapable } } }
+			random_relation = {
+				type = soulmate
+				limit = { this = { has_trait = incapable } }
+				this = { save_scope_as = zgrc_hun_target }
+			}
+		}
+		# 空安全：控制台直触发等无合适目标时以自身充当，避免空作用域
+		if = {
+			limit = { NOT = { exists = scope:zgrc_hun_target } }
+			save_scope_as = zgrc_hun_target
+		}
+	}
+
+	# —— A 许之：出香火之资，请巫觋行法 ——
+	option = {
+		name = zgrc_custom_flavor.1001.a
+		trigger = { gold >= zgrc_zhaohun_cost }
+		show_as_unavailable = { always = yes }
+
+		remove_short_term_gold = zgrc_zhaohun_cost
+		add_stress = major_stress_loss
+
+		trigger_event = { id = zgrc_custom_flavor.1002 days = { 1 5 } }
+
+		ai_chance = {
+			base = 60
+			modifier = { add = 20 has_trait = zealous }
+			modifier = { add = 20 has_trait = compassionate }
+			modifier = { add = -20 has_trait = cynical }
+		}
+	}
+
+	# —— B 斥之：一派胡言 ——
+	option = {
+		name = zgrc_custom_flavor.1001.b
+
+		ai_chance = {
+			base = 40
+			modifier = { add = 20 has_trait = cynical }
+			modifier = { add = -20 has_trait = zealous }
+		}
+	}
+}
+
+# ------------------------------------------------------------
+# 1002 —— 魂兮归来（招魂者）★循环体★
+#   只知一遍遍呼喊，不知魂在何方、是否将归
+#   再唤 → 魂那边走一段（1003）；四方已遍则只余空喊（重入本事件）；作罢 → 结束
+# ------------------------------------------------------------
+zgrc_custom_flavor.1002 = {
+	type = character_event
+	title = zgrc_custom_flavor.1002.t
+	desc = zgrc_custom_flavor.1002.desc
+
+	theme = faith
+	override_background = { reference = zgrc_custom_flavor_zhaohun }
+
+	left_portrait = {
+		character = root
+		animation = lantern
+	}
+
+	# —— A 再唤一声（反复呼喊不生慰藉：慰藉只在起念、作罢、魂归时）——
+	option = {
+		name = zgrc_custom_flavor.1002.a
+
+		if = {
+			limit = {
+				scope:zgrc_hun_target = {
+					OR = {
+						NOT = { has_character_flag = zgrc_zhaohun_visited_dong }
+						NOT = { has_character_flag = zgrc_zhaohun_visited_nan }
+						NOT = { has_character_flag = zgrc_zhaohun_visited_xi }
+						NOT = { has_character_flag = zgrc_zhaohun_visited_bei }
+					}
+				}
+			}
+			scope:zgrc_hun_target = {
+				trigger_event = { id = zgrc_custom_flavor.1003 days = { 1 7 } }
+			}
+		}
+		else = {
+			trigger_event = { id = zgrc_custom_flavor.1002 days = { 5 15 } }
+		}
+
+		ai_chance = {
+			base = 90
+			# 四方已遍、魂仍不归：AI 不再空唤，就此收手
+			modifier = {
+				factor = 0
+				scope:zgrc_hun_target = {
+					has_character_flag = zgrc_zhaohun_visited_dong
+					has_character_flag = zgrc_zhaohun_visited_nan
+					has_character_flag = zgrc_zhaohun_visited_xi
+					has_character_flag = zgrc_zhaohun_visited_bei
+				}
+			}
+		}
+	}
+
+	# —— B 作罢 ——
+	option = {
+		name = zgrc_custom_flavor.1002.b
+		add_stress = medium_stress_loss
+
+		ai_chance = { base = 10 }
+
+		# 呼唤自此止住：他若仍未醒来，就只剩一片死寂
+		scope:zgrc_hun_target = {
+			trigger_event = { id = zgrc_custom_flavor.1008 days = { 3 10 } }
+		}
+	}
+}
+
+# ------------------------------------------------------------
+# 1003 —— 去往何方（无能者）
+#   四方各只可去一次：去过的方向灰显不可选（四方遍历即四轮）
+# ------------------------------------------------------------
+zgrc_custom_flavor.1003 = {
+	type = character_event
+	title = zgrc_custom_flavor.1003.t
+	desc = zgrc_custom_flavor.1003.desc
+
+	theme = mental_health
+	override_background = { reference = zgrc_custom_flavor_zhaohun }
+	# override_effect_2d = { reference = fog }
+	widget = { gui = event_window_widget_vfx_fog container = foreground_shader_vfx_container }
+
+	# 魂游者：一身寝衣，不显名衔；唤你名字的人在下方中位现身
+	left_portrait = {
+		character = root
+		animation = mental_anguish
+		triggered_outfit = {
+			remove_default_outfit = no
+			outfit_tags = { nightgown }
+		}
+		hide_info = yes
+	}
+	lower_center_portrait = {
+		character = scope:zgrc_hun_helper
+		animation = lantern
+	}
+
+	option = {
+		name = zgrc_custom_flavor.1003.dong
+		trigger = { NOT = { has_character_flag = zgrc_zhaohun_visited_dong } }
+		# show_as_unavailable = { always = yes }
+
+		add_character_flag = zgrc_zhaohun_visited_dong
+		set_variable = { name = zgrc_zhaohun_dir value = flag:dong }
+		trigger_event = { id = zgrc_custom_flavor.1004 days = 1 }
+	}
+	option = {
+		name = zgrc_custom_flavor.1003.nan
+		trigger = { NOT = { has_character_flag = zgrc_zhaohun_visited_nan } }
+		# show_as_unavailable = { always = yes }
+
+		add_character_flag = zgrc_zhaohun_visited_nan
+		set_variable = { name = zgrc_zhaohun_dir value = flag:nan }
+		trigger_event = { id = zgrc_custom_flavor.1004 days = 1 }
+	}
+	option = {
+		name = zgrc_custom_flavor.1003.xi
+		trigger = { NOT = { has_character_flag = zgrc_zhaohun_visited_xi } }
+		# show_as_unavailable = { always = yes }
+
+		add_character_flag = zgrc_zhaohun_visited_xi
+		set_variable = { name = zgrc_zhaohun_dir value = flag:xi }
+		trigger_event = { id = zgrc_custom_flavor.1004 days = 1 }
+	}
+	option = {
+		name = zgrc_custom_flavor.1003.bei
+		trigger = { NOT = { has_character_flag = zgrc_zhaohun_visited_bei } }
+		# show_as_unavailable = { always = yes }
+
+		add_character_flag = zgrc_zhaohun_visited_bei
+		set_variable = { name = zgrc_zhaohun_dir value = flag:bei }
+		trigger_event = { id = zgrc_custom_flavor.1004 days = 1 }
+	}
+	# 兜底：四方已遍（正常流程不会走到，防异常状态卡死）
+	option = {
+		name = zgrc_custom_flavor.1003.none
+		trigger = {
+			has_character_flag = zgrc_zhaohun_visited_dong
+			has_character_flag = zgrc_zhaohun_visited_nan
+			has_character_flag = zgrc_zhaohun_visited_xi
+			has_character_flag = zgrc_zhaohun_visited_bei
+		}
+	}
+}
+
+# ------------------------------------------------------------
+# 1004 —— 魂游四方（无能者）
+#   文本与背景均随方向变量 var:zgrc_zhaohun_dir 切换
+#   前进：六成魂归（1005）／四成未醒，回到招魂者处继续呼喊（1002）
+# ------------------------------------------------------------
+zgrc_custom_flavor.1004 = {
+	type = character_event
+	title = zgrc_custom_flavor.1004.t
+	desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = { var:zgrc_zhaohun_dir = flag:dong }
+				desc = zgrc_custom_flavor.1004.desc_dong
+			}
+			triggered_desc = {
+				trigger = { var:zgrc_zhaohun_dir = flag:nan }
+				desc = zgrc_custom_flavor.1004.desc_nan
+			}
+			triggered_desc = {
+				trigger = { var:zgrc_zhaohun_dir = flag:xi }
+				desc = zgrc_custom_flavor.1004.desc_xi
+			}
+			desc = zgrc_custom_flavor.1004.desc_bei
+		}
+	}
+
+	theme = mental_health
+
+	# 背景随方向择图（取第一条 trigger 通过者；末条兜底）
+	override_background = {
+		trigger = { var:zgrc_zhaohun_dir = flag:dong }
+		reference = zgrc_custom_flavor_dong
+	}
+	override_background = {
+		trigger = { var:zgrc_zhaohun_dir = flag:nan }
+		reference = zgrc_custom_flavor_nan
+	}
+	override_background = {
+		trigger = { var:zgrc_zhaohun_dir = flag:xi }
+		reference = zgrc_custom_flavor_xi
+	}
+	override_background = {
+		trigger = { var:zgrc_zhaohun_dir = flag:bei }
+		reference = zgrc_custom_flavor_bei
+	}
+	override_background = { reference = zgrc_custom_flavor_zhaohun }
+
+	# 四方天光，随魂所至（东：神光／南：雾瘴／西：沙暴／北：风雪）
+	widgets = {
+		widget = {
+			is_shown = { var:zgrc_zhaohun_dir = flag:dong }
+			gui = "event_window_widget_vfx_godray"
+			container = "foreground_shader_vfx_container"
+		}
+		widget = {
+			is_shown = { var:zgrc_zhaohun_dir = flag:nan }
+			gui = "event_window_widget_vfx_fog"
+			container = "foreground_shader_vfx_container"
+		}
+		widget = {
+			is_shown = { var:zgrc_zhaohun_dir = flag:xi }
+			gui = "event_window_widget_vfx_sandstorm"
+			container = "foreground_shader_vfx_container"
+		}
+		widget = {
+			is_shown = { var:zgrc_zhaohun_dir = flag:bei }
+			gui = "event_window_widget_vfx_snow"
+			container = "foreground_shader_vfx_container"
+		}
+	}
+
+	left_portrait = {
+		character = root
+		animation = paranoia
+
+		triggered_outfit = {
+			remove_default_outfit = no
+			outfit_tags = { nightgown }
+		}
+		hide_info = yes
+	}
+
+	option = {
+		name = zgrc_custom_flavor.1004.a
+
+		random_list = {
+			60 = {
+				scope:zgrc_hun_target = {
+					trigger_event = { id = zgrc_custom_flavor.1005 days = { 1 7 } }
+				}
+			}
+			# 未醒：招魂者不知情，仍在 1002 一遍遍呼喊
+			40 = {
+				scope:zgrc_hun_helper = {
+					trigger_event = { id = zgrc_custom_flavor.1002 days = { 1 7 } }
+				}
+			}
+		}
+	}
+}
+
+# ------------------------------------------------------------
+# 1005 —— 反故居些（恢复者）
+#   招魂有成：移去无能；醒来时不见其人，只余耳畔的呼唤
+#   随后一体两面：团聚（1007 恢复者一面 / 1006 招魂者一面）
+# ------------------------------------------------------------
+zgrc_custom_flavor.1005 = {
+	type = character_event
+	title = zgrc_custom_flavor.1005.t
+	desc = zgrc_custom_flavor.1005.desc
+
+	theme = healthcare
+
+	left_portrait = {
+		character = root
+		animation = ecstasy
+	}
+	# right_portrait = {
+	# 	character = scope:zgrc_hun_helper
+	# 	animation = ecstasy
+	# }
+
+	immediate = {
+		# 魂魄归位，双方大慰
+		add_stress = massive_stress_loss
+		if = {
+			limit = { has_trait = incapable }
+			remove_trait = incapable
+		}
+
+		# 清理招魂痕迹（四方标记与方向）
+		remove_character_flag = zgrc_zhaohun_visited_dong
+		remove_character_flag = zgrc_zhaohun_visited_nan
+		remove_character_flag = zgrc_zhaohun_visited_xi
+		remove_character_flag = zgrc_zhaohun_visited_bei
+		remove_variable = zgrc_zhaohun_dir
+
+		# 一体两面：团聚（恢复者一面先现，招魂者一面略晚知晓）
+		trigger_event = { id = zgrc_custom_flavor.1007 days = 1 }
+		scope:zgrc_hun_helper = {
+			trigger_event = { id = zgrc_custom_flavor.1006 days = 1 }
+		}
+	}
+
+	option = {
+		name = zgrc_custom_flavor.1005.a
+	}
+}
+
+# ------------------------------------------------------------
+# 1006 —— 呼唤得应（招魂者）●一体两面·另一面●
+#   与 1005 同一件事：招魂者稍晚知晓
+# ------------------------------------------------------------
+zgrc_custom_flavor.1006 = {
+	type = character_event
+	title = zgrc_custom_flavor.1006.t
+	desc = zgrc_custom_flavor.1006.desc
+
+	theme = friendly
+
+	left_portrait = {
+		character = root
+		animation = ecstasy
+	}
+	right_portrait = {
+		character = scope:zgrc_hun_target
+		animation = ecstasy
+	}
+
+	# 期盼得偿，大慰
+	immediate = { add_stress = massive_stress_loss }
+
+	option = {
+		name = zgrc_custom_flavor.1006.a
+	}
+}
+
+# ------------------------------------------------------------
+# 1007 —— 重逢（恢复者）●一体两面·一面●
+#   与 1006 同一件事：团聚，两处各表一面
+# ------------------------------------------------------------
+zgrc_custom_flavor.1007 = {
+	type = character_event
+	title = zgrc_custom_flavor.1007.t
+	desc = zgrc_custom_flavor.1007.desc
+
+	theme = friendly
+
+	left_portrait = {
+		character = root
+		animation = ecstasy
+	}
+	right_portrait = {
+		character = scope:zgrc_hun_helper
+		animation = ecstasy
+	}
+
+	immediate = {
+		# 团聚：关系更进一步（情人→灵魂伴侣／朋友→至交／无关系→朋友）
+		if = {
+			limit = {
+				is_adult = yes
+				has_relation_lover = scope:zgrc_hun_helper
+				NOT = { has_relation_soulmate = scope:zgrc_hun_helper }
+			}
+			set_relation_soulmate = { target = scope:zgrc_hun_helper }
+		}
+		else_if = {
+			limit = {
+				is_adult = yes
+				has_relation_friend = scope:zgrc_hun_helper
+				NOT = { has_relation_best_friend = scope:zgrc_hun_helper }
+			}
+			set_relation_best_friend = { target = scope:zgrc_hun_helper }
+		}
+		else_if = {
+			limit = {
+				is_adult = yes
+				NOT = { has_relation_friend = scope:zgrc_hun_helper }
+				NOT = { has_relation_lover = scope:zgrc_hun_helper }
+			}
+			set_relation_friend = { target = scope:zgrc_hun_helper }
+		}
+
+		# 恩重难还：招魂者自此握他一份薄情（弱牵制，十年为期）
+		scope:zgrc_hun_helper = {
+			add_hook = {
+				target = scope:zgrc_hun_target
+				type = indebted_hook
+			}
+		}
+	}
+
+	option = {
+		name = zgrc_custom_flavor.1007.a
+	}
+}
+
+# ------------------------------------------------------------
+# 1008 —— 重归死寂（魂不守舍者）
+#   呼唤止住而魂未归：他重新沉入死寂
+#   进入即清四方痕迹，好教日后再招时从零起
+# ------------------------------------------------------------
+zgrc_custom_flavor.1008 = {
+	type = character_event
+	title = zgrc_custom_flavor.1008.t
+	desc = zgrc_custom_flavor.1008.desc
+
+	theme = mental_health
+	override_background = { reference = zgrc_custom_flavor_zhaohun }
+
+	left_portrait = {
+		character = root
+		animation = incapable
+		triggered_outfit = {
+			remove_default_outfit = no
+			outfit_tags = { nightgown }
+		}
+		hide_info = yes
+	}
+
+	immediate = {
+		remove_character_flag = zgrc_zhaohun_visited_dong
+		remove_character_flag = zgrc_zhaohun_visited_nan
+		remove_character_flag = zgrc_zhaohun_visited_xi
+		remove_character_flag = zgrc_zhaohun_visited_bei
+		remove_variable = zgrc_zhaohun_dir
+	}
+
+	option = {
+		name = zgrc_custom_flavor.1008.a
+	}
+}
+
+# ============================================================
+# 招魂 1 · 三年内亡故的挚亲挚友（1011-1012）
+# 入口：on_action zgrc_flavor_zhaohun_1
+# 招之亦空：只有招魂者一遍遍呼喊，直到自己作罢
+# ============================================================
+
+# ------------------------------------------------------------
+# 1011 —— 巫觋叩门·招亡者（招魂者）
+#   亡者不现身
+# ------------------------------------------------------------
+zgrc_custom_flavor.1011 = {
+	type = character_event
+	title = zgrc_custom_flavor.1011.t
+	desc = zgrc_custom_flavor.1011.desc
+
+	theme = study_faith
+	override_background = { reference = zgrc_custom_flavor_zhaohun }
+
+	left_portrait = {
+		character = root
+		animation = thinking
+	}
+
+	immediate = {
+		save_scope_as = zgrc_hun_helper
+
+		# 取三年内亡故的挚亲挚友（爱人 / 灵魂伴侣 / 朋友 / 至交 / 近亲 / 配偶）
+		random_memory = {
+			limit = {
+				memory_age_years < 3
+				OR = {
+					has_memory_type = lover_died
+					has_memory_type = soulmate_died
+					has_memory_type = friend_died
+					has_memory_type = best_friend_died
+					has_memory_type = relative_died
+					has_memory_type = spouse_died
+				}
+			}
+			memory_participant:dead_relation = { save_scope_as = zgrc_hun_target }
+		}
+
+		# 空安全：控制台直触发等无合适目标时以自身充当，避免空作用域
+		if = {
+			limit = { NOT = { exists = scope:zgrc_hun_target } }
+			save_scope_as = zgrc_hun_target
+		}
+	}
+
+	# —— A 许之：仍要招 ——
+	option = {
+		name = zgrc_custom_flavor.1011.a
+		trigger = { gold >= zgrc_zhaohun_cost }
+		show_as_unavailable = { always = yes }
+
+		remove_short_term_gold = zgrc_zhaohun_cost
+		add_stress = major_stress_loss
+
+		trigger_event = { id = zgrc_custom_flavor.1012 days = { 1 5 } }
+
+		ai_chance = {
+			base = 70
+			modifier = { add = 20 has_trait = zealous }
+			modifier = { add = 20 has_trait = compassionate }
+			modifier = { add = -20 has_trait = cynical }
+		}
+	}
+
+	# —— B 斥之 ——
+	option = {
+		name = zgrc_custom_flavor.1011.b
+
+		ai_chance = {
+			base = 30
+			modifier = { add = 20 has_trait = cynical }
+			modifier = { add = -20 has_trait = zealous }
+		}
+	}
+}
+
+# ------------------------------------------------------------
+# 1012 —— 魂兮归来·空（招魂者）★循环体★
+#   亡者无应：唯余自己一遍遍呼喊，直到作罢
+# ------------------------------------------------------------
+zgrc_custom_flavor.1012 = {
+	type = character_event
+	title = zgrc_custom_flavor.1012.t
+	desc = zgrc_custom_flavor.1012.desc
+
+	theme = mental_health
+	override_background = { reference = zgrc_custom_flavor_zhaohun }
+
+	left_portrait = {
+		character = root
+		animation = lantern
+	}
+
+	# —— A 再唤一声（亡者无应，徒劳而已）——
+	option = {
+		name = zgrc_custom_flavor.1012.a
+		trigger_event = { id = zgrc_custom_flavor.1012 days = { 5 15 } }
+	}
+
+	# —— B 作罢 ——
+	option = {
+		name = zgrc_custom_flavor.1012.b
+		add_stress = medium_stress_loss
+	}
+}
+
+# ============================================================
+# 吴越宝剑（3001）—— 落魄吴越剑士来卖剑
+# 入口：on_action zgrc_flavor_wuyue_sword（文化有吴越剑风）
+# ============================================================
+zgrc_custom_flavor.3001 = {
+	type = character_event
+	title = zgrc_custom_flavor.3001.t
+	desc = zgrc_custom_flavor.3001.desc
+	theme = stewardship_wealth_focus
+
+	left_portrait = {
+		character = root
+		animation = personality_rational
+	}
+	right_portrait = {
+		character = scope:swordsman
+		animation = personality_content
+	}
+	artifact = {
+		target = scope:sword_scope
+		position = lower_left_portrait
+	}
+
+	immediate = {
+		create_character = {
+			template = wandering_knight_character
+			location = root.location
+			culture = root.culture
+			faith = root.faith
+			save_scope_as = swordsman
+		}
+		scope:swordsman = {
+			zgrc_create_wuyue_sword_effect = yes
+		}
+		# 宝剑与剑士跨事件传递（3002 结果事件用）
+		set_variable = { name = zgrc_wuyue_sword value = scope:sword_scope }
+		set_variable = { name = zgrc_swordsman value = scope:swordsman }
+	}
+
+	# —— 1 购买（高价）——
+	option = {
+		name = zgrc_custom_flavor.3001.a
+		trigger = {
+			gold >= major_gold_value
+		}
+
+		remove_short_term_gold = major_gold_value
+		scope:sword_scope = { set_owner = root }
+
+		stress_and_fulfillment_impact = {
+			generous = medium_stress_impact_loss
+			greedy = medium_stress_impact_gain
+		}
+
+		ai_chance = {
+			base = 15
+			modifier = {
+				add = 10
+				prowess >= 12
+			}
+			modifier = {
+				factor = 0.5
+				OR = {
+					has_trait = greedy
+					has_trait = callous
+				}
+			}
+		}
+	}
+
+	# —— 2 决斗（原版单挑流程）——
+	option = {
+		name = zgrc_custom_flavor.3001.b
+		custom_tooltip = zgrc_custom_flavor.3001.b_tt
+		trigger = {
+			can_start_single_combat_trigger = yes
+		}
+		# 决斗场景：清理交给 3002，after 跳过早清理
+		add_character_flag = zgrc_wuyue_duel
+
+		configure_start_single_combat_effect = {
+			SC_INITIATOR = root
+			SC_ATTACKER = root
+			SC_DEFENDER = scope:swordsman
+			FATALITY = possible
+			FIXED = no
+			LOCALE = terrain_scope
+			OUTPUT_EVENT = zgrc_custom_flavor.3002
+			INVALIDATION_EVENT = zgrc_custom_flavor.3002
+		}
+
+		ai_chance = {
+			base = 5
+			modifier = { add = 10  has_trait = brave }
+			modifier = { factor = 0  has_trait = craven }
+		}
+	}
+
+	# —— 3 招募（宝剑仍归剑士）——
+	option = {
+		name = zgrc_custom_flavor.3001.c
+		root = { add_courtier = scope:swordsman }
+
+		ai_chance = {
+			base = 10
+			modifier = { add = 5  has_trait = gregarious }
+		}
+	}
+
+	# —— 4 赶走 ——
+	option = {
+		name = zgrc_custom_flavor.3001.d
+
+		ai_chance = {
+			base = 70
+			modifier = { add = 10  has_trait = callous }
+		}
+	}
+
+	after = {
+		hidden_effect = {
+			# 决斗场景：变量留给 3002 处理
+			if = {
+				limit = { has_character_flag = zgrc_wuyue_duel }
+				remove_character_flag = zgrc_wuyue_duel
+			}
+			else = {
+				# 非决斗：剑士没被招募 → 宝剑（若没到你手上）销毁 + 剑士消失
+				if = {
+					limit = { NAND = { exists = var:zgrc_swordsman var:zgrc_swordsman = { employer = root } } }	# 本 mod：剑士缺失时也算「未被招募」
+					if = {
+						limit = { exists = var:zgrc_wuyue_sword var:zgrc_wuyue_sword = { artifact_owner != root } }	# 本 mod：?= 在变量缺失时为真，会对空变量 destroy_artifact
+						destroy_artifact = var:zgrc_wuyue_sword
+					}
+					var:zgrc_swordsman ?= { silent_disappearance_effect = yes }
+				}
+				remove_variable = zgrc_wuyue_sword
+				remove_variable = zgrc_swordsman
+			}
+		}
+	}
+}
+
+# ============================================================
+# 吴越宝剑 · 决斗结果（3002）—— 单挑结束后处理
+# 入口：3001 选项 2 → configure_start_single_combat_effect → OUTPUT_EVENT
+# 作用域：root = 发起者，scope:sc_victor / scope:sc_loser
+# ============================================================
+zgrc_custom_flavor.3002 = {
+	type = character_event
+	hidden = yes
+
+	immediate = {
+		# root 胜 → 得剑；败 → 扣威望
+		if = {
+			limit = { scope:sc_victor = root }
+			var:zgrc_wuyue_sword ?= { set_owner = root }
+			send_interface_toast = {
+				title = zgrc_custom_flavor.3001.win_t
+				left_icon = root
+				right_icon = var:zgrc_wuyue_sword
+				custom_tooltip = zgrc_custom_flavor.3001.win_tt
+			}
+		}
+		else = {
+			add_prestige = major_prestige_loss
+			send_interface_toast = {
+				title = zgrc_custom_flavor.3001.lose_t
+				left_icon = root
+				custom_tooltip = zgrc_custom_flavor.3001.lose_tt
+			}
+		}
+
+		# 剑士：决斗落败/未招募 → 消失
+		var:zgrc_swordsman ?= { silent_disappearance_effect = yes }
+
+		# 宝剑若没到你手上 → 销毁
+		if = {
+			limit = { exists = var:zgrc_wuyue_sword var:zgrc_wuyue_sword = { artifact_owner != root } }	# 本 mod：?= 在变量缺失时为真，会对空变量 destroy_artifact
+			destroy_artifact = var:zgrc_wuyue_sword
+		}
+
+		# 清理变量
+		remove_variable = zgrc_wuyue_sword
+		remove_variable = zgrc_swordsman
+	}
+}
+
+# ============================================================
+# 干将莫邪 · 山阴石罅（3101）—— 发现石缝，是否探看
+# ============================================================
+zgrc_custom_flavor.3101 = {
+	type = character_event
+	title = zgrc_custom_flavor.3101.t
+	theme = travel
+
+	left_portrait = {
+		character = root
+		animation = personality_rational
+	}
+
+	desc = zgrc_custom_flavor.3101.desc
+
+	option = {                                   # 入内
+		name = zgrc_custom_flavor.3101.a
+		if = {
+			limit = { prowess >= 12 }
+			random_list = {
+				60 = {
+					trigger_event = { id = zgrc_custom_flavor.3102 days = { 1 3 } }
+				}
+				25 = {
+					custom_tooltip = zgrc_custom_flavor.3101.avoid_tt
+					trigger_event = { id = zgrc_custom_flavor.3102 days = { 1 3 } }
+				}
+				15 = {
+					custom_tooltip = zgrc_custom_flavor.3101.collapse_tt
+					add_stress = major_stress_gain
+				}
+			}
+		}
+		else = {
+			random_list = {
+				60 = {
+					trigger_event = { id = zgrc_custom_flavor.3102 days = { 1 3 } }
+				}
+				25 = {
+					custom_tooltip = zgrc_custom_flavor.3101.hurt_tt
+					add_trait = wounded_1
+					add_stress = medium_stress_gain
+					trigger_event = { id = zgrc_custom_flavor.3102 days = { 1 3 } }
+				}
+				15 = {
+					custom_tooltip = zgrc_custom_flavor.3101.collapse_tt
+					add_stress = major_stress_gain
+				}
+			}
+		}
+		ai_chance = {
+			base = 40
+			modifier = { add = 20  has_trait = brave }
+			modifier = { add = 10  learning >= 12 }
+			modifier = { factor = 0  has_trait = craven }
+		}
+	}
+
+	option = {                                   # 不理
+		name = zgrc_custom_flavor.3101.b
+		ai_chance = { base = 60 }
+	}
+}
+
+# ============================================================
+# 干将莫邪 · 寒泉剑匣（3102）—— 洞中见匣，是否开启
+# ============================================================
+zgrc_custom_flavor.3102 = {
+	type = character_event
+	title = zgrc_custom_flavor.3102.t
+	theme = travel
+	override_background = fp3_cave
+
+	left_portrait = {
+		character = root
+		animation = thinking
+	}
+
+	desc = zgrc_custom_flavor.3102.desc
+
+	option = {                                   # 开匣
+		name = zgrc_custom_flavor.3102.a
+		if = {
+			limit = { learning >= 12 }
+			random_list = {
+				75 = {
+					trigger_event = { id = zgrc_custom_flavor.3103 days = 1 }
+				}
+				25 = {
+					custom_tooltip = zgrc_custom_flavor.3102.avoid_tt
+					trigger_event = { id = zgrc_custom_flavor.3103 days = 1 }
+				}
+			}
+		}
+		else = {
+			random_list = {
+				75 = {
+					trigger_event = { id = zgrc_custom_flavor.3103 days = 1 }
+				}
+				25 = {
+					custom_tooltip = zgrc_custom_flavor.3102.hurt_tt
+					add_trait = wounded_1
+					add_stress = medium_stress_gain
+					trigger_event = { id = zgrc_custom_flavor.3103 days = 1 }
+				}
+			}
+		}
+		ai_chance = {
+			base = 80
+			modifier = { add = 20  has_trait = greedy }
+		}
+	}
+
+	option = {                                   # 退出
+		name = zgrc_custom_flavor.3102.b
+		ai_chance = { base = 20 }
+	}
+}
+
+# ============================================================
+# 干将莫邪 · 雌雄双剑（3103）—— 开匣得剑，宝物上屏
+# ============================================================
+zgrc_custom_flavor.3103 = {
+	type = character_event
+	title = zgrc_custom_flavor.3103.t
+	theme = stewardship_wealth_focus
+	override_background = fp3_cave
+
+	left_portrait = {
+		character = root
+		animation = admiration
+	}
+
+	artifact = {
+		target = scope:ganjiang
+		position = lower_center_portrait
+	}
+	artifact = {
+		target = scope:moye
+		position = lower_right_portrait
+	}
+
+	desc = zgrc_custom_flavor.3103.desc
+
+	immediate = {
+		save_scope_value_as = { name = quality  value = 90 }
+		save_scope_value_as = { name = wealth   value = 80 }
+
+		root = { zgrc_create_ganjiang_effect = yes }
+		scope:sword_scope = {
+			save_scope_as = ganjiang
+			set_variable = zgrc_artifact_ganjiang
+			# set_owner = root
+		}
+
+		root = { zgrc_create_moye_effect = yes }
+		scope:sword_scope = {
+			save_scope_as = moye
+			set_variable = zgrc_artifact_moye
+			# set_owner = root
+		}
+
+		# 供后续索取事件取用
+		set_variable = { name = zgrc_ganjiang_ref  value = scope:ganjiang }
+		set_variable = { name = zgrc_moye_ref      value = scope:moye }
+	}
+
+	option = {
+		name = zgrc_custom_flavor.3103.a
+		# 治下宝物出世：风声先到最高领主耳中
+		if = {
+			limit = {
+				is_independent_ruler = no
+				top_liege != root
+			}
+			top_liege = {
+				set_variable = { name = zgrc_sword_finder  value = root }
+				trigger_event = { id = zgrc_custom_flavor.3104 days = { 30 35 } }
+			}
+		}
+		ai_chance = { base = 100 }
+	}
+}
+
+
+# ============================================================
+# 干将莫邪 · 宝物出世（3104）—— 领主：治下有人得了宝剑
+# ============================================================
+zgrc_custom_flavor.3104 = {
+	type = character_event
+	title = zgrc_custom_flavor.3104.t
+	theme = court
+
+	left_portrait = {
+		character = root
+		animation = thinking
+	}
+
+	desc = zgrc_custom_flavor.3104.desc
+
+	option = {                                   # 去信索要
+		name = zgrc_custom_flavor.3104.a
+		if = {
+			limit = { exists = var:zgrc_sword_finder }
+			var:zgrc_sword_finder = {
+				set_variable = { name = zgrc_sword_liege  value = root }
+				trigger_event = { id = zgrc_custom_flavor.3105 days = 1 }
+			}
+		}
+		ai_chance = {
+			base = 20
+			modifier = { add = 10  has_trait = greedy }
+			modifier = { add = 5   has_trait = ambitious }
+		}
+	}
+
+	option = {                                   # 视为祥瑞
+		name = zgrc_custom_flavor.3104.b
+		add_prestige = medium_prestige_gain
+		add_legitimacy = medium_legitimacy_gain
+		ai_chance = {
+			base = 60
+			modifier = { add = 10  has_trait = zealous }
+			modifier = { add = 5   has_trait = arrogant }
+		}
+	}
+}
+
+# ============================================================
+# 干将莫邪 · 索剑（3105）—— 发现者：主上来要剑
+# ============================================================
+zgrc_custom_flavor.3105 = {
+	type = character_event
+	title = zgrc_custom_flavor.3105.t
+	theme = court
+
+	left_portrait = {
+		character = root
+		animation = thinking
+	}
+	right_portrait = {
+		trigger = { exists = scope:liege }
+		character = scope:liege
+		animation = personality_rational
+	}
+
+	desc = zgrc_custom_flavor.3105.desc
+
+	# 主上：优先用变量传递，缺失则退回自身最高领主
+	immediate = {
+		if = {
+			limit = { exists = var:zgrc_sword_liege }
+			var:zgrc_sword_liege = { save_scope_as = liege }
+		}
+		else = {
+			top_liege = { save_scope_as = liege }
+		}
+	}
+
+	option = {                                   # 全部献出
+		name = zgrc_custom_flavor.3105.a
+		var:zgrc_ganjiang_ref ?= { set_owner = scope:liege }
+		var:zgrc_moye_ref ?= { set_owner = scope:liege }
+		add_prestige = major_prestige_gain
+		scope:liege ?= {
+			add_opinion = { target = root  modifier = gift_artifact_opinion  opinion = 50 }
+		}
+		if = {
+			limit = { exists = scope:liege }
+			add_hook = { target = scope:liege  type = favor_hook }
+		}
+		ai_chance = {
+			base = 10
+			modifier = { add = 15  has_trait = content }
+			modifier = { add = 10  has_trait = craven }
+			modifier = { add = 5   has_trait = just }
+		}
+	}
+
+	option = {                                   # 愿意卖出
+		name = zgrc_custom_flavor.3105.b
+		trigger = {
+			exists = scope:liege
+			scope:liege = { gold >= zgrc_sword_price }
+		}
+		var:zgrc_ganjiang_ref ?= { set_owner = scope:liege }
+		var:zgrc_moye_ref ?= { set_owner = scope:liege }
+		scope:liege ?= { remove_short_term_gold = zgrc_sword_price }
+		add_gold = zgrc_sword_price
+		add_prestige = zgrc_sword_sale_prestige
+		ai_chance = {
+			base = 50
+			modifier = { add = 20  has_trait = greedy }
+		}
+	}
+
+	option = {                                   # 藏雄献雌
+		name = zgrc_custom_flavor.3105.c
+		var:zgrc_moye_ref ?= { set_owner = scope:liege }
+		add_prestige = medium_prestige_gain
+		scope:liege ?= {
+			add_opinion = { target = root  modifier = gift_artifact_opinion  opinion = 50 }
+		}
+		ai_chance = {
+			base = 30
+			modifier = { add = 15  has_trait = arbitrary }
+			modifier = { add = 10  has_trait = deceitful }
+		}
+	}
+
+	option = {                                   # 不给
+		name = zgrc_custom_flavor.3105.d
+		scope:liege ?= {
+			trigger_event = { id = zgrc_custom_flavor.3106 days = { 3 7 } }
+		}
+		ai_chance = {
+			base = 10
+			modifier = { add = 20  has_trait = brave }
+			modifier = { add = 10  has_trait = arrogant }
+			modifier = { factor = 0  has_trait = craven }
+		}
+	}
+}
+
+# ============================================================
+# 干将莫邪 · 他不肯给（3106）—— 领主：使者空手而归
+# ============================================================
+zgrc_custom_flavor.3106 = {
+	type = character_event
+	title = zgrc_custom_flavor.3106.t
+	theme = intrigue
+
+	left_portrait = {
+		character = root
+		animation = anger
+	}
+
+	desc = zgrc_custom_flavor.3106.desc
+
+	option = {                                   # 构陷
+		name = zgrc_custom_flavor.3106.a
+		trigger = {
+			exists = var:zgrc_sword_finder
+			var:zgrc_sword_finder = { is_alive = yes }
+		}
+		add_prestige = major_prestige_loss
+		if = {
+			limit = { exists = var:zgrc_sword_finder }
+			add_opinion = { target = var:zgrc_sword_finder  modifier = zgrc_sword_refused_opinion }
+		}
+		ai_chance = {
+			base = 20
+			modifier = { add = 20  has_trait = vengeful }
+			modifier = { add = 15  has_trait = callous }
+		}
+	}
+
+	option = {                                   # 作罢
+		name = zgrc_custom_flavor.3106.b
+		ai_chance = { base = 80 }
+	}
+}
+

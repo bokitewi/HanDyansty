@@ -42,12 +42,19 @@ on_birth_child = {
 on_character_culture_change = {
 	on_actions = {
 		zgrc_hanjia_guandai_on_culture_change
+		zgrc_shou_su_on_culture_change
 	}
 }
 
 five_year_playable_pulse = {
 	on_actions = {
 		zgrc_ruxiang_pulse
+	}
+}
+# 风味事件：随机年度脉冲（年内随机某天，每角色独立）——2026-11-01 汉地风俗 1.5.3 并入
+random_yearly_playable_pulse = {
+	on_actions = {
+		zgrc_flavor_on_action
 	}
 }
 # 革新同步：每年全局计数 + 每年文化同步
@@ -128,33 +135,60 @@ zgrc_game_start_init = {
 	}
 }
 
-# 出生：① 子嗣文化绑定出生地（汉家认同内改从当地）② 汉家冠带授予
+# 出生链：文化分流 → 已汉化（冠带/入乡随俗）｜汉化中（守俗/转籍）
+# 文化只取一次；华夏礼乐与汉化传统互斥，顶层分两支（2026-11-01 汉地风俗 1.5.3：冠带只给非卑微出身、加「生于斯土」规则）
 zgrc_hanjia_children_on_birth = {
 	effect = {
-		# ① 子嗣文化绑定出生地：新生儿文化有华夏礼乐、出生地文化亦有华夏礼乐且不一致 → 改为当地文化
+		culture = { save_scope_as = zgrc_birth_culture }
+
+		# 已汉化文化
 		if = {
 			limit = {
-				# 空安全：新生儿无 location（出生即夭等）时下钻 location.county 会刷 Script system error
-				exists = location
-				culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue }
-				location.county = {
-					culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue }
-					NOT = { culture = root.culture }
+				scope:zgrc_birth_culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue }
+			}
+			# 冠带：非卑微出身
+			if = {
+				limit = { is_lowborn = no }
+				add_trait = zgrc_hanjia_guandai
+			}
+			# 入乡随俗：出生地亦为汉文化且不同 → 改当地，记祖风（受规则「生于斯土」控制）
+			if = {
+				limit = {
+					exists = location
+					location.county.culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue }
+					NOT = { culture = location.county.culture }
+					zgrc_sheng_yu_si_tu_allowed_trigger = yes
 				}
+				zgrc_zufeng_set_origin_effect = yes
+				set_culture = location.county.culture
+				zgrc_zufeng_apply_effect = yes
 			}
-			# 祖风 · 先记录祖上（继承）大区（须在改文化之前）
-			zgrc_zufeng_set_origin_effect = yes
-			set_culture = location.county.culture
-			# 祖风 · 跨大区迁居者挂「某祖风」；同大区跨风俗则不计
-			zgrc_zufeng_apply_effect = yes
 		}
-		# ② 汉家冠带：文化有华夏礼乐 → 添加
-		if = {
+		# 汉化中文化
+		else_if = {
 			limit = {
-				culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue }
-				NOT = { has_trait = zgrc_hanjia_guandai }
+				scope:zgrc_birth_culture = { has_cultural_tradition = tradition_zgrc_yong_xia_bian_yi }
 			}
-			add_trait = zgrc_hanjia_guandai
+			# 父系守俗 → 传守俗
+			if = {
+				# 上游写作 father ?= {…}，无父时为真会误给守俗人，改为显式 exists
+				limit = {
+					exists = father
+					father = { has_trait = zgrc_shou_su_ren }
+				}
+				add_trait = zgrc_shou_su_ren
+			}
+			# 否则：生于汉化之地 → 转籍（记原方向 → 改文化 → 挂五方祖风）
+			else_if = {
+				limit = {
+					exists = location
+					location.county.culture = { has_cultural_tradition = tradition_zgrc_hua_xia_li_yue }
+					NOT = { culture = location.county.culture }
+				}
+				zgrc_zufeng_set_origin_effect = yes
+				set_culture = location.county.culture
+				zgrc_zufeng_apply_yi_effect = yes
+			}
 		}
 	}
 }
@@ -186,6 +220,19 @@ zgrc_hanjia_guandai_on_culture_change = {
 	}
 }
 
+# 转文化：文化失去汉化传统则移除守俗人（先判特质，快速短路）
+zgrc_shou_su_on_culture_change = {
+	effect = {
+		if = {
+			limit = {
+				has_trait = zgrc_shou_su_ren
+				NOT = { culture = { has_cultural_tradition = tradition_zgrc_yong_xia_bian_yi } }
+			}
+			remove_trait = zgrc_shou_su_ren
+		}
+	}
+}
+
 # 入乡随俗：五年度检测（当场判定，直接触发选择事件）
 zgrc_ruxiang_pulse = {
 	trigger = {
@@ -202,6 +249,8 @@ zgrc_ruxiang_pulse = {
 		}
 		# 冷却中不弹
 		NOT = { has_character_flag = zgrc_ruxiang_cooldown }
+		# 祖风存续期内不弹（挂祖风即记 30 年）
+		NOT = { has_character_flag = zgrc_zufeng_active }
 	}
 	effect = {
 		trigger_event = { id = zgrc_common.0002 days = { 0 10 } }
@@ -284,6 +333,100 @@ zgrc_wenyan_travel_check = {
 		random = {
 			chance = zgrc_wen_travel_weight
 			zgrc_wenyan_try_hear_effect = yes
+		}
+	}
+}
+
+# ============================================================
+# 风味事件 · 总入口
+#   只看通用资格，并把各路风味事件分派出去
+#   扩展：一个新事件链写一个 on_action，在本表加一行
+# ============================================================
+zgrc_flavor_on_action = {
+	trigger = {
+		basic_is_valid_for_yearly_events_trigger = yes
+		OR = {
+			is_landed = yes
+			has_government = landless_adventurer_government
+		}
+	}
+	on_actions = {
+		zgrc_flavor_zhaohun_0
+		zgrc_flavor_zhaohun_1
+		zgrc_flavor_wuyue_sword
+		zgrc_flavor_ganjiang_moye
+	}
+}
+
+# 招魂 0 · 魂不守舍者（可救）
+# 资格：自身文化尚巫鬼方术；且亲人 / 朋友 / 至交 / 情人 / 灵魂伴侣中有魂不守舍者
+zgrc_flavor_zhaohun_0 = {
+	trigger = {
+		culture = { has_cultural_tradition = tradition_zgrc_wu_gui_fangshu }
+		OR = {
+			any_close_family_member = { has_trait = incapable }
+			any_relation = { type = friend has_trait = incapable }
+			any_relation = { type = best_friend has_trait = incapable }
+			any_relation = { type = lover has_trait = incapable }
+			any_relation = { type = soulmate has_trait = incapable }
+		}
+	}
+	effect = {
+		random = {
+			chance = zgrc_zhaohun_chance_a
+			trigger_event = { id = zgrc_custom_flavor.1001 days = { 0 7 } }
+		}
+	}
+}
+
+# 资格：自身文化尚巫鬼方术；且三年内爱人 / 灵魂伴侣 / 朋友 / 至交 / 近亲 / 配偶有亡故者
+zgrc_flavor_zhaohun_1 = {
+	trigger = {
+		culture = { has_cultural_tradition = tradition_zgrc_wu_gui_fangshu }
+		any_memory = {
+			# 先筛类型再算年龄：memory_age_years 对已失效的 weak 记忆会报错，
+			# 顺序对齐原版 pilgrimage.txt 写法，让 AND 短路挡住绝大多数记忆
+			OR = {
+				has_memory_type = lover_died
+				has_memory_type = soulmate_died
+				has_memory_type = friend_died
+				has_memory_type = best_friend_died
+				has_memory_type = relative_died
+				has_memory_type = spouse_died
+			}
+			memory_age_years < 3
+		}
+	}
+	effect = {
+		random = {
+			chance = zgrc_zhaohun_chance_b
+			trigger_event = { id = zgrc_custom_flavor.1011 days = { 0 7 } }
+		}
+	}
+}
+
+# 吴越宝剑 · 日常（文化有吴越剑风）
+zgrc_flavor_wuyue_sword = {
+	trigger = {
+		culture = { has_cultural_tradition = tradition_zgrc_wuyue_swordsmanship }
+	}
+	effect = {
+		random = {
+			chance = zgrc_wuyue_sword_chance
+			trigger_event = { id = zgrc_custom_flavor.3001 days = { 0 7 } }
+		}
+	}
+}
+
+# 干将莫邪 · 剑冢（文化有吴越剑风）
+zgrc_flavor_ganjiang_moye = {
+	trigger = {
+		culture = { has_cultural_tradition = tradition_zgrc_wuyue_swordsmanship }
+	}
+	effect = {
+		random = {
+			chance = zgrc_ganjiang_moye_chance
+			trigger_event = { id = zgrc_custom_flavor.3101 days = { 0 7 } }
 		}
 	}
 }
