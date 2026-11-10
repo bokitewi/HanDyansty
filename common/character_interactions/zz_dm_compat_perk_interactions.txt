@@ -11,65 +11,97 @@ fabricate_hook_interaction = {
 	scheme = fabricate_hook
 
 	desc = fabricate_hook_interaction_desc
-	
+
+	is_available = {
+		trigger_if = {
+			limit = { is_ai = yes }
+			intrigue >= medium_skill_rating
+			ai_greed >= low_positive_ai_value
+			is_adult = yes
+			NOR = {
+				has_trait = content
+				any_scheme = {
+					OR = {
+						scheme_type = murder
+						scheme_type = abduct
+						scheme_type = claim_throne
+						scheme_type = fabricate_hook
+						scheme_type = steal_back_artifact
+					}
+				}
+			}
+		}
+	}
+
 	is_shown = {
-		scope:actor = {
+		scope:puppet_or_actor ?= {
 			OR = {
 				has_perk = truth_is_relative_perk
+				has_fulfillment_parameter = sp_fabricate_hook_court_chaplain
+				has_fulfillment_parameter = sp_fabricate_hook_hor
+				has_personal_tenet_flag = tenet_sacred_shadows_fabricate_hook
 				AND = {
 					has_trait = vengeful
 					has_relation_rival = scope:recipient
 				}
-				AND = {
-					any_character_struggle = {
-						involvement = involved
-						has_struggle_phase_parameter = unlocks_fabricate_hooks_for_all
-						is_secondary_character_involvement_either_trigger = {
-							CHAR = scope:recipient
-						}
+				any_character_struggle = {
+					involvement = involved
+					has_struggle_phase_parameter = unlocks_fabricate_hooks_for_all
+					is_secondary_character_involvement_either_trigger = {
+						CHAR = scope:recipient
 					}
 				}
 				AND = {
-					dm_compat_uses_house_unity_trigger = yes
+					government_has_flag = government_is_clan
 					is_in_same_clan_as_trigger = { CHARACTER = scope:recipient }
-					house = { has_house_unity_stage = competitive }	
-				}	
+					house ?= {
+						has_house_unity_parameter = unity_unlock_fabricate_hooks
+					}
+				}
 			}
 		}
-		scope:recipient != scope:actor
+		scope:recipient != scope:puppet_or_actor
 	}
 
 	is_valid = {
-		NOT = { scope:actor = { has_hook = scope:recipient } }
-		OR = {
-			scope:actor = {
-				OR = {
-					has_perk = truth_is_relative_perk # To display that it's available because of the Perk
-					AND = {
-						has_trait = vengeful
-						has_relation_rival = scope:recipient
+		NOT = { scope:puppet_or_actor = { has_hook = scope:recipient } }
+		scope:puppet_or_actor = {
+			OR = {
+				custom_tooltip = {
+					text = sp_fabricate_hook_court_chaplain_tt
+					has_fulfillment_parameter = sp_fabricate_hook_court_chaplain
+				}
+				custom_tooltip = {
+					text = sp_fabricate_hook_hor_tt
+					has_fulfillment_parameter = sp_fabricate_hook_hor
+				}
+				custom_tooltip = {
+					text = doctrine_parameter_tenet_sacred_shadows_fabricate_hook
+					has_personal_tenet_flag = tenet_sacred_shadows_fabricate_hook
+				}
+				has_perk = truth_is_relative_perk # To display that it's available because of the Perk
+				AND = {
+					has_trait = vengeful
+					has_relation_rival = scope:recipient
+				}
+				any_character_struggle = {
+					involvement = involved
+					has_struggle_phase_parameter = unlocks_fabricate_hooks_for_all
+					is_secondary_character_involvement_either_trigger = {
+						CHAR = scope:recipient
 					}
-					AND = {
-						any_character_struggle = {
-							involvement = involved
-							has_struggle_phase_parameter = unlocks_fabricate_hooks_for_all
-							is_secondary_character_involvement_either_trigger = {
-								CHAR = scope:recipient
-							}
-						}
-					}
-					AND = {
-						dm_compat_uses_house_unity_trigger = yes
-						is_in_same_clan_as_trigger = { CHARACTER = scope:recipient }
-						house = { has_house_unity_stage = competitive }	
-					}	
+				}
+				AND = {
+					government_has_flag = government_is_clan
+					is_in_same_clan_as_trigger = { CHARACTER = scope:recipient }
+					house ?= { has_house_unity_parameter = unity_unlock_fabricate_hooks }
 				}
 			}
 		}
 	}
 
 	is_valid_showing_failures_only = {
-		scope:actor = {
+		scope:puppet_or_actor = {
 			is_physically_able_adult = yes
 			can_start_scheme = {
 				target_character = scope:recipient
@@ -101,18 +133,36 @@ fabricate_hook_interaction = {
 		flag = agent_focus_secrecy
 		current_description = fabricate_hook_interaction.tt.agent_focus_secrecy
 	}
-
+	on_send = {
+		scope:puppet_or_actor = {
+			if = {
+				limit = {
+					OR = {
+						has_character_modifier = pam_granted_indulgences_modifier
+						has_character_modifier = pam_granted_indulgences_modifier_small
+					}
+				}
+				change_spiritual_fulfillment = medium_spiritual_fulfillment_loss
+			}
+		}
+	}
 	on_accept = {
-		scope:actor = {
-			stress_impact = {
-				just = medium_stress_impact_gain
-				honest = medium_stress_impact_gain
-				compassionate = minor_stress_impact_gain
+		scope:puppet_or_actor = {
+			# Only get stressed/SP penalties if you don't have the parameter
+			if = {
+				limit = {
+					NOT = { sp_hostile_schemes_except_murder_no_stress_or_fulfillment_trigger = yes }
+				}
+				stress_and_fulfillment_impact = {
+					just = medium_stress_impact_gain
+					honest = medium_stress_impact_gain
+					compassionate = minor_stress_impact_gain
+				}
 			}
 			send_interface_toast = {
 				type = event_toast_effect_good
 				title = fabricate_hook_interaction_toast
-				left_icon = scope:actor
+				left_icon = scope:puppet_or_actor
 				right_icon = scope:recipient
 
 				# Success.
@@ -184,6 +234,20 @@ fabricate_hook_interaction = {
 				}
 			}
 		}
+		if = {
+			limit = {
+				scope:is_puppet_action ?= yes
+				scope:actor != scope:recipient
+			}
+			scope:actor = {
+				send_interface_toast = {
+					type = event_toast_effect_good
+					title = fabricate_hook_interaction_toast_puppeteer
+					left_icon = scope:puppet_or_actor
+					right_icon = scope:recipient
+				}
+			}
+		}
 	}
 
 	ai_targets = {
@@ -196,36 +260,18 @@ fabricate_hook_interaction = {
 		ai_recipients = peer_vassals
 		max = 10
 	}
-	
+
 	ai_targets = {
 		ai_recipients = courtiers
 		max = 5
 	}
-	
+
 	ai_targets = {
 		ai_recipients = realm_characters
 		ai_recipients = top_realm_domicile_owners
 		max = 30
 	}
-	
-	ai_potential = {
-		is_adult = yes
-		ai_greed >= low_positive_ai_value
-		intrigue >= medium_skill_rating
-		NOR = {
-			has_trait = content
-			any_scheme = {
-				OR = {
-					scheme_type = murder
-					scheme_type = abduct
-					scheme_type = claim_throne
-					scheme_type = fabricate_hook
-					scheme_type = steal_back_artifact
-				}
-			}
-		}
-	}
-	
+
 	ai_target_quick_trigger = {
 		adult = yes
 	}
@@ -253,53 +299,53 @@ fabricate_hook_interaction = {
 					add = 50
 				}
 			}
-			
+
 			scope:recipient = {
-				is_vassal_of = scope:actor
+				is_vassal_of = scope:puppet_or_actor
 				vassal_contract_has_modifiable_obligations = yes
 			}
 		}
-		
+
 		modifier = {
 			add = -50
-			
+
 			opinion = {
 				target = scope:recipient
 				value >= high_positive_opinion
 			}
 		}
-		
+
 		modifier = {
 			add = -40
-			
+
 			scope:recipient = {
 				is_playable_character = yes
 				NOT = {
-					is_vassal_of = scope:actor
+					is_vassal_of = scope:puppet_or_actor
 				}
 			}
 		}
-		
+
 		modifier = {
 			add = 50
-			
+
 			scope:recipient = {
 				is_playable_character = no
 				OR = {
-					liege = scope:actor.liege
+					liege = scope:puppet_or_actor.liege
 					liege = {
 						OR = {
-							has_relation_rival = scope:actor
-							has_relation_nemesis = scope:actor
+							has_relation_rival = scope:puppet_or_actor
+							has_relation_nemesis = scope:puppet_or_actor
 						}
 					}
 				}
 			}
 		}
-		
+
 		modifier = {
 			factor = 0
-			
+
 			scope:recipient = {
 				has_council_position = councillor_spymaster
 			}

@@ -1,29 +1,89 @@
-﻿# 原版 on_title_gain 只枚举九个内阁头衔；丞相补充同样的授职回调。
-on_title_gain = {
-	on_actions = {
-		WJ_cheng_xiang_title_gain
-	}
+# Formal grant and actual family-law succession only; no generic appointment pool.
+on_title_gain = { on_actions = { WJ_cheng_xiang_title_gain } }
+on_death = { on_actions = { WJ_cx_death } }
+on_title_lost = { on_actions = { WJ_cx_title_lost } }
+on_title_destroyed = { on_actions = { WJ_cx_title_destroyed } }
+on_vassal_change = { on_actions = { WJ_cx_leaves_court } }
+on_leave_council = { on_actions = { WJ_cx_resigned } }
+
+# Native voluntary resignation: root is the council owner, councillor is the leaver.
+# Do not rely on the position-loss callback retaining councillor_liege or the seat.
+WJ_cx_resigned = {
+ trigger = {
+  has_title = title:h_china
+  exists = scope:councillor
+  scope:councillor = { has_title = title:e_WJ_minister_cheng_xiang }
+ }
+ effect = {
+  scope:councillor = { WJ_cx_abolish = yes }
+ }
 }
 
 WJ_cheng_xiang_title_gain = {
-	trigger = {
-		scope:title = title:e_WJ_minister_cheng_xiang
-		is_alive = yes
-		is_independent_ruler = no
-		government_has_flag = government_is_celestial
-		scope:title.holder = root
-		exists = title:h_china.holder
-		liege = top_liege
-		top_liege = title:h_china.holder
-		root != title:h_china.holder
-		title:h_china.holder = { government_has_flag = government_is_celestial }
-	}
-	effect = {
-		title:h_china.holder = {
-			save_scope_as = councillor_liege
-		}
-		root = {
-			got_minister_position_effect = { MINISTER_TITLE = e_WJ_minister_cheng_xiang MINISTER_POSITION = WJ_minister_cheng_xiang }
-		}
-	}
+ trigger = {
+  scope:title = title:e_WJ_minister_cheng_xiang
+  is_alive = yes
+  government_has_flag = government_is_celestial
+  scope:title.holder = root
+  exists = title:h_china.holder
+  top_liege = title:h_china.holder
+  root != title:h_china.holder
+  OR = {
+   has_character_flag = wj_cx_formal_grant
+   AND = { exists = scope:title.var:wj_cx_successor scope:title.var:wj_cx_successor = root }
+  }
+ }
+ effect = {
+  # Native family inheritance already selects the heir and transfers the actual realm.
+  if = { limit = { exists = scope:title.var:wj_cx_successor scope:title.var:wj_cx_successor = root }
+   if = { limit = { WJ_cx_heir_can_serve = yes }
+    title:h_china.holder = { save_scope_as = councillor_liege }
+    root = { got_minister_position_effect = { MINISTER_TITLE = e_WJ_minister_cheng_xiang MINISTER_POSITION = WJ_minister_cheng_xiang } }
+    title:h_china.holder = {
+     if = { limit = { exists = diarch diarch = root } set_diarchy_swing = 60 }
+     if = { limit = { exists = var:hd_dong_fixed_regent var:hd_dong_fixed_regent = scope:previous_holder }
+      set_variable = { name = hd_dong_fixed_regent value = root }
+     }
+    }
+    if = { limit = { exists = title:h_china.var:hd_court_regent title:h_china.var:hd_court_regent = scope:previous_holder }
+     title:h_china = {
+      set_variable = { name = hd_court_regent value = root }
+      set_variable = { name = hd_court_regent_title value = title:e_WJ_minister_cheng_xiang }
+     }
+     hd_court_refresh_puppet_effect = yes
+    }
+   }
+   else = { WJ_cx_abolish = yes }
+   if = { limit = { NOT = { AND = { has_council_position = WJ_minister_cheng_xiang is_councillor_of = title:h_china.holder } } }
+    WJ_cx_abolish = yes
+   }
+   scope:title = { remove_variable = wj_cx_successor }
+  }
+  else = {
+   title:h_china.holder = { save_scope_as = councillor_liege }
+   root = { got_minister_position_effect = { MINISTER_TITLE = e_WJ_minister_cheng_xiang MINISTER_POSITION = WJ_minister_cheng_xiang } }
+  }
+ }
+}
+WJ_cx_death = {
+ trigger = { has_title = title:e_WJ_minister_cheng_xiang }
+ effect = { WJ_cx_before_death = yes }
+}
+WJ_cx_title_lost = {
+ trigger = {
+  scope:title = title:e_WJ_minister_cheng_xiang
+  NOT = { has_character_flag = wj_cx_death_handoff }
+ }
+ effect = { set_variable = { name = wj_cx_court value = title:h_china } WJ_cx_abolish = yes }
+}
+WJ_cx_title_destroyed = {
+ trigger = { scope:landed_title = title:e_WJ_minister_cheng_xiang }
+ effect = { set_variable = { name = wj_cx_court value = title:h_china } WJ_cx_abolish = yes }
+}
+WJ_cx_leaves_court = {
+ trigger = {
+  has_title = title:e_WJ_minister_cheng_xiang
+  OR = { NOT = { top_liege = title:h_china.holder } has_title = title:h_china }
+ }
+ effect = { WJ_cx_abolish = yes }
 }

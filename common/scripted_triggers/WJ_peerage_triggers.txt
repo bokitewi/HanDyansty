@@ -1,6 +1,23 @@
 ﻿# Issuer-only grant gate. Never impose the issuer's tier/independence on the recipient.
 WJ_peer_realm_head = { is_alive = yes this = top_liege government_has_flag = government_is_celestial }
-WJ_peer_authority = { WJ_peer_realm_head = yes is_independent_ruler = yes highest_held_title_tier >= tier_empire }
+# Interaction scopes: crown authority is displayed as levels 1..4 (law indices 0..3).
+WJ_peer_revoke_allowed = {
+ exists = scope:wj_edict_emperor
+ scope:actor = { WJ_edict_operator_for = { CROWN = scope:wj_edict_emperor } }
+ trigger_if = { limit = { scope:actor = scope:wj_edict_emperor }
+  scope:actor = { custom_tooltip = { text = WJ_peer_revoke_authority_tt OR = {
+   has_realm_law = celestial_bureaucracy_1
+   has_realm_law = celestial_bureaucracy_2
+   has_realm_law = celestial_bureaucracy_3
+  } } }
+ }
+ scope:recipient = {
+  is_alive = yes top_liege = scope:wj_edict_emperor
+  has_variable = wj_peer_rank var:wj_peer_rank >= 1 var:wj_peer_rank <= 4
+ }
+}
+
+WJ_peer_authority = { WJ_peer_realm_head = yes is_independent_ruler = yes highest_held_title_tier >= tier_empire WJ_cr_crowned_king = no }
 WJ_peer_royal_kin = { OR = { house = $EMPEROR$.house AND = { dynasty = $EMPEROR$.dynasty house = { has_house_modifier = SanGong_SeparatedCloseKin_modifier } } } }
 WJ_peer_family_possible = {
  exists = house exists = dynasty
@@ -27,12 +44,14 @@ OR = {
 }
 WJ_peer_flow_valid = {
  trigger_if = { limit = { exists = var:wj_peer_target has_variable = wj_peer_ticket exists = scope:wj_peer_ticket }
-  WJ_peer_authority = yes var:wj_peer_flow_version = 2 var:wj_peer_ticket = scope:wj_peer_ticket
+  exists = var:wj_peer_crown
+  WJ_edict_operator_for = { CROWN = var:wj_peer_crown }
+  var:wj_peer_flow_version = 2 var:wj_peer_ticket = scope:wj_peer_ticket
   trigger_if = { limit = { has_variable = wj_ab_placement }
    has_variable = wj_ab_transferred var:wj_peer_target = var:wj_ab_emperor
-   var:wj_peer_target = { is_alive = yes top_liege = root }
+   var:wj_peer_target = { is_alive = yes top_liege = root.var:wj_peer_crown }
   }
-  trigger_else = { var:wj_peer_target = { WJ_peer_base_candidate = { EMPEROR = root } } }
+  trigger_else = { var:wj_peer_target = { WJ_peer_base_candidate = { EMPEROR = root.var:wj_peer_crown } } }
  }
  trigger_else = { always = no }
 }
@@ -41,10 +60,10 @@ WJ_peer_rank_allowed = {
   var:wj_peer_pending_rank >= 1 var:wj_peer_pending_rank <= 4
   OR = {
    AND = { has_variable = wj_ab_placement OR = { var:wj_peer_pending_rank = 1 var:wj_peer_pending_rank = 3 var:wj_peer_pending_rank = 4 } }
-   AND = { var:wj_peer_pending_rank >= 2 var:wj_peer_pending_rank <= 3 var:wj_peer_target = { is_female = yes dynasty = root.dynasty } }
-   AND = { var:wj_peer_pending_rank = 4 var:wj_peer_target = { is_male = yes WJ_peer_royal_kin = { EMPEROR = root } } gold >= 50 piety >= 50 influence >= 50 prestige >= 50 }
+   AND = { var:wj_peer_pending_rank >= 2 var:wj_peer_pending_rank <= 3 var:wj_peer_target = { is_female = yes dynasty = root.var:wj_peer_crown.dynasty } }
+   AND = { var:wj_peer_pending_rank = 4 var:wj_peer_target = { is_male = yes WJ_peer_royal_kin = { EMPEROR = root.var:wj_peer_crown } } WJ_peer_grant_funds = yes }
    AND = { var:wj_peer_pending_rank <= 2 var:wj_peer_target = {
-    is_male = yes NOT = { dynasty = root.dynasty }
+    is_male = yes NOT = { dynasty = root.var:wj_peer_crown.dynasty }
     trigger_if = { limit = { root = { var:wj_peer_pending_rank = 1 } } OR = { has_trait_xp = { trait = WJ_mingshi_trait track = jungong value >= 25 } has_trait_xp = { trait = WJ_mingshi_trait track = zhengji value >= 25 } } }
     trigger_if = { limit = { root = { var:wj_peer_pending_rank = 2 } } OR = { has_trait_xp = { trait = WJ_mingshi_trait track = jungong value >= 50 } has_trait_xp = { trait = WJ_mingshi_trait track = zhengji value >= 50 } } }
     trigger_if = { limit = { root = { var:wj_peer_pending_rank = 3 } } OR = { has_trait_xp = { trait = WJ_mingshi_trait track = jungong value >= 75 } has_trait_xp = { trait = WJ_mingshi_trait track = zhengji value >= 75 } } }
@@ -100,11 +119,20 @@ WJ_peer_valid = {
  trigger_else = { always = no }
 }
 # Title scope. Source/income flags are on the specific titles, never their landed holders.
+WJ_peer_income_choice_valid = {
+ WJ_peer_valid = yes
+ has_variable = wj_peer_income_pending
+ exists = scope:wj_peer_income_year
+ var:wj_peer_income_pending = scope:wj_peer_income_year
+ var:wj_peer_last_paid = scope:wj_peer_income_year
+ var:wj_peer_food = scope:wj_peer_income_food
+ exists = scope:wj_peer_income_county
+}
 WJ_peer_county_free = { tier = tier_county NOR = { has_variable = wj_peer_food_family has_variable = wj_peer_food_owner } NOT = { any_direct_de_jure_vassal_title = { OR = { has_variable = wj_peer_food_family has_variable = wj_peer_food_owner } } } }
 WJ_peer_barony_free = { tier = tier_barony NOR = { has_variable = wj_peer_food_family has_variable = wj_peer_food_owner } county = { NOR = { has_variable = wj_peer_food_family has_variable = wj_peer_food_owner } } }
 WJ_peer_name_free = { NOR = { has_variable = wj_peer_name_family has_variable = wj_peer_name_owner } }
 # Actual ownership through all vassal levels, not wartime occupation or the issuer's de jure claims.
-WJ_peer_controlled_leaf = { exists = holder holder = { top_liege = root } NOT = { is_noble_family_title = yes } }
+WJ_peer_controlled_leaf = { exists = holder holder = { top_liege = root.var:wj_peer_crown } NOT = { is_noble_family_title = yes } }
 WJ_peer_kingdom_in_domain = {
  tier = tier_kingdom
  any_de_jure_county = { WJ_peer_controlled_leaf = yes }
@@ -174,4 +202,11 @@ WJ_peer_commit_valid = {
   }
  }
  trigger_else = { always = no }
+}
+
+WJ_peer_grant_funds = {
+ var:wj_peer_crown = { prestige >= 50 }
+ WJ_peer_resource_available = { CROWN = var:wj_peer_crown PAYER = this RESOURCE = gold COST = 50 SPONSOR = var:wj_peer_cover_gold }
+ WJ_peer_resource_available = { CROWN = var:wj_peer_crown PAYER = this RESOURCE = piety COST = 50 SPONSOR = var:wj_peer_cover_piety }
+ WJ_peer_resource_available = { CROWN = var:wj_peer_crown PAYER = this RESOURCE = influence COST = 50 SPONSOR = var:wj_peer_cover_influence }
 }

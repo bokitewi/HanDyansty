@@ -13,23 +13,20 @@ WJ_cr_establish_empire = {
    set_variable = wj_cr_empire_settled
   }
   else_if = { limit = { WJ_cr_empire_in_china = yes }
+   # A new territorial empire, not a concurrent nominal ministry, owns the country name.
+   if = { limit = { primary_title = { WJ_cr_local_empire_title = no } }
+    random_held_title = { limit = { WJ_cr_local_empire_title = yes } root = { set_primary_title_to = prev } }
+   }
    set_variable = wj_cr_empire_settled
-   WJ_miaoshi_initialize_effect = yes
-   if = { limit = { WJ_cr_royal_origin = yes }
-    add_legitimacy = 1000
-    send_interface_toast = { type = event_toast_effect_good title = WJ_cr_empire_found_t left_icon = root custom_tooltip = WJ_cr_empire_found_tt }
-   }
-   else = {
-    add_legitimacy = -1000
-    send_interface_toast = { type = event_toast_effect_bad title = WJ_cr_empire_usurp_t left_icon = root custom_tooltip = WJ_cr_empire_usurp_tt }
-   }
+   WJ_cr_advance_king = yes
   }
  }
 }
 WJ_cr_advance_king = {
  hidden_effect = {
   if = { limit = { WJ_cr_can_advance_king = yes }
-   primary_title = { set_variable = wj_cr_hereditary_king }
+   set_variable = wj_cr_independent_king
+   set_variable = wj_cr_king_proclamation_pending
    WJ_miaoshi_initialize_effect = yes
    WJ_mr_end_request = yes WJ_mr_clear_rank = yes remove_variable = WJ_mr_award_realm
    WJ_title_style_reconcile = yes
@@ -40,11 +37,39 @@ WJ_cr_advance_king = {
   }
  }
 }
+WJ_cr_proclaim_king = {
+ if = { limit = { WJ_cr_crowned_king = yes has_variable = wj_cr_king_proclamation_pending }
+  remove_variable = wj_cr_king_proclamation_pending
+  save_scope_as = wj_cr_proclaimed_king
+  # One event per independent celestial ruler; only the proclaimed king's option pays.
+  every_independent_ruler = {
+   limit = { government_has_flag = government_is_celestial }
+   trigger_event = WJ_cr.9
+  }
+ }
+}
+# Initial scenario kings retain their historical country name and receive no new-foundation reward.
+WJ_cr_initialize_scenario_king = {
+ if = { limit = { WJ_cr_accession_ruler = yes highest_held_title_tier = tier_empire
+  primary_title = { OR = { has_variable = hd218_wang_display AND = { has_variable = hd_nbc_style var:hd_nbc_style = flag:wang } } }
+ }
+  set_variable = wj_cr_independent_king set_variable = wj_cr_empire_settled
+  primary_title = {
+   remove_variable = hd218_wang_display
+   if = { limit = { has_variable = hd_nbc_style var:hd_nbc_style = flag:wang } remove_variable = hd_nbc_style }
+  }
+  WJ_title_style_reconcile = yes
+ }
+}
 WJ_cr_complete = {
  # 2026-10-23 践祚大典并入加冕礼：原版典礼事件会在礼中先授即皇帝位法律，故不再用 WJ_cr_can_plan（要求尚无该法律）；
  # 活动走到礼成本身就说明典礼已行，不再要求 WJ_cr.2 写入 wj_cr_investiture_done
- if = { limit = { WJ_cr_emperor = yes scope:activity = { NOT = { has_variable = wj_cr_paid } } }
+ if = { limit = { WJ_cr_accession_ruler = yes scope:activity = { NOT = { has_variable = wj_cr_paid } } }
   scope:activity = { set_variable = wj_cr_paid }
+  if = { limit = { WJ_cr_crowned_king = yes }
+   remove_variable = wj_cr_independent_king
+   set_variable = wj_cr_founded_this_accession
+  }
   add_realm_law = crowned_emperor set_variable = crowned_emperor_var remove_variable = crowned_king_var
   WJ_miaoshi_initialize_effect = yes
   # Native rewards are paid once; realm-name options keep their native separate naming effects.
@@ -54,16 +79,47 @@ WJ_cr_complete = {
   else_if = { limit = { scope:activity = { has_variable = wj_cr_oath var:wj_cr_oath = 2 } NOT = { has_variable = stewardship_oath_1 } } coronation_chosen_oath_setup_effect = { VAR = stewardship_oath_1 TIME = 18250 } }
   coronation_disburse_rewards_effect = yes
   coronation_upgrade_oath_value_effect = yes
-  # HD 218 start: finish the king-to-emperor proclamation (no-op without hd218_wang_display)
-  hd_sg218_jianzuo_complete_effect = yes
   WJ_mr_end_request = yes WJ_mr_clear_rank = yes remove_variable = WJ_mr_award_realm
   WJ_title_style_reconcile = yes
-  # The naming event consumes this permit; an open choice must not expire with game time.
-  set_variable = wj_cr_allow_naming
-  tgp_fire_china_realm_name_event_effect = yes
-  trigger_event = WJ_cr.4
+  if = { limit = { WJ_cr_han_lineage = yes }
+   # The Han choice is mandatory even when the existing country name is already Han.
+   set_variable = wj_cr_han_choice_pending
+   trigger_event = WJ_cr.8
+  }
+  else_if = { limit = { has_variable = wj_cr_founded_this_accession }
+   # A king already chose his country name; becoming emperor does not reopen the picker.
+   create_artifact_dynastic_imperial_seal_effect = { OWNER = root SMITH = root }
+   WJ_cr_finish_accession = yes
+  }
+  else = {
+   # The naming event consumes this permit; an open choice must not expire with game time.
+   set_variable = wj_cr_allow_naming
+   tgp_fire_china_realm_name_event_effect = yes
+   trigger_event = WJ_cr.4
+  }
  }
  WJ_cr_cleanup = yes
+}
+WJ_cr_finish_accession = {
+ # Historical news and appointments use the final chosen name, not a forced Han name.
+ hd_sg218_jianzuo_complete_effect = yes
+ remove_variable = wj_cr_218_historical_king remove_variable = wj_cr_218_accession_invited
+ if = { limit = { has_variable = wj_cr_founded_this_accession }
+  remove_variable = wj_cr_founded_this_accession
+  trigger_event = WJ_cr.10
+ }
+ else = { trigger_event = WJ_cr.4 }
+}
+WJ_cr_choose_han = {
+ if = { limit = { WJ_cr_han_choice_valid = yes }
+  # Use the same canonical name and fixed-name storage as the existing country picker.
+  dynasty = {
+   remove_variable = hd_fixed_realm_title
+   set_variable = { name = hd_fixed_realm_name value = flag:dynn_title_han }
+  }
+  hd_apply_fixed_realm_name_effect = yes
+  add_legitimacy = 3000
+ }
 }
 # Replace only the shared dispatch, retaining the Git baseline's regional name pool.
 tgp_fire_china_realm_name_event_effect = {

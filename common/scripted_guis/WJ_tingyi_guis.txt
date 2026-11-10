@@ -1,0 +1,246 @@
+﻿WJ_ty_gui_close = { scope = character effect = { WJ_ty_close = yes } }
+WJ_ty_gui_refresh = { scope = character is_valid = { WJ_ty_session = yes } effect = { WJ_ty_refresh_seats = yes } }
+# Called by a stale-roster _show transition, never by a timer.
+WJ_ty_gui_sync = {
+ scope = character
+ is_shown = {
+  trigger_if = { limit = { WJ_ty_session = yes } WJ_ty_roster_current = no }
+  trigger_else = { always = no }
+ }
+ is_valid = {
+  trigger_if = { limit = { WJ_ty_session = yes } WJ_ty_roster_current = no }
+  trigger_else = { always = no }
+ }
+ effect = {
+  if = { limit = { WJ_ty_session = yes }
+   if = { limit = { WJ_ty_roster_current = no }
+    WJ_ty_refresh_seats = yes
+    # Only resolve the selected seat; leave the reviewed appointment snapshot intact.
+    clear_saved_scope = wj_ty_sync_lobby
+    if = { limit = { var:wj_ty_role = 0 exists = var:wj_ty_seat_0 }
+     var:wj_ty_seat_0 = { save_scope_as = wj_ty_sync_lobby }
+    }
+    else_if = { limit = { var:wj_ty_role = 1 exists = var:wj_ty_seat_1 }
+     var:wj_ty_seat_1 = { save_scope_as = wj_ty_sync_lobby }
+    }
+    else_if = { limit = { var:wj_ty_role = 2 exists = var:wj_ty_seat_2 }
+     var:wj_ty_seat_2 = { save_scope_as = wj_ty_sync_lobby }
+    }
+    else_if = { limit = { var:wj_ty_role = 3 exists = var:wj_ty_seat_3 }
+     var:wj_ty_seat_3 = { save_scope_as = wj_ty_sync_lobby }
+    }
+    else_if = { limit = { var:wj_ty_role = 4 exists = var:wj_ty_seat_4 }
+     var:wj_ty_seat_4 = { save_scope_as = wj_ty_sync_lobby }
+    }
+    else_if = { limit = { var:wj_ty_role = 5 exists = var:wj_ty_seat_5 }
+     var:wj_ty_seat_5 = { save_scope_as = wj_ty_sync_lobby }
+    }
+    else_if = { limit = { var:wj_ty_role = 6 exists = var:wj_ty_seat_6 }
+     var:wj_ty_seat_6 = { save_scope_as = wj_ty_sync_lobby }
+    }
+    # Compare only existing pointers. Empty -> empty is unchanged.
+    if = { limit = {
+     trigger_if = { limit = { exists = var:wj_ty_lobby }
+      trigger_if = { limit = { exists = scope:wj_ty_sync_lobby }
+       NOT = { var:wj_ty_lobby = scope:wj_ty_sync_lobby }
+      }
+      trigger_else = { always = yes }
+     }
+     trigger_else = { exists = scope:wj_ty_sync_lobby }
+    }
+     remove_variable = wj_ty_choice_gold
+     remove_variable = wj_ty_choice_prestige
+     remove_variable = wj_ty_choice_influence
+     remove_variable = wj_ty_choice_weak
+     remove_variable = wj_ty_choice_strong
+     remove_variable = wj_ty_choice_hook
+    }
+    if = { limit = { exists = scope:wj_ty_sync_lobby }
+     set_variable = { name = wj_ty_lobby value = scope:wj_ty_sync_lobby }
+    }
+    else = { remove_variable = wj_ty_lobby }
+    clear_saved_scope = wj_ty_sync_lobby
+   }
+  }
+ }
+}
+WJ_ty_gui_confirm = { scope = character is_valid = { WJ_ty_draft_valid = yes } effect = { if = { limit = { WJ_ty_draft_valid = yes } set_variable = { name = wj_ty_confirmed value = 1 } } } }
+WJ_ty_gui_execute = { scope = character is_valid = { WJ_ty_execute_valid = yes } effect = { WJ_ty_commit = yes } }
+WJ_ty_gui_picker = { scope = character is_valid = { WJ_ty_session = yes } effect = { WJ_ty_candidates = yes } }
+WJ_ty_gui_cancel_picker = { scope = character effect = { remove_variable = wj_ty_picker clear_variable_list = wj_ty_candidates WJ_ty_picker_clear = yes } }
+WJ_ty_gui_target = { scope = character saved_scopes = { candidate }
+ is_valid = { WJ_ty_session = yes exists = scope:candidate
+  trigger_if = { limit = { var:wj_ty_topic = 3 } scope:candidate = { WJ_ty_appointment_candidate = { OPERATOR = root } } }
+  trigger_else_if = { limit = { var:wj_ty_topic = 4 } scope:candidate = { WJ_ty_removal_candidate = { OPERATOR = root } } }
+  trigger_else = { scope:candidate = { WJ_ty_target = yes } }
+ }
+ effect = { save_scope_as = wj_ty_operator
+  if = { limit = { WJ_ty_session = yes exists = scope:candidate
+   trigger_if = { limit = { var:wj_ty_topic = 3 } scope:candidate = { WJ_ty_appointment_candidate = { OPERATOR = scope:wj_ty_operator } } }
+  trigger_else_if = { limit = { var:wj_ty_topic = 4 } scope:candidate = { WJ_ty_removal_candidate = { OPERATOR = scope:wj_ty_operator } } }
+   trigger_else = { scope:candidate = { WJ_ty_target = yes } }
+  }
+   set_variable = { name = wj_ty_target value = scope:candidate } WJ_ty_invalidate = yes
+   if = { limit = { var:wj_ty_topic = 3 } set_variable = { name = wj_ty_appointment_mode value = 1 } WJ_ty_appointment_snapshot = yes }
+   else_if = { limit = { var:wj_ty_topic = 4 }
+    clear_variable_list = wj_ty_selected_court_positions remove_variable = wj_ty_removal_title set_variable = { name = wj_ty_office value = 0 }
+    if = { limit = { var:wj_ty_dismiss_kind = 1 }
+     if = { limit = { var:wj_ty_target = {
+      is_councillor_of = scope:wj_ty_operator.var:wj_ty_emperor
+      NOR = { has_title = title:e_WJ_minister_cheng_xiang has_council_position = WJ_minister_cheng_xiang }
+     } } set_variable = { name = wj_ty_removal_mode value = 1 } }
+     else = { set_variable = { name = wj_ty_removal_mode value = 2 } }
+    }
+    WJ_ty_removal_snapshot = yes
+   }
+   remove_variable = wj_ty_picker clear_variable_list = wj_ty_candidates WJ_ty_picker_clear = yes
+  }
+ }
+}
+WJ_ty_gui_catalog = { scope = character effect = { if = { limit = { has_variable = wj_ty_catalog } remove_variable = wj_ty_catalog } else = { set_variable = { name = wj_ty_catalog value = 1 } } } }
+WJ_ty_gui_role_0 = { scope = character effect = {
+ set_variable = { name = wj_ty_role value = 0 }
+ if = { limit = { exists = var:wj_ty_seat_0 }
+  if = { limit = { OR = { NOT = { exists = var:wj_ty_lobby } var:wj_ty_lobby != var:wj_ty_seat_0 } } remove_variable = wj_ty_choice_gold remove_variable = wj_ty_choice_prestige remove_variable = wj_ty_choice_influence remove_variable = wj_ty_choice_weak remove_variable = wj_ty_choice_strong remove_variable = wj_ty_choice_hook }
+  set_variable = { name = wj_ty_lobby value = var:wj_ty_seat_0 }
+ } else = { remove_variable = wj_ty_lobby remove_variable = wj_ty_choice_gold remove_variable = wj_ty_choice_prestige remove_variable = wj_ty_choice_influence remove_variable = wj_ty_choice_weak remove_variable = wj_ty_choice_strong remove_variable = wj_ty_choice_hook }
+} }
+WJ_ty_gui_lobby_0 = { scope = character is_valid = { exists = var:wj_ty_seat_0 } effect = { if = { limit = { exists = var:wj_ty_seat_0 } set_variable = { name = wj_ty_lobby value = var:wj_ty_seat_0 } remove_variable = wj_ty_choice_gold remove_variable = wj_ty_choice_prestige remove_variable = wj_ty_choice_influence remove_variable = wj_ty_choice_weak remove_variable = wj_ty_choice_strong remove_variable = wj_ty_choice_hook } } }
+WJ_ty_gui_role_1 = { scope = character effect = {
+ set_variable = { name = wj_ty_role value = 1 }
+ if = { limit = { exists = var:wj_ty_seat_1 }
+  if = { limit = { OR = { NOT = { exists = var:wj_ty_lobby } var:wj_ty_lobby != var:wj_ty_seat_1 } } remove_variable = wj_ty_choice_gold remove_variable = wj_ty_choice_prestige remove_variable = wj_ty_choice_influence remove_variable = wj_ty_choice_weak remove_variable = wj_ty_choice_strong remove_variable = wj_ty_choice_hook }
+  set_variable = { name = wj_ty_lobby value = var:wj_ty_seat_1 }
+ } else = { remove_variable = wj_ty_lobby remove_variable = wj_ty_choice_gold remove_variable = wj_ty_choice_prestige remove_variable = wj_ty_choice_influence remove_variable = wj_ty_choice_weak remove_variable = wj_ty_choice_strong remove_variable = wj_ty_choice_hook }
+} }
+WJ_ty_gui_lobby_1 = { scope = character is_valid = { exists = var:wj_ty_seat_1 } effect = { if = { limit = { exists = var:wj_ty_seat_1 } set_variable = { name = wj_ty_lobby value = var:wj_ty_seat_1 } remove_variable = wj_ty_choice_gold remove_variable = wj_ty_choice_prestige remove_variable = wj_ty_choice_influence remove_variable = wj_ty_choice_weak remove_variable = wj_ty_choice_strong remove_variable = wj_ty_choice_hook } } }
+WJ_ty_gui_role_2 = { scope = character effect = {
+ set_variable = { name = wj_ty_role value = 2 }
+ if = { limit = { exists = var:wj_ty_seat_2 }
+  if = { limit = { OR = { NOT = { exists = var:wj_ty_lobby } var:wj_ty_lobby != var:wj_ty_seat_2 } } remove_variable = wj_ty_choice_gold remove_variable = wj_ty_choice_prestige remove_variable = wj_ty_choice_influence remove_variable = wj_ty_choice_weak remove_variable = wj_ty_choice_strong remove_variable = wj_ty_choice_hook }
+  set_variable = { name = wj_ty_lobby value = var:wj_ty_seat_2 }
+ } else = { remove_variable = wj_ty_lobby remove_variable = wj_ty_choice_gold remove_variable = wj_ty_choice_prestige remove_variable = wj_ty_choice_influence remove_variable = wj_ty_choice_weak remove_variable = wj_ty_choice_strong remove_variable = wj_ty_choice_hook }
+} }
+WJ_ty_gui_lobby_2 = { scope = character is_valid = { exists = var:wj_ty_seat_2 } effect = { if = { limit = { exists = var:wj_ty_seat_2 } set_variable = { name = wj_ty_lobby value = var:wj_ty_seat_2 } remove_variable = wj_ty_choice_gold remove_variable = wj_ty_choice_prestige remove_variable = wj_ty_choice_influence remove_variable = wj_ty_choice_weak remove_variable = wj_ty_choice_strong remove_variable = wj_ty_choice_hook } } }
+WJ_ty_gui_role_3 = { scope = character effect = {
+ set_variable = { name = wj_ty_role value = 3 }
+ if = { limit = { exists = var:wj_ty_seat_3 }
+  if = { limit = { OR = { NOT = { exists = var:wj_ty_lobby } var:wj_ty_lobby != var:wj_ty_seat_3 } } remove_variable = wj_ty_choice_gold remove_variable = wj_ty_choice_prestige remove_variable = wj_ty_choice_influence remove_variable = wj_ty_choice_weak remove_variable = wj_ty_choice_strong remove_variable = wj_ty_choice_hook }
+  set_variable = { name = wj_ty_lobby value = var:wj_ty_seat_3 }
+ } else = { remove_variable = wj_ty_lobby remove_variable = wj_ty_choice_gold remove_variable = wj_ty_choice_prestige remove_variable = wj_ty_choice_influence remove_variable = wj_ty_choice_weak remove_variable = wj_ty_choice_strong remove_variable = wj_ty_choice_hook }
+} }
+WJ_ty_gui_lobby_3 = { scope = character is_valid = { exists = var:wj_ty_seat_3 } effect = { if = { limit = { exists = var:wj_ty_seat_3 } set_variable = { name = wj_ty_lobby value = var:wj_ty_seat_3 } remove_variable = wj_ty_choice_gold remove_variable = wj_ty_choice_prestige remove_variable = wj_ty_choice_influence remove_variable = wj_ty_choice_weak remove_variable = wj_ty_choice_strong remove_variable = wj_ty_choice_hook } } }
+WJ_ty_gui_role_4 = { scope = character effect = {
+ set_variable = { name = wj_ty_role value = 4 }
+ if = { limit = { exists = var:wj_ty_seat_4 }
+  if = { limit = { OR = { NOT = { exists = var:wj_ty_lobby } var:wj_ty_lobby != var:wj_ty_seat_4 } } remove_variable = wj_ty_choice_gold remove_variable = wj_ty_choice_prestige remove_variable = wj_ty_choice_influence remove_variable = wj_ty_choice_weak remove_variable = wj_ty_choice_strong remove_variable = wj_ty_choice_hook }
+  set_variable = { name = wj_ty_lobby value = var:wj_ty_seat_4 }
+ } else = { remove_variable = wj_ty_lobby remove_variable = wj_ty_choice_gold remove_variable = wj_ty_choice_prestige remove_variable = wj_ty_choice_influence remove_variable = wj_ty_choice_weak remove_variable = wj_ty_choice_strong remove_variable = wj_ty_choice_hook }
+} }
+WJ_ty_gui_lobby_4 = { scope = character is_valid = { exists = var:wj_ty_seat_4 } effect = { if = { limit = { exists = var:wj_ty_seat_4 } set_variable = { name = wj_ty_lobby value = var:wj_ty_seat_4 } remove_variable = wj_ty_choice_gold remove_variable = wj_ty_choice_prestige remove_variable = wj_ty_choice_influence remove_variable = wj_ty_choice_weak remove_variable = wj_ty_choice_strong remove_variable = wj_ty_choice_hook } } }
+WJ_ty_gui_role_5 = { scope = character effect = {
+ set_variable = { name = wj_ty_role value = 5 }
+ if = { limit = { exists = var:wj_ty_seat_5 }
+  if = { limit = { OR = { NOT = { exists = var:wj_ty_lobby } var:wj_ty_lobby != var:wj_ty_seat_5 } } remove_variable = wj_ty_choice_gold remove_variable = wj_ty_choice_prestige remove_variable = wj_ty_choice_influence remove_variable = wj_ty_choice_weak remove_variable = wj_ty_choice_strong remove_variable = wj_ty_choice_hook }
+  set_variable = { name = wj_ty_lobby value = var:wj_ty_seat_5 }
+ } else = { remove_variable = wj_ty_lobby remove_variable = wj_ty_choice_gold remove_variable = wj_ty_choice_prestige remove_variable = wj_ty_choice_influence remove_variable = wj_ty_choice_weak remove_variable = wj_ty_choice_strong remove_variable = wj_ty_choice_hook }
+} }
+WJ_ty_gui_lobby_5 = { scope = character is_valid = { exists = var:wj_ty_seat_5 } effect = { if = { limit = { exists = var:wj_ty_seat_5 } set_variable = { name = wj_ty_lobby value = var:wj_ty_seat_5 } remove_variable = wj_ty_choice_gold remove_variable = wj_ty_choice_prestige remove_variable = wj_ty_choice_influence remove_variable = wj_ty_choice_weak remove_variable = wj_ty_choice_strong remove_variable = wj_ty_choice_hook } } }
+WJ_ty_gui_role_6 = { scope = character effect = {
+ set_variable = { name = wj_ty_role value = 6 }
+ if = { limit = { exists = var:wj_ty_seat_6 }
+  if = { limit = { OR = { NOT = { exists = var:wj_ty_lobby } var:wj_ty_lobby != var:wj_ty_seat_6 } } remove_variable = wj_ty_choice_gold remove_variable = wj_ty_choice_prestige remove_variable = wj_ty_choice_influence remove_variable = wj_ty_choice_weak remove_variable = wj_ty_choice_strong remove_variable = wj_ty_choice_hook }
+  set_variable = { name = wj_ty_lobby value = var:wj_ty_seat_6 }
+ } else = { remove_variable = wj_ty_lobby remove_variable = wj_ty_choice_gold remove_variable = wj_ty_choice_prestige remove_variable = wj_ty_choice_influence remove_variable = wj_ty_choice_weak remove_variable = wj_ty_choice_strong remove_variable = wj_ty_choice_hook }
+} }
+WJ_ty_gui_lobby_6 = { scope = character is_valid = { exists = var:wj_ty_seat_6 } effect = { if = { limit = { exists = var:wj_ty_seat_6 } set_variable = { name = wj_ty_lobby value = var:wj_ty_seat_6 } remove_variable = wj_ty_choice_gold remove_variable = wj_ty_choice_prestige remove_variable = wj_ty_choice_influence remove_variable = wj_ty_choice_weak remove_variable = wj_ty_choice_strong remove_variable = wj_ty_choice_hook } } }
+WJ_ty_gui_topic_1 = { scope = character effect = { WJ_ty_removal_clear = yes remove_variable = wj_ty_revoke_peerage remove_variable = wj_ty_removal_mode remove_variable = wj_ty_removal_title set_variable = { name = wj_ty_topic value = 1 } WJ_ty_appointment_clear = yes WJ_ty_invalidate = yes } }
+WJ_ty_gui_topic_2 = { scope = character effect = { WJ_ty_removal_clear = yes remove_variable = wj_ty_revoke_peerage remove_variable = wj_ty_removal_mode remove_variable = wj_ty_removal_title set_variable = { name = wj_ty_topic value = 2 } WJ_ty_appointment_clear = yes WJ_ty_invalidate = yes } }
+WJ_ty_gui_tier_1 = { scope = character effect = { set_variable = { name = wj_ty_tier value = 1 } WJ_ty_invalidate = yes } }
+WJ_ty_gui_tier_2 = { scope = character effect = { set_variable = { name = wj_ty_tier value = 2 } WJ_ty_invalidate = yes } }
+WJ_ty_gui_tier_3 = { scope = character effect = { set_variable = { name = wj_ty_tier value = 3 } WJ_ty_invalidate = yes } }
+WJ_ty_gui_choice_gold = { scope = character
+ is_valid = { trigger_if = { limit = { NOT = { has_variable = wj_ty_choice_gold } } WJ_ty_lobby_gold_valid = yes } }
+ effect = { if = { limit = { has_variable = wj_ty_choice_gold } remove_variable = wj_ty_choice_gold } else_if = { limit = { WJ_ty_lobby_gold_valid = yes } set_variable = { name = wj_ty_choice_gold value = 1 } } }
+}
+WJ_ty_gui_choice_prestige = { scope = character
+ is_valid = { trigger_if = { limit = { NOT = { has_variable = wj_ty_choice_prestige } } WJ_ty_lobby_prestige_valid = yes } }
+ effect = { if = { limit = { has_variable = wj_ty_choice_prestige } remove_variable = wj_ty_choice_prestige } else_if = { limit = { WJ_ty_lobby_prestige_valid = yes } set_variable = { name = wj_ty_choice_prestige value = 1 } } }
+}
+WJ_ty_gui_choice_influence = { scope = character
+ is_valid = { trigger_if = { limit = { NOT = { has_variable = wj_ty_choice_influence } } WJ_ty_lobby_influence_valid = yes } }
+ effect = { if = { limit = { has_variable = wj_ty_choice_influence } remove_variable = wj_ty_choice_influence } else_if = { limit = { WJ_ty_lobby_influence_valid = yes } set_variable = { name = wj_ty_choice_influence value = 1 } } }
+}
+WJ_ty_gui_choice_weak = { scope = character
+ is_valid = { trigger_if = { limit = { NOT = { has_variable = wj_ty_choice_weak } } WJ_ty_lobby_weak_valid = yes } }
+ effect = { if = { limit = { has_variable = wj_ty_choice_weak } remove_variable = wj_ty_choice_weak } else_if = { limit = { WJ_ty_lobby_weak_valid = yes } remove_variable = wj_ty_choice_strong set_variable = { name = wj_ty_choice_weak value = 1 } } }
+}
+WJ_ty_gui_choice_strong = { scope = character
+ is_valid = { trigger_if = { limit = { NOT = { has_variable = wj_ty_choice_strong } } WJ_ty_lobby_strong_valid = yes } }
+ effect = { if = { limit = { has_variable = wj_ty_choice_strong } remove_variable = wj_ty_choice_strong } else_if = { limit = { WJ_ty_lobby_strong_valid = yes } remove_variable = wj_ty_choice_weak set_variable = { name = wj_ty_choice_strong value = 1 } } }
+}
+WJ_ty_gui_choice_hook = { scope = character
+ is_valid = { trigger_if = { limit = { NOT = { has_variable = wj_ty_choice_hook } } WJ_ty_lobby_hook_valid = yes } }
+ effect = { if = { limit = { has_variable = wj_ty_choice_hook } remove_variable = wj_ty_choice_hook } else_if = { limit = { WJ_ty_lobby_hook_valid = yes } set_variable = { name = wj_ty_choice_hook value = 1 } } }
+}
+WJ_ty_gui_lobby_confirm = { scope = character is_valid = { WJ_ty_lobby_batch_valid = yes } effect = { if = { limit = { WJ_ty_lobby_batch_valid = yes }
+ if = { limit = { has_variable = wj_ty_choice_gold } WJ_ty_pay_gold = yes remove_variable = wj_ty_choice_gold }
+ if = { limit = { has_variable = wj_ty_choice_prestige } WJ_ty_pay_prestige = yes remove_variable = wj_ty_choice_prestige }
+ if = { limit = { has_variable = wj_ty_choice_influence } WJ_ty_pay_influence = yes remove_variable = wj_ty_choice_influence }
+ if = { limit = { has_variable = wj_ty_choice_weak } WJ_ty_pay_weak = yes remove_variable = wj_ty_choice_weak }
+ if = { limit = { has_variable = wj_ty_choice_strong } WJ_ty_pay_strong = yes remove_variable = wj_ty_choice_strong }
+ if = { limit = { has_variable = wj_ty_choice_hook } WJ_ty_pay_hook = yes remove_variable = wj_ty_choice_hook }
+ WJ_ty_invalidate = yes } } }
+WJ_ty_gui_paid_gold = { scope = character is_shown = {
+ trigger_if = { limit = { exists = var:wj_ty_lobby exists = var:wj_ty_proposer }
+ var:wj_ty_proposer = { save_temporary_scope_as = wj_ty_payer }
+ var:wj_ty_lobby = { is_target_in_variable_list = { name = WJ_ty_lobby_gold target = scope:wj_ty_payer } } }
+ trigger_else = { always = no } } }
+WJ_ty_gui_paid_prestige = { scope = character is_shown = {
+ trigger_if = { limit = { exists = var:wj_ty_lobby exists = var:wj_ty_proposer }
+ var:wj_ty_proposer = { save_temporary_scope_as = wj_ty_payer }
+ var:wj_ty_lobby = { is_target_in_variable_list = { name = WJ_ty_lobby_prestige target = scope:wj_ty_payer } } }
+ trigger_else = { always = no } } }
+WJ_ty_gui_paid_influence = { scope = character is_shown = {
+ trigger_if = { limit = { exists = var:wj_ty_lobby exists = var:wj_ty_proposer }
+ var:wj_ty_proposer = { save_temporary_scope_as = wj_ty_payer }
+ var:wj_ty_lobby = { is_target_in_variable_list = { name = WJ_ty_lobby_influence target = scope:wj_ty_payer } } }
+ trigger_else = { always = no } } }
+WJ_ty_gui_paid_weak = { scope = character is_shown = {
+ trigger_if = { limit = { exists = var:wj_ty_lobby exists = var:wj_ty_proposer }
+ var:wj_ty_proposer = { save_temporary_scope_as = wj_ty_payer }
+ var:wj_ty_lobby = { is_target_in_variable_list = { name = WJ_ty_lobby_weak target = scope:wj_ty_payer } } }
+ trigger_else = { always = no } } }
+WJ_ty_gui_paid_strong = { scope = character is_shown = {
+ trigger_if = { limit = { exists = var:wj_ty_lobby exists = var:wj_ty_proposer }
+ var:wj_ty_proposer = { save_temporary_scope_as = wj_ty_payer }
+ var:wj_ty_lobby = { is_target_in_variable_list = { name = WJ_ty_lobby_strong target = scope:wj_ty_payer } } }
+ trigger_else = { always = no } } }
+WJ_ty_gui_paid_hook = { scope = character is_shown = {
+ trigger_if = { limit = { exists = var:wj_ty_lobby exists = var:wj_ty_proposer }
+ var:wj_ty_proposer = { save_temporary_scope_as = wj_ty_payer }
+ var:wj_ty_lobby = { is_target_in_variable_list = { name = WJ_ty_lobby_hook target = scope:wj_ty_payer } } }
+ trigger_else = { always = no } } }
+
+WJ_ty_gui_appointment = { scope = character effect = { WJ_ty_removal_clear = yes remove_variable = wj_ty_revoke_peerage remove_variable = wj_ty_removal_mode remove_variable = wj_ty_removal_title set_variable = { name = wj_ty_topic value = 3 } set_variable = { name = wj_ty_office value = 2 } remove_variable = wj_ty_target WJ_ty_appointment_snapshot = yes WJ_ty_invalidate = yes } }
+# TY38 entry only. The TY23 office grid must not call this GUI.
+WJ_ty_gui_office_1 = { scope = character effect = { WJ_ty_removal_clear = yes remove_variable = wj_ty_revoke_peerage remove_variable = wj_ty_removal_mode remove_variable = wj_ty_removal_title set_variable = { name = wj_ty_topic value = 3 } set_variable = { name = wj_ty_office value = 1 } set_variable = { name = wj_ty_appointment_ty38 value = 1 } remove_variable = wj_ty_target WJ_ty_appointment_snapshot = yes WJ_ty_invalidate = yes } }
+WJ_ty_gui_office_2 = { scope = character effect = { WJ_ty_removal_clear = yes remove_variable = wj_ty_revoke_peerage remove_variable = wj_ty_removal_mode remove_variable = wj_ty_removal_title set_variable = { name = wj_ty_topic value = 3 } set_variable = { name = wj_ty_office value = 2 } remove_variable = wj_ty_target WJ_ty_appointment_snapshot = yes WJ_ty_invalidate = yes } }
+WJ_ty_gui_office_3 = { scope = character effect = { WJ_ty_removal_clear = yes remove_variable = wj_ty_revoke_peerage remove_variable = wj_ty_removal_mode remove_variable = wj_ty_removal_title set_variable = { name = wj_ty_topic value = 3 } set_variable = { name = wj_ty_office value = 3 } remove_variable = wj_ty_target WJ_ty_appointment_snapshot = yes WJ_ty_invalidate = yes } }
+WJ_ty_gui_office_4 = { scope = character effect = { WJ_ty_removal_clear = yes remove_variable = wj_ty_revoke_peerage remove_variable = wj_ty_removal_mode remove_variable = wj_ty_removal_title set_variable = { name = wj_ty_topic value = 3 } set_variable = { name = wj_ty_office value = 4 } remove_variable = wj_ty_target WJ_ty_appointment_snapshot = yes WJ_ty_invalidate = yes } }
+
+WJ_ty_gui_office_6 = { scope = character effect = { WJ_ty_removal_clear = yes remove_variable = wj_ty_revoke_peerage remove_variable = wj_ty_removal_mode remove_variable = wj_ty_removal_title set_variable = { name = wj_ty_topic value = 3 } set_variable = { name = wj_ty_office value = 6 } remove_variable = wj_ty_target WJ_ty_appointment_snapshot = yes WJ_ty_invalidate = yes } }
+WJ_ty_gui_office_7 = { scope = character effect = { WJ_ty_removal_clear = yes remove_variable = wj_ty_revoke_peerage remove_variable = wj_ty_removal_mode remove_variable = wj_ty_removal_title set_variable = { name = wj_ty_topic value = 3 } set_variable = { name = wj_ty_office value = 7 } remove_variable = wj_ty_target WJ_ty_appointment_snapshot = yes WJ_ty_invalidate = yes } }
+WJ_ty_gui_office_8 = { scope = character effect = { WJ_ty_removal_clear = yes remove_variable = wj_ty_revoke_peerage remove_variable = wj_ty_removal_mode remove_variable = wj_ty_removal_title set_variable = { name = wj_ty_topic value = 3 } set_variable = { name = wj_ty_office value = 8 } remove_variable = wj_ty_target WJ_ty_appointment_snapshot = yes WJ_ty_invalidate = yes } }
+WJ_ty_gui_office_9 = { scope = character effect = { WJ_ty_removal_clear = yes remove_variable = wj_ty_revoke_peerage remove_variable = wj_ty_removal_mode remove_variable = wj_ty_removal_title set_variable = { name = wj_ty_topic value = 3 } set_variable = { name = wj_ty_office value = 9 } remove_variable = wj_ty_target WJ_ty_appointment_snapshot = yes WJ_ty_invalidate = yes } }
+WJ_ty_gui_office_10 = { scope = character effect = { WJ_ty_removal_clear = yes remove_variable = wj_ty_revoke_peerage remove_variable = wj_ty_removal_mode remove_variable = wj_ty_removal_title set_variable = { name = wj_ty_topic value = 3 } set_variable = { name = wj_ty_office value = 10 } remove_variable = wj_ty_target WJ_ty_appointment_snapshot = yes WJ_ty_invalidate = yes } }
+
+
+WJ_ty_gui_office_13 = { scope = character effect = { WJ_ty_removal_clear = yes remove_variable = wj_ty_revoke_peerage remove_variable = wj_ty_removal_mode remove_variable = wj_ty_removal_title set_variable = { name = wj_ty_topic value = 3 } set_variable = { name = wj_ty_office value = 13 } remove_variable = wj_ty_target WJ_ty_appointment_snapshot = yes WJ_ty_invalidate = yes } }
+WJ_ty_gui_office_14 = { scope = character effect = { WJ_ty_removal_clear = yes remove_variable = wj_ty_revoke_peerage remove_variable = wj_ty_removal_mode remove_variable = wj_ty_removal_title set_variable = { name = wj_ty_topic value = 3 } set_variable = { name = wj_ty_office value = 14 } remove_variable = wj_ty_target WJ_ty_appointment_snapshot = yes WJ_ty_invalidate = yes } }
+WJ_ty_gui_office_15 = { scope = character effect = { WJ_ty_removal_clear = yes remove_variable = wj_ty_revoke_peerage remove_variable = wj_ty_removal_mode remove_variable = wj_ty_removal_title set_variable = { name = wj_ty_topic value = 3 } set_variable = { name = wj_ty_office value = 15 } remove_variable = wj_ty_target WJ_ty_appointment_snapshot = yes WJ_ty_invalidate = yes } }
+WJ_ty_gui_office_16 = { scope = character effect = { WJ_ty_removal_clear = yes remove_variable = wj_ty_revoke_peerage remove_variable = wj_ty_removal_mode remove_variable = wj_ty_removal_title set_variable = { name = wj_ty_topic value = 3 } set_variable = { name = wj_ty_office value = 16 } remove_variable = wj_ty_target WJ_ty_appointment_snapshot = yes WJ_ty_invalidate = yes } }
+
+# Read-only footer status; no alternate execution path.
+WJ_ty_gui_manager_status = { scope = character is_valid = { WJ_ty_manager_ready = yes } }
+

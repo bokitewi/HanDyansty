@@ -1,5 +1,6 @@
 ﻿# All operation state belongs to the issuing player, never to A or B.
-WJ_mt_authority = {
+# Original Hire/Reassign authority remains separate from the new transfer rights.
+WJ_mt_legacy_authority = {
  is_alive = yes is_ai = no
  custom_tooltip = { text = WJ_mt_hanjin_tt government_has_flag = government_is_celestial }
  custom_tooltip = { text = WJ_mt_zhongwai_exclusive_tt OR = { WJ_zw_valid = yes NOT = { WJ_zw_realm_taken_over = yes } } }
@@ -14,6 +15,19 @@ WJ_mt_authority = {
   custom_tooltip = { text = WJ_mt_no_rebellion_tt NOT = { is_at_war_with = top_liege } }
  }
 }
+WJ_mt_dasima = {
+ exists = top_liege.var:wj_dasima_holder
+ top_liege.var:wj_dasima_holder = this
+ WJ_dasima_retention_trigger = yes
+}
+WJ_mt_authority = {
+ is_alive = yes is_ai = no government_has_flag = government_is_celestial
+ OR = { WJ_mt_legacy_authority = yes WJ_mt_dasima = yes }
+}
+WJ_mt_free_authority = {
+ WJ_mt_authority = yes
+ OR = { WJ_zw_valid = no WJ_mt_dasima = yes }
+}
 WJ_mt_military_person = {
  OR = {
   WJ_contract_sanjie_visible_trigger = yes
@@ -21,11 +35,11 @@ WJ_mt_military_person = {
   AND = { exists = top_liege.var:wj_dasima_holder top_liege.var:wj_dasima_holder = this }
  }
 }
-WJ_mt_person_allowed = {
+WJ_mt_legacy_person_allowed = {
  is_alive = yes
  custom_tooltip = { text = WJ_mt_has_command_tt OR = { is_landed = yes any_held_title = { WJ_mt_title_legal = yes } } }
  custom_tooltip = { text = WJ_mt_same_realm_tt top_liege = $OP$.top_liege }
- $OP$ = { WJ_mt_authority = yes }
+ $OP$ = { WJ_mt_legacy_authority = yes }
  trigger_if = {
   limit = { $OP$ = { OR = { WJ_zw_valid = yes WJ_inner_emperor_trigger = yes } } }
   custom_tooltip = { text = WJ_mt_central_target_tt
@@ -47,16 +61,57 @@ WJ_mt_person_allowed = {
   }
  }
 }
+WJ_mt_person_allowed = {
+ trigger_if = { limit = { $OP$ = { WJ_mt_dasima = yes } }
+  is_alive = yes
+  OR = { is_landed = yes any_held_title = { WJ_mt_title_legal = yes } }
+  top_liege = $OP$.top_liege
+  $OP$ = { WJ_mt_authority = yes }
+  # Exactly the previous central candidate range, not every civilian in the realm.
+  OR = { this = $OP$ this = $OP$.top_liege WJ_mt_military_person = yes }
+ }
+ trigger_else = { WJ_mt_legacy_person_allowed = { OP = $OP$ } }
+}
+WJ_mt_source_person_allowed = {
+ WJ_mt_person_allowed = { OP = $OP$ }
+ trigger_if = { limit = { $OP$ = { WJ_mt_dasima = yes NOT = { has_variable = wj_mt_zw_order } } }
+  custom_tooltip = { text = WJ_mt_dasima_source_tt NOT = { this = $OP$.top_liege } }
+ }
+}
+# Respect the existing ministry contract; a retained local military flag does
+# not re-enable title troops for a civil minister. The locked route uses private troops instead.
+WJ_mt_receives_title = {
+ OR = {
+  WJ_inner_emperor_trigger = yes
+  vassal_contract_has_flag = celestial_grand_marshal_obligation
+  AND = {
+   vassal_contract_has_flag = celestial_military_appointment
+   NOT = { vassal_contract_obligation_level:celestial_ministry_obligations = 1 }
+  }
+ }
+ any_held_title = { WJ_mt_title_legal = yes tier >= prev.min_title_maa_tier }
+}
 WJ_mt_title_legal = { tier >= tier_duchy is_noble_family_title = no exists = holder }
 WJ_mt_pair_valid = {
  WJ_mt_authority = yes
  exists = var:wj_mt_a exists = var:wj_mt_b
+ trigger_if = { limit = { has_variable = wj_mt_zw_order }
+  WJ_zw_valid = yes
+  OR = {
+   AND = { var:wj_mt_a = top_liege var:wj_mt_b = this }
+   AND = { var:wj_mt_a = this var:wj_mt_b = top_liege }
+  }
+ }
+ trigger_else = { WJ_mt_free_authority = yes }
  custom_tooltip = { text = WJ_mt_different_pair_tt NOT = { var:wj_mt_a = var:wj_mt_b } }
  var:wj_mt_a = {
-  WJ_mt_person_allowed = { OP = root }
+  WJ_mt_source_person_allowed = { OP = root }
   trigger_if = { limit = { root = { var:wj_mt_mode = 1 } } highest_held_title_tier >= tier_duchy }
  }
- var:wj_mt_b = { WJ_mt_person_allowed = { OP = root } highest_held_title_tier >= tier_duchy }
+ var:wj_mt_b = {
+  WJ_mt_person_allowed = { OP = root }
+  trigger_if = { limit = { root = { NOT = { has_variable = wj_mt_private_destination } } } highest_held_title_tier >= tier_duchy }
+ }
 }
 WJ_mt_title_a_valid = {
  WJ_mt_pair_valid = yes
@@ -65,9 +120,19 @@ WJ_mt_title_a_valid = {
 }
 WJ_mt_title_b_valid = {
  WJ_mt_pair_valid = yes
- exists = var:wj_mt_title_b
- var:wj_mt_title_b = { WJ_mt_title_legal = yes holder = root.var:wj_mt_b }
- trigger_if = { limit = { var:wj_mt_mode = 1 exists = var:wj_mt_title_a } NOT = { var:wj_mt_title_a = var:wj_mt_title_b } }
+ trigger_if = { limit = { has_variable = wj_mt_private_destination }
+  has_variable = wj_mt_zw_order
+  var:wj_mt_b = { WJ_mt_receives_title = no }
+ }
+ trigger_else = {
+  exists = var:wj_mt_title_b
+  var:wj_mt_title_b = { WJ_mt_title_legal = yes holder = root.var:wj_mt_b }
+  trigger_if = { limit = { has_variable = wj_mt_zw_order }
+   var:wj_mt_b = { WJ_mt_receives_title = yes }
+   var:wj_mt_title_b = { tier >= holder.min_title_maa_tier }
+  }
+  trigger_if = { limit = { var:wj_mt_mode = 1 exists = var:wj_mt_title_a } NOT = { var:wj_mt_title_a = var:wj_mt_title_b } }
+ }
 }
 # Regiment scope. Raised regiments must first be disbanded: no deleting units in a battle.
 WJ_mt_source_regiment = {
@@ -86,4 +151,10 @@ WJ_mt_order_valid = {
  variable_list_size = { name = wj_mt_pending value > 0 }
  any_in_list = { variable = wj_mt_pending count = all WJ_mt_source_regiment = { OP = root } }
  trigger_if = { limit = { var:wj_mt_mode = 2 } treasury >= WJ_mt_cost }
+}
+WJ_mt_new_regiment = {
+ scope:wj_mt_operator = {
+  NOT = { is_target_in_variable_list = { name = wj_mt_before target = prev } }
+  NOT = { is_target_in_variable_list = { name = wj_mt_created target = prev } }
+ }
 }

@@ -590,12 +590,6 @@ start_abduct = {
 			}
 			factor = 0.1
 		}
-		# 天朝循环大修·朋党：尊王立场的成员极少对领主下手（置于末尾，压低最终意愿）
-		modifier = {
-			factor = 0.1
-			scope:puppet_or_actor = { var:hd_party_my_stance ?= flag:zunwang }
-			scope:recipient = scope:puppet_or_actor.liege
-		}
 	}
 
 	auto_accept = yes
@@ -3029,3 +3023,504 @@ learn_language_interaction = {
 	}
 }
 
+
+study_faith_interaction = {
+	icon = icon_scheme_study_faith
+	category = interaction_category_friendly
+	common_interaction = yes
+
+	send_name = START_SCHEME
+
+	interface_priority = 42
+	scheme = study_faith
+
+	ai_targets = {
+		ai_recipients = liege
+		ai_recipients = spouses
+		ai_recipients = scripted_relations
+		ai_recipients = suzerain
+		ai_recipients = top_suzerain
+		ai_recipients = activity_host
+		ai_recipients = war_allies
+	}
+	ai_targets = {
+		ai_recipients = vassals
+		ai_recipients = peer_vassals
+		ai_recipients = tributaries
+		max = 10
+	}
+	ai_targets = {
+		ai_recipients = neighboring_rulers
+		max = 5
+	}
+	ai_frequency_by_tier = {
+		barony = 0
+		county = 144
+		duchy = 60
+		kingdom = 36
+		empire = 36
+		hegemony = 36
+	}
+
+	is_available = {
+		trigger_if = {
+			limit = { is_ai = yes }
+			NOR = {
+				has_trait = paranoid
+				has_trait = lazy
+				primary_title ?= {
+					is_mercenary_company = yes
+				}
+				scheme_generic_ai_blocker_trigger = yes
+			}
+		}
+	}
+
+	is_shown = {
+		scope:puppet_or_actor ?= { faith != scope:recipient.faith }
+		scope:puppet_or_actor != scope:recipient
+	}
+
+	is_valid_showing_failures_only = {
+		trigger_if = {
+			limit = {
+				scope:is_puppet_action ?= yes
+				scope:actor = scope:recipient
+			}
+			custom_tooltip = {
+				text = study_faith_nothing_left_to_learn_tt_puppet_self
+				scope:puppet_or_actor = {
+					study_faith_has_anything_to_learn_trigger = { RITE = scope:recipient.rite }
+				}
+			}
+		}
+		trigger_else = {
+			custom_tooltip = {
+				text = study_faith_nothing_left_to_learn_tt
+				scope:puppet_or_actor = {
+					study_faith_has_anything_to_learn_trigger = { RITE = scope:recipient.rite }
+				}
+			}
+		}
+		scope:puppet_or_actor = {
+			can_start_scheme = {
+				type = study_faith
+				target_character = scope:recipient
+			}
+		}
+		#limit range for landless adventurers
+		trigger_if = {
+			limit = {
+				scope:puppet_or_actor = {
+					has_government = landless_adventurer_government
+				}
+			}
+			#Has to be used instead of diplo range checks in laamp to landed interactions
+			ep3_laamp_diplo_range_trigger = {
+				TARGET = scope:recipient
+				LAAMP = scope:puppet_or_actor
+			}
+		}
+		trigger_if = {
+			limit = { scope:is_puppet_action ?= yes }
+			scope:puppet_or_actor = {
+				piety >= medium_piety_value
+			}
+		}
+	}
+
+	desc = {
+		first_valid = {
+			triggered_desc = {
+				trigger = {
+					scope:is_puppet_action ?= yes
+					scope:actor = scope:recipient
+				}
+				desc = scheme_interaction_tt_study_faith_approved_puppet_self
+			}
+			desc = scheme_interaction_tt_study_faith_approved
+		}
+	}
+	notification_text = study_faith_interaction_notification_int
+
+	cost = {
+		piety = {
+			value = medium_piety_value
+			if = {
+				limit = { scope:is_puppet_action ?= yes }
+				multiply = 0
+			}
+		}
+	}
+
+	send_option = {
+		flag = study_faith_ask_directly
+		current_description = {
+			first_valid = {
+				triggered_desc = {
+					trigger = {
+						scope:is_puppet_action ?= yes
+						scope:actor = scope:recipient
+					}
+					desc = study_faith_interaction.tt.ask_directly_puppet_self
+				}
+				desc = study_faith_interaction.tt.ask_directly
+			}
+		}
+	}
+	send_option = {
+		flag = study_faith_ask_for_emissary
+		current_description = {
+			first_valid = {
+				triggered_desc = {
+					trigger = {
+						scope:is_puppet_action ?= yes
+						scope:actor = scope:recipient
+					}
+					desc = study_faith_interaction.tt.ask_for_emissary_puppet_self
+				}
+				desc = study_faith_interaction.tt.ask_for_emissary
+			}
+		}
+	}
+	send_option = {
+		flag = study_faith_study_from_afar
+		is_valid = {
+			custom_tooltip = {
+				text = can_only_be_learned_in_person_tt
+				scope:recipient.faith = {
+					NOT = { has_doctrine_parameter = can_only_be_learned_in_person }
+				}
+			}
+		}
+		current_description = {
+			first_valid = {
+				triggered_desc = {
+					trigger = {
+						scope:is_puppet_action ?= yes
+						scope:actor = scope:recipient
+					}
+					desc = study_faith_interaction.tt.study_from_afar_puppet_self
+				}
+				desc = study_faith_interaction.tt.study_from_afar
+			}
+		}
+	}
+
+	auto_accept = { scope:study_faith_study_from_afar = yes }
+
+	on_accept = {
+		if = {
+			limit = { scope:is_puppet_action ?= yes }
+			scope:puppet_or_actor = {
+				add_piety = { value = { add = medium_piety_value max = piety multiply = -1 } }
+			}
+		}
+		scope:puppet_or_actor = {
+			send_interface_toast = {
+				type = event_toast_effect_neutral
+				title = study_faith_interaction_notification
+
+				left_icon = scope:puppet_or_actor
+				right_icon = scope:recipient
+
+				begin_scheme_basic_effect = {
+					SCHEME_TYPE = study_faith
+					TARGET_TYPE = target_character
+					TARGET_SCOPE = scope:recipient
+				}
+				scope:new_scheme ?= {
+					if = {
+						limit = { scope:study_faith_ask_directly = yes }
+						add_scheme_modifier = {
+							type = study_faith_ask_directly_modifier
+						}
+					}
+					else_if = {
+						limit = { scope:study_faith_ask_for_emissary = yes }
+						add_scheme_modifier = {
+							type = study_faith_ask_for_emissary_modifier
+						}
+					}
+					else_if = {
+						limit = { scope:study_faith_study_from_afar = yes }
+						add_scheme_modifier = {
+							type = study_faith_study_from_afar_modifier
+						}
+					}
+				}
+			}
+		}
+		if = {
+			limit = {
+				scope:is_puppet_action ?= yes
+				scope:actor != scope:recipient
+			}
+			scope:actor = {
+				send_interface_toast = {
+					type = event_toast_effect_neutral
+					title = study_faith_interaction_notification_puppeteer
+					left_icon = scope:puppet_or_actor
+					right_icon = scope:recipient
+				}
+			}
+		}
+		if = {
+			limit = {
+				scope:study_faith_ask_directly = yes
+				scope:is_puppet_action ?= yes
+				scope:actor = scope:recipient
+			}
+			custom_label = study_faith_interaction.accept.study_faith_ask_directly_puppet_self
+		}
+		else_if = {
+			limit = { scope:study_faith_ask_directly = yes }
+			custom_label = study_faith_interaction.accept.study_faith_ask_directly
+		}
+		else_if = {
+			limit = {
+				scope:study_faith_ask_for_emissary = yes
+				scope:is_puppet_action ?= yes
+				scope:actor = scope:recipient
+			}
+			custom_label = study_faith_interaction.accept.study_faith_ask_for_emissary_puppet_self
+		}
+		else_if = {
+			limit = { scope:study_faith_ask_for_emissary = yes }
+			custom_label = study_faith_interaction.accept.study_faith_ask_for_emissary
+		}
+		else_if = {
+			limit = {
+				scope:study_faith_study_from_afar = yes
+				scope:is_puppet_action ?= yes
+				scope:actor = scope:recipient
+			}
+			custom_label = study_faith_interaction.accept.study_faith_study_from_afar_puppet_self
+		}
+		else_if = {
+			limit = { scope:study_faith_study_from_afar = yes }
+			custom_label = study_faith_interaction.accept.study_faith_study_from_afar
+		}
+	}
+
+	ai_accept = {
+		base = 0
+
+		modifier = {
+			add = 25
+			scope:puppet_or_actor = {
+				has_perk = theologian_perk
+			}
+			desc = study_faith_interaction.ai_accept.theologian_perk
+		}
+
+		modifier = {
+			add = 25
+			scope:recipient = {
+				has_trait = curious
+			}
+			desc = study_faith_interaction.ai_accept.curious
+		}
+
+		modifier = {
+			add = 25
+			scope:recipient = {
+				has_relation_friend = scope:puppet_or_actor
+			}
+			desc = WE_ARE_FRIENDS
+		}
+
+		modifier = {
+			add = 25
+			scope:recipient = {
+				has_relation_lover = scope:puppet_or_actor
+			}
+			desc = WE_ARE_LOVERS
+		}
+
+		modifier = {
+			add = 25
+			scope:recipient = {
+				is_close_family_of = scope:puppet_or_actor
+				is_ruler = yes
+			}
+			desc = study_faith_interaction.ai_accept.close_family_ruler
+		}
+
+		opinion_modifier = { # Opinion Factor
+			who = scope:recipient
+			opinion_target = scope:puppet_or_actor
+			multiplier = 0.5
+			desc = AI_OPINION_REASON
+		}
+
+		modifier = {
+			add = -30
+			scope:recipient.faith = {
+				faith_hostility_level = {
+					target = scope:puppet_or_actor.faith
+					value = faith_evil_level
+				}
+			}
+			desc = study_faith_interaction.ai_accept.evil_faith
+		}
+		modifier = {
+			add = -15
+			scope:recipient.faith = {
+				faith_hostility_level = {
+					target = scope:puppet_or_actor.faith
+					value = faith_hostile_level
+				}
+			}
+			desc = study_faith_interaction.ai_accept.hostile_faith
+		}
+		modifier = {
+			add = 5
+			scope:recipient.faith = {
+				faith_hostility_level = {
+					target = scope:puppet_or_actor.faith
+					value = faith_astray_level
+				}
+			}
+			desc = study_faith_interaction.ai_accept.astray_faith
+		}
+		modifier = {
+			add = 25
+			scope:recipient.faith = {
+				faith_hostility_level = {
+					target = scope:puppet_or_actor.faith
+					value = faith_fully_accepted_level
+				}
+			}
+			desc = study_faith_interaction.ai_accept.accepted_faith
+		}
+
+		modifier = {
+			add = 60
+			scope:study_faith_ask_for_emissary = yes
+			desc = study_faith_interaction.ai_accept.ask_for_emissary
+		}
+	}
+
+	ai_will_do = {
+		base = 0
+
+		modifier = { # Focus on befriending if that's the path you've chosen
+			add = -50
+			scope:puppet_or_actor = {
+				has_perk = befriend_perk
+			}
+		}
+
+		modifier = { # Prefer seducing if you've got the focus for it
+			add = -20
+			scope:puppet_or_actor = {
+				has_focus = intrigue_temptation_focus
+			}
+		}
+
+		modifier = {
+			add = 35
+			scope:puppet_or_actor = {
+				has_focus = learning_theology_focus
+			}
+		}
+
+		modifier = {
+			add = 35
+			scope:puppet_or_actor = {
+				has_perk = theologian_perk
+			}
+		}
+
+		modifier = {
+			add = 25
+			scope:puppet_or_actor = {
+				has_perk = open_minded_perk
+			}
+		}
+
+		modifier = {
+			add = 25
+			scope:puppet_or_actor = {
+				has_trait = curious
+			}
+		}
+
+		modifier = {
+			add = 25
+			scope:recipient = {
+				has_relation_friend = scope:puppet_or_actor
+			}
+		}
+
+		modifier = {
+			add = 25
+			scope:recipient = {
+				has_relation_lover = scope:puppet_or_actor
+			}
+		}
+
+		modifier = {
+			add = 10
+			scope:recipient = {
+				has_relation_potential_friend = scope:puppet_or_actor
+			}
+		}
+
+		modifier = {
+			add = 25
+			scope:recipient = {
+				is_close_family_of = scope:puppet_or_actor
+				is_ruler = yes
+			}
+		}
+
+		modifier = {
+			add = 20
+			scope:puppet_or_actor = {
+				has_focus = diplomacy_foreign_affairs_focus
+				any_neighboring_realm_same_rank_owner = {
+					this = scope:recipient
+				}
+			}
+		}
+
+		modifier = {
+			add = 20
+			scope:puppet_or_actor = {
+				has_focus = stewardship_duty_focus
+			}
+			scope:recipient = {
+				is_vassal_of = scope:puppet_or_actor
+			}
+		}
+
+		modifier = {
+			add = 10
+			exists = scope:puppet_or_actor.capital_county
+			scope:recipient.faith = scope:puppet_or_actor.capital_county.faith
+		}
+
+		modifier = {
+			factor = 2
+			scope:recipient = {
+				is_powerful_vassal_of = scope:puppet_or_actor
+			}
+		}
+
+		modifier = {
+			factor = 2
+			scope:puppet_or_actor = {
+				learning >= 12
+			}
+		}
+
+		modifier = {
+			factor = 0.5
+			scope:puppet_or_actor = {
+				learning <= 6
+			}
+		}
+	}
+}

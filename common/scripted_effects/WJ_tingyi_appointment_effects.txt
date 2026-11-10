@@ -1,0 +1,456 @@
+﻿# Topic 3 backend. Every public effect runs on the UI operator, never the nominee.
+# Parent hooks: clear on close; snapshot after office/target selection; valid at confirmation;
+# commit after WJ_ty_execute_valid. Success scope is wj_ty_appointment_success (yes/no).
+# Target scope, after native dismissal. Destroy only the reviewed ministry title
+# so the delayed handoff cannot refill this deliberately vacant seat. Unlike
+# destroy_and_fire_minister_effect, this does not copy the target's treasury.
+# The caller owns political approval; this leaf never retires land or private titles.
+WJ_ty_appointment_finish_ministry = {
+ save_scope_as = wj_ty_departing_minister
+ save_scope_value_as = { name = wj_ty_office_released value = no }
+ if = {
+  limit = {
+   exists = scope:wj_ty_emperor
+   NOT = { has_council_position = $POSITION$ }
+   NOT = { is_councillor_of = scope:wj_ty_emperor }
+  }
+  if = { limit = { has_title = title:$TITLE$ } scope:wj_ty_emperor = { destroy_title = title:$TITLE$ } }
+  if = {
+   limit = { NOT = { has_title = title:$TITLE$ } }
+   
+   
+   
+   if = { limit = { title:$TITLE$ = title:e_minister_grand_marshal } remove_character_flag = officer_da_jiang_jun }
+   if = { limit = { hd_holds_any_ministry_title_trigger = no } remove_character_modifier = minister_scheme_slots_modifier }
+   WJ_reconcile_contract_privileges_effect = yes
+   scope:wj_ty_emperor = { WJ_sync_grand_secretariat_effect = yes }
+   save_scope_value_as = { name = wj_ty_office_released value = yes }
+  }
+ }
+}
+# Target scope. Native fire retains on_fired/on_lose and dependent-post invalidation.
+# Never remove an office title when the engine refused to release the actual seat.
+WJ_ty_appointment_release_ministry = {
+ save_scope_as = wj_ty_departing_minister
+ save_scope_value_as = { name = wj_ty_office_released value = no }
+ if = {
+  limit = { WJ_ty_appointment_dismiss_council = { TITLE = $TITLE$ POSITION = $POSITION$ } }
+  clear_saved_scope = new_councillor
+  clear_saved_scope = swapped_position
+  # Native tooltip evaluation does not fire the councillor. The subsequent
+  # finish guard therefore cannot expose the title loss until after execution.
+  # Describe that exact reviewed title here; show_as_tooltip never destroys it.
+  show_as_tooltip = {
+   if = { limit = { has_title = title:$TITLE$ }
+    scope:wj_ty_emperor = { destroy_title = title:$TITLE$ }
+   }
+  }
+  if = { limit = { scope:wj_ty_departing_minister = { WJ_ty_imperial_release_context = yes } }
+   # Same native final primitive used by destroy_and_fire_minister_effect,
+   # without copying treasury or deleting any unrelated title.
+   scope:wj_ty_emperor = { always_fire_councillor = scope:wj_ty_departing_minister }
+  }
+  else = { scope:wj_ty_emperor = { fire_councillor = scope:wj_ty_departing_minister } }
+  WJ_ty_appointment_finish_ministry = { TITLE = $TITLE$ POSITION = $POSITION$ }
+ }
+}
+# Operator scope. Unified removal owns snapshot, confirmation and exactly-once
+# completion; recheck the live ordinary office immediately before native mutation.
+WJ_ty_appointment_dismiss_commit = {
+ save_scope_value_as = { name = wj_ty_commit_ok value = no }
+ save_scope_value_as = { name = wj_ty_office_released value = no }
+ if = {
+  limit = { WJ_ty_execute_valid = yes WJ_ty_appointment_dismiss_valid = yes }
+  save_scope_as = wj_ty_operator
+  var:wj_ty_emperor = { save_scope_as = wj_ty_emperor }
+  var:wj_ty_target = { save_scope_as = wj_ty_target }
+  if = { limit = { var:wj_ty_office = 2 } scope:wj_ty_target = { WJ_ty_appointment_release_ministry = { POSITION = councillor_chancellor TITLE = e_minister_chancellor } } }
+  else_if = { limit = { var:wj_ty_office = 3 } scope:wj_ty_target = { WJ_ty_appointment_release_ministry = { POSITION = councillor_spymaster TITLE = e_minister_censor } } }
+  else_if = { limit = { var:wj_ty_office = 4 } scope:wj_ty_target = { WJ_ty_appointment_release_ministry = { POSITION = councillor_marshal TITLE = e_minister_of_war } } }
+  
+  else_if = { limit = { var:wj_ty_office = 6 } scope:wj_ty_target = { WJ_ty_appointment_release_ministry = { POSITION = minister_grand_marshal TITLE = e_minister_grand_marshal } } }
+  else_if = { limit = { var:wj_ty_office = 7 }
+   scope:wj_ty_emperor = { WJ_dasima_revoke_effect = yes }
+   if = { limit = { NOT = { exists = scope:wj_ty_emperor.var:wj_dasima_holder } } save_scope_value_as = { name = wj_ty_office_released value = yes } }
+  }
+  else_if = { limit = { OR = { var:wj_ty_office = 8 var:wj_ty_office = 9 } }
+   if = { limit = { var:wj_ty_office = 8 } scope:wj_ty_emperor = { revoke_court_position = { recipient = scope:wj_ty_target court_position = favored_minister_court_position } } }
+   else = { scope:wj_ty_emperor = { revoke_court_position = { recipient = scope:wj_ty_target court_position = chief_eunuch_court_position } } }
+   if = {
+    limit = {
+     trigger_if = { limit = { var:wj_ty_office = 8 } scope:wj_ty_target = { NOT = { has_court_position = favored_minister_court_position } } }
+     trigger_else = { scope:wj_ty_target = { NOT = { has_court_position = chief_eunuch_court_position } } }
+    }
+    save_scope_value_as = { name = wj_ty_office_released value = yes }
+   }
+  }
+  else_if = { limit = { var:wj_ty_office = 10 } scope:wj_ty_target = { WJ_ty_appointment_release_ministry = { POSITION = minister_personnel TITLE = e_minister_of_personnel } } }
+  
+  
+  else_if = { limit = { var:wj_ty_office = 13 } scope:wj_ty_target = { WJ_ty_appointment_release_ministry = { POSITION = councillor_steward TITLE = e_minister_of_revenue } } }
+  else_if = { limit = { var:wj_ty_office = 14 } scope:wj_ty_target = { WJ_ty_appointment_release_ministry = { POSITION = minister_justice TITLE = e_minister_of_justice } } }
+  else_if = { limit = { var:wj_ty_office = 15 } scope:wj_ty_target = { WJ_ty_appointment_release_ministry = { POSITION = councillor_court_chaplain TITLE = e_minister_of_rites } } }
+  else_if = { limit = { var:wj_ty_office = 16 } scope:wj_ty_target = { WJ_ty_appointment_release_ministry = { POSITION = minister_works TITLE = e_minister_of_works } } }
+  if = { limit = { scope:wj_ty_office_released = yes } save_scope_value_as = { name = wj_ty_commit_ok value = yes } }
+ }
+}
+
+WJ_ty_native_swap_clear_authorization = {
+ remove_variable = wj_ty_native_swap_authorized
+ remove_variable = wj_ty_swap_emperor
+ remove_variable = wj_ty_swap_target
+ remove_variable = wj_ty_swap_incumbent
+ remove_variable = wj_ty_swap_source_task
+ remove_variable = wj_ty_swap_destination_task
+ remove_variable = wj_ty_swap_source_title
+ remove_variable = wj_ty_swap_destination_title
+}
+WJ_ty_native_picker_close = {
+ remove_variable = wj_ty_native_picker
+ remove_variable = wj_ty_native_picker_owner
+ remove_variable = wj_ty_native_picker_task
+ remove_variable = wj_ty_native_swap_ready
+ WJ_ty_native_swap_clear_authorization = yes
+}
+WJ_ty_appointment_native_snapshot = {
+ if = { limit = { var:wj_ty_office = 2 }
+  set_variable = { name = wj_ty_appointment_destination_task value = var:wj_ty_emperor.council_task:councillor_chancellor }
+  set_variable = { name = wj_ty_appointment_destination_title value = title:e_minister_chancellor }
+ }
+ if = { limit = { exists = var:wj_ty_appointment_source_task var:wj_ty_appointment_source_task = var:wj_ty_emperor.council_task:councillor_chancellor }
+  set_variable = { name = wj_ty_appointment_source_title value = title:e_minister_chancellor }
+ }
+ if = { limit = { var:wj_ty_office = 3 }
+  set_variable = { name = wj_ty_appointment_destination_task value = var:wj_ty_emperor.council_task:councillor_spymaster }
+  set_variable = { name = wj_ty_appointment_destination_title value = title:e_minister_censor }
+ }
+ if = { limit = { exists = var:wj_ty_appointment_source_task var:wj_ty_appointment_source_task = var:wj_ty_emperor.council_task:councillor_spymaster }
+  set_variable = { name = wj_ty_appointment_source_title value = title:e_minister_censor }
+ }
+ if = { limit = { var:wj_ty_office = 4 }
+  set_variable = { name = wj_ty_appointment_destination_task value = var:wj_ty_emperor.council_task:councillor_marshal }
+  set_variable = { name = wj_ty_appointment_destination_title value = title:e_minister_of_war }
+ }
+ if = { limit = { exists = var:wj_ty_appointment_source_task var:wj_ty_appointment_source_task = var:wj_ty_emperor.council_task:councillor_marshal }
+  set_variable = { name = wj_ty_appointment_source_title value = title:e_minister_of_war }
+ }
+ 
+ 
+ if = { limit = { var:wj_ty_office = 6 }
+  set_variable = { name = wj_ty_appointment_destination_task value = var:wj_ty_emperor.council_task:minister_grand_marshal }
+  set_variable = { name = wj_ty_appointment_destination_title value = title:e_minister_grand_marshal }
+ }
+ if = { limit = { exists = var:wj_ty_appointment_source_task var:wj_ty_appointment_source_task = var:wj_ty_emperor.council_task:minister_grand_marshal }
+  set_variable = { name = wj_ty_appointment_source_title value = title:e_minister_grand_marshal }
+ }
+ if = { limit = { var:wj_ty_office = 10 }
+  set_variable = { name = wj_ty_appointment_destination_task value = var:wj_ty_emperor.council_task:minister_personnel }
+  set_variable = { name = wj_ty_appointment_destination_title value = title:e_minister_of_personnel }
+ }
+ if = { limit = { exists = var:wj_ty_appointment_source_task var:wj_ty_appointment_source_task = var:wj_ty_emperor.council_task:minister_personnel }
+  set_variable = { name = wj_ty_appointment_source_title value = title:e_minister_of_personnel }
+ }
+ 
+ 
+ 
+ 
+ if = { limit = { var:wj_ty_office = 13 }
+  set_variable = { name = wj_ty_appointment_destination_task value = var:wj_ty_emperor.council_task:councillor_steward }
+  set_variable = { name = wj_ty_appointment_destination_title value = title:e_minister_of_revenue }
+ }
+ if = { limit = { exists = var:wj_ty_appointment_source_task var:wj_ty_appointment_source_task = var:wj_ty_emperor.council_task:councillor_steward }
+  set_variable = { name = wj_ty_appointment_source_title value = title:e_minister_of_revenue }
+ }
+ if = { limit = { var:wj_ty_office = 14 }
+  set_variable = { name = wj_ty_appointment_destination_task value = var:wj_ty_emperor.council_task:minister_justice }
+  set_variable = { name = wj_ty_appointment_destination_title value = title:e_minister_of_justice }
+ }
+ if = { limit = { exists = var:wj_ty_appointment_source_task var:wj_ty_appointment_source_task = var:wj_ty_emperor.council_task:minister_justice }
+  set_variable = { name = wj_ty_appointment_source_title value = title:e_minister_of_justice }
+ }
+ if = { limit = { var:wj_ty_office = 15 }
+  set_variable = { name = wj_ty_appointment_destination_task value = var:wj_ty_emperor.council_task:councillor_court_chaplain }
+  set_variable = { name = wj_ty_appointment_destination_title value = title:e_minister_of_rites }
+ }
+ if = { limit = { exists = var:wj_ty_appointment_source_task var:wj_ty_appointment_source_task = var:wj_ty_emperor.council_task:councillor_court_chaplain }
+  set_variable = { name = wj_ty_appointment_source_title value = title:e_minister_of_rites }
+ }
+ if = { limit = { var:wj_ty_office = 16 }
+  set_variable = { name = wj_ty_appointment_destination_task value = var:wj_ty_emperor.council_task:minister_works }
+  set_variable = { name = wj_ty_appointment_destination_title value = title:e_minister_of_works }
+ }
+ if = { limit = { exists = var:wj_ty_appointment_source_task var:wj_ty_appointment_source_task = var:wj_ty_emperor.council_task:minister_works }
+  set_variable = { name = wj_ty_appointment_source_title value = title:e_minister_of_works }
+ }
+ # An occupied ordinary seat plus an imperial councillor is a reciprocal swap.
+ set_variable = { name = wj_ty_appointment_mode value = 1 }
+ set_variable = { name = wj_ty_action value = 1 }
+ if = { limit = { exists = var:wj_ty_incumbent } set_variable = { name = wj_ty_action value = 2 } }
+ if = { limit = { WJ_ty_uses_native_candidate_provider = yes exists = var:wj_ty_appointment_source_task } set_variable = { name = wj_ty_action value = 3 } }
+ if = { limit = { WJ_ty_uses_native_candidate_provider = yes exists = var:wj_ty_incumbent exists = var:wj_ty_appointment_source_title }
+  if = { limit = { var:wj_ty_appointment_source_employer = var:wj_ty_emperor NOT = { var:wj_ty_appointment_source_task = var:wj_ty_appointment_destination_task } }
+   set_variable = { name = wj_ty_appointment_mode value = 2 } set_variable = { name = wj_ty_action value = 4 }
+  }
+ }
+ set_variable = { name = wj_ty_appointment_snapshot_mode value = var:wj_ty_appointment_mode }
+}
+# Native swap changes the reviewed positions. Its result is checked against the
+# immutable authorization, then consumed before the shared completion effect.
+WJ_ty_native_swap_finish = {
+ if = { limit = { has_variable = wj_ty_native_swap_authorized }
+  if = { limit = { WJ_ty_native_swap_result = yes }
+   save_scope_as = wj_ty_operator
+   var:wj_ty_swap_emperor = { save_scope_as = wj_ty_emperor }
+   var:wj_ty_proposer = { save_scope_as = wj_ty_proposer }
+   var:wj_ty_swap_target = { save_scope_as = wj_ty_target save_scope_as = wj_ty_sender }
+   save_scope_value_as = { name = wj_ty_result_topic value = 3 }
+   save_scope_value_as = { name = wj_ty_result_tier value = var:wj_ty_tier }
+   save_scope_value_as = { name = wj_ty_appointment_success value = yes }
+   WJ_ty_native_swap_clear_authorization = yes
+   WJ_ty_commit_success = yes
+  }
+  else = {
+   WJ_ty_native_swap_clear_authorization = yes
+   WJ_ty_invalidate = yes
+   remove_variable = wj_ty_appointment_snapshot
+   set_variable = { name = wj_ty_appointment_failed value = 1 }
+  }
+ }
+}
+WJ_ty_appointment_clear = {
+ WJ_ty_native_picker_close = yes
+ remove_variable = wj_ty_appointment_mode
+ remove_variable = wj_ty_appointment_ty38
+ WJ_ty_appointment_clear_snapshot = yes
+}
+WJ_ty_appointment_clear_snapshot = {
+ WJ_ty_native_swap_clear_authorization = yes
+ remove_variable = wj_ty_appointment_snapshot_mode
+ remove_variable = wj_ty_appointment_source_title
+ remove_variable = wj_ty_appointment_destination_title
+ remove_variable = wj_ty_appointment_destination_task
+ remove_variable = wj_ty_appointment_failed
+ remove_variable = wj_ty_incumbent
+ remove_variable = wj_ty_had_incumbent
+ remove_variable = wj_ty_appointment_snapshot
+ remove_variable = wj_ty_appointment_office
+ remove_variable = wj_ty_appointment_emperor
+ remove_variable = wj_ty_appointment_target
+ remove_variable = wj_ty_appointment_source_task
+ remove_variable = wj_ty_appointment_source_employer
+ remove_variable = wj_ty_appointment_had_source_task
+ remove_variable = wj_ty_appointment_had_source_employer
+ remove_variable = wj_ty_appointment_zhongwai
+}
+WJ_ty_appointment_snapshot = {
+ # Selecting an ordinary office leaves TY38. Candidate recapture keeps its entry.
+ if = { limit = { NOT = { var:wj_ty_office = 1 } } remove_variable = wj_ty_appointment_ty38 }
+ WJ_ty_appointment_clear_snapshot = yes
+ WJ_ty_invalidate = yes
+ if = { limit = { WJ_ty_appointment_context = yes }
+  save_scope_as = wj_ty_operator
+  set_variable = { name = wj_ty_had_incumbent value = 0 }
+  set_variable = { name = wj_ty_appointment_office value = var:wj_ty_office }
+  set_variable = { name = wj_ty_appointment_emperor value = var:wj_ty_emperor }
+  if = { limit = { exists = var:wj_ty_target }
+   set_variable = { name = wj_ty_appointment_target value = var:wj_ty_target }
+   # Capture both ends of a transfer when selecting, not after confirmation.
+   set_variable = { name = wj_ty_appointment_had_source_task value = 0 }
+   set_variable = { name = wj_ty_appointment_had_source_employer value = 0 }
+   if = { limit = { exists = var:wj_ty_target.council_task }
+    set_variable = { name = wj_ty_appointment_had_source_task value = 1 }
+    set_variable = { name = wj_ty_appointment_source_task value = var:wj_ty_target.council_task }
+   }
+   if = { limit = { exists = var:wj_ty_target.liege_or_court_owner }
+    set_variable = { name = wj_ty_appointment_had_source_employer value = 1 }
+    set_variable = { name = wj_ty_appointment_source_employer value = var:wj_ty_target.liege_or_court_owner }
+   }
+  }
+  if = { limit = { var:wj_ty_office = 1 exists = title:e_WJ_minister_cheng_xiang.holder } set_variable = { name = wj_ty_incumbent value = title:e_WJ_minister_cheng_xiang.holder } }
+  if = { limit = { var:wj_ty_office = 2 exists = var:wj_ty_emperor.council_task:councillor_chancellor.councillor } set_variable = { name = wj_ty_incumbent value = var:wj_ty_emperor.council_task:councillor_chancellor.councillor } }
+  if = { limit = { var:wj_ty_office = 3 exists = var:wj_ty_emperor.council_task:councillor_spymaster.councillor } set_variable = { name = wj_ty_incumbent value = var:wj_ty_emperor.council_task:councillor_spymaster.councillor } }
+  if = { limit = { var:wj_ty_office = 4 exists = var:wj_ty_emperor.council_task:councillor_marshal.councillor } set_variable = { name = wj_ty_incumbent value = var:wj_ty_emperor.council_task:councillor_marshal.councillor } }
+  
+  if = { limit = { var:wj_ty_office = 6 exists = var:wj_ty_emperor.council_task:minister_grand_marshal.councillor } set_variable = { name = wj_ty_incumbent value = var:wj_ty_emperor.council_task:minister_grand_marshal.councillor } }
+  if = { limit = { var:wj_ty_office = 7 } var:wj_ty_emperor = { random_court_position_holder = { type = WJ_dasima_court_position scope:wj_ty_operator = { set_variable = { name = wj_ty_incumbent value = prev } } } } }
+  if = { limit = { var:wj_ty_office = 8 } var:wj_ty_emperor = { random_court_position_holder = { type = favored_minister_court_position scope:wj_ty_operator = { set_variable = { name = wj_ty_incumbent value = prev } } } } }
+  if = { limit = { var:wj_ty_office = 9 } var:wj_ty_emperor = { random_court_position_holder = { type = chief_eunuch_court_position scope:wj_ty_operator = { set_variable = { name = wj_ty_incumbent value = prev } } } } }
+  if = { limit = { var:wj_ty_office = 10 exists = var:wj_ty_emperor.council_task:minister_personnel.councillor } set_variable = { name = wj_ty_incumbent value = var:wj_ty_emperor.council_task:minister_personnel.councillor } }
+  
+  
+  if = { limit = { var:wj_ty_office = 13 exists = var:wj_ty_emperor.council_task:councillor_steward.councillor } set_variable = { name = wj_ty_incumbent value = var:wj_ty_emperor.council_task:councillor_steward.councillor } }
+  if = { limit = { var:wj_ty_office = 14 exists = var:wj_ty_emperor.council_task:minister_justice.councillor } set_variable = { name = wj_ty_incumbent value = var:wj_ty_emperor.council_task:minister_justice.councillor } }
+  if = { limit = { var:wj_ty_office = 15 exists = var:wj_ty_emperor.council_task:councillor_court_chaplain.councillor } set_variable = { name = wj_ty_incumbent value = var:wj_ty_emperor.council_task:councillor_court_chaplain.councillor } }
+  if = { limit = { var:wj_ty_office = 16 exists = var:wj_ty_emperor.council_task:minister_works.councillor } set_variable = { name = wj_ty_incumbent value = var:wj_ty_emperor.council_task:minister_works.councillor } }
+  if = { limit = { exists = var:wj_ty_incumbent } set_variable = { name = wj_ty_had_incumbent value = 1 } }
+  if = { limit = { var:wj_ty_office = 1 exists = var:wj_ty_emperor.var:wj_zw_holder }
+   set_variable = { name = wj_ty_appointment_zhongwai value = var:wj_ty_emperor.var:wj_zw_holder }
+  }
+  WJ_ty_appointment_native_snapshot = yes
+  set_variable = { name = wj_ty_appointment_snapshot value = 1 }
+ }
+}
+# Native routes: petition_liege_0101 recruits ordinary courtiers before assigning;
+# fill_the_ministry calls got_minister_position_effect for rulers. The shared
+# ministry effect owns appointment/title retirement/vassal handling, not this UI.
+WJ_ty_appointment_assign_council = {
+ if = { limit = { scope:wj_ty_target = { is_ruler = yes } }
+  scope:wj_ty_emperor = { save_scope_as = councillor_liege }
+  scope:wj_ty_target = { got_minister_position_effect = { MINISTER_TITLE = $TITLE$ MINISTER_POSITION = $POSITION$ } }
+ }
+ else_if = { limit = { scope:wj_ty_target = { NOT = { is_courtier_of = scope:wj_ty_emperor } } }
+  scope:wj_ty_emperor = { add_courtier = scope:wj_ty_target }
+ }
+ # on_title_gain/shared ministry may already have assigned the seat. Its internal
+ # has_council_position check compares only the position key, so a local incumbent
+ # of the same kind still needs assignment to the actual imperial council.
+ if = { limit = {
+  scope:wj_ty_target = {
+   NOT = { AND = { has_council_position = $POSITION$ is_councillor_of = scope:wj_ty_emperor } }
+   OR = { is_ruler = no has_title = title:$TITLE$ }
+   WJ_ty_appointment_ready = { TITLE = $TITLE$ POSITION = $POSITION$ }
+  }
+ }
+  scope:wj_ty_emperor = { assign_councillor_type = { type = $POSITION$ target = scope:wj_ty_target remove_existing_councillor = yes fire_on_actions = yes } }
+ }
+ if = { limit = { WJ_ty_appointment_destination_valid = { TITLE = $TITLE$ POSITION = $POSITION$ } }
+  save_scope_value_as = { name = wj_ty_appointment_success value = yes }
+ }
+}
+WJ_ty_appointment_assign_court = {
+ if = { limit = { exists = var:wj_ty_incumbent }
+  scope:wj_ty_emperor = { replace_court_position = { recipient = scope:wj_ty_target holder = scope:wj_ty_operator.var:wj_ty_incumbent court_position = $POSITION$ } }
+ }
+ else = { scope:wj_ty_emperor = { appoint_court_position = { recipient = scope:wj_ty_target court_position = $POSITION$ } } }
+ if = { limit = { scope:wj_ty_target = { has_court_position = $POSITION$ is_court_position_employer = { court_position = $POSITION$ who = scope:wj_ty_emperor } } }
+  save_scope_value_as = { name = wj_ty_appointment_success value = yes }
+ }
+}
+# Refresh only an already matched office/title pair. This cannot grant a new title,
+# retire land, or select an heir; it reuses the existing ministry bookkeeping.
+WJ_ty_swap_refresh_member = {
+ hd_minister_settle_effect = yes
+ got_council_position_effect = yes
+ if = { limit = { has_title = title:e_minister_chancellor has_council_position = councillor_chancellor is_councillor_of = scope:wj_ty_emperor } got_minister_position_effect = { MINISTER_TITLE = e_minister_chancellor MINISTER_POSITION = councillor_chancellor } }
+ if = { limit = { has_title = title:e_minister_censor has_council_position = councillor_spymaster is_councillor_of = scope:wj_ty_emperor } got_minister_position_effect = { MINISTER_TITLE = e_minister_censor MINISTER_POSITION = councillor_spymaster } }
+ if = { limit = { has_title = title:e_minister_of_war has_council_position = councillor_marshal is_councillor_of = scope:wj_ty_emperor } got_minister_position_effect = { MINISTER_TITLE = e_minister_of_war MINISTER_POSITION = councillor_marshal } }
+ 
+ if = { limit = { has_title = title:e_minister_grand_marshal has_council_position = minister_grand_marshal is_councillor_of = scope:wj_ty_emperor } got_minister_position_effect = { MINISTER_TITLE = e_minister_grand_marshal MINISTER_POSITION = minister_grand_marshal } }
+ if = { limit = { has_title = title:e_minister_of_personnel has_council_position = minister_personnel is_councillor_of = scope:wj_ty_emperor } got_minister_position_effect = { MINISTER_TITLE = e_minister_of_personnel MINISTER_POSITION = minister_personnel } }
+ 
+ 
+ if = { limit = { has_title = title:e_minister_of_revenue has_council_position = councillor_steward is_councillor_of = scope:wj_ty_emperor } got_minister_position_effect = { MINISTER_TITLE = e_minister_of_revenue MINISTER_POSITION = councillor_steward } }
+ if = { limit = { has_title = title:e_minister_of_justice has_council_position = minister_justice is_councillor_of = scope:wj_ty_emperor } got_minister_position_effect = { MINISTER_TITLE = e_minister_of_justice MINISTER_POSITION = minister_justice } }
+ if = { limit = { has_title = title:e_minister_of_rites has_council_position = councillor_court_chaplain is_councillor_of = scope:wj_ty_emperor } got_minister_position_effect = { MINISTER_TITLE = e_minister_of_rites MINISTER_POSITION = councillor_court_chaplain } }
+ if = { limit = { has_title = title:e_minister_of_works has_council_position = minister_works is_councillor_of = scope:wj_ty_emperor } got_minister_position_effect = { MINISTER_TITLE = e_minister_of_works MINISTER_POSITION = minister_works } }
+}
+# Quiet native seat writes + one exact two-title transaction. No normal ministry
+# transfer/retirement is invoked for either participant. The parent owns approval.
+WJ_ty_appointment_swap_apply = {
+ if = { limit = { WJ_ty_execute_valid = yes WJ_ty_appointment_valid = yes var:wj_ty_appointment_mode = 2 }
+  # Transient markers also guard project callbacks if an engine version runs
+  # position hooks despite quiet assignment. One-day expiry is a failure fallback.
+  scope:wj_ty_target = { set_variable = { name = wj_ty_swapping_council value = 1 days = 1 } }
+  var:wj_ty_incumbent = { set_variable = { name = wj_ty_swapping_council value = 1 days = 1 } }
+  var:wj_ty_appointment_source_task = { save_scope_as = swapped_position }
+  # fire_on_actions=no isolates the intermediate seat state from leave/hire events.
+  scope:wj_ty_emperor = {
+   always_fire_councillor_skip_effects = scope:wj_ty_target
+   always_fire_councillor_skip_effects = scope:wj_ty_operator.var:wj_ty_incumbent
+  }
+  # Native valid_character must see the actual new title before seating its holder.
+  create_title_and_vassal_change = { type = appointment save_scope_as = wj_ty_pair_change add_claim_on_loss = no }
+  var:wj_ty_appointment_source_title = { change_title_holder = { holder = scope:wj_ty_operator.var:wj_ty_incumbent change = scope:wj_ty_pair_change } }
+  var:wj_ty_appointment_destination_title = { change_title_holder = { holder = scope:wj_ty_target change = scope:wj_ty_pair_change } }
+  resolve_title_and_vassal_change = scope:wj_ty_pair_change
+  if = { limit = {
+   var:wj_ty_appointment_source_title.holder = var:wj_ty_incumbent
+   var:wj_ty_appointment_destination_title.holder = var:wj_ty_target
+  }
+   scope:wj_ty_emperor = {
+    assign_council_task = { council_task = scope:wj_ty_operator.var:wj_ty_appointment_destination_task target = scope:wj_ty_target fire_on_actions = no }
+    assign_council_task = { council_task = scope:wj_ty_operator.var:wj_ty_appointment_source_task target = scope:wj_ty_operator.var:wj_ty_incumbent fire_on_actions = no }
+   }
+  }
+  if = { limit = { WJ_ty_swap_result_reached = yes }
+   clear_saved_scope = swapped_position
+   scope:wj_ty_emperor = { save_scope_as = councillor_liege }
+   scope:wj_ty_target = { WJ_ty_swap_refresh_member = yes }
+   var:wj_ty_incumbent = { WJ_ty_swap_refresh_member = yes }
+  }
+  if = { limit = { WJ_ty_swap_result_reached = yes } save_scope_value_as = { name = wj_ty_appointment_success value = yes } }
+  else = {
+   # Restore the reviewed pair on native refusal; never publish a partial swap.
+   if = { limit = { NOT = { AND = {
+    var:wj_ty_appointment_source_title.holder = var:wj_ty_target
+    var:wj_ty_appointment_destination_title.holder = var:wj_ty_incumbent
+   } } }
+    create_title_and_vassal_change = { type = appointment save_scope_as = wj_ty_pair_restore add_claim_on_loss = no }
+    var:wj_ty_appointment_source_title = { change_title_holder = { holder = scope:wj_ty_target change = scope:wj_ty_pair_restore } }
+    var:wj_ty_appointment_destination_title = { change_title_holder = { holder = scope:wj_ty_operator.var:wj_ty_incumbent change = scope:wj_ty_pair_restore } }
+    resolve_title_and_vassal_change = scope:wj_ty_pair_restore
+   }
+   if = { limit = { scope:wj_ty_target = { is_councillor_of = scope:wj_ty_emperor } } scope:wj_ty_emperor = { always_fire_councillor_skip_effects = scope:wj_ty_target } }
+   if = { limit = { var:wj_ty_incumbent = { is_councillor_of = scope:wj_ty_emperor } } scope:wj_ty_emperor = { always_fire_councillor_skip_effects = scope:wj_ty_operator.var:wj_ty_incumbent } }
+   scope:wj_ty_emperor = {
+    assign_council_task = { council_task = scope:wj_ty_operator.var:wj_ty_appointment_source_task target = scope:wj_ty_target fire_on_actions = no }
+    assign_council_task = { council_task = scope:wj_ty_operator.var:wj_ty_appointment_destination_task target = scope:wj_ty_operator.var:wj_ty_incumbent fire_on_actions = no }
+   }
+   scope:wj_ty_emperor = { save_scope_as = councillor_liege }
+   clear_saved_scope = swapped_position
+   scope:wj_ty_target = { WJ_ty_swap_refresh_member = yes }
+   var:wj_ty_incumbent = { WJ_ty_swap_refresh_member = yes }
+  }
+  scope:wj_ty_target = { remove_variable = wj_ty_swapping_council }
+  var:wj_ty_incumbent = { remove_variable = wj_ty_swapping_council }
+  clear_saved_scope = swapped_position
+  clear_saved_scope = wj_ty_pair_change
+  clear_saved_scope = wj_ty_pair_restore
+ }
+}
+WJ_ty_appointment_commit = {
+ remove_variable = wj_ty_appointment_failed
+ save_scope_value_as = { name = wj_ty_appointment_success value = no }
+ if = { limit = { WJ_ty_execute_valid = yes WJ_ty_appointment_valid = yes }
+  save_scope_as = wj_ty_operator
+  var:wj_ty_emperor = { save_scope_as = wj_ty_emperor }
+  var:wj_ty_target = { save_scope_as = wj_ty_target }
+  clear_saved_scope = swapped_position
+  clear_saved_scope = wj_ty_old_task
+  scope:wj_ty_target.council_task ?= { save_scope_as = wj_ty_old_task }
+  if = { limit = { var:wj_ty_appointment_mode = 2 } WJ_ty_appointment_swap_apply = yes }
+  else_if = { limit = { var:wj_ty_office = 1 }
+   # The special script owns grant + native transfer + regency. Do not resign the
+   # old seat or clear the reviewed military holder before that script succeeds.
+   scope:wj_ty_emperor = { save_scope_as = councillor_liege }
+   scope:wj_ty_target = { got_minister_position_effect = { MINISTER_TITLE = e_WJ_minister_cheng_xiang MINISTER_POSITION = WJ_minister_cheng_xiang } }
+   if = { limit = { WJ_ty_appointment_destination_valid = { TITLE = e_WJ_minister_cheng_xiang POSITION = WJ_minister_cheng_xiang } }
+    if = { limit = { exists = var:wj_ty_appointment_zhongwai NOT = { var:wj_ty_appointment_zhongwai = scope:wj_ty_target } }
+     var:wj_ty_appointment_zhongwai = { WJ_zw_clear = yes }
+    }
+    save_scope_value_as = { name = wj_ty_appointment_success value = yes }
+   }
+  }
+  else_if = { limit = { var:wj_ty_office = 2 } WJ_ty_appointment_assign_council = { POSITION = councillor_chancellor TITLE = e_minister_chancellor } }
+  else_if = { limit = { var:wj_ty_office = 3 } WJ_ty_appointment_assign_council = { POSITION = councillor_spymaster TITLE = e_minister_censor } }
+  else_if = { limit = { var:wj_ty_office = 4 } WJ_ty_appointment_assign_council = { POSITION = councillor_marshal TITLE = e_minister_of_war } }
+  
+  else_if = { limit = { var:wj_ty_office = 6 } WJ_ty_appointment_assign_council = { POSITION = minister_grand_marshal TITLE = e_minister_grand_marshal } }
+  else_if = { limit = { var:wj_ty_office = 7 } WJ_ty_appointment_assign_court = { POSITION = WJ_dasima_court_position } }
+  else_if = { limit = { var:wj_ty_office = 8 } WJ_ty_appointment_assign_court = { POSITION = favored_minister_court_position } }
+  else_if = { limit = { var:wj_ty_office = 9 } WJ_ty_appointment_assign_court = { POSITION = chief_eunuch_court_position } }
+  else_if = { limit = { var:wj_ty_office = 10 } WJ_ty_appointment_assign_council = { POSITION = minister_personnel TITLE = e_minister_of_personnel } }
+  
+  
+  else_if = { limit = { var:wj_ty_office = 13 } WJ_ty_appointment_assign_council = { POSITION = councillor_steward TITLE = e_minister_of_revenue } }
+  else_if = { limit = { var:wj_ty_office = 14 } WJ_ty_appointment_assign_council = { POSITION = minister_justice TITLE = e_minister_of_justice } }
+  else_if = { limit = { var:wj_ty_office = 15 } WJ_ty_appointment_assign_council = { POSITION = councillor_court_chaplain TITLE = e_minister_of_rites } }
+  else_if = { limit = { var:wj_ty_office = 16 } WJ_ty_appointment_assign_council = { POSITION = minister_works TITLE = e_minister_of_works } }
+  # Even if an engine operation failed, never replay a partially consumed draft.
+  WJ_ty_invalidate = yes
+  remove_variable = wj_ty_appointment_snapshot
+ }
+ if = { limit = { scope:wj_ty_appointment_success = no }
+  set_variable = { name = wj_ty_appointment_failed value = 1 }
+ }
+}
