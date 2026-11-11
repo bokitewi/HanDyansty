@@ -604,6 +604,25 @@ for(const name of ['WJ_ty_reward_target_card','WJ_ty_appointment_target_card']){
   assert.equal(walk(target).filter(n=>n.key==='WJ_luzhi_badge').length,1,'One shared Han-rank badge remains in the background row');
   const backgroundRow=target.children.find(n=>n.key==='widget'&&member(n,'position')?.children.map(x=>x.key).join(',')==='100,62');
   assert(backgroundRow&&!member(backgroundRow,'visible'),'Background/faith/culture/rank remain available for all appointments');
+  const rect=n=>{const [x,y]=one(n,'position').children.map(c=>Number(c.key)),[width,height]=dimensions(n);return {x,y,width,height};};
+  const disjoint=(a,b)=>a.x+a.width<=b.x||b.x+b.width<=a.x||a.y+a.height<=b.y||b.y+b.height<=a.y;
+  const identityBounds=rect(backgroundRow);
+  for(const aptitude of aptitudes)assert(disjoint(identityBounds,rect(aptitude)),'Identity region must end before aptitude; removing traits must not leave a full-width icon row');
+  assert(!backgroundRow.children.some(n=>n.key==='hbox'),'Identity slots do not redistribute when a badge is hidden');
+  const identitySlots=backgroundRow.children.filter(n=>n.children&&member(n,'size'));
+  assert.equal(identitySlots.length,4,'House, faith, culture and salary rank each retain a slot');
+  for(const slot of identitySlots){
+   const box=rect(slot);
+   assert(box.x>=0&&box.y>=0&&box.width>0&&box.height>0&&box.x+box.width<=identityBounds.width&&box.y+box.height<=identityBounds.height,'Identity child stays inside its own region');
+  }
+  for(const hasMerit of [false,true]){
+   const shown=identitySlots.filter(n=>hasMerit||n.key!=='WJ_luzhi_badge');
+   for(let i=0;i<shown.length;i++)for(let j=i+1;j<shown.length;j++)assert(disjoint(rect(shown[i]),rect(shown[j])),'Visible identity slots never overlap, with or without a salary badge');
+  }
+  const houseSlot=identitySlots.find(n=>member(n,'coa_house_microscopic'));
+  assert(houseSlot,'Use the native 24px house component instead of squeezing the 48px tiny component into a 30px slot');
+  assert(dimensions(houseSlot).every(n=>n>=24));
+  assert(!member(one(houseSlot,'coa_house_microscopic'),'size'),'Preserve the complete native small-house component');
   for(const aptitude of aptitudes){
    assert.deepEqual(one(aptitude,'position').children.map(n=>Number(n.key)),[254,66]);
    assert.deepEqual(dimensions(aptitude),[166,26],'Aptitude occupies the removed trait area and clears the change button');
