@@ -18,7 +18,7 @@ WJ_rf_begin = {
  set_variable = { name = wj_rf_mode value = 1 }
  set_variable = { name = wj_rf_stage value = 0 }
  if = { limit = { this = var:wj_rf_emperor } set_variable = { name = wj_rf_active_grant value = yes } }
- if = { limit = { var:wj_rf_target = { WJ_rf_local = yes } }
+ if = { limit = { WJ_rf_fixed_capital_available = yes }
   set_variable = { name = wj_rf_stage value = 2 }
   set_variable = { name = wj_rf_capital value = var:wj_rf_target.capital_county.duchy }
  }
@@ -36,6 +36,13 @@ WJ_rf_begin_expansion = {
  set_variable = { name = wj_rf_emperor value = top_liege }
  set_variable = { name = wj_rf_mode value = 2 } set_variable = { name = wj_rf_stage value = 2 }
  every_held_title = { limit = { tier = tier_kingdom has_variable = wj_rf_rank var:wj_rf_rank = 1 } root = { set_variable = { name = wj_rf_fief value = prev } } }
+ # Historical Wei has a real king title without a constituent ducal fief.
+ if = { limit = { NOT = { exists = var:wj_rf_fief } }
+  every_held_title = { limit = { tier = tier_empire has_variable = wj_rf_rank var:wj_rf_rank = 2 } root = { set_variable = { name = wj_rf_fief value = prev } } }
+ }
+ if = { limit = { WJ_rf_needs_reseat = yes }
+  set_variable = { name = wj_rf_stage value = 0 } WJ_rf_collect_pool = yes
+ }
  WJ_rf_build_choices = yes trigger_event = WJ_rf.1
  }
 }
@@ -193,11 +200,16 @@ WJ_rf_prepare_page = {
 WJ_rf_back = {
  if = { limit = { WJ_rf_flow_valid = yes }
   if = { limit = { var:wj_rf_stage = 3 } remove_variable = wj_rf_second set_variable = { name = wj_rf_stage value = 2 } }
-  else_if = { limit = { var:wj_rf_stage = 2 var:wj_rf_mode = 1 var:wj_rf_target = { WJ_rf_local = no } }
-   remove_variable = wj_rf_capital set_variable = { name = wj_rf_stage value = 1 }
+  else_if = { limit = { var:wj_rf_stage = 2 var:wj_rf_mode = 1 WJ_rf_fixed_capital_available = no }
+   remove_variable = wj_rf_capital
+   if = { limit = { exists = var:wj_rf_parent } set_variable = { name = wj_rf_stage value = 1 } }
+   else = { set_variable = { name = wj_rf_stage value = 0 } WJ_rf_collect_pool = yes }
   }
-  else_if = { limit = { var:wj_rf_stage = 1 var:wj_rf_target = { WJ_rf_local = no } }
+  else_if = { limit = { var:wj_rf_stage = 1 OR = { var:wj_rf_mode = 2 WJ_rf_fixed_capital_available = no } }
    remove_variable = wj_rf_parent set_variable = { name = wj_rf_stage value = 0 }
+  }
+  if = { limit = { var:wj_rf_mode = 2 WJ_rf_needs_reseat = no }
+   set_variable = { name = wj_rf_stage value = 2 }
   }
   WJ_rf_build_choices = yes trigger_event = WJ_rf.1
  }
@@ -208,11 +220,11 @@ WJ_rf_select = {
    set_variable = { name = wj_rf_parent value = scope:wj_rf_choice }
    set_variable = { name = wj_rf_stage value = 1 } WJ_rf_build_choices = yes trigger_event = WJ_rf.1
   }
+  else_if = { limit = { var:wj_rf_mode = 2 } WJ_rf_expand = yes }
   else_if = { limit = { var:wj_rf_stage = 1 }
    set_variable = { name = wj_rf_capital value = scope:wj_rf_choice }
    set_variable = { name = wj_rf_stage value = 2 } WJ_rf_build_choices = yes trigger_event = WJ_rf.1
   }
-  else_if = { limit = { var:wj_rf_mode = 2 } WJ_rf_expand = yes }
   else_if = { limit = { var:wj_rf_stage = 2 }
    set_variable = { name = wj_rf_second value = scope:wj_rf_choice }
    set_variable = { name = wj_rf_stage value = 3 } WJ_rf_build_choices = yes trigger_event = WJ_rf.1
@@ -226,9 +238,17 @@ WJ_rf_retry = {
  if = { limit = { WJ_rf_flow_valid = yes }
   if = { limit = { var:wj_rf_mode = 1 }
    set_variable = { name = wj_rf_stage value = 0 } remove_variable = wj_rf_parent
-   if = { limit = { var:wj_rf_target = { WJ_rf_local = yes } }
+   if = { limit = { WJ_rf_fixed_capital_available = yes }
     set_variable = { name = wj_rf_stage value = 2 }
     set_variable = { name = wj_rf_capital value = var:wj_rf_target.capital_county.duchy }
+   }
+   if = { limit = { var:wj_rf_stage = 0 } WJ_rf_collect_pool = yes }
+  }
+  else = {
+   remove_variable = wj_rf_parent
+   set_variable = { name = wj_rf_stage value = 2 }
+   if = { limit = { WJ_rf_needs_reseat = yes }
+    set_variable = { name = wj_rf_stage value = 0 } WJ_rf_collect_pool = yes
    }
   }
   WJ_rf_build_choices = yes trigger_event = WJ_rf.1
@@ -279,6 +299,7 @@ WJ_rf_commit = {
   scope:new_title = {
    save_scope_as = wj_rf_new_fief
    set_variable = { name = wj_rf_rank value = 1 }
+   set_landless_title = yes
   set_variable = { name = wj_rf_name_source value = scope:wj_rf_capital_duchy.kingdom }
   # Display name is complete (X国); the title's own stem never reads its holder's primary title.
   set_definitive_form = yes
@@ -320,18 +341,49 @@ WJ_rf_commit = {
  else = { WJ_rf_retry = yes }
 }
 WJ_rf_expand = {
- if = { limit = { WJ_rf_choice_valid = yes var:wj_rf_mode = 2 }
+ if = { limit = { WJ_rf_choice_valid = yes var:wj_rf_mode = 2 var:wj_rf_stage >= 1 scope:wj_rf_choice = { tier = tier_duchy } }
   var:wj_rf_target = { save_scope_as = wj_rf_beneficiary }
   var:wj_rf_emperor = { save_scope_as = wj_rf_sovereign }
   var:wj_rf_fief = { save_scope_as = wj_rf_new_fief }
-  scope:wj_rf_new_fief.title_capital_county = { save_scope_as = wj_rf_capital_county }
+  clear_saved_scope = wj_rf_capital_county
+  scope:wj_rf_new_fief.title_capital_county ?= { save_scope_as = wj_rf_capital_county }
+  save_scope_value_as = { name = wj_rf_reseat value = no }
+  if = { limit = { WJ_rf_needs_reseat = yes }
+   save_scope_value_as = { name = wj_rf_reseat value = yes }
+   scope:wj_rf_choice.title_capital_county = { save_scope_as = wj_rf_capital_county }
+  }
   create_title_and_vassal_change = { type = granted save_scope_as = wj_rf_change add_claim_on_loss = no }
   scope:wj_rf_choice = { WJ_rf_transfer_duchy = yes }
+  if = { limit = { scope:wj_rf_reseat = yes }
+   scope:wj_rf_capital_county = {
+    change_title_holder = { holder = scope:wj_rf_beneficiary change = scope:wj_rf_change government_base = scope:wj_rf_sovereign }
+   }
+  }
   resolve_title_and_vassal_change = scope:wj_rf_change
   if = { limit = { scope:wj_rf_choice = {
     de_jure_liege = scope:wj_rf_new_fief
     any_de_jure_county = { WJ_rf_in_fief = yes }
-   } }
+   }
+   OR = { scope:wj_rf_reseat = no scope:wj_rf_capital_county.holder = scope:wj_rf_beneficiary }
+  }
+   if = { limit = { scope:wj_rf_reseat = yes }
+    # Only retire the former capital's own binding, never an unrelated family law.
+    scope:wj_rf_new_fief.title_capital_county ?= {
+     if = { limit = { var:wj_rf_capital_of = scope:wj_rf_new_fief }
+      remove_variable = wj_rf_capital_of remove_title_law = noble_family_succession_law
+     }
+    }
+    scope:wj_rf_new_fief = { set_capital_county = scope:wj_rf_capital_county save_scope_as = wj_rf_law_title }
+    scope:wj_rf_capital_county = { set_variable = { name = wj_rf_capital_of value = scope:wj_rf_new_fief } }
+    scope:wj_rf_beneficiary = {
+     set_realm_capital = scope:wj_rf_capital_county
+     every_held_title = {
+      limit = { var:wj_rf_constituent_fief = scope:wj_rf_new_fief }
+      set_capital_county = scope:wj_rf_capital_county
+     }
+     trigger_event = WJ_rf.4
+    }
+   }
    scope:wj_rf_beneficiary = { set_variable = { name = wj_rf_cooldown value = yes years = 3 } }
    WJ_rf_end = yes trigger_event = WJ_rf.2
   }
@@ -347,6 +399,7 @@ WJ_rf_promote = {
   create_dynamic_title = { tier = empire name = WJ_rf_promoted_name }
   scope:new_title = {
    save_scope_as = wj_rf_new_kingdom set_variable = { name = wj_rf_rank value = 2 }
+   set_landless_title = yes
    set_variable = { name = wj_rf_constituent_fief value = scope:wj_rf_new_fief }
    set_definitive_form = yes
    set_variable = { name = wj_rf_name_code value = scope:wj_rf_new_fief.var:wj_rf_name_code }
@@ -375,8 +428,8 @@ WJ_rf_promote = {
 # One reference to an actually held title for display; no separate inheritance/state ledger.
 WJ_rf_refresh_holder = {
  remove_variable = wj_rf_owned_title
- every_held_title = { limit = { has_variable = wj_rf_rank var:wj_rf_rank = 1 } prev = { set_variable = { name = wj_rf_owned_title value = prev } } }
- every_held_title = { limit = { has_variable = wj_rf_rank var:wj_rf_rank = 2 } prev = { set_variable = { name = wj_rf_owned_title value = prev } } }
+ every_held_title = { limit = { has_variable = wj_rf_rank var:wj_rf_rank = 1 } set_landless_title = yes prev = { set_variable = { name = wj_rf_owned_title value = prev } } }
+ every_held_title = { limit = { has_variable = wj_rf_rank var:wj_rf_rank = 2 } set_landless_title = yes prev = { set_variable = { name = wj_rf_owned_title value = prev } } }
  WJ_title_style_reconcile = yes
 }
 

@@ -5,6 +5,8 @@ WJ_peer_end_workflow = {
  remove_variable = wj_peer_pending_name remove_variable = wj_peer_pending_food
  remove_variable = wj_peer_parent remove_variable = wj_peer_flow_version remove_variable = wj_peer_page_offset
  clear_variable_list = wj_peer_choices
+ remove_variable = wj_peer_crown
+ remove_variable = wj_peer_cover_gold remove_variable = wj_peer_cover_piety remove_variable = wj_peer_cover_influence
 }
 WJ_peer_build_choices = {
  set_variable = { name = wj_peer_page_offset value = 0 }
@@ -14,7 +16,7 @@ WJ_peer_build_choices = {
  }
  else = {
   # Kingdoms group actually held counties, including all vassals and land outside our de jure realm.
-  every_sub_realm_county = { limit = { WJ_peer_controlled_leaf = yes } kingdom ?= { WJ_peer_add_kingdom_choice = yes } }
+  var:wj_peer_crown = { every_sub_realm_county = { limit = { WJ_peer_controlled_leaf = yes } kingdom ?= { WJ_peer_add_kingdom_choice = yes } } }
  }
 }
 WJ_peer_add_kingdom_choice = {
@@ -175,6 +177,7 @@ WJ_peer_clear_mirror = {
  remove_variable = wj_peer_family remove_variable = wj_peer_food
  remove_variable = wj_peer_realm remove_variable = wj_peer_heir remove_variable = wj_peer_last_paid
  remove_variable = wj_peer_amount
+ remove_variable = wj_peer_income_pending
  remove_variable = wj_peer_personal
 }
 # Family title scope. This is the only authoritative record; character variables are display adapters.
@@ -233,14 +236,14 @@ WJ_peer_clear = {
 WJ_peer_commit = {
  if = { limit = { WJ_peer_commit_valid = yes }
   save_scope_as = wj_peer_issuer
-  if = { limit = { OR = { has_variable = wj_ab_placement var:wj_peer_target = { dynasty = root.dynasty } } }
+  if = { limit = { OR = { has_variable = wj_ab_placement var:wj_peer_target = { dynasty = root.var:wj_peer_crown.dynasty } } }
   var:wj_peer_target = {
     if = { limit = { scope:wj_peer_issuer = { has_variable = wj_ab_placement } } set_variable = { name = wj_peer_retired_emperor value = 1 } }
     set_variable = { name = wj_peer_personal value = yes }
     set_variable = { name = wj_peer_rank value = scope:wj_peer_issuer.var:wj_peer_pending_rank }
     set_variable = { name = wj_peer_name value = scope:wj_peer_issuer.var:wj_peer_pending_name }
     set_variable = { name = wj_peer_food value = scope:wj_peer_issuer.var:wj_peer_pending_food }
-    set_variable = { name = wj_peer_realm value = scope:wj_peer_issuer.primary_title }
+    set_variable = { name = wj_peer_realm value = scope:wj_peer_issuer.var:wj_peer_crown.primary_title }
     set_variable = { name = wj_peer_last_paid value = current_year }
     if = { limit = { is_female = yes NOT = { has_variable = wj_peer_retired_emperor } } set_variable = { name = wj_peer_princess value = 1 } }
     WJ_peer_bind_personal = yes
@@ -255,11 +258,11 @@ WJ_peer_commit = {
     set_variable = { name = wj_peer_rank value = scope:wj_peer_issuer.var:wj_peer_pending_rank }
     set_variable = { name = wj_peer_name value = scope:wj_peer_issuer.var:wj_peer_pending_name }
     set_variable = { name = wj_peer_food value = scope:wj_peer_issuer.var:wj_peer_pending_food }
-    set_variable = { name = wj_peer_realm value = scope:wj_peer_issuer.primary_title }
+    set_variable = { name = wj_peer_realm value = scope:wj_peer_issuer.var:wj_peer_crown.primary_title }
     set_variable = { name = wj_peer_last_paid value = current_year }
     if = { limit = { scope:wj_peer_issuer.var:wj_peer_target = { is_female = yes } }
      set_variable = { name = wj_peer_princess value = 1 }
-     set_variable = { name = wj_peer_princess_dynasty value = scope:wj_peer_issuer.dynasty }
+     set_variable = { name = wj_peer_princess_dynasty value = scope:wj_peer_issuer.var:wj_peer_crown.dynasty }
     }
     WJ_peer_bind_family = yes
    }
@@ -269,21 +272,50 @@ WJ_peer_commit = {
  }
 }
 WJ_peer_finish_grant = {
- if = { limit = { var:wj_peer_pending_rank = 4 NOT = { has_variable = wj_ab_placement } } remove_short_term_gold = 50 add_piety = -50 change_influence = -50 }
+ if = { limit = { var:wj_peer_pending_rank = 4 NOT = { has_variable = wj_ab_placement } } WJ_peer_pay_grant_cost = yes }
  var:wj_peer_target = { trigger_event = WJ_peer.020 }
  if = { limit = { has_variable = wj_ab_placement } WJ_ab_cleanup = yes }
  WJ_peer_end_workflow = yes
 }
 WJ_peer_pay = {
- if = { limit = { WJ_peer_valid = yes OR = {
+ if = { limit = { WJ_peer_valid = yes NOT = { has_variable = wj_peer_income_pending } OR = {
   AND = { has_variable = wj_peer_personal var:wj_peer_last_paid < current_year }
   AND = { exists = var:wj_peer_family var:wj_peer_family = { var:wj_peer_last_paid < current_year } }
  } }
   var:wj_peer_family ?= { set_variable = { name = wj_peer_last_paid value = current_year } }
   set_variable = { name = wj_peer_last_paid value = current_year }
   set_variable = { name = wj_peer_amount value = WJ_peer_annual_gold }
-  add_gold = var:wj_peer_amount
-  if = { limit = { is_ai = no } trigger_event = WJ_peer.100 }
+  # Reserve the annual ledger before opening the choice. AI keeps its existing full payment.
+  if = { limit = { is_ai = yes } add_gold = var:wj_peer_amount }
+  else = {
+   set_variable = { name = wj_peer_income_pending value = current_year }
+   save_scope_value_as = { name = wj_peer_income_year value = current_year }
+   var:wj_peer_food = { save_scope_as = wj_peer_income_food }
+   trigger_event = WJ_peer.100
+  }
+ }
+}
+# Event character scope. Every choice shares the same pending-ledger guard.
+WJ_peer_resolve_income = {
+ if = { limit = { WJ_peer_income_choice_valid = yes }
+  hidden_effect = { remove_variable = wj_peer_income_pending }
+  if = { limit = { $SHARE$ > 0 } add_gold = { value = var:wj_peer_amount multiply = $SHARE$ } }
+  if = { limit = { $SHARE$ < 1 }
+   scope:wj_peer_income_county = {
+    remove_county_modifier = WJ_peer_half_relief_modifier
+    remove_county_modifier = WJ_peer_full_relief_modifier
+    if = { limit = { $SHARE$ = 0 }
+     add_county_modifier = { modifier = WJ_peer_full_relief_modifier years = 1 }
+    }
+    else = { add_county_modifier = { modifier = WJ_peer_half_relief_modifier years = 1 } }
+   }
+  }
+  if = { limit = { $SHARE$ = 0 exists = scope:wj_peer_income_official scope:wj_peer_income_official = { is_alive = yes NOT = { this = root } } }
+   scope:wj_peer_income_official = { add_opinion = { target = root modifier = WJ_peer_relief_gratitude years = 5 } }
+  }
+  hidden_effect = { send_interface_toast = { title = WJ_peer_income_settled left_icon = root
+   custom_tooltip = WJ_peer_income_result_$RESULT$_tt
+  } }
  }
 }
 # Family title scope; preserve an existing different grant if two family titles converge.
@@ -360,4 +392,10 @@ WJ_peer_before_death = {
   set_variable = { name = wj_peer_memorial value = yes }
   if = { limit = { has_variable = wj_peer_personal } WJ_peer_clear_personal = yes }
  }
+}
+
+WJ_peer_pay_grant_cost = {
+ WJ_peer_pay_resource = { CROWN = var:wj_peer_crown PAYER = this RESOURCE = gold COST = 50 EFFECT = add_gold }
+ WJ_peer_pay_resource = { CROWN = var:wj_peer_crown PAYER = this RESOURCE = piety COST = 50 EFFECT = add_piety }
+ WJ_peer_pay_resource = { CROWN = var:wj_peer_crown PAYER = this RESOURCE = influence COST = 50 EFFECT = change_influence }
 }

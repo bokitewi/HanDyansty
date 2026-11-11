@@ -950,14 +950,23 @@ share_known_secrets_interaction = {
 		hegemony = 180
 	}
 
+	is_available = {
+		trigger_if = {
+			limit = { is_ai = yes }
+			#Has access to the appropriate cultural parameter.
+			dynasty ?= { has_dynasty_perk = fp2_coterie_legacy_4 }
+			prestige > major_prestige_value
+		}
+	}
+
 	is_shown = {
-		scope:actor = {
+		scope:puppet_or_actor ?= {
 			# Standard check
 			# Has access to the appropriate legacy perk.
-			dynasty = { has_dynasty_perk = fp2_coterie_legacy_4 }
+			dynasty ?= { has_dynasty_perk = fp2_coterie_legacy_4 }
 
 			# they are from the same house
-			house = scope:recipient.house
+			house ?= scope:recipient.house
 		}
 	}
 
@@ -965,9 +974,9 @@ share_known_secrets_interaction = {
 		custom_tooltip = {
 			text = share_known_secrets_interaction.tt.no_secrets_to_share
 			# We try to keep the criteria vague to obfuscate things.
-			scope:actor = { any_known_secret = { } } # Must have a secret to share
+			scope:puppet_or_actor = { any_known_secret = { } } # Must have a secret to share
 			OR = {
-				scope:actor = {
+				scope:puppet_or_actor = {
 					# At least one secret is unknown from recipient
 					any_known_secret = {
 						NOT = { is_known_by = scope:recipient }
@@ -976,7 +985,7 @@ share_known_secrets_interaction = {
 				scope:recipient = {
 					# At least one secret is unknown from actor
 					any_known_secret = {
-						NOT = { is_known_by = scope:actor }
+						NOT = { is_known_by = scope:puppet_or_actor }
 					}
 				}
 			}
@@ -984,15 +993,16 @@ share_known_secrets_interaction = {
 	}
 
 	desc = share_known_secrets_interaction_desc
+	notification_text = share_known_secrets_interaction_notification
 
 	on_accept = {
-		scope:actor = {
+		scope:puppet_or_actor = {
 			if = {
 				limit = {
 					scope:recipient = {
 						any_known_secret = {
 							count >= 7
-							NOT = { is_known_by = scope:actor }
+							NOT = { is_known_by = scope:puppet_or_actor }
 						}
 					}
 				}
@@ -1007,7 +1017,7 @@ share_known_secrets_interaction = {
 					scope:recipient = {
 						any_known_secret = {
 							count >= 3
-							NOT = { is_known_by = scope:actor }
+							NOT = { is_known_by = scope:puppet_or_actor }
 						}
 					}
 				}
@@ -1024,7 +1034,7 @@ share_known_secrets_interaction = {
 			}
 
 			# Stress impact
-			stress_impact = {
+			stress_and_fulfillment_impact = {
 				honest = minor_stress_impact_gain
 				just = minor_stress_impact_gain
 				compassionate = minor_stress_impact_gain
@@ -1034,7 +1044,7 @@ share_known_secrets_interaction = {
 		scope:recipient = {
 			if = {
 				limit = {
-					scope:actor = {
+					scope:puppet_or_actor = {
 						any_known_secret = {
 							count >= 7
 							NOT = { is_known_by = scope:recipient }
@@ -1065,19 +1075,19 @@ share_known_secrets_interaction = {
 			}
 			else_if = {
 				limit = {
-					scope:actor = {
+					scope:puppet_or_actor = {
 						any_known_secret = {
 							count >= 3
 							NOT = { is_known_by = scope:recipient }
 							OR = {
 								NOR = {
-									secret_owner = scope:actor
+									secret_owner = scope:puppet_or_actor
 									AND = {
 										exists = secret_target
-										secret_target = scope:actor
+										secret_target = scope:puppet_or_actor
 									}
 								}
-								scope:actor = {
+								scope:puppet_or_actor = {
 									OR = {
 										has_trait = dull
 										has_trait = intellect_bad
@@ -1103,7 +1113,7 @@ share_known_secrets_interaction = {
 			}
 
 			# Stress impact
-			stress_impact = {
+			stress_and_fulfillment_impact = {
 				honest = minor_stress_impact_gain
 				just = minor_stress_impact_gain
 				compassionate = minor_stress_impact_gain
@@ -1112,12 +1122,12 @@ share_known_secrets_interaction = {
 
 		hidden_effect = {
 			scope:recipient = { save_scope_as = END_TARGET } # This should make the loc work 2-ways, as notifs do not update themselves
-			scope:actor = {
+			scope:puppet_or_actor = {
 				if = { # Recipient has no secrets to share
 					limit = {
 						scope:recipient = {
 							any_known_secret = {
-								NOT = { is_known_by = scope:actor }
+								NOT = { is_known_by = scope:puppet_or_actor }
 								OR = {
 									NOR = {
 										secret_owner = scope:recipient
@@ -1144,6 +1154,21 @@ share_known_secrets_interaction = {
 						desc = share_known_secrets_interaction_recipient_had_no_secrets
 						left_icon = scope:recipient
 					}
+					if = {
+						limit = {
+							scope:is_puppet_action ?= yes
+							scope:actor != scope:recipient
+						}
+						scope:actor = {
+							send_interface_message = {
+								type = event_intrigue_bad_with_text
+								title = share_known_secrets_interaction_outcome_notif_title_puppeteer
+								desc = share_known_secrets_interaction_recipient_had_no_secrets_puppeteer
+								left_icon = scope:recipient
+								right_icon = scope:puppet_or_actor
+							}
+						}
+					}
 				}
 				else = { # They had secrets to share
 					send_interface_message = {
@@ -1155,7 +1180,7 @@ share_known_secrets_interaction = {
 						scope:recipient = {
 							every_known_secret = {
 								limit = {
-									NOT = { is_known_by = scope:actor }
+									NOT = { is_known_by = scope:puppet_or_actor }
 									OR = {
 										NOR = {
 											secret_owner = scope:recipient
@@ -1173,29 +1198,44 @@ share_known_secrets_interaction = {
 										}
 									}
 								}
-								reveal_to = scope:actor
+								reveal_to = scope:puppet_or_actor
+							}
+						}
+					}
+					if = {
+						limit = {
+							scope:is_puppet_action ?= yes
+							scope:actor != scope:recipient
+						}
+						scope:actor = {
+							send_interface_message = {
+								type = event_intrigue_good_with_text
+								title = share_known_secrets_interaction_outcome_notif_title_puppeteer
+								desc = share_known_secrets_interaction_desc_intro_puppeteer
+								left_icon = scope:recipient
+								right_icon = scope:puppet_or_actor
 							}
 						}
 					}
 				}
 			}
 
-			scope:actor = { save_scope_as = END_TARGET }
+			scope:puppet_or_actor = { save_scope_as = END_TARGET }
 			scope:recipient = {
 				if = { # actor has no secrets to share
 					limit = { 
-						scope:actor = { 
+						scope:puppet_or_actor = { 
 							any_known_secret = {
 								NOT = { is_known_by = scope:recipient }
 								OR = {
 									NOR = {
-										secret_owner = scope:actor
+										secret_owner = scope:puppet_or_actor
 										AND = {
 											exists = secret_target
-											secret_target = scope:actor
+											secret_target = scope:puppet_or_actor
 										}
 									}
-									scope:actor = {
+									scope:puppet_or_actor = {
 										OR = {
 											has_trait = dull
 											has_trait = intellect_bad
@@ -1211,7 +1251,7 @@ share_known_secrets_interaction = {
 						type = event_intrigue_bad_with_text
 						title = share_known_secrets_interaction_outcome_notif_title
 						desc = share_known_secrets_interaction_recipient_had_no_secrets
-						left_icon = scope:actor
+						left_icon = scope:puppet_or_actor
 					}
 				}
 				else = { # They had secrets to share
@@ -1219,21 +1259,21 @@ share_known_secrets_interaction = {
 						type = event_intrigue_good_with_text
 						title = share_known_secrets_interaction_outcome_notif_title
 						desc = share_known_secrets_interaction_desc_intro
-						left_icon = scope:actor
+						left_icon = scope:puppet_or_actor
 
-						scope:actor = {
+						scope:puppet_or_actor = {
 							every_known_secret = {
 								limit = {
 									NOT = { is_known_by = scope:recipient }
 									OR = {
 										NOR = {
-											secret_owner = scope:actor
+											secret_owner = scope:puppet_or_actor
 											AND = {
 												exists = secret_target
-												secret_target = scope:actor
+												secret_target = scope:puppet_or_actor
 											}
 										}
-										scope:actor = {
+										scope:puppet_or_actor = {
 											OR = {
 												has_trait = dull
 												has_trait = intellect_bad
@@ -1253,7 +1293,7 @@ share_known_secrets_interaction = {
 
 		# If we're a clan this interaction affects unity
 		add_clan_unity_interaction_effect = {
-			CHARACTER = scope:actor
+			CHARACTER = scope:puppet_or_actor
 			TARGET = scope:recipient
 			VALUE = minor_unity_loss
 			DESC = clan_unity_secret_sharing.desc
@@ -1264,42 +1304,30 @@ share_known_secrets_interaction = {
 	auto_accept = {
 		custom_description = {
 			text = "spending_hook"
-			subject = scope:actor
+			subject = scope:puppet_or_actor
 			object = scope:recipient
 			AND = {
 				always = scope:hook
-				scope:actor = { has_strong_hook = scope:recipient }
+				scope:puppet_or_actor = { has_strong_hook = scope:recipient }
 			}
 		}
 	}
 
 	send_option = {
 		is_valid = {
-			scope:actor = { has_strong_hook = scope:recipient }
+			scope:puppet_or_actor = { has_strong_hook = scope:recipient }
 		}
 		flag = hook
 		localization = SCHEME_HOOK
 	}
 	should_use_extra_icon = {
-		scope:actor = { has_strong_hook = scope:recipient }
+		scope:puppet_or_actor = { has_strong_hook = scope:recipient }
 	}
 	extra_icon = "gfx/interface/icons/character_interactions/hook_icon.dds"
 	
 	send_options_exclusive = no
 
-	ai_potential = {
-		#Has access to the appropriate cultural parameter.
-		AND = {
-			exists = dynasty
-			dynasty = { has_dynasty_perk = fp2_coterie_legacy_4 }
-		}
-		prestige > major_prestige_value
-	}
-	
-	auto_accept = no
-
 	ai_accept = {
-		WJ_dd_jie_acceptance_modifier = yes
 		# AI should accept by default
 		base = 10
 

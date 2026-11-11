@@ -1,8 +1,8 @@
 ﻿# ============================================================================
 # WJ 皇帝下诏书交互 —— 适配自 jueyi_mod 的 huangdi_quanwei_name_interactions
 # xinsanguo-MOD 2026-08-19
-# 扮演者 = 皇帝(h_china 持有者 + 天朝政体)
-# 适配变更: 1) 显示条件 = 持有 h_china 且政体为天朝制; 2) 移除 diarch 权臣判定(主mod无权臣特质系统)
+# 原生傀儡入口沿现有注册；汉廷拔擢、赏金改由廷议结算，独立皇廷保留旧项。
+# 爵位子项继续进入既有选地与费用交互，不复制其结算。
 # ============================================================================
 
 wj_huangdi_zhaoshu_interaction = {
@@ -15,99 +15,89 @@ wj_huangdi_zhaoshu_interaction = {
 	name = wj_huangdi_zhaoshu_interaction
 	desc = wj_huangdi_zhaoshu_interaction_desc
 
-	is_shown = {
-		always = no # 2026-10-05 用户要求暂时隐藏下诏书，保留原功能待适配后恢复。
-		NOT = { scope:recipient = scope:actor }
-		scope:actor = {
-			is_ai = no
-			has_title = title:h_china
-			government_has_flag = government_is_celestial
-		}
-	}
+	is_shown = { scope:actor = { is_ai = no } scope:recipient = { is_alive = yes }
+ OR = { AND = { NOT = { scope:is_puppet_action = yes } scope:actor = { WJ_inner_emperor_trigger = yes NOT = { has_title = title:h_china } } } AND = { scope:is_puppet_action = yes scope:puppet_or_actor = { WJ_inner_emperor_trigger = yes NOT = { has_title = title:h_china } puppeteer = scope:actor } } }
+}
+ redirect = {
+ if = { limit = { exists = scope:puppet_or_actor } scope:puppet_or_actor = { save_scope_as = wj_edict_emperor } }
+ else = { scope:actor = { save_scope_as = wj_edict_emperor } }
+}
+send_options_exclusive = yes
+is_valid_showing_failures_only = {
+ WJ_edict_actor_valid = yes
+ scope:recipient = { is_alive = yes OR = { top_liege = scope:wj_edict_emperor AND = { is_ruler = no is_imprisoned = no NOT = { exists = liege_or_court_owner } } } }
+}
+
+ can_send = { WJ_edict_send_valid = yes }
 
 	# 下诏入宫
 	send_option = {
-		is_valid = {
-			custom_tooltip = {
-				text = huangdi_zhengpirugong_invalid
-				scope:recipient = {
-					is_imprisoned = no
-					is_landed_or_landless_administrative = no
-					NOT = { is_courtier_of = scope:actor }
-					primary_title.tier < tier_barony
-				}
-			}
-		}
+		is_valid = { scope:recipient = { is_alive = yes is_ruler = no is_imprisoned = no NOT = { exists = liege_or_court_owner } } }
 		flag = xiazhao_zhengpirugong
-		starts_enabled = { always = yes }
+		starts_enabled = { always = no }
 	}
 
 	# 赏赐
 	send_option = {
+		is_shown = { scope:wj_edict_emperor = { NOT = { has_title = title:h_china } } }
 		flag = luoyang_shangci_interaction
-		starts_enabled = { always = yes }
-	}
+		starts_enabled = { always = no }
 
-	# 赐予同进士出身
+ is_valid = {  scope:wj_edict_emperor = { gold >= 500 }
+ }
+}
+
+	# 赐予辟召
 	send_option = {
 		is_valid = {
-			custom_tooltip = {
-				text = huangdi_jinshichushen_invalid
-				scope:recipient = {
-					OR = {
-						AND = {
-							is_vassal_or_below_of = scope:actor
-							is_landed_or_landless_administrative = yes
-							NOT = { has_character_modifier = tgp_passed_metropolitan_exam_modifier }
-							NOT = { has_character_modifier = mod_jinshichushen_1 }
-							NOT = { has_character_modifier = dynasty_celestial_favor_interaction_modifier }
-						}
-						AND = {
-							NOT = { has_character_modifier = tgp_passed_metropolitan_exam_modifier }
-							NOT = { has_character_modifier = mod_jinshichushen_1 }
-							NOT = { has_character_modifier = dynasty_celestial_favor_interaction_modifier }
-							is_courtier_of = scope:actor
-						}
-					}
-				}
-			}
-		}
+ scope:wj_edict_emperor = { WJ_edict_level_two = yes }
+ scope:wj_edict_emperor = { prestige_level >= 3 }
+ scope:recipient = { government_has_flag = government_is_celestial top_liege = scope:wj_edict_emperor NOT = { has_character_modifier = WJ_bizhao_modifier } }
+ }
 		flag = mod_jinshichushen
 		starts_enabled = { always = no }
 	}
 
 	# 破格拔擢
 	send_option = {
+		is_shown = { scope:wj_edict_emperor = { NOT = { has_title = title:h_china } } }
 		is_valid = {
+ scope:wj_edict_emperor = { WJ_edict_level_two = yes }
+ scope:wj_edict_emperor = { prestige_level >= 3 }
+ scope:wj_edict_emperor = { influence >= 800 }
+
 			custom_tooltip = {
 				text = huangdi_add_major_invalid
 				scope:recipient = {
 					OR = {
 						AND = {
 							is_landed_or_landless_administrative = yes
-							is_vassal_or_below_of = scope:actor
+							is_vassal_or_below_of = scope:wj_edict_emperor
 						}
-						is_courtier_of = scope:actor
+						is_courtier_of = scope:wj_edict_emperor
 					}
 				}
 			}
-		}
+
+ }
 		flag = add_major_xianneng_option
 		localization = "add_major_xianneng_option_desc"
 	}
 
 	# 官品拔擢
 	send_option = {
-		is_valid = {
+		is_shown = { scope:wj_edict_emperor = { NOT = { has_title = title:h_china } } }
+		is_valid = { scope:wj_edict_emperor = { influence >= 150 }
+
 			custom_tooltip = {
 				text = huangdi_add_medium_invalid
 				scope:recipient = {
 					OR = {
 						AND = {
 							is_landed_or_landless_administrative = yes
-							is_vassal_or_below_of = scope:actor
+							is_vassal_or_below_of = scope:wj_edict_emperor
 						}
-						is_courtier_of = scope:actor
+						is_courtier_of = scope:wj_edict_emperor
 					}
 				}
 			}
@@ -119,22 +109,27 @@ wj_huangdi_zhaoshu_interaction = {
 	# 官品贬谪
 	send_option = {
 		is_valid = {
+ scope:wj_edict_emperor = { WJ_regency_authority_three = yes }
+ OR = { scope:actor != scope:wj_edict_emperor scope:wj_edict_emperor = { NOT = { has_trait = WJ_lost_imperial_authority } } }
+ scope:wj_edict_emperor = { influence >= 500 }
+
 			custom_tooltip = {
 				text = huangdi_reduce_major_invalid
 				scope:recipient = {
 					OR = {
 						AND = {
 							is_landed_or_landless_administrative = yes
-							is_vassal_or_below_of = scope:actor
+							is_vassal_or_below_of = scope:wj_edict_emperor
 						}
 						AND = {
-							is_imprisoned_by = scope:actor
-							is_courtier_of = scope:actor
+							is_imprisoned_by = scope:wj_edict_emperor
+							is_courtier_of = scope:wj_edict_emperor
 						}
 					}
 				}
 			}
-		}
+
+ }
 		flag = reduce_major_xianneng_option
 		localization = "reduce_major_xianneng_option_desc"
 	}
@@ -142,22 +137,27 @@ wj_huangdi_zhaoshu_interaction = {
 	# 小惩大戒
 	send_option = {
 		is_valid = {
+ scope:wj_edict_emperor = { WJ_edict_level_two = yes }
+ OR = { scope:actor != scope:wj_edict_emperor scope:wj_edict_emperor = { NOT = { has_trait = WJ_lost_imperial_authority } } }
+ scope:wj_edict_emperor = { influence >= 100 }
+
 			custom_tooltip = {
 				text = huangdi_reduce_medium_invalid
 				scope:recipient = {
 					OR = {
 						AND = {
 							is_landed_or_landless_administrative = yes
-							is_vassal_or_below_of = scope:actor
+							is_vassal_or_below_of = scope:wj_edict_emperor
 						}
 						AND = {
-							is_imprisoned_by = scope:actor
-							is_courtier_of = scope:actor
+							is_imprisoned_by = scope:wj_edict_emperor
+							is_courtier_of = scope:wj_edict_emperor
 						}
 					}
 				}
 			}
-		}
+
+ }
 		flag = reduce_medium_xianneng_option
 		localization = "reduce_medium_xianneng_option_desc"
 	}
@@ -165,12 +165,16 @@ wj_huangdi_zhaoshu_interaction = {
 	# 构陷
 	send_option = {
 		is_valid = {
+ scope:wj_edict_emperor = { WJ_regency_authority_three = yes }
+ OR = { scope:actor != scope:wj_edict_emperor scope:wj_edict_emperor = { NOT = { has_trait = WJ_lost_imperial_authority } } }
+ scope:wj_edict_emperor = { influence >= 200 }
+
 			custom_tooltip = {
 				text = huangdi_random_negative_trait_invalid
 				scope:recipient = {
 					OR = {
-						is_vassal_or_below_of = scope:actor
-						is_courtier_of = scope:actor
+						is_vassal_or_below_of = scope:wj_edict_emperor
+						is_courtier_of = scope:wj_edict_emperor
 					}
 					NOR = {
 						has_trait = witch
@@ -184,17 +188,22 @@ wj_huangdi_zhaoshu_interaction = {
 					}
 				}
 			}
-		}
+
+ }
 		flag = huangdi_random_negative_trait
 	}
 
 	# 罢免
 	send_option = {
 		is_valid = {
+ scope:wj_edict_emperor = { WJ_regency_authority_three = yes }
+ OR = { scope:actor != scope:wj_edict_emperor scope:wj_edict_emperor = { NOT = { has_trait = WJ_lost_imperial_authority } } }
+ scope:wj_edict_emperor = { influence >= 300 }
+
 			custom_tooltip = {
 				text = huangdi_cuihui_title_invalid
 				scope:recipient = {
-					is_vassal_or_below_of = scope:actor
+					is_vassal_or_below_of = scope:wj_edict_emperor
 					highest_held_title_tier >= tier_barony
 					is_landless_ruler = no
 					OR = {
@@ -209,13 +218,19 @@ wj_huangdi_zhaoshu_interaction = {
 					}
 				}
 			}
-		}
+		 scope:recipient = { NOR = { has_title = title:e_WJ_minister_cheng_xiang has_council_position = WJ_minister_cheng_xiang } }
+
+ }
 		flag = mod_huangdi_cuihui_title_interaction
 	}
 
 	# 永不录用
 	send_option = {
 		is_valid = {
+ scope:wj_edict_emperor = { WJ_regency_authority_three = yes }
+ OR = { scope:actor != scope:wj_edict_emperor scope:wj_edict_emperor = { NOT = { has_trait = WJ_lost_imperial_authority } } }
+ scope:wj_edict_emperor = { influence >= 200 }
+
 			custom_tooltip = {
 				text = huangdi_yongbuluyong_invalid
 				scope:recipient = {
@@ -223,43 +238,54 @@ wj_huangdi_zhaoshu_interaction = {
 					NOT = { has_character_modifier = mod_yongbuluyong_1 }
 				}
 			}
-		}
+		 scope:recipient = { NOR = { has_title = title:e_WJ_minister_cheng_xiang has_council_position = WJ_minister_cheng_xiang } }
+
+ }
 		flag = huangdi_yongbuluyong
 	}
 
 	# 流放
 	send_option = {
 		is_valid = {
+ scope:wj_edict_emperor = { WJ_regency_authority_three = yes }
+ OR = { scope:actor != scope:wj_edict_emperor scope:wj_edict_emperor = { NOT = { has_trait = WJ_lost_imperial_authority } } }
+ scope:wj_edict_emperor = { influence >= 50 }
+
 			custom_tooltip = {
 				text = huangdi_bianweishumin_invalid
 				scope:recipient = {
 					highest_held_title_tier <= tier_duchy
 					is_landless_ruler = yes
-					is_vassal_or_below_of = scope:actor
-					dynasty != scope:actor.dynasty
+					is_vassal_or_below_of = scope:wj_edict_emperor
+					dynasty != scope:wj_edict_emperor.dynasty
 				}
-				scope:actor = {
+				scope:wj_edict_emperor = {
 					government_has_flag = government_is_celestial
 					is_tributary = no
 				}
 			}
-		}
+
+ }
 		flag = mod_huangdi_bianweishumin
 	}
 
 	# 逮捕九族
 	send_option = {
 		is_valid = {
+ scope:wj_edict_emperor = { WJ_regency_authority_three = yes }
+ OR = { scope:actor != scope:wj_edict_emperor scope:wj_edict_emperor = { NOT = { has_trait = WJ_lost_imperial_authority } } }
+ scope:wj_edict_emperor = { influence >= 1000 }
+
 			custom_tooltip = {
 				text = huangdi_zhujiuzu_invalid
-				scope:actor = {
+				scope:wj_edict_emperor = {
 					NOT = { exists = involved_activity }
 					is_imprisoned = no
 				}
 				scope:recipient = {
 					OR = {
-						is_vassal_or_below_of = scope:actor
-						is_courtier_of = scope:actor
+						is_vassal_or_below_of = scope:wj_edict_emperor
+						is_courtier_of = scope:wj_edict_emperor
 					}
 					OR = {
 						has_trait = witch
@@ -273,104 +299,115 @@ wj_huangdi_zhaoshu_interaction = {
 					}
 				}
 			}
-		}
+		 scope:recipient = { NOR = { has_title = title:e_WJ_minister_cheng_xiang has_council_position = WJ_minister_cheng_xiang } }
+scope:recipient.house = { any_house_member = { WJ_edict_arrestable = yes } }
+
+ }
 		flag = mod_huangdi_zhujiuzu
 	}
 
 	on_accept = {
+  if = {
+   limit = { WJ_edict_send_valid = yes }
+
 		scope:recipient = { save_scope_as = wj_zhaoshu_target }
 		switch = {
 			trigger = yes
 
 			# 破格拔擢
 			scope:add_major_xianneng_option = {
-				scope:actor = {
+				scope:wj_edict_emperor = {
 					change_influence = -800
-					add_hook = {
+					scope:actor = { if = { limit = { this != scope:recipient } add_hook = {
 						target = scope:recipient
 						type = strong_test_hook
-					}
+					} } }
 				}
 				scope:recipient = {
-					change_merit = 10000
-					add_opinion = {
+					change_merit = 1000
+					if = { limit = { this != scope:actor } add_opinion = {
 						target = scope:actor
 						modifier = grateful_opinion
 						opinion = 100
-					}
+					} }
 				}
-			}
+			scope:actor = { send_interface_toast = { type = event_generic_neutral title = WJ_edict_done desc = add_major_xianneng_option_desc right_icon = scope:recipient } }
+}
 
 			# 官品拔擢
 			scope:add_medium_xianneng_option = {
-				scope:actor = {
+				scope:wj_edict_emperor = {
 					change_influence = -150
-					add_hook = {
+					scope:actor = { if = { limit = { this != scope:recipient } add_hook = {
 						target = scope:recipient
 						type = favor_hook
-					}
+					} } }
 				}
 				scope:recipient = {
-					change_merit = 2000
-					add_opinion = {
+					change_merit = 200
+					if = { limit = { this != scope:actor } add_opinion = {
 						target = scope:actor
 						modifier = grateful_opinion
 						opinion = 30
-					}
+					} }
 				}
-			}
+			scope:actor = { send_interface_toast = { type = event_generic_neutral title = WJ_edict_done desc = add_medium_xianneng_option_desc right_icon = scope:recipient } }
+}
 
 			# 官品贬谪
 			scope:reduce_major_xianneng_option = {
-				scope:actor = {
+				scope:wj_edict_emperor = {
 					change_influence = -500
 				}
 				scope:recipient = {
-					change_merit = -20000
+					change_merit = -2000
 					add_opinion = {
-						target = scope:actor
+						target = scope:wj_edict_emperor
 						modifier = disgusted_opinion
 						opinion = -30
 					}
 				}
-			}
+			scope:actor = { send_interface_toast = { type = event_generic_neutral title = WJ_edict_done desc = reduce_major_xianneng_option_desc right_icon = scope:recipient } }
+}
 
 			# 小惩大戒
 			scope:reduce_medium_xianneng_option = {
-				scope:actor = {
+				scope:wj_edict_emperor = {
 					change_influence = -100
 				}
 				scope:recipient = {
-					change_merit = -3000
+					change_merit = -300
 					add_opinion = {
-						target = scope:actor
+						target = scope:wj_edict_emperor
 						modifier = disgusted_opinion
 						opinion = -20
 					}
 				}
-			}
+			scope:actor = { send_interface_toast = { type = event_generic_neutral title = WJ_edict_done desc = reduce_medium_xianneng_option_desc right_icon = scope:recipient } }
+}
 
 			# 下诏入宫
 			scope:xiazhao_zhengpirugong = {
-				scope:actor = {
-					add_courtier = scope:recipient
-					add_hook = {
+				scope:wj_edict_emperor = {
+					scope:actor = { add_courtier = scope:recipient }
+					scope:actor = { if = { limit = { this != scope:recipient } add_hook = {
 						target = scope:recipient
 						type = favor_hook
-					}
+					} } }
 				}
 				scope:recipient = {
-					add_opinion = {
+					if = { limit = { this != scope:actor } add_opinion = {
 						target = scope:actor
 						modifier = grateful_opinion
 						opinion = 30
-					}
+					} }
 				}
-			}
+			scope:actor = { send_interface_toast = { type = event_generic_neutral title = WJ_edict_done desc = xiazhao_zhengpirugong right_icon = scope:recipient } }
+}
 
 			# 赏赐
 			scope:luoyang_shangci_interaction = {
-				scope:actor = {
+				scope:wj_edict_emperor = {
 					send_interface_message = {
 						type = event_generic_neutral
 						title = gift_interaction_notification
@@ -379,50 +416,49 @@ wj_huangdi_zhaoshu_interaction = {
 							value = 500
 							multiply = 1
 						}
-						add_hook = {
+						scope:actor = { if = { limit = { this != scope:recipient } add_hook = {
 							target = scope:recipient
 							type = favor_hook
-						}
+						} } }
 					}
 				}
 				scope:recipient = {
-					add_opinion = {
+					if = { limit = { this != scope:actor } add_opinion = {
 						target = scope:actor
 						modifier = gift_opinion
 						opinion = send_gift_opinion
-					}
+					} }
 					add_gold = 500
-					add_opinion = {
+					if = { limit = { this != scope:actor } add_opinion = {
 						target = scope:actor
 						modifier = grateful_opinion
 						opinion = 50
-					}
+					} }
 				}
 			}
 
-			# 同进士出身
+			# 辟召
 			scope:mod_jinshichushen = {
-				scope:actor = {
-					add_hook = {
+				scope:wj_edict_emperor = {
+					scope:actor = { if = { limit = { this != scope:recipient } add_hook = {
 						target = scope:recipient
 						type = perpetual_test_hook
-					}
+					} } }
 				}
 				scope:recipient = {
-					add_character_modifier = {
-						modifier = mod_jinshichushen_1
-					}
-					add_opinion = {
+					WJ_grant_road_bizhao_effect = yes
+					if = { limit = { this != scope:actor } add_opinion = {
 						target = scope:actor
 						modifier = loyalty_opinion
 						opinion = 100
-					}
+					} }
 				}
-			}
+			scope:actor = { send_interface_toast = { type = event_generic_neutral title = WJ_edict_done desc = mod_jinshichushen right_icon = scope:recipient } }
+}
 
 			# 永不录用
 			scope:huangdi_yongbuluyong = {
-				scope:actor = {
+				scope:wj_edict_emperor = {
 					change_influence = -200
 				}
 				scope:recipient = {
@@ -430,50 +466,38 @@ wj_huangdi_zhaoshu_interaction = {
 						modifier = mod_yongbuluyong_1
 					}
 					add_opinion = {
-						target = scope:actor
+						target = scope:wj_edict_emperor
 						modifier = villain_opinion
 						opinion = -100
 					}
 				}
-			}
+			scope:actor = { send_interface_toast = { type = event_generic_neutral title = WJ_edict_done desc = huangdi_yongbuluyong right_icon = scope:recipient } }
+}
 
 			# 罢免
 			scope:mod_huangdi_cuihui_title_interaction = {
-				scope:actor = {
-					change_influence = -300
-				}
-				scope:recipient = {
-					every_held_title = {
-						limit = {
-							NOT = { is_noble_family_title = yes }
-						}
-						create_title_and_vassal_change = {
-							type = granted
-							save_scope_as = title_change
-							add_claim_on_loss = no
-						}
-						change_title_holder = {
-							holder = scope:actor
-							change = scope:title_change
-						}
-						resolve_title_and_vassal_change = scope:title_change
-					}
-					add_opinion = {
-						target = scope:actor
-						modifier = villain_opinion
-						opinion = -50
-					}
-				}
-			}
+ scope:wj_edict_emperor = { change_influence = -300 always_fire_councillor = scope:recipient }
+ scope:recipient = {
+  WJ_trial_retire_local_offices_effect = yes
+  every_held_title = { limit = { tgp_is_minister_title = yes NOT = { this = title:e_WJ_minister_cheng_xiang } }
+   save_scope_as = wj_edict_dismissed_office
+   scope:recipient = { destroy_title = scope:wj_edict_dismissed_office }
+  }
+  add_opinion = { target = scope:wj_edict_emperor modifier = villain_opinion opinion = -50 }
+ }
+scope:actor = { send_interface_toast = { type = event_generic_neutral title = WJ_edict_done desc = mod_huangdi_cuihui_title_interaction right_icon = scope:recipient } }
+}
 
 			# 逮捕九族
 			scope:mod_huangdi_zhujiuzu = {
 				scope:recipient.house = {
 					every_house_member = {
+ limit = { WJ_edict_arrestable = yes }
+
 						custom = every_house_member_tt
 						custom_tooltip = {
 							text = imprisoned_by_you
-							scope:actor = {
+							scope:wj_edict_emperor = {
 								imprison = {
 									target = prev
 									type = house_arrest
@@ -483,24 +507,25 @@ wj_huangdi_zhaoshu_interaction = {
 						add_opinion = {
 							modifier = imprisoned_me
 							years = 10
-							target = scope:actor
+							target = scope:wj_edict_emperor
 						}
 						change_merit = -10000
 						add_opinion = {
-							target = scope:actor
+							target = scope:wj_edict_emperor
 							modifier = villain_opinion
 							opinion = -50
 						}
 					}
 				}
-				scope:actor = {
+				scope:wj_edict_emperor = {
 					change_influence = -1000
 				}
-			}
+			scope:actor = { send_interface_toast = { type = event_generic_neutral title = WJ_edict_done desc = mod_huangdi_zhujiuzu right_icon = scope:recipient } }
+}
 
 			# 构陷
 			scope:huangdi_random_negative_trait = {
-				scope:actor = {
+				scope:wj_edict_emperor = {
 					change_influence = -200
 					send_interface_message = {
 						type = event_generic_neutral
@@ -520,7 +545,7 @@ wj_huangdi_zhaoshu_interaction = {
 						1 = { add_trait = deviant }
 					}
 					add_opinion = {
-						target = scope:actor
+						target = scope:wj_edict_emperor
 						modifier = disgusted_opinion
 						opinion = -50
 					}
@@ -529,17 +554,17 @@ wj_huangdi_zhaoshu_interaction = {
 
 			# 流放
 			scope:mod_huangdi_bianweishumin = {
-				scope:actor = {
+				scope:wj_edict_emperor = {
 					change_influence = -50
 				}
 				scope:recipient = {
 					add_opinion = {
-						target = scope:actor
+						target = scope:wj_edict_emperor
 						modifier = disgusted_opinion
 						opinion = -100
 					}
 					add_truce_both_ways = {
-						character = scope:actor
+						character = scope:wj_edict_emperor
 						days = 3650
 						name = TRUCE_GRANT_INDEPENDENCE
 					}
@@ -570,10 +595,10 @@ wj_huangdi_zhaoshu_interaction = {
 							hidden_effect_new_object = {
 								create_character = {
 									template = laamp_inheritor_template
-									culture = root.capital_county.culture
-									rite = root.capital_county.rite
+									culture = scope:wj_edict_emperor.capital_county.culture
+									rite = scope:wj_edict_emperor.capital_county.rite
 									dynasty = generate
-									location = root.capital_province
+									location = scope:wj_edict_emperor.capital_province
 									after_creation = {
 										save_scope_as = laamp_inheritor
 										add_character_flag = new_laamp_inheritor
@@ -590,11 +615,23 @@ wj_huangdi_zhaoshu_interaction = {
 						lazy = minor_stress_impact_gain
 					}
 				}
-			}
-		}
-	}
+			scope:actor = { send_interface_toast = { type = event_generic_neutral title = WJ_edict_done desc = mod_huangdi_bianweishumin right_icon = scope:recipient } }
+}
+		 scope:wj_edict_peer_grant = { open_interaction_window = { interaction = WJ_peer_grant_interaction actor = scope:actor recipient = scope:recipient secondary_actor = scope:wj_edict_emperor } }
+ scope:wj_edict_peer_revoke = { open_interaction_window = { interaction = WJ_peer_revoke_interaction actor = scope:actor recipient = scope:recipient secondary_actor = scope:wj_edict_emperor } }
+ scope:wj_edict_transfer = { open_interaction_window = { interaction = WJ_mt_zhongwai_transfer actor = scope:actor recipient = scope:wj_edict_emperor } }
+}
+
+  }
+}
 
 	auto_accept = yes
 	ai_frequency = 0
 	ai_will_do = { base = 0 }
+send_option = { flag = wj_edict_peer_grant localization = WJ_peer_grant_interaction is_valid = {
+ scope:actor = { WJ_edict_operator_for = { CROWN = scope:wj_edict_emperor } }
+ scope:actor = { NOT = { has_trait = WJ_lost_imperial_authority } } scope:recipient = { WJ_peer_base_candidate = { EMPEROR = scope:wj_edict_emperor } }
+ } }
+send_option = { flag = wj_edict_peer_revoke localization = WJ_peer_revoke_interaction is_valid = { WJ_peer_revoke_allowed = yes } }
+send_option = { flag = wj_edict_transfer localization = WJ_mt_zhongwai_transfer is_shown = { scope:actor = { WJ_zw_valid = yes } } is_valid = { scope:actor = { WJ_zw_valid = yes top_liege = scope:wj_edict_emperor } scope:recipient = scope:wj_edict_emperor } }
 }

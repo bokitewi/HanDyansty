@@ -1,0 +1,145 @@
+# Called only from native manual-appointment on_accept. Engine transaction is
+# verified next day; canceled/failed grants and scripted successions never prompt.
+WJ_tenure_offer_titles = {
+ if = {
+  limit = { scope:actor = { is_ai = no WJ_tenure_emperor = yes NOT = { has_character_flag = wj_tenure_prompts_off } } }
+  every_in_list = {
+   list = target_titles
+   limit = { WJ_tenure_office_title = yes }
+   if = {
+    limit = { OR = { NOT = { exists = scope:wj_tenure_office } tier > scope:wj_tenure_office.tier } }
+    save_scope_as = wj_tenure_office
+   }
+  }
+  if = {
+   limit = { exists = scope:wj_tenure_office }
+   scope:recipient = { save_scope_as = wj_tenure_appointee }
+   scope:actor = { trigger_event = { id = WJ_tenure.1 days = 1 } }
+  }
+ }
+}
+WJ_tenure_offer_council = {
+ if = {
+  limit = {
+   scope:actor = { is_ai = no WJ_tenure_emperor = yes NOT = { has_character_flag = wj_tenure_prompts_off } }
+   scope:recipient = { is_councillor_of = scope:actor }
+  }
+  scope:actor = { save_scope_as = wj_tenure_emperor }
+  scope:recipient = { WJ_tenure_queue_council = yes }
+ }
+}
+# Character scope. Preset callers provide wj_tenure_office or wj_tenure_council;
+# normal appointments have those scopes already. DURATION is native cooldown days.
+# Caller adds the SAME modifier for ten years or indefinitely. Existing tenure is
+# not renewed. Scripted departures explicitly call WJ_tenure_clear before transfer.
+WJ_tenure_begin = {
+ if = {
+  limit = { NOT = { has_character_modifier = WJ_tenure_modifier } }
+  if = { limit = { WJ_has_entry_road_trigger = no } WJ_grant_road_bizhao_effect = yes }
+  top_liege.primary_title = { save_scope_as = wj_tenure_realm }
+  set_variable = { name = wj_tenure_realm value = scope:wj_tenure_realm }
+  if = { limit = { exists = scope:wj_tenure_office } set_variable = { name = wj_tenure_office value = scope:wj_tenure_office } }
+  else_if = { limit = { exists = scope:wj_tenure_council } set_variable = { name = wj_tenure_council value = scope:wj_tenure_council } }
+  set_variable = { name = wj_tenure_started value = current_date }
+  # Preserve older refusal/cooldown. Never claim ownership of a longer timer.
+  if = {
+   limit = { appointment_timeout_days < $DURATION$ }
+   set_variable = { name = wj_tenure_previous_timeout value = appointment_timeout_days }
+   set_variable = { name = wj_tenure_timeout_days value = $DURATION$ }
+   set_appointment_timeout = { days = $DURATION$ desc = WJ_tenure_modifier }
+  }
+ }
+}
+WJ_tenure_ten_years = {
+ if = {
+  limit = { WJ_tenure_can_begin = yes }
+  WJ_tenure_begin = { DURATION = 3650 }
+  add_character_modifier = { modifier = WJ_tenure_modifier days = 3650 }
+  trigger_event = { id = WJ_tenure.3 days = 3651 }
+ }
+}
+WJ_tenure_lifetime = {
+ if = {
+  limit = { WJ_tenure_can_begin = yes }
+  WJ_tenure_begin = { DURATION = 54750 }
+  add_character_modifier = WJ_tenure_modifier
+  trigger_event = { id = WJ_tenure.3 days = 54750 }
+ }
+}
+WJ_tenure_clear = {
+ if = {
+  limit = { has_variable = wj_tenure_timeout_days }
+  # A later, longer refusal belongs to its own system and must be left intact.
+  if = {
+   limit = { appointment_timeout_days <= WJ_tenure_owned_remaining }
+   clear_appointment_timeout = yes
+   if = {
+    limit = { WJ_tenure_previous_remaining > 0 }
+    set_appointment_timeout = { days = WJ_tenure_previous_remaining desc = appointment_timeout_desc_refusing }
+   }
+  }
+ }
+ remove_character_modifier = WJ_tenure_modifier
+ remove_variable = wj_tenure_realm
+ remove_variable = wj_tenure_office
+ remove_variable = wj_tenure_council
+ remove_variable = wj_tenure_started
+ remove_variable = wj_tenure_timeout_days
+ remove_variable = wj_tenure_previous_timeout
+}
+WJ_tenure_reconcile = {
+ if = {
+  limit = {
+   has_variable = wj_tenure_realm
+   OR = { NOT = { has_character_modifier = WJ_tenure_modifier } WJ_tenure_job_valid = no }
+  }
+  WJ_tenure_clear = yes
+ }
+ else_if = {
+  limit = { has_character_modifier = WJ_tenure_modifier appointment_timeout_days = 0 }
+  # Only matters for unusually long-lived characters. No population pulse.
+  set_variable = { name = wj_tenure_started value = current_date }
+  set_variable = { name = wj_tenure_previous_timeout value = 0 }
+  set_variable = { name = wj_tenure_timeout_days value = 54750 }
+  set_appointment_timeout = { days = 54750 desc = WJ_tenure_modifier }
+  trigger_event = { id = WJ_tenure.3 days = 54750 }
+ }
+}
+WJ_tenure_offer_dispatch = {
+ save_scope_as = wj_tenure_emperor
+ scope:wj_tenure_appointee = {
+  if = { limit = { is_ai = yes } WJ_tenure_accept = yes }
+  else = { trigger_event = WJ_tenure.2 }
+ }
+}
+WJ_tenure_manual_council_completed = {
+ if = {
+  limit = { has_variable = wj_tenure_manual_emperor var:wj_tenure_manual_emperor = scope:councillor_liege }
+  scope:councillor_liege = { save_scope_as = wj_tenure_emperor }
+  WJ_tenure_queue_council = yes
+  remove_variable = wj_tenure_manual_emperor
+ }
+}
+WJ_tenure_queue_council = {
+ if = {
+  limit = {
+   WJ_tenure_free = yes is_councillor_of = scope:wj_tenure_emperor
+   scope:wj_tenure_emperor = { is_ai = no WJ_tenure_emperor = yes NOT = { has_character_flag = wj_tenure_prompts_off } }
+   NOT = { var:wj_tenure_last_council_prompt = council_task }
+  }
+  save_scope_as = wj_tenure_appointee
+  council_task = { save_scope_as = wj_tenure_council }
+  set_variable = { name = wj_tenure_last_council_prompt value = council_task days = 2 }
+  scope:wj_tenure_emperor = { trigger_event = { id = WJ_tenure.1 days = 1 } }
+ }
+}
+WJ_tenure_accept = {
+ if = {
+  limit = {
+   scope:wj_tenure_emperor = { WJ_tenure_offer_valid = { RULER = scope:wj_tenure_emperor } }
+  }
+  WJ_grant_road_bizhao_effect = yes
+  if = { limit = { scope:wj_tenure_term = 10 } WJ_tenure_ten_years = yes }
+  else = { WJ_tenure_lifetime = yes }
+ }
+}

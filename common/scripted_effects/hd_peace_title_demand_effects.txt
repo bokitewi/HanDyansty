@@ -1,9 +1,59 @@
 # Whole-title demands. ROOT is always the proposer.
 
+# Flood only the counties of the selected whole-title clause, seeded from
+# actual land of the proposer and its vassals. No sea, unselected enemy corridor
+# or unrelated single-county/annexation clause can connect a remote island.
+hd_peace_rebuild_title_connections_effect = {
+ clear_variable_list = hd_peace_title_connected_counties
+ clear_variable_list = hd_peace_title_frontier
+ clear_variable_list = hd_peace_title_next
+ clear_variable_list = hd_peace_title_pool
+ every_in_list = {
+  variable = hd_peace_demand_titles
+  limit = { hd_peace_protected_grant_title_trigger = no }
+  every_de_jure_county = {
+   limit = { hd_peace_county_in_opponent_realm_trigger = yes }
+   root = { add_to_variable_list = { name = hd_peace_title_pool target = prev } }
+  }
+ }
+ every_in_list = {
+  variable = hd_peace_title_pool
+  limit = { hd_peace_demand_county_border_trigger = yes hd_peace_demand_county_connected_trigger = no }
+  root = {
+   add_to_variable_list = { name = hd_peace_title_connected_counties target = prev }
+   add_to_variable_list = { name = hd_peace_title_frontier target = prev }
+  }
+ }
+ while = {
+  limit = { any_in_list = { variable = hd_peace_title_frontier always = yes } }
+  every_in_list = {
+   variable = hd_peace_title_frontier
+   every_neighboring_county = {
+    limit = {
+     root = { is_target_in_variable_list = { name = hd_peace_title_pool target = prev } }
+     hd_peace_demand_county_connected_trigger = no
+    }
+    root = {
+     add_to_variable_list = { name = hd_peace_title_connected_counties target = prev }
+     add_to_variable_list = { name = hd_peace_title_next target = prev }
+    }
+   }
+  }
+  clear_variable_list = hd_peace_title_frontier
+  every_in_list = {
+   variable = hd_peace_title_next
+   root = { add_to_variable_list = { name = hd_peace_title_frontier target = prev } }
+  }
+  clear_variable_list = hd_peace_title_next
+ }
+ clear_variable_list = hd_peace_title_pool
+}
+
 # Build from the opponent's current realm: every de jure empire, kingdom and
 # duchy that holds some of its land and is within the proposer's rank. The
 # largest titles are listed first.
 hd_peace_populate_demand_title_candidates_effect = {
+ hd_peace_rebuild_title_connections_effect = yes
 	if = { limit = { has_variable_list = hd_peace_demand_title_candidates } clear_variable_list = hd_peace_demand_title_candidates }
 	if = {
 		limit = {
@@ -49,9 +99,16 @@ hd_peace_populate_demand_title_candidates_effect = {
 			}
 		}
 	}
+ # Keep now-invalid selected rows visible so the player can remove them.
+ every_in_list = {
+  variable = hd_peace_demand_titles
+  limit = { NOT = { root = { is_target_in_variable_list = { name = hd_peace_demand_title_candidates target = prev } } } }
+  root = { add_to_variable_list = { name = hd_peace_demand_title_candidates target = prev } }
+ }
+
 }
 
-# scope:hd_peace_new_demand_title is being added. Counties and smaller titles it
+# scope:hd_peace_new_demand_title is being added. Connected counties and smaller titles it
 # already contains leave the draft, so no land is priced or moved twice.
 # Collected first, then removed, so no list is edited while iterated.
 hd_peace_absorb_demands_into_title_effect = {
@@ -59,7 +116,7 @@ hd_peace_absorb_demands_into_title_effect = {
 		limit = { has_variable_list = hd_peace_demand_counties }
 		every_in_list = {
 			variable = hd_peace_demand_counties
-			limit = { target_is_de_jure_liege_or_above = scope:hd_peace_new_demand_title }
+			limit = { target_is_de_jure_liege_or_above = scope:hd_peace_new_demand_title hd_peace_demand_county_connected_trigger = yes }
 			root = { add_to_variable_list = { name = hd_peace_demand_purge target = prev } }
 		}
 		if = {
@@ -107,9 +164,11 @@ hd_peace_ai_select_budget_titles_effect = {
 						}
 					}
 					add_to_variable_list = { name = hd_peace_demand_titles target = scope:hd_peace_budget_title }
+     hd_peace_rebuild_title_connections_effect = yes
 					if = {
 						limit = { hd_peace_demand_cost_value > 100 }
 						remove_list_variable = { name = hd_peace_demand_titles target = scope:hd_peace_budget_title }
+      hd_peace_rebuild_title_connections_effect = yes
 					}
 				}
 			}
@@ -119,14 +178,15 @@ hd_peace_ai_select_budget_titles_effect = {
 
 # Signature. scope:hd_peace_actor, scope:hd_peace_opponent and the open change
 # are set by hd_peace_apply_negotiated_treaty_effect. Every county the opponent's
-# realm holds inside each title moves with its baronies; the title itself and any
-# smaller title move too when someone in that realm holds them.
+# realm holds in the connected parcel moves with its baronies. Protected
+# identities never move; ordinary higher titles with remote land remain behind.
 hd_peace_transfer_demand_titles_effect = {
 	every_in_list = {
 		variable = hd_peace_demand_titles
 		every_in_de_jure_hierarchy = {
 			limit = {
 				tier >= tier_county
+    hd_peace_protected_grant_title_trigger = no
 				is_landless_type_title = no
 				is_noble_family_title = no
 				exists = holder
@@ -134,9 +194,17 @@ hd_peace_transfer_demand_titles_effect = {
 			}
 			if = {
 				limit = { tier = tier_county }
-				change_title_holder = { holder = scope:hd_peace_actor change = $CHANGE$ take_baronies = yes }
+    if = {
+     limit = { hd_peace_demand_county_connected_trigger = yes }
+     change_title_holder = { holder = scope:hd_peace_actor change = $CHANGE$ take_baronies = yes }
+    }
 			}
-			else = {
+			else_if = {
+    # Never drag remote vassals along with an ordinary higher title.
+    limit = {
+     any_de_jure_county = { hd_peace_demand_county_connected_trigger = yes }
+     NOT = { any_de_jure_county = { hd_peace_county_in_opponent_realm_trigger = yes hd_peace_demand_county_connected_trigger = no } }
+    }
 				change_title_holder = { holder = scope:hd_peace_actor change = $CHANGE$ }
 			}
 		}

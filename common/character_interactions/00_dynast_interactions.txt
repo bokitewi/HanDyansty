@@ -1569,26 +1569,41 @@ dynast_claim_title_interaction = {
 	desc = dynast_claim_title_interaction_desc
 	target_type = title
 	target_filter = recipient_domain_titles
+	show_all_targets = no
 	ignores_pending_interaction_block = yes
-	cost = { renown = scope:actor.dynasty.major_dynasty_prestige_value }
+	cost = {
+		renown = {
+			value = dynast_claim_title_interaction_cost_value
+			if = {
+				limit = { scope:is_puppet_action ?= yes }
+				multiply = 0
+			}
+		}
+	}
 	is_shown = {
-		scope:recipient != scope:actor
-
-		scope:actor = {
+		scope:puppet_or_actor ?= {
+			this != scope:recipient
 			is_dynast = yes
-			religion = scope:recipient.religion
-			dynasty = scope:recipient.dynasty
+			religion ?= scope:recipient.religion
+			dynasty ?= scope:recipient.dynasty
 		}
 
 		scope:recipient = {
 			is_playable_character = yes
+			any_held_title = {
+				is_landless_type_title = no
+			}
 		}
 	}
 	
-	can_be_picked = {
-		custom_description = {
-			scope:target = { NOT = { any_claimant = { this = scope:actor } } }
-			text = "already_have_a_claim_on_this_title"
+	can_be_picked_title = {
+		scope:target = {
+			tier >= tier_county
+			custom_tooltip = {
+				NOT = { any_claimant = { this = scope:puppet_or_actor } }
+				text = "ALREADY_HAVE_CLAIM_ON_THIS_TITLE"
+			}
+			is_landless_type_title = no
 		}
 	}
 
@@ -1597,12 +1612,21 @@ dynast_claim_title_interaction = {
 			scope:recipient = {
 				any_held_title = {
 					title_tier >= county
-					NOT = { any_claimant = { this = scope:actor } }
+					NOT = { any_claimant = { this = scope:puppet_or_actor } }
+					is_landless_type_title = no
 				} 
 			}
 
 			object = scope:recipient
 			text = "already_have_claims_on_all_titles"
+		}
+		trigger_if = {
+			limit = { scope:is_puppet_action ?= yes }
+			scope:puppet_or_actor = {
+				dynasty ?= {
+					dynasty_prestige >= dynast_claim_title_interaction_cost_value
+				}
+			}
 		}
 	}
 
@@ -1613,14 +1637,23 @@ dynast_claim_title_interaction = {
 	}
 	
 	on_accept = {
+		if = {
+			limit = { scope:is_puppet_action ?= yes }
+			scope:puppet_or_actor = {
+				if = {
+					limit = { dynast_claim_title_interaction_cost_value > 0 }
+					dynasty ?= { add_dynasty_prestige = { value = { add = dynast_claim_title_interaction_cost_value multiply = -1 } } }
+				}
+			}
+		}
 		dynast_claim_title_effect = yes
-		scope:actor = {
+		scope:puppet_or_actor = {
 			hidden_effect = {
 				send_interface_toast = {
 					type = event_toast_effect_neutral
 					title = dynast_claim_title_interaction_notification
 
-					left_icon = scope:actor					
+					left_icon = scope:puppet_or_actor					
 					right_icon = scope:recipient
 
 					show_as_tooltip = {
@@ -1629,10 +1662,30 @@ dynast_claim_title_interaction = {
 				}
 			}
 		}
+		hidden_effect = {
+			if = {
+				limit = {
+					scope:is_puppet_action ?= yes
+				}
+				scope:actor = {
+					send_interface_toast = {
+						type = event_toast_effect_neutral
+						title = dynast_claim_title_interaction_notification
+
+						left_icon = scope:puppet_or_actor
+						right_icon = scope:recipient
+
+						show_as_tooltip = {
+							dynast_claim_title_effect = yes
+						}
+					}
+				}
+			}
+		}
 
 		# If we're a clan this interaction affects unity
 		add_clan_unity_interaction_effect = {
-			CHARACTER = scope:actor
+			CHARACTER = scope:puppet_or_actor
 			TARGET = scope:recipient
 			VALUE = medium_unity_loss
 			DESC = clan_unity_title_claim.desc

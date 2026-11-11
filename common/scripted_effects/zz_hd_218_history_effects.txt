@@ -246,7 +246,6 @@ hd_sg218_pulse_effect = {
 	hd_sg218_check_shouchan_effect = yes
 	hd_sg218_check_emperor_effect = yes
 	hd_sg218_check_sun_quan_effect = yes
-	hd_sg218_jianzuo_fallback_effect = yes
 	hd_sg218_check_zhangfei_effect = yes
 	hd_sg218_check_yiling_effect = yes
 	hd_sg218_check_lianying_effect = yes
@@ -1424,7 +1423,7 @@ hd_sg218_wei_succession_effect = {
 			# 不从玩家国内抢头衔；世族、朝官等无地头衔和男爵级不动
 			holder.top_liege = { is_ai = yes }
 			is_noble_family_title = no
-			is_landless_type_title = no
+			OR = { is_landless_type_title = no has_variable = wj_rf_rank }
 			tier >= tier_county
 		}
 		change_title_holder = { holder = root change = scope:hd_sg218_wei_change }
@@ -1546,6 +1545,10 @@ hd_sg218_check_shouchan_effect = {
 
 # 受禅（0120、0121 选项 a、0122 选项 a）。Root：曹丕
 hd_sg218_shouchan_effect = {
+ WJ_ab_history_begin = { KIND = caopi THRONE = title:h_china }
+}
+# Private historical settlement: invoked only after the common abdication ritual.
+hd_sg218_shouchan_effect_after_ritual = {
 	if = {
 		limit = {
 			NOT = { has_global_variable = hd_sg218_shouchan_done }
@@ -1689,7 +1692,7 @@ hd_sg218_wei_name_effect = {
 }
 
 ############################################################
-# 13 刘备称帝（核心）：汉帝被废（天子不再是献帝一族）后；把汉中王号改称"汉"并去掉王级标记，不另建头衔
+# 13 汉中王劝进：保留汉帝被废后的历史节奏，真正称帝及后续剧情记录在践祚礼成后。
 ############################################################
 hd_sg218_check_emperor_effect = {
 	if = {
@@ -1698,7 +1701,7 @@ hd_sg218_check_emperor_effect = {
 			NOT = { has_global_variable = hd_sg218_emperor_wait }
 			character:liu_bei ?= {
 				is_alive = yes
-				is_independent_ruler = yes
+				WJ_cr_crowned_king = yes
 				NOT = { has_character_flag = hd_sg218_jianzuo_allowed }
 			}
 			global_var:hd218_hanzhong_title ?= {
@@ -1716,11 +1719,11 @@ hd_sg218_check_emperor_effect = {
 	}
 }
 
-# 0130 选项 a。Root：刘备。称帝之议已定（张飞遇害、夷陵之战认此标记），帝号、国号在践祚大典完成时才改（boki 10-17）
+# 0130 选项 a。Root：刘备。这里只准许筹备；称帝与最终国号在大典礼成后结算。
 hd_sg218_liu_bei_emperor_effect = {
-	set_global_variable = hd_sg218_liu_bei_emperor
-	hd_sg218_jianzuo_allow_effect = { NAME = dynn_title_han }
-	debug_log = "HD218 LIU_BEI_EMPEROR"
+	hd_sg218_jianzuo_allow_effect = yes
+	set_variable = wj_cr_218_accession_invited
+	debug_log = "HD218 LIU_BEI_ACCESSION_PREPARATION"
 }
 
 ############################################################
@@ -1728,36 +1731,24 @@ hd_sg218_liu_bei_emperor_effect = {
 # 闸门在 zz_WJ_chinese_coronation_triggers.txt 的 WJ_cr_can_plan，完成钩子在 WJ_chinese_coronation_effects.txt 的 WJ_cr_complete
 ############################################################
 
-# 给许可，国号记到王朝上。办不了大典（无 DLC、规则关闭、已有加冕法）就直接称帝。Root：称帝者
+# 给 AI 筹备许可，不提前改国号、称帝。两年计时只防止刘备筹备永久挡住孙权剧情。
 hd_sg218_jianzuo_allow_effect = {
-	dynasty ?= {
-		remove_variable = hd_fixed_realm_title
-		set_variable = { name = hd_fixed_realm_name value = flag:$NAME$ }
-	}
 	add_character_flag = hd_sg218_jianzuo_allowed
-	# 有许可仍办不了大典（无 DLC、规则关闭、已有加冕法、不独立等）就直接称帝；完成效果会去掉许可
-	if = {
-		limit = { WJ_cr_can_plan = no }
-		debug_log = "HD218 JIANZUO DIRECT"
-		hd_sg218_jianzuo_complete_effect = yes
-	}
-	else = {
-		# 两年内没办成：AI 直接称帝（hd_sg218_jianzuo_fallback_effect），玩家不再挡孙权
-		set_variable = { name = hd_sg218_jianzuo_deadline value = yes years = 2 }
-		debug_log = "HD218 JIANZUO ALLOWED"
-	}
+	set_variable = { name = hd_sg218_jianzuo_deadline value = yes years = 2 }
+	debug_log = "HD218 JIANZUO ALLOWED"
 }
 
-# 大典完成（或直接称帝）：去掉王号显示，汉中国改名"汉"、吴国改名"吴"，发通报。主头衔不带 hd218_wang_display 时什么都不做。
+# 大典完成并选好汉号后：沿用实际国号，保留 main 的拜诸葛亮、吴蜀通报及历史时序。
 # 作用域：称帝者（WJ_cr_complete 里是主办人）
 hd_sg218_jianzuo_complete_effect = {
 	if = {
-		limit = { primary_title ?= { has_variable = hd218_wang_display } }
+		limit = { WJ_cr_emperor = yes has_variable = wj_cr_218_historical_king }
 		save_scope_as = hd_sg218_jz_ruler
 		primary_title = {
 			save_scope_as = hd_sg218_jz_title
 			remove_variable = hd218_wang_display
 			remove_variable = wj_rf_rank
+			set_landless_title = no
 		}
 		remove_character_flag = hd_sg218_jianzuo_allowed
 		remove_variable = hd_sg218_jianzuo_deadline
@@ -1767,7 +1758,6 @@ hd_sg218_jianzuo_complete_effect = {
 				scope:hd_sg218_jz_title = global_var:hd218_hanzhong_title
 			}
 			scope:hd_sg218_jz_title = {
-				set_title_name = dynn_title_han
 				# 蜀汉首席议会席位改称丞相（WJ_CouncilName_chancellor 首条），记在头衔上，后主及以后的君主沿用
 				set_variable = hd218_shu_chengxiang
 			}
@@ -1795,6 +1785,7 @@ hd_sg218_jianzuo_complete_effect = {
 				}
 				else = { debug_log = "HD218 SHU_CHENGXIANG ZHUGE_LIANG FAIL" }
 			}
+			set_global_variable = hd_sg218_liu_bei_emperor
 			set_global_variable = hd_sg218_shu_crowned
 			# 孙权称帝至少再等两年
 			set_global_variable = { name = hd_sg218_wu_wait value = yes days = 730 }
@@ -1805,7 +1796,7 @@ hd_sg218_jianzuo_complete_effect = {
 		}
 		else_if = {
 			limit = { scope:hd_sg218_jz_title = title:e_jiangdong }
-			scope:hd_sg218_jz_title = { set_title_name = dynn_title_wu }
+			set_global_variable = hd_sg218_sun_quan_emperor
 			set_global_variable = hd_sg218_wu_crowned
 			scope:hd_sg218_jz_ruler = { save_scope_as = hd_news_a }
 			title:h_china.holder ?= { save_scope_as = hd_news_b }
@@ -1814,26 +1805,6 @@ hd_sg218_jianzuo_complete_effect = {
 		}
 		else = { debug_log = "HD218 JIANZUO COMPLETE OTHER" }
 		WJ_rf_refresh_holder = yes
-	}
-}
-
-# AI 得许可满两年、不在任何活动中仍未称帝：直接称帝。按王号持有者找人（刘备、孙权死后由继承人接许可）
-hd_sg218_jianzuo_fallback_effect = {
-	global_var:hd218_hanzhong_title.holder ?= { hd_sg218_jianzuo_fallback_one_effect = yes }
-	title:e_jiangdong.holder ?= { hd_sg218_jianzuo_fallback_one_effect = yes }
-}
-
-hd_sg218_jianzuo_fallback_one_effect = {
-	if = {
-		limit = {
-			is_alive = yes
-			is_ai = yes
-			has_character_flag = hd_sg218_jianzuo_allowed
-			NOT = { has_variable = hd_sg218_jianzuo_deadline }
-			NOT = { exists = involved_activity }
-		}
-		debug_log = "HD218 JIANZUO FALLBACK"
-		hd_sg218_jianzuo_complete_effect = yes
 	}
 }
 
@@ -1847,7 +1818,7 @@ hd_sg218_jianzuo_inherit_effect = {
 				NOT = { has_character_flag = hd_sg218_jianzuo_allowed }
 			}
 			debug_log = "HD218 JIANZUO INHERIT $NAME$"
-			hd_sg218_jianzuo_allow_effect = { NAME = $NAME$ }
+			hd_sg218_jianzuo_allow_effect = yes
 		}
 	}
 }
@@ -1872,7 +1843,7 @@ hd_sg218_check_sun_quan_effect = {
 					has_variable = hd_sg218_jianzuo_deadline
 				}
 			}
-			title:e_jiangdong = { has_variable = hd218_wang_display }
+			title:e_jiangdong.holder ?= { WJ_cr_crowned_king = yes }
 			character:sun_quan ?= {
 				is_alive = yes
 				is_landed = yes

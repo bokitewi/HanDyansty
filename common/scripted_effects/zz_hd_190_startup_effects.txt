@@ -1,7 +1,7 @@
 ﻿# 190 年（初平元年正月）「讨董」剧本开局效果（2026-10-22）。只由 common/on_action/zz_hd_190_startup.txt 调用，调用处已带 190 闸门。
 # 设计见 docs/190讨董剧本_设计草案.md。debug.log 搜 HD190。
 # 头衔历史由 tools/hd190/gen_190_titles.py 生成到 history/titles/zz_hd_190_titles.txt；这里做历史文件写不了的事。
-# 写法参照 218 开局（zz_hd_218_startup_effects.txt）：on_game_start 改头衔与预置旗标；after_lobby 装朝官、联盟、朝贡、排期。
+# 固定朝廷配置见人物／头衔历史；这里保留玩家选择后的关系、兵力与历史剧情初始化。
 
 ############################################################
 # on_game_start
@@ -103,10 +103,7 @@ hd190_preset_flags_effect = {
 # on_game_start_after_lobby
 ############################################################
 hd190_after_lobby_effect = {
-	hd190_court_effect = yes
-	hd190_fire_extras_effect = yes
 	hd190_regency_effect = yes
-	hd190_ministers_effect = yes
 	hd190_dong_troops_effect = yes
 	hd190_era_effect = yes
 	hd190_employers_effect = yes
@@ -119,7 +116,7 @@ hd190_after_lobby_effect = {
 	hd190_rewards_effect = yes
 	hd190_coalition_found_effect = yes
 	hd190_tributary_effect = yes
-	hd190_peerage_effect = yes	# 须在郿国建成（其中会清董卓旧爵）、诸侯王入宫廷之后
+	hd190_peerage_effect = yes	# 郿侯仅为个人爵位，不建立实封国
 	hd190_xuzhou_xiangyang_effect = yes	# 2026-10-24：笮融/臧霸/黄祖军阀契约，张虎/陈生农民领袖与结盟
 	hd190_truces_effect = yes	# 2026-10-25：曹操—袁绍、袁术—刘表十年停战
 	hd190_start_prestige_effect = yes	# 2026-10-26：曹操、孙策各 +2000 威望
@@ -135,75 +132,18 @@ hd190_after_lobby_effect = {
 		trigger_event = { on_action = hd190_sched_li_guo days = 1856 }	# 195.2.1 李傕郭汜相攻（2026-10-25）
 	}
 	hd_recommended_starting_resources_effect = yes
+	WJ_190_starting_career_setup = yes
+	# 190首日完成配置后立即设定君权2级；后续跟随仍由原生同步处理。
+	title:h_china.holder ?= {
+		if = {
+			limit = { government_has_flag = government_is_celestial }
+			add_realm_law_skip_effects = celestial_bureaucracy_2
+		}
+	}
 	debug_log = "HD190 AFTER_LOBBY DONE"
 }
 
-# 汉廷官署命名（照 hd_han_setup_184_court_effect 的 set_title_name 部分）。
-# 不沿用它的 grand_marshal_law：190 是丞相法，大将军又已空缺；也不沿用对荆益凉州牧的军戍契约（他们现在是独立朝贡国）。
-hd190_court_effect = {
-	title:h_china.holder ?= {
-		save_scope_as = councillor_liege
-		title:e_minister_chancellor = { set_title_name = hd_han_situ_title }
-		title:e_minister_censor = { set_title_name = hd_han_sikong_title }
-		title:e_minister_grand_marshal = { set_title_name = hd_han_general_in_chief_title }
-		title:e_minister_of_war = { set_title_name = hd_han_taiwei_title }
-		title:e_minister_of_revenue = { set_title_name = hd_han_dasinong_title }
-		title:e_minister_of_works = { set_title_name = hd_han_taipu_title }
-		title:e_minister_of_personnel = { set_title_name = hd_han_shangshuling_title }
-		title:e_minister_of_justice = { set_title_name = hd_han_tingwei_title }
-		title:e_minister_of_rites = { set_title_name = hd_han_taichang_title }
-		title:e_WJ_minister_zong_zheng = { set_title_name = WJ_zong_zheng_hanjin_title }
-		hd_184_ensure_noble_families_effect = yes
-	}
-}
-
-# 184 历史层的 give_council_position 泄漏进 190 的议员，一律解职（人选由 hd190_ministers_effect 重新授座）。Scope：任意
-hd190_fire_extras_effect = {
-	title:h_china.holder ?= {
-		save_scope_as = hd190_emperor
-		every_councillor = {
-			limit = { NOT = { this = scope:hd190_emperor } }
-			save_temporary_scope_as = hd190_extra
-			scope:hd190_emperor = { always_fire_councillor = scope:hd190_extra }
-		}
-	}
-}
-
-# 指定朝官入席。头衔已由 190 头衔历史交给本人，got_minister_position_effect 见已持头衔就只补席位、居所。
-# 照 hd_nbc_minister_effect 的写法，判定改用 NOT has_council_position。需 scope:councillor_liege。
-hd190_minister_effect = {
-	character:$WHO$ ?= {
-		if = {
-			limit = {
-				is_alive = yes
-				NOT = { has_council_position = $POS$ }
-				NOT = { this = scope:councillor_liege }
-			}
-			if = {
-				limit = {
-					is_landed = no
-					NOT = { employer ?= scope:councillor_liege }
-				}
-				scope:councillor_liege = { add_courtier = character:$WHO$ }
-			}
-			got_minister_position_effect = { MINISTER_TITLE = $TITLE$ MINISTER_POSITION = $POS$ }
-		}
-	}
-}
-
-# 太傅袁隗、太尉黄琬、司徒杨彪、司空荀爽、尚书令王允（董卓的丞相在 hd190_regency_effect）。其余席位空缺。
 # 2026-10-23：荀爽卒年改回 190.5（库里原写 190.1.1，开局时已死），司空由张温换回荀爽；张温无地在朝。
-hd190_ministers_effect = {
-	title:h_china.holder ?= {
-		save_scope_as = councillor_liege
-		hd190_minister_effect = { WHO = yuan_kui TITLE = e_WJ_minister_tai_fu POS = WJ_minister_tai_fu }
-		hd190_minister_effect = { WHO = huang_wan TITLE = e_minister_of_war POS = councillor_marshal }
-		hd190_minister_effect = { WHO = yang_biao TITLE = e_minister_chancellor POS = councillor_chancellor }
-		hd190_minister_effect = { WHO = xun_shuang TITLE = e_minister_censor POS = councillor_spymaster }
-		hd190_minister_effect = { WHO = wang_yun TITLE = e_minister_of_personnel POS = minister_personnel }
-	}
-	debug_log = "HD190 MINISTERS DONE"
-}
 
 # 袁绍、曹操的起家奖励：沿用 184 流程「渤海立足」「陈留落脚」完成时发的东西，一次性补发
 hd190_rewards_effect = {
@@ -257,27 +197,15 @@ hd190_burn_prep_effect = {
 	debug_log = "HD190 BURN_PREP DONE"
 }
 
-# 董卓拜相秉政：先 granted 授丞相再走 WJ 拜相（避开 appointment 辞头衔检查），献帝为傀儡
+# Fixed office, law, capital and vassals are historical state. Only player-dependent operations run here.
 hd190_regency_effect = {
-	if = {
-		limit = {
-			exists = title:h_china.holder
-			title:h_china.holder = character:liu_xie
-			character:dong_zhuo_2 ?= { is_alive = yes is_landed = yes }
-		}
-		character:dong_zhuo_2 = {
-			hd_force_dong_regency_effect = yes
-			hd_dong_lock_succession_effect = yes
-			# 郿国：照 hd_palace_crisis.0007 的顺序，拜相之后建封国（董卓主头衔改郿国，司隶法理归它，州头衔注销）
-			hd184r_meiguo_create_effect = yes
-			set_location = { location = title:b_uuii_p_787.title_province stick_to_location = yes }
-			domicile ?= { move_domicile = title:b_uuii_p_787.title_province }
-		}
-		debug_log = "HD190 REGENCY INSTALLED"
-	}
-	else = {
-		debug_log = "HD190 REGENCY FAILED"
-	}
+ character:dong_zhuo_2 ?= {
+  if = { limit = { has_title = title:e_WJ_minister_cheng_xiang }
+   WJ_zw_grant_chancellor = yes
+   hd_court_refresh_puppet_effect = yes
+   if = { limit = { is_ai = no } trigger_event = WJ_chancellor.10 }
+  }
+ }
 }
 
 # 西凉兵 3 万（羌骑、湟中义从、重甲步兵），事件兵，董卓死后随之解散
@@ -407,7 +335,17 @@ hd190_employer_fix_effect = {
 				is_alive = yes
 				is_landed = no
 				is_ruler = no
-				character:$BOSS$ ?= { is_alive = yes is_landed = yes }
+				character:$BOSS$ ?= {
+					is_alive = yes
+					OR = {
+						is_landed = yes
+						AND = {
+							this = character:dong_zhuo_2
+							has_title = title:e_WJ_minister_cheng_xiang
+							top_liege = title:h_china.holder
+						}
+					}
+				}
 				NOT = { employer ?= character:$BOSS$ }
 			}
 			debug_log = "HD190 EMPLOYER_FIX $WHO$ -> $BOSS$"
@@ -427,7 +365,16 @@ hd190_coalition_found_effect = {
 			hd_history_events_enabled_trigger = yes	# 历史事件开关关闭时不建联盟（同 184 的 hd_try_start_palace_crisis_effect）
 			NOT = { exists = global_var:hd_anti_regent_chain_resolved }
 			NOT = { exists = global_var:hd_anti_regent_founded }
-			character:dong_zhuo_2 ?= { is_alive = yes is_landed = yes }
+			character:dong_zhuo_2 ?= {
+				is_alive = yes
+				OR = {
+					is_landed = yes
+					AND = {
+						has_title = title:e_WJ_minister_cheng_xiang
+						top_liege = title:h_china.holder
+					}
+				}
+			}
 			character:yuan_shao ?= { is_alive = yes is_landed = yes is_independent_ruler = yes }
 		}
 		character:yuan_shao = { hd190_coalition_create_effect = yes }
@@ -602,7 +549,7 @@ hd190_day10_check_effect = {
 			limit = { is_alive = yes }
 			if = { limit = { has_council_position = WJ_minister_cheng_xiang } debug_log = "HD190 DAY10 DONG_CHENGXIANG_OK" }
 			else = { debug_log = "HD190 DAY10 DONG_CHENGXIANG_MISSING" }
-			if = { limit = { exists = global_var:hd184r_meiguo } debug_log = "HD190 DAY10 MEIGUO_OK" }
+			if = { limit = { NOT = { exists = global_var:hd184r_meiguo } } debug_log = "HD190 DAY10 NO_REAL_FIEF_OK" }
 			else = { debug_log = "HD190 DAY10 MEIGUO_MISSING" }
 		}
 	}
@@ -1153,3 +1100,5 @@ hd190_zhang_lu_revolt_effect = {
 	}
 	else = { debug_log = "HD190 ZHANG_LU_REVOLT_SKIPPED" }
 }
+
+# Only Dong's direct holdings change; the surrounding realm and its people remain.
