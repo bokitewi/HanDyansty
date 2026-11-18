@@ -1,866 +1,418 @@
-﻿# 年度汉晋吏治：每年仍只派发一个原有事件，不扫描世界、不生成额外人物。
-# 原版只读依据：
-# tgp_governor_contract_events.txt:1571+ dam_in_disrepair — duel / skills / compare_modifier。
-# yearly_events_3.txt:3351+ — random_held_title / add_county_modifier / change_county_control。
-# yearly_events_3.txt:3365 与自制 WJ_quanchen_events.txt:335 — show_as_unavailable。
-# 身份、周期、epoch、朝廷、县份归属均在执行前重验；旧案不 reconcile。
-# 只给高门槛选项灰显；失效窗口其余选项隐藏，并提供无成本退案。
+# Existing three annual duties, refurbished 2026-11-17; no new event IDs.
+# Actual payer/person/county and repeat/stale guards; player-only scenes, original annual AI dispatch unchanged.
 namespace = wj_kaoke_duties
 
 wj_kaoke_duties.1001 = {
-	type = character_event
-	title = wj_kaoke_duties.1001.t
-	desc = wj_kaoke_duties.1001.desc
+	type = character_event title = wj_kaoke_duties.1001.t
+	desc = { desc = wj_kaoke_duties.1001.desc
+		triggered_desc = { trigger = { exists = scope:wj_event_adviser } desc = wj_kaoke_duties.1001.adviser }
+		triggered_desc = { trigger = { is_at_war = yes } desc = wj_kaoke_duties.1001.war }
+		desc = wj_kaoke_duties.1001.closing }
 	theme = administrative
 	override_background = { reference = study }
-	left_portrait = { character = root animation = pondering }
-	trigger = {
-		WJ_kaoke_eligible_trigger = yes
-		has_variable = wj_kaoke_start
-		WJ_kaoke_days_value < 1825
-		has_variable = wj_kaoke_window_epoch
-		has_variable = wj_kaoke_realm
-		var:wj_kaoke_realm = top_liege.primary_title
-	}
-	immediate = {
-		# 原版 manage_new_governance_contract_effect：冷却中不刷新，期满后下一次触发再起算。
-		if = {
-			limit = { NOT = { has_character_flag = wj_kaoke_duties_cooldown } }
-			add_character_flag = { flag = wj_kaoke_duties_cooldown years = 3 }
-		}
-		save_scope_value_as = { name = wj_kaoke_choice_epoch value = var:wj_kaoke_window_epoch }
-		save_scope_value_as = { name = wj_kaoke_choice_start value = var:wj_kaoke_start }
-		var:wj_kaoke_realm = { save_scope_as = wj_kaoke_choice_realm }
-		random_held_title = {
-			limit = { tier = tier_county holder = root }
-			save_scope_as = wj_kaoke_duty_county
-		}
-	}
-
+	left_portrait = { character = root animation = thinking }
+	right_portrait = { character = scope:wj_duty_person animation = debating }
+	lower_center_portrait = { trigger = { exists = scope:wj_event_adviser } character = scope:wj_event_adviser }
+	trigger = { hd_hanfl_kaoke_event_trigger = yes is_ai = no is_available_adult = yes any_held_title = { tier = tier_county holder = root } }
+	immediate = { hd_hanfl_kaoke_snapshot_effect = yes hd_hanfl_local_adviser_effect = yes WJ_duty_dike_prepare_effect = yes }
 	option = {
 		name = wj_kaoke_duties.1001.a
 		show_as_unavailable = { always = yes }
-		trigger = {
-			WJ_kaoke_eligible_trigger = yes
-			has_variable = wj_kaoke_start
-			WJ_kaoke_days_value < 1825
-			has_variable = wj_kaoke_window_epoch
-			has_variable = wj_kaoke_realm
-			exists = scope:wj_kaoke_choice_start
-			exists = scope:wj_kaoke_choice_epoch
-			exists = scope:wj_kaoke_choice_realm
-			var:wj_kaoke_start = scope:wj_kaoke_choice_start
-			var:wj_kaoke_window_epoch = scope:wj_kaoke_choice_epoch
-			var:wj_kaoke_realm = scope:wj_kaoke_choice_realm
-			top_liege.primary_title = scope:wj_kaoke_choice_realm
-			exists = scope:wj_kaoke_duty_county
-			scope:wj_kaoke_duty_county.holder = root
-			gold >= 120
-			stewardship >= 12
-		}
-		# Availability is only UI: revalidate before any resource, county or score effect.
-		if = {
-			limit = {
-				WJ_kaoke_eligible_trigger = yes
-				has_variable = wj_kaoke_start
-				WJ_kaoke_days_value < 1825
-				has_variable = wj_kaoke_window_epoch
-				has_variable = wj_kaoke_realm
-				exists = scope:wj_kaoke_choice_start
-				exists = scope:wj_kaoke_choice_epoch
-				exists = scope:wj_kaoke_choice_realm
-				var:wj_kaoke_start = scope:wj_kaoke_choice_start
-				var:wj_kaoke_window_epoch = scope:wj_kaoke_choice_epoch
-				var:wj_kaoke_realm = scope:wj_kaoke_choice_realm
-				top_liege.primary_title = scope:wj_kaoke_choice_realm
-				exists = scope:wj_kaoke_duty_county
-				scope:wj_kaoke_duty_county.holder = root
-				gold >= 120
-				stewardship >= 12
+		trigger = { WJ_duty_people_valid_trigger = yes gold >= 120 }
+		if = { limit = { WJ_duty_people_valid_trigger = yes gold >= 120 }
+			send_interface_toast = {
+				type = event_toast_effect_good
+				title = wj_kaoke_duties.1001.a.result
+				left_icon = root
+				right_icon = scope:wj_duty_person
+
+				hidden_effect = { WJ_duty_people_finish_effect = yes }
+				pay_short_term_gold = { target = scope:wj_duty_person gold = 120 }
+				scope:wj_kaoke_duty_county = { remove_county_modifier = WJ_duty_unrepaired_dike_modifier }
+				scope:wj_kaoke_duty_county = { add_county_modifier = { modifier = WJ_duty_rebuilt_dike_modifier years = 5 } } scope:wj_kaoke_duty_county = { change_county_control = 10 }
+				add_prestige = medium_prestige_gain add_stewardship_lifestyle_xp = 250
+				scope:wj_duty_person = { add_opinion = { target = root modifier = grateful_opinion opinion = 40 } } stress_impact = { greedy = minor_stress_impact_gain generous = minor_stress_impact_loss }
+				WJ_kaoke_choice_effect = { POINTS = 20 }
 			}
-			remove_short_term_gold = 120
-			add_stress = 30
-			scope:wj_kaoke_duty_county = {
-				change_county_control = 10
-				add_county_modifier = { modifier = wj_kaoke_duties_relief_modifier years = 3 }
-			}
-			custom_tooltip = wj_kaoke_duties.1001.a.tt
-			hidden_effect = { WJ_kaoke_choice_effect = { POINTS = 20 } }
 		}
-		ai_chance = {
-			base = 25
-			modifier = { factor = 2 has_trait = just }
-			modifier = { factor = 2 has_trait = generous }
-			modifier = { factor = 0.5 has_trait = greedy }
-			modifier = { factor = 0 gold < 120 }
-		}
+		else = { WJ_duty_people_lapsed_effect = yes }
+		ai_chance = { base = 1 }
 	}
 
 	option = {
 		name = wj_kaoke_duties.1001.b
-		trigger = {
-			WJ_kaoke_eligible_trigger = yes
-			has_variable = wj_kaoke_start
-			WJ_kaoke_days_value < 1825
-			has_variable = wj_kaoke_window_epoch
-			has_variable = wj_kaoke_realm
-			exists = scope:wj_kaoke_choice_start
-			exists = scope:wj_kaoke_choice_epoch
-			exists = scope:wj_kaoke_choice_realm
-			var:wj_kaoke_start = scope:wj_kaoke_choice_start
-			var:wj_kaoke_window_epoch = scope:wj_kaoke_choice_epoch
-			var:wj_kaoke_realm = scope:wj_kaoke_choice_realm
-			top_liege.primary_title = scope:wj_kaoke_choice_realm
-			exists = scope:wj_kaoke_duty_county
-			scope:wj_kaoke_duty_county.holder = root
-		}
-		# Availability is only UI: revalidate before any resource, county or score effect.
-		if = {
-			limit = {
-				WJ_kaoke_eligible_trigger = yes
-				has_variable = wj_kaoke_start
-				WJ_kaoke_days_value < 1825
-				has_variable = wj_kaoke_window_epoch
-				has_variable = wj_kaoke_realm
-				exists = scope:wj_kaoke_choice_start
-				exists = scope:wj_kaoke_choice_epoch
-				exists = scope:wj_kaoke_choice_realm
-				var:wj_kaoke_start = scope:wj_kaoke_choice_start
-				var:wj_kaoke_window_epoch = scope:wj_kaoke_choice_epoch
-				var:wj_kaoke_realm = scope:wj_kaoke_choice_realm
-				top_liege.primary_title = scope:wj_kaoke_choice_realm
-				exists = scope:wj_kaoke_duty_county
-				scope:wj_kaoke_duty_county.holder = root
+
+		trigger = { WJ_duty_people_valid_trigger = yes  }
+		if = { limit = { WJ_duty_people_valid_trigger = yes  }
+			send_interface_toast = {
+				type = event_toast_effect_neutral
+				title = wj_kaoke_duties.1001.b.result
+				left_icon = root
+				right_icon = scope:wj_duty_person
+
+				hidden_effect = { WJ_duty_people_finish_effect = yes }
+				scope:wj_kaoke_duty_county = { add_county_modifier = { modifier = WJ_duty_unrepaired_dike_modifier years = 2 } } scope:wj_kaoke_duty_county = { change_county_control = 5 }
+				add_martial_lifestyle_xp = 100
+				if = { limit = { exists = situation:dynastic_cycle OR = { hd_dc_phase_is_trigger = { PHASE = instability } hd_dc_phase_is_trigger = { PHASE = hd_collapse } hd_dc_phase_is_trigger = { PHASE = chaos } } } add_stress = 15 }
+				WJ_kaoke_choice_effect = { POINTS = 0 }
 			}
-			custom_tooltip = wj_kaoke_duties.1001.b.tt
-			hidden_effect = { WJ_kaoke_choice_effect = { POINTS = 0 } }
 		}
-		ai_chance = {
-			base = 40
-			modifier = { factor = 2 has_trait = lazy }
-			modifier = { factor = 2 has_trait = content }
-		}
+		else = { WJ_duty_people_lapsed_effect = yes }
+		ai_chance = { base = 1 }
 	}
 
 	option = {
 		name = wj_kaoke_duties.1001.c
-		trigger = {
-			WJ_kaoke_eligible_trigger = yes
-			has_variable = wj_kaoke_start
-			WJ_kaoke_days_value < 1825
-			has_variable = wj_kaoke_window_epoch
-			has_variable = wj_kaoke_realm
-			exists = scope:wj_kaoke_choice_start
-			exists = scope:wj_kaoke_choice_epoch
-			exists = scope:wj_kaoke_choice_realm
-			var:wj_kaoke_start = scope:wj_kaoke_choice_start
-			var:wj_kaoke_window_epoch = scope:wj_kaoke_choice_epoch
-			var:wj_kaoke_realm = scope:wj_kaoke_choice_realm
-			top_liege.primary_title = scope:wj_kaoke_choice_realm
-			exists = scope:wj_kaoke_duty_county
-			scope:wj_kaoke_duty_county.holder = root
-		}
-		# Availability is only UI: revalidate before any resource, county or score effect.
-		if = {
-			limit = {
-				WJ_kaoke_eligible_trigger = yes
-				has_variable = wj_kaoke_start
-				WJ_kaoke_days_value < 1825
-				has_variable = wj_kaoke_window_epoch
-				has_variable = wj_kaoke_realm
-				exists = scope:wj_kaoke_choice_start
-				exists = scope:wj_kaoke_choice_epoch
-				exists = scope:wj_kaoke_choice_realm
-				var:wj_kaoke_start = scope:wj_kaoke_choice_start
-				var:wj_kaoke_window_epoch = scope:wj_kaoke_choice_epoch
-				var:wj_kaoke_realm = scope:wj_kaoke_choice_realm
-				top_liege.primary_title = scope:wj_kaoke_choice_realm
-				exists = scope:wj_kaoke_duty_county
-				scope:wj_kaoke_duty_county.holder = root
+
+		trigger = { WJ_duty_people_valid_trigger = yes  }
+		if = { limit = { WJ_duty_people_valid_trigger = yes  }
+			send_interface_toast = {
+				type = event_toast_effect_bad
+				title = wj_kaoke_duties.1001.c.result
+				left_icon = root
+				right_icon = scope:wj_duty_person
+
+				hidden_effect = { WJ_duty_people_finish_effect = yes }
+				add_gold = 60 scope:wj_kaoke_duty_county = { change_county_control = -10 } scope:wj_kaoke_duty_county = { add_county_modifier = { modifier = wj_kaoke_duties_exactions_modifier years = 3 } }
+				scope:wj_duty_person = { add_opinion = { target = root modifier = angry_opinion opinion = -40 } }
+				stress_impact = { just = medium_stress_impact_gain generous = minor_stress_impact_gain greedy = minor_stress_impact_loss }
+				WJ_kaoke_choice_effect = { POINTS = -20 }
 			}
-			add_gold = 25
-			scope:wj_kaoke_duty_county = {
-				change_county_control = -10
-				add_county_modifier = { modifier = wj_kaoke_duties_exactions_modifier years = 3 }
-			}
-			custom_tooltip = wj_kaoke_duties.1001.c.tt
-			hidden_effect = { WJ_kaoke_choice_effect = { POINTS = -20 } }
 		}
-		ai_chance = {
-			base = 25
-			modifier = { factor = 2 has_trait = greedy }
-			modifier = { factor = 2 has_trait = arbitrary }
-			modifier = { factor = 0.25 has_trait = just }
-		}
+		else = { WJ_duty_people_lapsed_effect = yes }
+		ai_chance = { base = 1 }
 	}
 
 	option = {
 		name = wj_kaoke_duties.1001.d
-		trigger = {
-			WJ_kaoke_eligible_trigger = yes
-			has_variable = wj_kaoke_start
-			WJ_kaoke_days_value < 1825
-			has_variable = wj_kaoke_window_epoch
-			has_variable = wj_kaoke_realm
-			exists = scope:wj_kaoke_choice_start
-			exists = scope:wj_kaoke_choice_epoch
-			exists = scope:wj_kaoke_choice_realm
-			var:wj_kaoke_start = scope:wj_kaoke_choice_start
-			var:wj_kaoke_window_epoch = scope:wj_kaoke_choice_epoch
-			var:wj_kaoke_realm = scope:wj_kaoke_choice_realm
-			top_liege.primary_title = scope:wj_kaoke_choice_realm
-			exists = scope:wj_kaoke_duty_county
-			scope:wj_kaoke_duty_county.holder = root
-		}
-		# Availability is only UI: revalidate before any resource, county or score effect.
-		if = {
-			limit = {
-				WJ_kaoke_eligible_trigger = yes
-				has_variable = wj_kaoke_start
-				WJ_kaoke_days_value < 1825
-				has_variable = wj_kaoke_window_epoch
-				has_variable = wj_kaoke_realm
-				exists = scope:wj_kaoke_choice_start
-				exists = scope:wj_kaoke_choice_epoch
-				exists = scope:wj_kaoke_choice_realm
-				var:wj_kaoke_start = scope:wj_kaoke_choice_start
-				var:wj_kaoke_window_epoch = scope:wj_kaoke_choice_epoch
-				var:wj_kaoke_realm = scope:wj_kaoke_choice_realm
-				top_liege.primary_title = scope:wj_kaoke_choice_realm
-				exists = scope:wj_kaoke_duty_county
-				scope:wj_kaoke_duty_county.holder = root
-			}
-			# Native duel renders the actual success/failure percentages from current skills.
-			duel = {
-				skills = { stewardship diplomacy }
-				value = decent_skill_rating
-				50 = {
-					desc = wj_kaoke_duties.1001.d.success
-					compare_modifier = { value = scope:duel_value multiplier = 3.5 }
-					add_stress = 15
-					scope:wj_kaoke_duty_county = {
-						change_county_control = 5
-						add_county_modifier = { modifier = wj_kaoke_duties_relief_modifier years = 2 }
-					}
-					custom_tooltip = wj_kaoke_duties.1001.d.success.tt
-					hidden_effect = { WJ_kaoke_choice_effect = { POINTS = 10 } }
-				}
-				50 = {
-					desc = wj_kaoke_duties.1001.d.failure
-					compare_modifier = { value = scope:duel_value multiplier = -3.5 }
-					add_stress = 30
-					scope:wj_kaoke_duty_county = {
-						change_county_control = -5
-					}
-					custom_tooltip = wj_kaoke_duties.1001.d.failure.tt
-					hidden_effect = { WJ_kaoke_choice_effect = { POINTS = -10 } }
-				}
+		show_as_unavailable = { always = yes }
+		trigger = { WJ_duty_people_valid_trigger = yes gold >= 30  }
+		if = { limit = { WJ_duty_people_valid_trigger = yes gold >= 30  }
+			duel = { skills = { stewardship diplomacy } value = decent_skill_rating
+				50 = { desc = wj_kaoke_duties.1001.d.success compare_modifier = { value = scope:duel_value multiplier = 3.5 min = 1 }
+					send_interface_toast = {
+						type = event_toast_effect_good
+						title = wj_kaoke_duties.1001.d.success
+						left_icon = root
+						right_icon = scope:wj_duty_person
+
+						hidden_effect = { WJ_duty_people_finish_effect = yes }
+						remove_short_term_gold = 30
+
+						scope:wj_kaoke_duty_county = { remove_county_modifier = WJ_duty_unrepaired_dike_modifier }
+						scope:wj_kaoke_duty_county = { add_county_modifier = { modifier = WJ_duty_rebuilt_dike_modifier years = 3 } } scope:wj_kaoke_duty_county = { change_county_control = 5 }
+						add_stewardship_lifestyle_xp = 300 add_prestige = minor_prestige_gain
+						scope:wj_duty_person = { add_opinion = { target = root modifier = grateful_opinion opinion = 25 } } WJ_kaoke_choice_effect = { POINTS = 10 }
+					} }
+				50 = { desc = wj_kaoke_duties.1001.d.failure compare_modifier = { value = scope:duel_value multiplier = -3.5 min = 1 }
+					send_interface_toast = {
+						type = event_toast_effect_bad
+						title = wj_kaoke_duties.1001.d.failure
+						left_icon = root
+						right_icon = scope:wj_duty_person
+
+						hidden_effect = { WJ_duty_people_finish_effect = yes }
+						remove_short_term_gold = 30
+
+						scope:wj_kaoke_duty_county = { change_county_control = -5 } add_stress = 30 add_stewardship_lifestyle_xp = 100
+						scope:wj_kaoke_duty_county = { add_county_modifier = { modifier = WJ_duty_unrepaired_dike_modifier years = 2 } } WJ_kaoke_choice_effect = { POINTS = -10 }
+					} }
 			}
 		}
-		ai_chance = {
-			base = 35
-			modifier = { factor = 2 has_trait = diligent }
-			modifier = { factor = 1.5 has_trait = ambitious }
-			modifier = { factor = 0.5 has_trait = lazy }
-		}
+		else = { WJ_duty_people_lapsed_effect = yes }
+		ai_chance = { base = 1 }
 	}
 
 	option = {
-		name = wj_kaoke_duties.invalid
-		trigger = {
-			NOT = {
-				AND = {
-					WJ_kaoke_eligible_trigger = yes
-					has_variable = wj_kaoke_start
-					WJ_kaoke_days_value < 1825
-					has_variable = wj_kaoke_window_epoch
-					has_variable = wj_kaoke_realm
-					exists = scope:wj_kaoke_choice_start
-					exists = scope:wj_kaoke_choice_epoch
-					exists = scope:wj_kaoke_choice_realm
-					var:wj_kaoke_start = scope:wj_kaoke_choice_start
-					var:wj_kaoke_window_epoch = scope:wj_kaoke_choice_epoch
-					var:wj_kaoke_realm = scope:wj_kaoke_choice_realm
-					top_liege.primary_title = scope:wj_kaoke_choice_realm
-					exists = scope:wj_kaoke_duty_county
-					scope:wj_kaoke_duty_county.holder = root
-				}
+		name = wj_kaoke_duties.1001.e
+		show_as_unavailable = { always = yes }
+		trigger = { WJ_duty_people_valid_trigger = yes gold >= 180 }
+		if = { limit = { WJ_duty_people_valid_trigger = yes gold >= 180 }
+			send_interface_toast = {
+				type = event_toast_effect_neutral
+				title = wj_kaoke_duties.1001.e.result
+				left_icon = root
+				right_icon = scope:wj_duty_person
+				hidden_effect = { scope:wj_duty_person = { save_scope_as = wj_duty_recruited } }
+				hidden_effect = { WJ_duty_people_finish_effect = yes }
+				pay_short_term_gold = { target = scope:wj_duty_person gold = 180 } add_courtier = scope:wj_duty_person
+				scope:wj_duty_person = { add_opinion = { target = root modifier = grateful_opinion opinion = 50 } } scope:wj_kaoke_duty_county = { add_county_modifier = { modifier = wj_kaoke_duties_dike_modifier years = 3 } }
+				add_stewardship_lifestyle_xp = 150 WJ_kaoke_choice_effect = { POINTS = 10 }
 			}
 		}
-		custom_tooltip = wj_kaoke_duties.invalid.tt
-		ai_chance = { base = 100 }
+		else = { WJ_duty_people_lapsed_effect = yes }
+		ai_chance = { base = 1 }
 	}
+	option = { name = wj_kaoke_duties.invalid trigger = { NOT = { WJ_duty_people_valid_trigger = yes } } WJ_duty_people_lapsed_effect = yes ai_chance = { base = 100 } }
+	after = { hidden_effect = { WJ_duty_people_finish_effect = yes } }
 }
 
 wj_kaoke_duties.1002 = {
-	type = character_event
-	title = wj_kaoke_duties.1002.t
-	desc = wj_kaoke_duties.1002.desc
-	theme = administrative
-	override_background = { reference = study }
-	left_portrait = { character = root animation = disapproval }
-	trigger = {
-		WJ_kaoke_eligible_trigger = yes
-		has_variable = wj_kaoke_start
-		WJ_kaoke_days_value < 1825
-		has_variable = wj_kaoke_window_epoch
-		has_variable = wj_kaoke_realm
-		var:wj_kaoke_realm = top_liege.primary_title
-	}
-	immediate = {
-		# 原版 manage_new_governance_contract_effect：冷却中不刷新，期满后下一次触发再起算。
-		if = {
-			limit = { NOT = { has_character_flag = wj_kaoke_duties_cooldown } }
-			add_character_flag = { flag = wj_kaoke_duties_cooldown years = 3 }
-		}
-		save_scope_value_as = { name = wj_kaoke_choice_epoch value = var:wj_kaoke_window_epoch }
-		save_scope_value_as = { name = wj_kaoke_choice_start value = var:wj_kaoke_start }
-		var:wj_kaoke_realm = { save_scope_as = wj_kaoke_choice_realm }
-		random_held_title = {
-			limit = { tier = tier_county holder = root }
-			save_scope_as = wj_kaoke_duty_county
-		}
-	}
+	type = character_event title = wj_kaoke_duties.1002.t
+	desc = { desc = wj_kaoke_duties.1002.desc
+		triggered_desc = { trigger = { exists = scope:wj_event_adviser } desc = wj_kaoke_duties.1002.adviser }
 
+		desc = wj_kaoke_duties.1002.closing }
+	theme = administrative
+	override_background = { reference = council_chamber }
+	left_portrait = { character = root animation = thinking }
+	right_portrait = { character = scope:wj_duty_person animation = worry }
+	lower_center_portrait = { character = scope:wj_duty_other animation = disapproval }
+	trigger = { hd_hanfl_kaoke_event_trigger = yes is_ai = no is_available_adult = yes any_held_title = { tier = tier_county holder = root } }
+	immediate = { hd_hanfl_kaoke_snapshot_effect = yes hd_hanfl_local_adviser_effect = yes WJ_duty_land_prepare_effect = yes }
 	option = {
 		name = wj_kaoke_duties.1002.a
 		show_as_unavailable = { always = yes }
-		trigger = {
-			WJ_kaoke_eligible_trigger = yes
-			has_variable = wj_kaoke_start
-			WJ_kaoke_days_value < 1825
-			has_variable = wj_kaoke_window_epoch
-			has_variable = wj_kaoke_realm
-			exists = scope:wj_kaoke_choice_start
-			exists = scope:wj_kaoke_choice_epoch
-			exists = scope:wj_kaoke_choice_realm
-			var:wj_kaoke_start = scope:wj_kaoke_choice_start
-			var:wj_kaoke_window_epoch = scope:wj_kaoke_choice_epoch
-			var:wj_kaoke_realm = scope:wj_kaoke_choice_realm
-			top_liege.primary_title = scope:wj_kaoke_choice_realm
-			exists = scope:wj_kaoke_duty_county
-			scope:wj_kaoke_duty_county.holder = root
-			gold >= 80
-			prestige >= 150
-			diplomacy >= 12
-		}
-		# Availability is only UI: revalidate before any resource, county or score effect.
-		if = {
-			limit = {
-				WJ_kaoke_eligible_trigger = yes
-				has_variable = wj_kaoke_start
-				WJ_kaoke_days_value < 1825
-				has_variable = wj_kaoke_window_epoch
-				has_variable = wj_kaoke_realm
-				exists = scope:wj_kaoke_choice_start
-				exists = scope:wj_kaoke_choice_epoch
-				exists = scope:wj_kaoke_choice_realm
-				var:wj_kaoke_start = scope:wj_kaoke_choice_start
-				var:wj_kaoke_window_epoch = scope:wj_kaoke_choice_epoch
-				var:wj_kaoke_realm = scope:wj_kaoke_choice_realm
-				top_liege.primary_title = scope:wj_kaoke_choice_realm
-				exists = scope:wj_kaoke_duty_county
-				scope:wj_kaoke_duty_county.holder = root
-				gold >= 80
-				prestige >= 150
-				diplomacy >= 12
+		trigger = { WJ_duty_people_valid_trigger = yes gold >= 80 scope:wj_duty_other.gold >= 60 }
+		if = { limit = { WJ_duty_people_valid_trigger = yes gold >= 80 scope:wj_duty_other.gold >= 60 }
+			send_interface_toast = {
+				type = event_toast_effect_good
+				title = wj_kaoke_duties.1002.a.result
+				left_icon = root
+				right_icon = scope:wj_duty_person
+
+				hidden_effect = { WJ_duty_people_finish_effect = yes }
+				remove_short_term_gold = 80
+				scope:wj_duty_other = { pay_short_term_gold = { target = scope:wj_duty_person gold = 60 } }
+				scope:wj_duty_person = { add_opinion = { target = root modifier = grateful_opinion opinion = 50 } } scope:wj_duty_other = { add_opinion = { target = root modifier = angry_opinion opinion = -40 } }
+				scope:wj_kaoke_duty_county = { add_county_modifier = { modifier = wj_kaoke_duties_boundaries_modifier years = 5 } } scope:wj_kaoke_duty_county = { change_county_control = 10 }
+				add_prestige = medium_prestige_gain add_stewardship_lifestyle_xp = 200
+				stress_impact = { just = minor_stress_impact_loss greedy = minor_stress_impact_gain }
+				WJ_kaoke_choice_effect = { POINTS = 20 }
 			}
-			remove_short_term_gold = 80
-			add_prestige = -150
-			scope:wj_kaoke_duty_county = {
-				change_county_control = 10
-				add_county_modifier = { modifier = wj_kaoke_duties_boundaries_modifier years = 3 }
-			}
-			custom_tooltip = wj_kaoke_duties.1002.a.tt
-			hidden_effect = { WJ_kaoke_choice_effect = { POINTS = 20 } }
 		}
-		ai_chance = {
-			base = 25
-			modifier = { factor = 2 has_trait = just }
-			modifier = { factor = 2 has_trait = generous }
-			modifier = { factor = 0.5 has_trait = greedy }
-			modifier = { factor = 0 gold < 80 }
-			modifier = { factor = 0 prestige < 150 }
-		}
+		else = { WJ_duty_people_lapsed_effect = yes }
+		ai_chance = { base = 1 }
 	}
 
 	option = {
 		name = wj_kaoke_duties.1002.b
-		trigger = {
-			WJ_kaoke_eligible_trigger = yes
-			has_variable = wj_kaoke_start
-			WJ_kaoke_days_value < 1825
-			has_variable = wj_kaoke_window_epoch
-			has_variable = wj_kaoke_realm
-			exists = scope:wj_kaoke_choice_start
-			exists = scope:wj_kaoke_choice_epoch
-			exists = scope:wj_kaoke_choice_realm
-			var:wj_kaoke_start = scope:wj_kaoke_choice_start
-			var:wj_kaoke_window_epoch = scope:wj_kaoke_choice_epoch
-			var:wj_kaoke_realm = scope:wj_kaoke_choice_realm
-			top_liege.primary_title = scope:wj_kaoke_choice_realm
-			exists = scope:wj_kaoke_duty_county
-			scope:wj_kaoke_duty_county.holder = root
-		}
-		# Availability is only UI: revalidate before any resource, county or score effect.
-		if = {
-			limit = {
-				WJ_kaoke_eligible_trigger = yes
-				has_variable = wj_kaoke_start
-				WJ_kaoke_days_value < 1825
-				has_variable = wj_kaoke_window_epoch
-				has_variable = wj_kaoke_realm
-				exists = scope:wj_kaoke_choice_start
-				exists = scope:wj_kaoke_choice_epoch
-				exists = scope:wj_kaoke_choice_realm
-				var:wj_kaoke_start = scope:wj_kaoke_choice_start
-				var:wj_kaoke_window_epoch = scope:wj_kaoke_choice_epoch
-				var:wj_kaoke_realm = scope:wj_kaoke_choice_realm
-				top_liege.primary_title = scope:wj_kaoke_choice_realm
-				exists = scope:wj_kaoke_duty_county
-				scope:wj_kaoke_duty_county.holder = root
+
+		trigger = { WJ_duty_people_valid_trigger = yes  }
+		if = { limit = { WJ_duty_people_valid_trigger = yes  }
+			send_interface_toast = {
+				type = event_toast_effect_neutral
+				title = wj_kaoke_duties.1002.b.result
+				left_icon = root
+				right_icon = scope:wj_duty_person
+
+				hidden_effect = { WJ_duty_people_finish_effect = yes }
+				scope:wj_kaoke_duty_county = { add_county_modifier = { modifier = WJ_duty_land_compromise_modifier years = 2 } }
+				scope:wj_duty_person = { add_opinion = { target = root modifier = grateful_opinion opinion = 10 } } scope:wj_duty_other = { add_opinion = { target = root modifier = grateful_opinion opinion = 10 } } add_diplomacy_lifestyle_xp = 100
+				WJ_kaoke_choice_effect = { POINTS = 0 }
 			}
-			custom_tooltip = wj_kaoke_duties.1002.b.tt
-			hidden_effect = { WJ_kaoke_choice_effect = { POINTS = 0 } }
 		}
-		ai_chance = {
-			base = 40
-			modifier = { factor = 2 has_trait = lazy }
-			modifier = { factor = 2 has_trait = content }
-		}
+		else = { WJ_duty_people_lapsed_effect = yes }
+		ai_chance = { base = 1 }
 	}
 
 	option = {
 		name = wj_kaoke_duties.1002.c
-		trigger = {
-			WJ_kaoke_eligible_trigger = yes
-			has_variable = wj_kaoke_start
-			WJ_kaoke_days_value < 1825
-			has_variable = wj_kaoke_window_epoch
-			has_variable = wj_kaoke_realm
-			exists = scope:wj_kaoke_choice_start
-			exists = scope:wj_kaoke_choice_epoch
-			exists = scope:wj_kaoke_choice_realm
-			var:wj_kaoke_start = scope:wj_kaoke_choice_start
-			var:wj_kaoke_window_epoch = scope:wj_kaoke_choice_epoch
-			var:wj_kaoke_realm = scope:wj_kaoke_choice_realm
-			top_liege.primary_title = scope:wj_kaoke_choice_realm
-			exists = scope:wj_kaoke_duty_county
-			scope:wj_kaoke_duty_county.holder = root
-		}
-		# Availability is only UI: revalidate before any resource, county or score effect.
-		if = {
-			limit = {
-				WJ_kaoke_eligible_trigger = yes
-				has_variable = wj_kaoke_start
-				WJ_kaoke_days_value < 1825
-				has_variable = wj_kaoke_window_epoch
-				has_variable = wj_kaoke_realm
-				exists = scope:wj_kaoke_choice_start
-				exists = scope:wj_kaoke_choice_epoch
-				exists = scope:wj_kaoke_choice_realm
-				var:wj_kaoke_start = scope:wj_kaoke_choice_start
-				var:wj_kaoke_window_epoch = scope:wj_kaoke_choice_epoch
-				var:wj_kaoke_realm = scope:wj_kaoke_choice_realm
-				top_liege.primary_title = scope:wj_kaoke_choice_realm
-				exists = scope:wj_kaoke_duty_county
-				scope:wj_kaoke_duty_county.holder = root
+		show_as_unavailable = { always = yes }
+		trigger = { WJ_duty_people_valid_trigger = yes scope:wj_duty_other.gold >= scope:wj_duty_land_offer }
+		if = { limit = { WJ_duty_people_valid_trigger = yes scope:wj_duty_other.gold >= scope:wj_duty_land_offer }
+			send_interface_toast = {
+				type = event_toast_effect_bad
+				title = wj_kaoke_duties.1002.c.result
+				left_icon = root
+				right_icon = scope:wj_duty_person
+
+				hidden_effect = { WJ_duty_people_finish_effect = yes }
+				scope:wj_duty_other = { pay_short_term_gold = { target = root gold = scope:wj_duty_land_offer } }
+				scope:wj_duty_other = { add_opinion = { target = root modifier = grateful_opinion opinion = 35 } } scope:wj_duty_person = { add_opinion = { target = root modifier = angry_opinion opinion = -50 } }
+				scope:wj_kaoke_duty_county = { change_county_control = -10 } scope:wj_kaoke_duty_county = { add_county_modifier = { modifier = wj_kaoke_duties_exactions_modifier years = 3 } }
+				stress_impact = { just = medium_stress_impact_gain honest = medium_stress_impact_gain greedy = minor_stress_impact_loss }
+				WJ_kaoke_choice_effect = { POINTS = -20 }
 			}
-			add_gold = 40
-			scope:wj_kaoke_duty_county = {
-				change_county_control = -10
-				add_county_modifier = { modifier = wj_kaoke_duties_exactions_modifier years = 3 }
-			}
-			custom_tooltip = wj_kaoke_duties.1002.c.tt
-			hidden_effect = { WJ_kaoke_choice_effect = { POINTS = -20 } }
 		}
-		ai_chance = {
-			base = 25
-			modifier = { factor = 2 has_trait = greedy }
-			modifier = { factor = 2 has_trait = arbitrary }
-			modifier = { factor = 0.25 has_trait = just }
-		}
+		else = { WJ_duty_people_lapsed_effect = yes }
+		ai_chance = { base = 1 }
 	}
 
 	option = {
 		name = wj_kaoke_duties.1002.d
-		trigger = {
-			WJ_kaoke_eligible_trigger = yes
-			has_variable = wj_kaoke_start
-			WJ_kaoke_days_value < 1825
-			has_variable = wj_kaoke_window_epoch
-			has_variable = wj_kaoke_realm
-			exists = scope:wj_kaoke_choice_start
-			exists = scope:wj_kaoke_choice_epoch
-			exists = scope:wj_kaoke_choice_realm
-			var:wj_kaoke_start = scope:wj_kaoke_choice_start
-			var:wj_kaoke_window_epoch = scope:wj_kaoke_choice_epoch
-			var:wj_kaoke_realm = scope:wj_kaoke_choice_realm
-			top_liege.primary_title = scope:wj_kaoke_choice_realm
-			exists = scope:wj_kaoke_duty_county
-			scope:wj_kaoke_duty_county.holder = root
-		}
-		# Availability is only UI: revalidate before any resource, county or score effect.
-		if = {
-			limit = {
-				WJ_kaoke_eligible_trigger = yes
-				has_variable = wj_kaoke_start
-				WJ_kaoke_days_value < 1825
-				has_variable = wj_kaoke_window_epoch
-				has_variable = wj_kaoke_realm
-				exists = scope:wj_kaoke_choice_start
-				exists = scope:wj_kaoke_choice_epoch
-				exists = scope:wj_kaoke_choice_realm
-				var:wj_kaoke_start = scope:wj_kaoke_choice_start
-				var:wj_kaoke_window_epoch = scope:wj_kaoke_choice_epoch
-				var:wj_kaoke_realm = scope:wj_kaoke_choice_realm
-				top_liege.primary_title = scope:wj_kaoke_choice_realm
-				exists = scope:wj_kaoke_duty_county
-				scope:wj_kaoke_duty_county.holder = root
-			}
-			# Native duel renders the actual success/failure percentages from current skills.
-			duel = {
-				skills = { diplomacy intrigue }
-				value = decent_skill_rating
-				50 = {
-					desc = wj_kaoke_duties.1002.d.success
-					compare_modifier = { value = scope:duel_value multiplier = 3.5 }
-					add_stress = 15
-					scope:wj_kaoke_duty_county = {
-						change_county_control = 5
-						add_county_modifier = { modifier = wj_kaoke_duties_boundaries_modifier years = 2 }
-					}
-					custom_tooltip = wj_kaoke_duties.1002.d.success.tt
-					hidden_effect = { WJ_kaoke_choice_effect = { POINTS = 10 } }
-				}
-				50 = {
-					desc = wj_kaoke_duties.1002.d.failure
-					compare_modifier = { value = scope:duel_value multiplier = -3.5 }
-					add_stress = 30
-					scope:wj_kaoke_duty_county = {
-						change_county_control = -5
-					}
-					custom_tooltip = wj_kaoke_duties.1002.d.failure.tt
-					hidden_effect = { WJ_kaoke_choice_effect = { POINTS = -10 } }
-				}
-			}
-		}
-		ai_chance = {
-			base = 35
-			modifier = { factor = 2 has_trait = diligent }
-			modifier = { factor = 1.5 has_trait = ambitious }
-			modifier = { factor = 0.5 has_trait = lazy }
-		}
-	}
+		show_as_unavailable = { always = yes }
+		trigger = { WJ_duty_people_valid_trigger = yes gold >= 20 scope:wj_duty_other.gold >= 30 }
+		if = { limit = { WJ_duty_people_valid_trigger = yes gold >= 20 scope:wj_duty_other.gold >= 30 }
+			duel = { skills = { diplomacy intrigue } value = decent_skill_rating
+				50 = { desc = wj_kaoke_duties.1002.d.success compare_modifier = { value = scope:duel_value multiplier = 3.5 min = 1 }
+					send_interface_toast = {
+						type = event_toast_effect_good
+						title = wj_kaoke_duties.1002.d.success
+						left_icon = root
+						right_icon = scope:wj_duty_person
 
-	option = {
-		name = wj_kaoke_duties.invalid
-		trigger = {
-			NOT = {
-				AND = {
-					WJ_kaoke_eligible_trigger = yes
-					has_variable = wj_kaoke_start
-					WJ_kaoke_days_value < 1825
-					has_variable = wj_kaoke_window_epoch
-					has_variable = wj_kaoke_realm
-					exists = scope:wj_kaoke_choice_start
-					exists = scope:wj_kaoke_choice_epoch
-					exists = scope:wj_kaoke_choice_realm
-					var:wj_kaoke_start = scope:wj_kaoke_choice_start
-					var:wj_kaoke_window_epoch = scope:wj_kaoke_choice_epoch
-					var:wj_kaoke_realm = scope:wj_kaoke_choice_realm
-					top_liege.primary_title = scope:wj_kaoke_choice_realm
-					exists = scope:wj_kaoke_duty_county
-					scope:wj_kaoke_duty_county.holder = root
-				}
+						hidden_effect = { WJ_duty_people_finish_effect = yes }
+						remove_short_term_gold = 20
+
+						scope:wj_duty_other = { pay_short_term_gold = { target = scope:wj_duty_person gold = 30 } }
+						scope:wj_duty_person = { add_opinion = { target = root modifier = grateful_opinion opinion = 35 } } scope:wj_duty_other = { add_opinion = { target = root modifier = angry_opinion opinion = -20 } }
+						scope:wj_kaoke_duty_county = { add_county_modifier = { modifier = wj_kaoke_duties_boundaries_modifier years = 3 } } scope:wj_kaoke_duty_county = { change_county_control = 5 }
+						change_merit = 100 add_diplomacy_lifestyle_xp = 300 WJ_kaoke_choice_effect = { POINTS = 10 }
+					} }
+				50 = { desc = wj_kaoke_duties.1002.d.failure compare_modifier = { value = scope:duel_value multiplier = -3.5 min = 1 }
+					send_interface_toast = {
+						type = event_toast_effect_bad
+						title = wj_kaoke_duties.1002.d.failure
+						left_icon = root
+						right_icon = scope:wj_duty_person
+
+						hidden_effect = { WJ_duty_people_finish_effect = yes }
+						remove_short_term_gold = 20
+
+						scope:wj_duty_person = { add_opinion = { target = root modifier = angry_opinion opinion = -20 } } scope:wj_duty_other = { add_opinion = { target = root modifier = angry_opinion opinion = -20 } } scope:wj_kaoke_duty_county = { change_county_control = -5 }
+						add_prestige = minor_prestige_loss add_stress = 20 add_diplomacy_lifestyle_xp = 100
+						WJ_kaoke_choice_effect = { POINTS = -10 }
+					} }
 			}
 		}
-		custom_tooltip = wj_kaoke_duties.invalid.tt
-		ai_chance = { base = 100 }
+		else = { WJ_duty_people_lapsed_effect = yes }
+		ai_chance = { base = 1 }
 	}
+	option = { name = wj_kaoke_duties.invalid trigger = { NOT = { WJ_duty_people_valid_trigger = yes } } WJ_duty_people_lapsed_effect = yes ai_chance = { base = 100 } }
+	after = { hidden_effect = { WJ_duty_people_finish_effect = yes } }
 }
 
 wj_kaoke_duties.1003 = {
-	type = character_event
-	title = wj_kaoke_duties.1003.t
-	desc = wj_kaoke_duties.1003.desc
-	theme = administrative
-	override_background = { reference = market }
-	left_portrait = { character = root animation = worry }
-	trigger = {
-		WJ_kaoke_eligible_trigger = yes
-		has_variable = wj_kaoke_start
-		WJ_kaoke_days_value < 1825
-		has_variable = wj_kaoke_window_epoch
-		has_variable = wj_kaoke_realm
-		var:wj_kaoke_realm = top_liege.primary_title
-	}
-	immediate = {
-		# 原版 manage_new_governance_contract_effect：冷却中不刷新，期满后下一次触发再起算。
-		if = {
-			limit = { NOT = { has_character_flag = wj_kaoke_duties_cooldown } }
-			add_character_flag = { flag = wj_kaoke_duties_cooldown years = 3 }
-		}
-		save_scope_value_as = { name = wj_kaoke_choice_epoch value = var:wj_kaoke_window_epoch }
-		save_scope_value_as = { name = wj_kaoke_choice_start value = var:wj_kaoke_start }
-		var:wj_kaoke_realm = { save_scope_as = wj_kaoke_choice_realm }
-		random_held_title = {
-			limit = { tier = tier_county holder = root }
-			save_scope_as = wj_kaoke_duty_county
-		}
-	}
+	type = character_event title = wj_kaoke_duties.1003.t
+	desc = { desc = wj_kaoke_duties.1003.desc
+		triggered_desc = { trigger = { exists = scope:wj_event_adviser } desc = wj_kaoke_duties.1003.adviser }
 
+		desc = wj_kaoke_duties.1003.closing }
+	theme = administrative
+	override_background = { reference = courtyard }
+	left_portrait = { character = root animation = thinking }
+	right_portrait = { character = scope:wj_duty_person animation = worry }
+	lower_center_portrait = { trigger = { exists = scope:wj_event_adviser } character = scope:wj_event_adviser }
+	trigger = { hd_hanfl_kaoke_event_trigger = yes is_ai = no is_available_adult = yes any_held_title = { tier = tier_county holder = root } }
+	immediate = { hd_hanfl_kaoke_snapshot_effect = yes hd_hanfl_local_adviser_effect = yes WJ_duty_post_prepare_effect = yes }
 	option = {
 		name = wj_kaoke_duties.1003.a
 		show_as_unavailable = { always = yes }
-		trigger = {
-			WJ_kaoke_eligible_trigger = yes
-			has_variable = wj_kaoke_start
-			WJ_kaoke_days_value < 1825
-			has_variable = wj_kaoke_window_epoch
-			has_variable = wj_kaoke_realm
-			exists = scope:wj_kaoke_choice_start
-			exists = scope:wj_kaoke_choice_epoch
-			exists = scope:wj_kaoke_choice_realm
-			var:wj_kaoke_start = scope:wj_kaoke_choice_start
-			var:wj_kaoke_window_epoch = scope:wj_kaoke_choice_epoch
-			var:wj_kaoke_realm = scope:wj_kaoke_choice_realm
-			top_liege.primary_title = scope:wj_kaoke_choice_realm
-			exists = scope:wj_kaoke_duty_county
-			scope:wj_kaoke_duty_county.holder = root
-			gold >= 100
-			OR = { stewardship >= 12 martial >= 12 }
-		}
-		# Availability is only UI: revalidate before any resource, county or score effect.
-		if = {
-			limit = {
-				WJ_kaoke_eligible_trigger = yes
-				has_variable = wj_kaoke_start
-				WJ_kaoke_days_value < 1825
-				has_variable = wj_kaoke_window_epoch
-				has_variable = wj_kaoke_realm
-				exists = scope:wj_kaoke_choice_start
-				exists = scope:wj_kaoke_choice_epoch
-				exists = scope:wj_kaoke_choice_realm
-				var:wj_kaoke_start = scope:wj_kaoke_choice_start
-				var:wj_kaoke_window_epoch = scope:wj_kaoke_choice_epoch
-				var:wj_kaoke_realm = scope:wj_kaoke_choice_realm
-				top_liege.primary_title = scope:wj_kaoke_choice_realm
-				exists = scope:wj_kaoke_duty_county
-				scope:wj_kaoke_duty_county.holder = root
-				gold >= 100
-				OR = { stewardship >= 12 martial >= 12 }
+		trigger = { WJ_duty_people_valid_trigger = yes gold >= 100 }
+		if = { limit = { WJ_duty_people_valid_trigger = yes gold >= 100 }
+			send_interface_toast = {
+				type = event_toast_effect_good
+				title = wj_kaoke_duties.1003.a.result
+				left_icon = root
+				right_icon = scope:wj_duty_person
+
+				hidden_effect = { WJ_duty_people_finish_effect = yes }
+				pay_short_term_gold = { target = scope:wj_duty_person gold = 100 } scope:wj_duty_person = { add_opinion = { target = root modifier = grateful_opinion opinion = 40 } }
+				scope:wj_kaoke_duty_county = { add_county_modifier = { modifier = WJ_duty_post_relay_modifier years = 3 } } scope:wj_kaoke_duty_county = { change_county_control = 10 }
+				add_prestige = minor_prestige_gain add_martial_lifestyle_xp = 250 add_stress = 20
+				WJ_kaoke_choice_effect = { POINTS = 20 }
 			}
-			remove_short_term_gold = 100
-			add_stress = 35
-			scope:wj_kaoke_duty_county = {
-				change_county_control = 10
-				add_county_modifier = { modifier = wj_kaoke_duties_post_roads_modifier years = 3 }
-			}
-			custom_tooltip = wj_kaoke_duties.1003.a.tt
-			hidden_effect = { WJ_kaoke_choice_effect = { POINTS = 20 } }
 		}
-		ai_chance = {
-			base = 25
-			modifier = { factor = 2 has_trait = just }
-			modifier = { factor = 2 has_trait = generous }
-			modifier = { factor = 0.5 has_trait = greedy }
-			modifier = { factor = 0 gold < 100 }
-		}
+		else = { WJ_duty_people_lapsed_effect = yes }
+		ai_chance = { base = 1 }
 	}
 
 	option = {
 		name = wj_kaoke_duties.1003.b
-		trigger = {
-			WJ_kaoke_eligible_trigger = yes
-			has_variable = wj_kaoke_start
-			WJ_kaoke_days_value < 1825
-			has_variable = wj_kaoke_window_epoch
-			has_variable = wj_kaoke_realm
-			exists = scope:wj_kaoke_choice_start
-			exists = scope:wj_kaoke_choice_epoch
-			exists = scope:wj_kaoke_choice_realm
-			var:wj_kaoke_start = scope:wj_kaoke_choice_start
-			var:wj_kaoke_window_epoch = scope:wj_kaoke_choice_epoch
-			var:wj_kaoke_realm = scope:wj_kaoke_choice_realm
-			top_liege.primary_title = scope:wj_kaoke_choice_realm
-			exists = scope:wj_kaoke_duty_county
-			scope:wj_kaoke_duty_county.holder = root
-		}
-		# Availability is only UI: revalidate before any resource, county or score effect.
-		if = {
-			limit = {
-				WJ_kaoke_eligible_trigger = yes
-				has_variable = wj_kaoke_start
-				WJ_kaoke_days_value < 1825
-				has_variable = wj_kaoke_window_epoch
-				has_variable = wj_kaoke_realm
-				exists = scope:wj_kaoke_choice_start
-				exists = scope:wj_kaoke_choice_epoch
-				exists = scope:wj_kaoke_choice_realm
-				var:wj_kaoke_start = scope:wj_kaoke_choice_start
-				var:wj_kaoke_window_epoch = scope:wj_kaoke_choice_epoch
-				var:wj_kaoke_realm = scope:wj_kaoke_choice_realm
-				top_liege.primary_title = scope:wj_kaoke_choice_realm
-				exists = scope:wj_kaoke_duty_county
-				scope:wj_kaoke_duty_county.holder = root
+
+		trigger = { WJ_duty_people_valid_trigger = yes  }
+		if = { limit = { WJ_duty_people_valid_trigger = yes  }
+			send_interface_toast = {
+				type = event_toast_effect_neutral
+				title = wj_kaoke_duties.1003.b.result
+				left_icon = root
+				right_icon = scope:wj_duty_person
+
+				hidden_effect = { WJ_duty_people_finish_effect = yes }
+				scope:wj_kaoke_duty_county = { add_county_modifier = { modifier = WJ_duty_post_trimmed_modifier years = 1 } }
+				scope:wj_duty_person = { add_opinion = { target = root modifier = grateful_opinion opinion = 20 } } add_stewardship_lifestyle_xp = 100
+				stress_impact = { compassionate = minor_stress_impact_loss }
+				WJ_kaoke_choice_effect = { POINTS = 0 }
 			}
-			custom_tooltip = wj_kaoke_duties.1003.b.tt
-			hidden_effect = { WJ_kaoke_choice_effect = { POINTS = 0 } }
 		}
-		ai_chance = {
-			base = 40
-			modifier = { factor = 2 has_trait = lazy }
-			modifier = { factor = 2 has_trait = content }
-		}
+		else = { WJ_duty_people_lapsed_effect = yes }
+		ai_chance = { base = 1 }
 	}
 
 	option = {
 		name = wj_kaoke_duties.1003.c
-		trigger = {
-			WJ_kaoke_eligible_trigger = yes
-			has_variable = wj_kaoke_start
-			WJ_kaoke_days_value < 1825
-			has_variable = wj_kaoke_window_epoch
-			has_variable = wj_kaoke_realm
-			exists = scope:wj_kaoke_choice_start
-			exists = scope:wj_kaoke_choice_epoch
-			exists = scope:wj_kaoke_choice_realm
-			var:wj_kaoke_start = scope:wj_kaoke_choice_start
-			var:wj_kaoke_window_epoch = scope:wj_kaoke_choice_epoch
-			var:wj_kaoke_realm = scope:wj_kaoke_choice_realm
-			top_liege.primary_title = scope:wj_kaoke_choice_realm
-			exists = scope:wj_kaoke_duty_county
-			scope:wj_kaoke_duty_county.holder = root
-		}
-		# Availability is only UI: revalidate before any resource, county or score effect.
-		if = {
-			limit = {
-				WJ_kaoke_eligible_trigger = yes
-				has_variable = wj_kaoke_start
-				WJ_kaoke_days_value < 1825
-				has_variable = wj_kaoke_window_epoch
-				has_variable = wj_kaoke_realm
-				exists = scope:wj_kaoke_choice_start
-				exists = scope:wj_kaoke_choice_epoch
-				exists = scope:wj_kaoke_choice_realm
-				var:wj_kaoke_start = scope:wj_kaoke_choice_start
-				var:wj_kaoke_window_epoch = scope:wj_kaoke_choice_epoch
-				var:wj_kaoke_realm = scope:wj_kaoke_choice_realm
-				top_liege.primary_title = scope:wj_kaoke_choice_realm
-				exists = scope:wj_kaoke_duty_county
-				scope:wj_kaoke_duty_county.holder = root
+
+		trigger = { WJ_duty_people_valid_trigger = yes  }
+		if = { limit = { WJ_duty_people_valid_trigger = yes  }
+			send_interface_toast = {
+				type = event_toast_effect_bad
+				title = wj_kaoke_duties.1003.c.result
+				left_icon = root
+				right_icon = scope:wj_duty_person
+
+				hidden_effect = { WJ_duty_people_finish_effect = yes }
+				add_gold = 75 add_dread = minor_dread_gain
+				scope:wj_duty_person = { add_stress = 30 }
+				scope:wj_duty_person = { add_opinion = { target = root modifier = angry_opinion opinion = -50 } } scope:wj_kaoke_duty_county = { change_county_control = -10 } scope:wj_kaoke_duty_county = { add_county_modifier = { modifier = wj_kaoke_duties_exactions_modifier years = 3 } }
+				stress_impact = { compassionate = medium_stress_impact_gain just = medium_stress_impact_gain greedy = minor_stress_impact_loss }
+				WJ_kaoke_choice_effect = { POINTS = -20 }
 			}
-			add_gold = 20
-			scope:wj_kaoke_duty_county = {
-				change_county_control = -10
-				add_county_modifier = { modifier = wj_kaoke_duties_exactions_modifier years = 3 }
-			}
-			custom_tooltip = wj_kaoke_duties.1003.c.tt
-			hidden_effect = { WJ_kaoke_choice_effect = { POINTS = -20 } }
 		}
-		ai_chance = {
-			base = 25
-			modifier = { factor = 2 has_trait = greedy }
-			modifier = { factor = 2 has_trait = arbitrary }
-			modifier = { factor = 0.25 has_trait = just }
-		}
+		else = { WJ_duty_people_lapsed_effect = yes }
+		ai_chance = { base = 1 }
 	}
 
 	option = {
 		name = wj_kaoke_duties.1003.d
-		trigger = {
-			WJ_kaoke_eligible_trigger = yes
-			has_variable = wj_kaoke_start
-			WJ_kaoke_days_value < 1825
-			has_variable = wj_kaoke_window_epoch
-			has_variable = wj_kaoke_realm
-			exists = scope:wj_kaoke_choice_start
-			exists = scope:wj_kaoke_choice_epoch
-			exists = scope:wj_kaoke_choice_realm
-			var:wj_kaoke_start = scope:wj_kaoke_choice_start
-			var:wj_kaoke_window_epoch = scope:wj_kaoke_choice_epoch
-			var:wj_kaoke_realm = scope:wj_kaoke_choice_realm
-			top_liege.primary_title = scope:wj_kaoke_choice_realm
-			exists = scope:wj_kaoke_duty_county
-			scope:wj_kaoke_duty_county.holder = root
-		}
-		# Availability is only UI: revalidate before any resource, county or score effect.
-		if = {
-			limit = {
-				WJ_kaoke_eligible_trigger = yes
-				has_variable = wj_kaoke_start
-				WJ_kaoke_days_value < 1825
-				has_variable = wj_kaoke_window_epoch
-				has_variable = wj_kaoke_realm
-				exists = scope:wj_kaoke_choice_start
-				exists = scope:wj_kaoke_choice_epoch
-				exists = scope:wj_kaoke_choice_realm
-				var:wj_kaoke_start = scope:wj_kaoke_choice_start
-				var:wj_kaoke_window_epoch = scope:wj_kaoke_choice_epoch
-				var:wj_kaoke_realm = scope:wj_kaoke_choice_realm
-				top_liege.primary_title = scope:wj_kaoke_choice_realm
-				exists = scope:wj_kaoke_duty_county
-				scope:wj_kaoke_duty_county.holder = root
-			}
-			# Native duel renders the actual success/failure percentages from current skills.
-			duel = {
-				skills = { stewardship martial }
-				value = decent_skill_rating
-				50 = {
-					desc = wj_kaoke_duties.1003.d.success
-					compare_modifier = { value = scope:duel_value multiplier = 3.5 }
-					add_stress = 15
-					scope:wj_kaoke_duty_county = {
-						change_county_control = 5
-						add_county_modifier = { modifier = wj_kaoke_duties_post_roads_modifier years = 2 }
-					}
-					custom_tooltip = wj_kaoke_duties.1003.d.success.tt
-					hidden_effect = { WJ_kaoke_choice_effect = { POINTS = 10 } }
-				}
-				50 = {
-					desc = wj_kaoke_duties.1003.d.failure
-					compare_modifier = { value = scope:duel_value multiplier = -3.5 }
-					add_stress = 30
-					scope:wj_kaoke_duty_county = {
-						change_county_control = -5
-					}
-					custom_tooltip = wj_kaoke_duties.1003.d.failure.tt
-					hidden_effect = { WJ_kaoke_choice_effect = { POINTS = -10 } }
-				}
+		show_as_unavailable = { always = yes }
+		trigger = { WJ_duty_people_valid_trigger = yes gold >= 40  }
+		if = { limit = { WJ_duty_people_valid_trigger = yes gold >= 40  }
+			duel = { skills = { stewardship martial } value = decent_skill_rating
+				50 = { desc = wj_kaoke_duties.1003.d.success compare_modifier = { value = scope:duel_value multiplier = 3.5 min = 1 }
+					send_interface_toast = {
+						type = event_toast_effect_good
+						title = wj_kaoke_duties.1003.d.success
+						left_icon = root
+						right_icon = scope:wj_duty_person
+
+						hidden_effect = { WJ_duty_people_finish_effect = yes }
+						remove_short_term_gold = 40
+
+						scope:wj_kaoke_duty_county = { add_county_modifier = { modifier = WJ_duty_post_relay_modifier years = 5 } } scope:wj_kaoke_duty_county = { change_county_control = 5 }
+						scope:wj_duty_person = { add_opinion = { target = root modifier = grateful_opinion opinion = 35 } } change_merit = 75 add_martial_lifestyle_xp = 300
+						WJ_kaoke_choice_effect = { POINTS = 10 }
+					} }
+				50 = { desc = wj_kaoke_duties.1003.d.failure compare_modifier = { value = scope:duel_value multiplier = -3.5 min = 1 }
+					send_interface_toast = {
+						type = event_toast_effect_bad
+						title = wj_kaoke_duties.1003.d.failure
+						left_icon = root
+						right_icon = scope:wj_duty_person
+
+						hidden_effect = { WJ_duty_people_finish_effect = yes }
+						remove_short_term_gold = 40
+
+						scope:wj_duty_person = { increase_wounds_no_death_effect = { REASON = accident } }
+						scope:wj_duty_person = { add_opinion = { target = root modifier = angry_opinion opinion = -20 } } scope:wj_kaoke_duty_county = { change_county_control = -5 }
+						add_stress = 30 add_martial_lifestyle_xp = 100 WJ_kaoke_choice_effect = { POINTS = -10 }
+					} }
 			}
 		}
-		ai_chance = {
-			base = 35
-			modifier = { factor = 2 has_trait = diligent }
-			modifier = { factor = 1.5 has_trait = ambitious }
-			modifier = { factor = 0.5 has_trait = lazy }
-		}
+		else = { WJ_duty_people_lapsed_effect = yes }
+		ai_chance = { base = 1 }
 	}
 
 	option = {
-		name = wj_kaoke_duties.invalid
-		trigger = {
-			NOT = {
-				AND = {
-					WJ_kaoke_eligible_trigger = yes
-					has_variable = wj_kaoke_start
-					WJ_kaoke_days_value < 1825
-					has_variable = wj_kaoke_window_epoch
-					has_variable = wj_kaoke_realm
-					exists = scope:wj_kaoke_choice_start
-					exists = scope:wj_kaoke_choice_epoch
-					exists = scope:wj_kaoke_choice_realm
-					var:wj_kaoke_start = scope:wj_kaoke_choice_start
-					var:wj_kaoke_window_epoch = scope:wj_kaoke_choice_epoch
-					var:wj_kaoke_realm = scope:wj_kaoke_choice_realm
-					top_liege.primary_title = scope:wj_kaoke_choice_realm
-					exists = scope:wj_kaoke_duty_county
-					scope:wj_kaoke_duty_county.holder = root
-				}
+		name = wj_kaoke_duties.1003.e
+		show_as_unavailable = { always = yes }
+		trigger = { WJ_duty_people_valid_trigger = yes gold >= 60 }
+		if = { limit = { WJ_duty_people_valid_trigger = yes gold >= 60 }
+			send_interface_toast = {
+				type = event_toast_effect_neutral
+				title = wj_kaoke_duties.1003.e.result
+				left_icon = root
+				right_icon = scope:wj_duty_person
+				hidden_effect = { scope:wj_duty_person = { save_scope_as = wj_duty_recruited } }
+				hidden_effect = { WJ_duty_people_finish_effect = yes }
+				pay_short_term_gold = { target = scope:wj_duty_person gold = 60 } add_courtier = scope:wj_duty_person
+				scope:wj_duty_person = { add_opinion = { target = root modifier = grateful_opinion opinion = 50 } } add_prestige = minor_prestige_loss
+				WJ_kaoke_choice_effect = { POINTS = 0 }
 			}
 		}
-		custom_tooltip = wj_kaoke_duties.invalid.tt
-		ai_chance = { base = 100 }
+		else = { WJ_duty_people_lapsed_effect = yes }
+		ai_chance = { base = 1 }
 	}
+	option = { name = wj_kaoke_duties.invalid trigger = { NOT = { WJ_duty_people_valid_trigger = yes } } WJ_duty_people_lapsed_effect = yes ai_chance = { base = 100 } }
+	after = { hidden_effect = { WJ_duty_people_finish_effect = yes } }
 }

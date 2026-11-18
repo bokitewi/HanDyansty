@@ -79,7 +79,7 @@ hd_court_install_regency_effect = {
 	title:h_china.holder = { save_scope_as = hd_court_puppet_target }
 	title:h_china = {
 		set_variable = { name = hd_court_regent value = scope:hd_court_regent_scope }
-		set_variable = { name = hd_court_regent_title value = scope:hd_court_regent_scope.primary_title }
+		set_variable = { name = hd_court_regent_title value = title:e_WJ_minister_cheng_xiang }
 	}
 	if = {
 		limit = {
@@ -95,6 +95,14 @@ hd_court_install_regency_effect = {
 		hd218_grant_chengxiang_effect = yes
 		WJ_install_historical_secretariat_effect = { OFFICE = e_WJ_minister_cheng_xiang POSITION = WJ_minister_cheng_xiang LAW = WJ_grand_chengxiang_law }
 	}
+	hd_court_refresh_puppet_effect = yes
+}
+
+
+# Maintenance may refresh the original native puppet relationship, never regrant an office.
+hd_court_refresh_puppet_effect = {
+ save_scope_as = hd_court_regent_scope
+ title:h_china.holder = { save_scope_as = hd_court_puppet_target }
 	if = {
 		limit = {
 			scope:hd_court_puppet_target = {
@@ -121,8 +129,8 @@ hd_court_install_regency_effect = {
 }
 
 # 挟天子成立（含夺天子）。Scope：新权臣（须满足 hd_court_regent_eligible_trigger）
-# D23：已有旧权臣时，京城县与汉帝国头衔归新权臣，旧权臣罢官后带其余领地独立。
-# D1b：天子直辖地、汉帝国头衔、非朝官封臣转归权臣；天子 0 县，霸权无地、定都京城。
+# D23：已有旧权臣时，京城县归新权臣，旧权臣罢官后带其余领地独立。
+# D1b：天子直辖地、非朝官封臣转归权臣；不创建或转交关中头衔；天子 0 县，霸权无地、定都京城。
 # 写法沿用曹操奉迎（zz_hd_cao_fengying_effects.txt）：先确立帝国级君臣关系，再转直辖地与封臣。
 hd_court_takeover_effect = {
 	save_scope_as = hd_court_new_regent
@@ -163,15 +171,6 @@ hd_court_takeover_effect = {
 				}
 			}
 		}
-		if = {
-			limit = { title:e_han.holder ?= scope:hd_court_old_regent }
-			title:e_han = {
-				change_title_holder = {
-					holder = scope:hd_court_new_regent
-					change = scope:hd_court_old_change
-				}
-			}
-		}
 		resolve_title_and_vassal_change = scope:hd_court_old_change
 		if = {
 			limit = { scope:hd_court_old_regent = { liege ?= scope:hd_court_emperor } }
@@ -208,24 +207,11 @@ hd_court_takeover_effect = {
 		}
 	}
 
-	# --- 第一笔：汉帝国头衔与君臣关系 ---
+	# --- 第一笔：君臣关系与正式授相；关中不是政治容器 ---
 	create_title_and_vassal_change = {
 		type = granted
 		save_scope_as = hd_court_empire_change
 		add_claim_on_loss = no
-	}
-	if = {
-		limit = {
-			title:e_han.holder ?= scope:hd_court_emperor
-			# 218：e_han 被抽空法理时不交给新权臣，留在天子手里（184 里 e_han 有司隶诸县，恒真）
-			title:e_han = { any_de_jure_county = { count >= 1 } }
-		}
-		title:e_han = {
-			change_title_holder = {
-				holder = scope:hd_court_new_regent
-				change = scope:hd_court_empire_change
-			}
-		}
 	}
 	if = {
 		limit = { scope:hd_court_new_regent = { NOT = { liege ?= scope:hd_court_emperor } } }
@@ -237,6 +223,7 @@ hd_court_takeover_effect = {
 		}
 	}
 	resolve_title_and_vassal_change = scope:hd_court_empire_change
+	scope:hd_court_new_regent = { hd_court_install_regency_effect = yes }
 
 	# 霸权无地并定都京城（须在天子交出最后一县之前）
 	title:h_china = {
@@ -278,10 +265,6 @@ hd_court_takeover_effect = {
 	resolve_title_and_vassal_change = scope:hd_court_domain_change
 
 	scope:hd_court_new_regent = {
-		if = {
-			limit = { has_title = title:e_han }
-			set_primary_title_to = title:e_han
-		}
 		hd_court_install_regency_effect = yes
 		add_character_flag = { flag = hd_court_regent_tenure years = 3 }
 	}
@@ -324,69 +307,17 @@ hd_court_adopt_scripted_regent_effect = {
 # D18/D19 维护：权臣死亡由继承人接续；新天子继续被挟持；失效则解除。
 # 斗争、对峙期每年一次，以及权臣死亡、天子更替后由 hd_court.0003 调用。Scope：任意
 hd_court_repair_effect = {
-	if = {
-		limit = {
-			exists = title:h_china.holder
-			exists = title:h_china.var:hd_court_regent
-		}
-		title:h_china.var:hd_court_regent = { save_scope_as = hd_court_cur_regent }
-		if = {
-			# 权臣仍有效：确保摄政与傀儡还在（D19 新天子即位后重建）
-			limit = { hd_court_has_regent_trigger = yes }
-			if = {
-				limit = {
-					OR = {
-						title:h_china.holder = {
-							NOT = {
-								has_diarchy_type = grand_secretariat
-								diarch ?= scope:hd_court_cur_regent
-							}
-						}
-						title:h_china.holder = {
-							is_ai = yes
-							NOT = { puppeteer ?= scope:hd_court_cur_regent }
-						}
-					}
-				}
-				scope:hd_court_cur_regent = { hd_court_install_regency_effect = yes }
-			}
-		}
-		else_if = {
-			# D18：权臣已死，由其主头衔的新持有者接续（剧本摄政在奉迎剧本未了结前交给剧本处理）
-			limit = {
-				scope:hd_court_cur_regent = { is_alive = no }
-				title:h_china.var:hd_court_regent_title.holder ?= {
-					hd_court_regent_eligible_trigger = yes
-					liege ?= title:h_china.holder
-				}
-				NAND = {
-					title:h_china.holder.var:hd_dong_fixed_regent ?= scope:hd_court_cur_regent
-					NOT = { exists = global_var:hd_fengying_world_resolved }
-				}
-				# 第 4 期：死于宫廷政变的权臣不由继承人接续
-				NOT = { exists = title:h_china.var:hd_court_coup_done }
-				# 两晋十六国（j16，3-A，02 §1.1）：八王时段内权臣死只 release，下一任由 B 节点或「入朝辅政」决定
-				NOT = { exists = global_var:hd_j16_bawang_active }
-				# 两晋十六国（j16，3-A，04 §3.2 第 4 步）：桓温卒的阻断钩子（zz_hd_j16_deaths_special_effects.txt）设了本变量＝已死权臣时不交接
-				NOT = { title:h_china.var:hd_j16_handoff_block ?= scope:hd_court_cur_regent }
-			}
-			title:h_china.var:hd_court_regent_title.holder = {
-				save_scope_as = hd_court_heir_regent
-			}
-			hd_court_release_effect = yes
-			scope:hd_court_heir_regent = { hd_court_install_regency_effect = yes }
-		}
-		else_if = {
-			# 两晋十六国（j16，3-A）：交接被阻断——天子获释，阻断变量用过即清（04 §3.2 第 5 步 E4-J40 的删除因此成为冗余兜底）
-			limit = { title:h_china.var:hd_j16_handoff_block ?= scope:hd_court_cur_regent }
-			hd_court_release_effect = yes
-			title:h_china = { remove_variable = hd_j16_handoff_block }
-			debug_log = "HD_J16 e4_j30 FIRE handoff_blocked"
-		}
-		else = {
-			hd_court_release_effect = yes
-		}
-	}
+ if = { limit = { exists = title:h_china.holder exists = title:h_china.var:hd_court_regent }
+  if = {
+   limit = { title:h_china.var:hd_court_regent = {
+    is_alive = yes has_title = title:e_WJ_minister_cheng_xiang
+    top_liege = title:h_china.holder
+   } }
+   # Losing a regency is not permission to regrant it or to restore 100 power.
+   # Native puppet maintenance owns survival; periodic repair never recreates it.
+  }
+  else = { title:h_china = { remove_variable = hd_court_regent remove_variable = hd_court_regent_title } }
+ }
 }
 
 # D8（推广）：天子 0 县且无权臣时，京城县持有者的最高领主若有资格，即挟天子。Scope：任意
@@ -407,7 +338,7 @@ hd_court_vacancy_check_effect = {
 }
 
 # D20：弃天子自立（1000 威望由决议 cost 扣除，D32）。Scope：权臣
-# 京城县与汉帝国头衔交还天子（天子获释后有地可居，也避免空缺检查把弃者重新立为权臣）。
+# 京城县交还天子，关中头衔不参与交接（天子获释后有地可居，也避免空缺检查把弃者重新立为权臣）。
 hd_court_abandon_emperor_effect = {
 	save_scope_as = hd_court_abandoner
 	title:h_china.holder = { save_scope_as = hd_court_abandoned_emperor }
@@ -438,24 +369,6 @@ hd_court_abandon_emperor_effect = {
 		}
 	}
 	resolve_title_and_vassal_change = scope:hd_court_abandon_return_change
-	if = {
-		limit = {
-			title:e_han.holder ?= scope:hd_court_abandoner
-			scope:hd_court_abandoned_emperor = { any_held_title = { tier = tier_county } }
-		}
-		create_title_and_vassal_change = {
-			type = granted
-			save_scope_as = hd_court_abandon_empire_change
-			add_claim_on_loss = no
-		}
-		title:e_han = {
-			change_title_holder = {
-				holder = scope:hd_court_abandoned_emperor
-				change = scope:hd_court_abandon_empire_change
-			}
-		}
-		resolve_title_and_vassal_change = scope:hd_court_abandon_empire_change
-	}
 	create_title_and_vassal_change = {
 		type = independency
 		save_scope_as = hd_court_abandon_change

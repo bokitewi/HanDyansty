@@ -1,9 +1,6 @@
 ﻿WJ_capital_grant_actor_valid = {
- is_alive = yes
- government_has_flag = government_is_celestial
+ WJ_inner_emperor_trigger = yes
  government_has_mechanic = administrative
- top_liege = this
- highest_held_title_tier >= tier_empire
  exists = capital_province
  exists = capital_county
 }
@@ -13,6 +10,7 @@ WJ_capital_grant_recipient_valid = {
   OR = { target_is_liege_or_above = scope:actor is_pool_guest_of = scope:actor }
  }
 scope:recipient = {
+			is_alive = yes
 			is_adult = yes
 			NOT = { is_at_war_with = scope:actor }
 			bp2_valid_for_standard_interactions_trigger = yes
@@ -91,30 +89,29 @@ WJ_capital_title_grantable = {
   limit = { exists = $TITLE$ }
   $TITLE$ = {
    tier = $TIER$
-   holder = scope:actor
+   OR = { NOT = { exists = holder } holder = scope:actor }
    this != scope:actor.primary_title
    is_leased_out = no
    is_noble_family_title = no
    is_landless_type_title = no
-   save_temporary_scope_as = target
   }
 scope:recipient = {
 			custom_tooltip = {
 				text = promote_candidate_interaction_existing_holder_tt
-				this != scope:target.holder
+				NOT = { $TITLE$ = { holder = scope:recipient } }
 			}
 
 			trigger_if = { # Governors can only be appointed to certain titles
 				limit = {
 					is_governor = yes
-					scope:target = { is_noble_family_title = no } # For tooltip reasons, so we don't show more than necessary
+					$TITLE$ = { is_noble_family_title = no } # For tooltip reasons, so we don't show more than necessary
 				}
 				custom_tooltip = { # Only one province of highest rank
 					text = only_one_province_of_highest_rank_tt
 					NAND = {
-						highest_held_title_tier = scope:target.tier
-						scope:target.tier >= tier_duchy
-						scope:target = { # We make an exception if recipient controls at least one de jure county
+						highest_held_title_tier = $TITLE$.tier
+						$TITLE$.tier >= tier_duchy
+						$TITLE$ = { # We make an exception if recipient controls at least one de jure county
 							any_de_jure_county = {
 								count < 1
 								OR = {
@@ -130,13 +127,13 @@ scope:recipient = {
 					any_held_title = {
 						OR = {
 							# The target title is part of your de jure structure
-							is_de_jure_liege_or_above_target = scope:target
-							target_is_de_jure_liege_or_above = scope:target
+							is_de_jure_liege_or_above_target = $TITLE$
+							target_is_de_jure_liege_or_above = $TITLE$
 							# Or is a neighboring county which de jure duchy is not part of your realm
 							AND = {
 								NOT = { tier = tier_barony }
-								any_title_to_title_neighboring_county = { this = scope:target }
-								scope:target = {
+								any_title_to_title_neighboring_county = { this = $TITLE$ }
+								$TITLE$ = {
 									tier = tier_county
 									duchy = {
 										OR = {
@@ -159,24 +156,49 @@ scope:recipient = {
 				limit = {
 					is_landless_ruler = yes
 					any_held_title = { is_noble_family_title = yes }
-					scope:target.tier < min_appointment_tier
+					$TITLE$.tier < min_appointment_tier
 				}
-				primary_title.tier <= scope:target.tier
+				primary_title.tier <= $TITLE$.tier
 			}
 			trigger_if = { # If recipient is a count, they can get only get counties within the same duchy
 				limit = {
 					highest_held_title_tier = tier_county
 					main_administrative_tier > tier_county
 					is_landed = yes
-					scope:target.tier = tier_county
+					$TITLE$.tier = tier_county
 				}
 				custom_tooltip = {
 					text = admin_count_grant_only_counties
-					any_held_title = { duchy = scope:target.duchy }
+					any_held_title = { duchy = $TITLE$.duchy }
 				}
 			}
 			tgp_is_ceremonial_liege_trigger = no
 		}
- }
+
+  trigger_if = {
+   limit = { $TITLE$ = { NOT = { exists = holder } } }
+   custom_tooltip = { text = WJ_capital_create_cost_tt scope:actor = { gold >= 50 prestige >= 50 } }
+  }
+}
  trigger_else = { always = no }
+}
+
+# Frozen selection must still be an assignable upper title of this capital.
+WJ_capital_grant_selected_valid = {
+ exists = scope:actor
+ exists = scope:recipient
+ exists = scope:WJ_capital_grant_selected_title
+ scope:actor = { WJ_capital_grant_actor_valid = yes }
+ WJ_capital_grant_recipient_valid = yes
+ OR = {
+  AND = {
+   scope:WJ_capital_grant_selected_title = scope:actor.capital_province.kingdom
+   WJ_capital_title_grantable = { TITLE = scope:WJ_capital_grant_selected_title TIER = tier_kingdom }
+  }
+  AND = {
+   scope:WJ_capital_grant_selected_title = scope:actor.capital_province.duchy
+   WJ_capital_title_grantable = { TITLE = scope:WJ_capital_grant_selected_title TIER = tier_duchy }
+  }
+ }
+
 }

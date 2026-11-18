@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """生成 190 讨董剧本的头衔历史与占位人物。
 
 用法：python tools/hd190/gen_190_titles.py <mod 根目录> [--check] [--no-after-split]
@@ -151,8 +151,8 @@ def alive(h):
 ############################################################
 # 王国级（州牧）持有人：title -> (holder, liege)  liege='0' 独立
 KINGS = {
-    'e_han': ('liu_xie', None),
-    'k_uuii_sili': ('dong_zhuo_2', 'e_han'),
+    'e_han': ('0', None),
+    'k_uuii_sili': ('dong_zhuo_2', 'h_china'),
     'k_uuii_jizhou': ('han_fu', '0'),
     'k_uuii_yanzhou': ('liu_dai_3', '0'),
     'k_uuii_yuzhou': ('kong_zhou', '0'),       # 2026-10-23 R4：豫州还给豫州刺史孔伷（原 S1 袁术持豫州，boki 推翻）
@@ -326,13 +326,13 @@ COURT = {
     'e_minister_of_personnel': 'wang_yun',     # 尚书令 王允
     'e_minister_grand_marshal': '0',           # 大将军：何进已死，空缺
     'e_WJ_minister_cheng_xiang': '0',          # 丞相：开局脚本授董卓
-    'e_WJ_minister_guang_lu_xun': '0',
-    'e_WJ_minister_zong_zheng': '0',           # 刘虞已是幽州牧
-    # 以下底板持有人与 190 无关（一人双职、多余入席），一律空缺，走贤望自动补
-    'e_minister_of_rites': '0',
-    'e_minister_of_justice': '0',
-    'e_minister_of_revenue': '0',
-    'e_minister_of_works': '0',
+    'e_WJ_minister_guang_lu_xun': 'shujun_zhao_005',
+    'e_WJ_minister_zong_zheng': 'liu_he_2',           # 宗正刘和；刘虞仍为幽州牧
+    # 六卿按190当前配置落位，与历史人物及开局补席保持一致
+    'e_minister_of_rites': 'ma_ri_di',
+    'e_minister_of_justice': 'henan_zhong_003',
+    'e_minister_of_revenue': 'zhou_zhong',
+    'e_minister_of_works': 'zhao_qi',
 }
 
 # 并州解体：realm = 底板里 liege 为 k_uuii_bingzhou 的郡 + 其下县。游牧/非华夏的郡不清空，只设独立。

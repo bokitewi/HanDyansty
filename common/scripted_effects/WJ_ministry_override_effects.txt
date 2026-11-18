@@ -1,4 +1,4 @@
-﻿# ============================================================================
+# ============================================================================
 # WJ 开府(内阁授职效果覆盖) —— per-key 覆盖主mod空壳, 恢复原版授职授衔链+开府
 # xinsanguo-MOD 2026-08-20
 #
@@ -15,6 +15,11 @@
 
 got_minister_position_effect = {
 	save_scope_as = new_minister
+	clear_saved_scope = wj_chengxiang_local_capital
+	if = {
+		limit = { title:$MINISTER_TITLE$ = title:e_WJ_minister_cheng_xiang exists = capital_county }
+		capital_county = { save_scope_as = wj_chengxiang_local_capital }
+	}
 	# 诊断（2026-10-18 换人顶替问题）：game.log 搜 HD_CPDIAG
 	if = {
 		limit = { exists = scope:councillor_liege scope:councillor_liege = { tgp_has_access_to_ministry_trigger = yes } }
@@ -35,22 +40,41 @@ got_minister_position_effect = {
 				tgp_has_access_to_ministry_trigger = yes
 			}
 			not = { exists = scope:swapped_position }
+			NOT = { has_variable = wj_ty_swapping_council } # A paired swap supplies both exact office titles itself.
 			# 只隔离 WJ 扩展三职，原版九职继续使用同一授职链。
 			trigger_if = {
 				limit = {
 					OR = {
-						title:$MINISTER_TITLE$ = title:e_WJ_minister_tai_fu
-						title:$MINISTER_TITLE$ = title:e_WJ_minister_zong_zheng
+						
+						
 						title:$MINISTER_TITLE$ = title:e_WJ_minister_cheng_xiang
-						title:$MINISTER_TITLE$ = title:e_WJ_minister_guang_lu_xun
+						
 					}
 				}
 				scope:councillor_liege = { government_has_flag = government_is_celestial }
 			}
 		}
-		# Grant the ministry title if councillor doesn't have it
+		# 唯一授相链：沿现有 granted 交付，避免 appointment 辞掉原地方头衔。
 		if = {
 			limit = {
+				title:$MINISTER_TITLE$ = title:e_WJ_minister_cheng_xiang
+				NOT = { has_title = title:e_WJ_minister_cheng_xiang }
+			}
+			if = {
+				limit = { exists = scope:wj_chengxiang_local_capital }
+				title:$MINISTER_TITLE$ = { set_capital_county = scope:wj_chengxiang_local_capital }
+			}
+			hd218_grant_chengxiang_effect = yes
+		}
+		if = {
+			limit = { title:$MINISTER_TITLE$ != title:e_WJ_minister_cheng_xiang has_title = title:e_WJ_minister_cheng_xiang }
+			WJ_cx_abolish = yes
+		}
+		# Other offices retain their native appointment transaction. A failed chancellor
+		# grant must not fall back to the land-releasing appointment path.
+		if = {
+			limit = {
+				title:$MINISTER_TITLE$ != title:e_WJ_minister_cheng_xiang
 				NOT = { has_title = title:$MINISTER_TITLE$ }
 			}
 
@@ -88,6 +112,7 @@ got_minister_position_effect = {
 					every_held_title = {
 						limit = {
 							this != title:$MINISTER_TITLE$
+							this != title:e_WJ_minister_cheng_xiang
 							tgp_is_minister_title = yes
 						}
 						change_title_holder = {
@@ -125,6 +150,7 @@ got_minister_position_effect = {
 			limit = {
 				exists = title:$MINISTER_TITLE$.holder
 				NOR = {
+					title:$MINISTER_TITLE$ = title:e_WJ_minister_cheng_xiang
 					title:$MINISTER_TITLE$ = title:e_minister_grand_marshal
 					title:$MINISTER_TITLE$ = {
 						has_title_law = celestial_ministry_appointment_succession_law
@@ -139,6 +165,7 @@ got_minister_position_effect = {
 		# Make them a minister if they don't have the council position
 		if = {
 			limit = {
+				has_title = title:$MINISTER_TITLE$
 				NOT = { has_council_position = $MINISTER_POSITION$ }
 			}
 			top_liege = {
@@ -153,6 +180,8 @@ got_minister_position_effect = {
 		if = {
 			limit = {
 				vassal_count > 0
+				# Chancellor keeps his original sub-realm; no de-jure rewrite or new troops.
+				title:$MINISTER_TITLE$ != title:e_WJ_minister_cheng_xiang
 				# A real duke/king keeps the actual fief when entering the imperial council.
 				NOT = { WJ_rf_has_fief = yes }
 				# 主包指定辅政保留已有辖区，不因接入真实朝臣职位拆走下属。
@@ -245,13 +274,17 @@ got_minister_position_effect = {
 			}
 			add_character_modifier = minister_scheme_slots_modifier
 		}
-		# Move capital to realm capital
-		scope:councillor_liege.capital_county = {
-			save_scope_as = capital_county
+		# Chancellor retains the local seat captured before the office-title transaction.
+		if = {
+			limit = { title:$MINISTER_TITLE$ = title:e_WJ_minister_cheng_xiang exists = scope:wj_chengxiang_local_capital }
+			scope:wj_chengxiang_local_capital = { save_scope_as = capital_county }
+		}
+		else = {
+			scope:councillor_liege.capital_county = { save_scope_as = capital_county }
 		}
 		if = {
 			limit = {
-				scope:councillor_liege.capital_county != title:$MINISTER_TITLE$.title_capital_county
+				scope:capital_county != title:$MINISTER_TITLE$.title_capital_county
 			}
 			title:$MINISTER_TITLE$ = {
 				set_capital_county = scope:capital_county
@@ -310,44 +343,30 @@ got_minister_position_effect = {
 			vassal_contract_set_obligation_level = { type = celestial_ministry_obligations level = 1 }
 		}
 	}
-	if = {
-		limit = {
-			title:$MINISTER_TITLE$ = title:e_WJ_minister_tai_fu
-			scope:councillor_liege = { government_has_flag = government_is_celestial }
-		}
-		add_character_flag = officer_tai_fu
-	}
-	if = {
-		limit = {
-			title:$MINISTER_TITLE$ = title:e_WJ_minister_zong_zheng
-			scope:councillor_liege = { government_has_flag = government_is_celestial }
-		}
-		add_character_flag = officer_zong_zheng
-	}
+	
+	
 	if = {
 		limit = {
 			title:$MINISTER_TITLE$ = title:e_WJ_minister_cheng_xiang
-			scope:councillor_liege = { government_has_flag = government_is_celestial }
+			is_alive = yes
+			has_title = title:e_WJ_minister_cheng_xiang
+			has_council_position = WJ_minister_cheng_xiang
+			is_councillor_of = scope:councillor_liege
+			liege = scope:councillor_liege
+			scope:councillor_liege = { WJ_chengxiang_court_active = yes }
+			NOT = { exists = scope:swapped_position }
 		}
 		add_character_flag = officer_cheng_xiang
+		WJ_cx_finish_appointment = yes
 	}
-	if = {
-		limit = {
-			title:$MINISTER_TITLE$ = title:e_WJ_minister_guang_lu_xun
-			is_alive = yes
-			has_title = title:e_WJ_minister_guang_lu_xun
-			has_council_position = WJ_minister_guang_lu_xun
-			is_councillor_of = scope:councillor_liege
-			top_liege = scope:councillor_liege
-			scope:councillor_liege = { government_has_flag = government_is_celestial }
-		}
-		add_character_flag = officer_guang_lu_xun
-	}
+	
 	if = {
 		limit = { title:$MINISTER_TITLE$ = title:e_minister_grand_marshal }
 		add_character_flag = officer_da_jiang_jun
 	}
 	WJ_reconcile_contract_privileges_effect = yes
+	WJ_zw_grant_chancellor = yes
+	WJ_tenure_manual_council_completed = yes
 }
 
 fired_minister_position_effect = {
@@ -362,45 +381,9 @@ fired_minister_position_effect = {
 			}
 			NOT = { exists = scope:new_councillor }
 		}
-					if = {
-			limit = { has_title = title:e_WJ_minister_guang_lu_xun }
-				if = {
-					limit = {
-						exists = title:e_WJ_minister_guang_lu_xun.current_heir
-						title:e_WJ_minister_guang_lu_xun.current_heir = { WJ_accepts_new_ministry_appointment_trigger = yes hd_minister_heir_merit_ok_trigger = yes }
-						title:e_WJ_minister_guang_lu_xun.current_heir != this
-					}
-					title:e_WJ_minister_guang_lu_xun.current_heir = {
-						got_minister_position_effect = { MINISTER_TITLE = e_WJ_minister_guang_lu_xun MINISTER_POSITION = WJ_minister_guang_lu_xun }
-					}
-				}
-				else = {
-					destroy_and_fire_minister_effect = {
-						MINISTER = e_WJ_minister_guang_lu_xun
-					}
-				}
-			
-		}
-		else_if = {
-			limit = { has_title = title:e_WJ_minister_tai_fu }
-				remove_character_flag = officer_tai_fu
-				if = {
-					limit = {
-						exists = title:e_WJ_minister_tai_fu.current_heir
-						title:e_WJ_minister_tai_fu.current_heir = { WJ_accepts_new_ministry_appointment_trigger = yes hd_minister_heir_merit_ok_trigger = yes }
-					}
-					title:e_WJ_minister_tai_fu.current_heir = {
-						got_minister_position_effect = { MINISTER_TITLE = e_WJ_minister_tai_fu MINISTER_POSITION = WJ_minister_tai_fu }
-					}
-				}
-				else = {
-					destroy_and_fire_minister_effect = {
-						MINISTER = e_WJ_minister_tai_fu
-					}
-				}
-			
-		}
-		else_if = {
+					
+		
+		if = {
 			limit = { has_title = title:e_minister_chancellor }
 				if = {
 					limit = {
@@ -562,43 +545,10 @@ fired_minister_position_effect = {
 				}
 			
 		}
-		else_if = {
-			limit = { has_title = title:e_WJ_minister_zong_zheng }
-				remove_character_flag = officer_zong_zheng
-				if = {
-					limit = {
-						exists = title:e_WJ_minister_zong_zheng.current_heir
-						title:e_WJ_minister_zong_zheng.current_heir = { WJ_accepts_new_ministry_appointment_trigger = yes hd_minister_heir_merit_ok_trigger = yes }
-					}
-					title:e_WJ_minister_zong_zheng.current_heir = {
-						got_minister_position_effect = { MINISTER_TITLE = e_WJ_minister_zong_zheng MINISTER_POSITION = WJ_minister_zong_zheng }
-					}
-				}
-				else = {
-					destroy_and_fire_minister_effect = {
-						MINISTER = e_WJ_minister_zong_zheng
-					}
-				}
-			
-		}
+		
 		else_if = {
 			limit = { has_title = title:e_WJ_minister_cheng_xiang }
-				remove_character_flag = officer_cheng_xiang
-				if = {
-					limit = {
-						exists = title:e_WJ_minister_cheng_xiang.current_heir
-						title:e_WJ_minister_cheng_xiang.current_heir = { WJ_accepts_new_ministry_appointment_trigger = yes hd_minister_heir_merit_ok_trigger = yes }
-					}
-					title:e_WJ_minister_cheng_xiang.current_heir = {
-						got_minister_position_effect = { MINISTER_TITLE = e_WJ_minister_cheng_xiang MINISTER_POSITION = WJ_minister_cheng_xiang }
-					}
-				}
-				else = {
-					destroy_and_fire_minister_effect = {
-						MINISTER = e_WJ_minister_cheng_xiang
-					}
-				}
-			
+			WJ_cx_abolish = yes
 		}
 		remove_character_modifier = minister_scheme_slots_modifier
 	}
@@ -654,7 +604,7 @@ WJ_sync_grand_secretariat_effect = {
      has_realm_law = grand_marshal_law
      has_realm_law = grand_censor_law
      has_realm_law = WJ_grand_taiwei_law
-     has_realm_law = WJ_grand_taifu_law
+     
      has_realm_law = WJ_grand_chengxiang_law
     }
    }
@@ -667,9 +617,11 @@ WJ_sync_grand_secretariat_effect = {
    grand_marshal_law = { WJ_install_secretariat_office_effect = { OFFICE = e_minister_grand_marshal } }
    grand_censor_law = { WJ_install_secretariat_office_effect = { OFFICE = e_minister_censor } }
    WJ_grand_taiwei_law = { WJ_install_secretariat_office_effect = { OFFICE = e_minister_of_war } }
-   WJ_grand_taifu_law = { WJ_install_secretariat_office_effect = { OFFICE = e_WJ_minister_tai_fu } }
+   
    WJ_grand_chengxiang_law = { WJ_install_secretariat_office_effect = { OFFICE = e_WJ_minister_cheng_xiang } }
   }
+  # Only restore authority to the actual chancellor-regent; never change a law here.
+  title:e_WJ_minister_cheng_xiang.holder ?= { WJ_zw_grant_chancellor = yes }
  }
 }
 

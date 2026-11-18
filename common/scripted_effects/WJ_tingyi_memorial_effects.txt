@@ -1,0 +1,153 @@
+# Draft data belongs to the proposer. Background petitions never open or reset another player's screen.
+WJ_ty_memorial_open = {
+ if = { limit = { WJ_ty_memorial_can_open = yes }
+  WJ_ty_close = yes
+  set_variable = { name = wj_ty_memorial value = 1 }
+  if = { limit = { is_ai = no } set_variable = { name = wj_ty_open value = 1 } }
+  WJ_ty_prepare_reward_500 = yes
+  if = { limit = { is_ai = no WJ_ty_memorial_can_request_local = yes } set_variable = { name = wj_ty_mem_local_available value = 1 } }
+ }
+}
+WJ_ty_reward_ai_open = {
+ if = { limit = { WJ_ty_reward_ai_can_open = yes }
+  WJ_ty_close = yes
+  set_variable = { name = wj_ty_reward_ai value = 1 }
+  WJ_ty_prepare_reward_500 = yes
+ }
+}
+WJ_ty_prepare_reward_500 = {
+ set_variable = { name = wj_ty_emperor value = title:h_china.holder }
+ set_variable = { name = wj_ty_proposer value = this }
+ set_variable = { name = wj_ty_target value = this }
+ set_variable = { name = wj_ty_topic value = 2 }
+ set_variable = { name = wj_ty_tier value = 1 }
+ set_variable = { name = wj_ty_role value = 5 }
+ WJ_ty_refresh_seats = yes
+ if = { limit = { exists = var:wj_ty_seat_5 } set_variable = { name = wj_ty_lobby value = var:wj_ty_seat_5 } }
+}
+WJ_ty_clear_reward_hooks = {
+ remove_variable = wj_ty_hook_target remove_variable = wj_ty_hook_tier
+ clear_variable_list = wj_ty_memorial_hooks
+}
+WJ_ty_memorial_cleanup = { WJ_ty_close = yes }
+
+# Member confirmation may be clicked again after lobbying. One fee per actual filed case.
+WJ_ty_reward_charge_fee = {
+ if = { limit = { NOT = { WJ_ty_reward_fee_paid = yes } }
+  set_variable = { name = wj_ty_fee_target value = var:wj_ty_target }
+  var:wj_ty_target = { save_scope_as = wj_ty_target }
+  var:wj_ty_proposer = {
+   remove_short_term_gold = 10
+   add_prestige = -20
+   if = { limit = { is_ai = no } WJ_ty_mem_payment_toast = { DESC = WJ_ty_mem_filing_out WHO = scope:wj_ty_target } }
+  }
+ }
+}
+WJ_ty_memorial_submit = {
+ if = { limit = { WJ_ty_memorial_can_submit = yes }
+  save_scope_as = wj_ty_operator
+  var:wj_ty_proposer = { save_scope_as = wj_ty_proposer }
+  var:wj_ty_target = { save_scope_as = wj_ty_target }
+  var:wj_ty_emperor = { save_scope_as = wj_ty_emperor }
+  WJ_ty_reward_capture_votes = yes
+  if = { limit = { var:wj_ty_topic = 4 }
+   add_prestige = -50
+   if = { limit = { is_ai = no } WJ_ty_mem_payment_toast = { DESC = WJ_mem_local_filing WHO = scope:wj_ty_target } }
+  }
+  else = { WJ_ty_reward_charge_fee = yes }
+  if = { limit = { has_variable = wj_ty_memorial }
+   set_variable = { name = wj_ty_memorial_cooldown value = 1 months = 6 }
+  }
+  if = { limit = { var:wj_ty_topic = 4 }
+   if = { limit = { scope:wj_ty_manager_allowed = 0 } WJ_ty_reward_broadcast = { RESULT = local_manager_refused } }
+   else_if = { limit = { scope:wj_ty_final_score < scope:wj_ty_final_threshold } WJ_ty_reward_broadcast = { RESULT = local_votes_refused } }
+   else = {
+    WJ_ty_removal_apply = yes
+    if = { limit = { WJ_ty_removal_result_reached = yes }
+     scope:wj_ty_target = { set_variable = { name = wj_ty_local_cooldown value = 1 months = 6 } }
+     WJ_ty_reward_broadcast = { RESULT = local_retired }
+    }
+    else = { WJ_ty_reward_broadcast = { RESULT = local_incomplete } }
+   }
+  }
+  else_if = { limit = { scope:wj_ty_manager_allowed = 0 }
+   WJ_ty_reward_broadcast = { RESULT = manager_refused }
+  }
+  else_if = { limit = { scope:wj_ty_final_score < scope:wj_ty_final_threshold }
+   WJ_ty_reward_broadcast = { RESULT = votes_refused }
+  }
+  else_if = { limit = { WJ_ty_gold_available >= WJ_ty_gold_amount }
+   WJ_ty_reward_gold_deliver = yes
+   WJ_ty_reward_broadcast = { RESULT = granted }
+  }
+  else = { WJ_ty_reward_broadcast = { RESULT = unfunded } }
+  WJ_ty_memorial_cleanup = yes
+ }
+}
+
+# All side effects are complete before looping over connected players; never move money in a notification.
+WJ_ty_reward_capture_votes = {
+ save_scope_value_as = { name = wj_ty_manager_allowed value = 0 }
+ if = { limit = { WJ_ty_manager_ready = yes } save_scope_value_as = { name = wj_ty_manager_allowed value = 1 } }
+ save_scope_value_as = { name = wj_ty_final_score value = WJ_ty_total }
+ save_scope_value_as = { name = wj_ty_final_threshold value = WJ_ty_threshold }
+}
+WJ_ty_reward_broadcast = {
+ every_player = {
+  limit = {
+   OR = {
+    WJ_ty_memorial_in_realm = yes
+    # Native retirement can leave the former governor without a Han liege before this notice.
+    AND = { exists = scope:wj_ty_operator this = scope:wj_ty_target
+     scope:wj_ty_operator = { has_variable = wj_ty_memorial var:wj_ty_topic = 4 } }
+   }
+  }
+  send_interface_message = {
+   type = WJ_ty_memorial_result_message
+   title = WJ_ty_mem_$RESULT$_title
+   desc = WJ_ty_mem_$RESULT$_desc
+   left_icon = scope:wj_ty_proposer
+   right_icon = scope:wj_ty_target
+  }
+ }
+}
+WJ_ty_mem_payment_toast = {
+ send_interface_toast = {
+  type = event_toast_effect_neutral
+  title = WJ_ty_mem_payment_title
+  desc = $DESC$
+  left_icon = $WHO$
+ }
+}
+WJ_ty_reward_lobby_notice = {
+ scope:wj_ty_payer = { if = { limit = { is_ai = no }
+  WJ_ty_mem_payment_toast = { DESC = WJ_ty_mem_$TERM$_out WHO = scope:wj_ty_member }
+ } }
+ scope:wj_ty_member = { if = { limit = { is_ai = no }
+  WJ_ty_mem_payment_toast = { DESC = WJ_ty_mem_$TERM$_in WHO = scope:wj_ty_payer }
+ } }
+}
+
+# Switching the subject of a petition clears the previous case and its selections.
+WJ_ty_memorial_prepare_local = {
+ remove_variable = wj_ty_choice_gold
+ remove_variable = wj_ty_choice_prestige
+ remove_variable = wj_ty_choice_influence
+ remove_variable = wj_ty_choice_weak
+ remove_variable = wj_ty_choice_strong
+ remove_variable = wj_ty_choice_hook
+ WJ_ty_clear_reward_hooks = yes
+ WJ_ty_picker_clear = yes
+ clear_variable_list = wj_ty_candidates
+ remove_variable = wj_ty_picker
+ remove_variable = wj_ty_target
+ WJ_ty_removal_clear = yes
+ set_variable = { name = wj_ty_topic value = 4 }
+ set_variable = { name = wj_ty_dismiss_kind value = 2 }
+ set_variable = { name = wj_ty_removal_mode value = 1 }
+ set_variable = { name = wj_ty_office value = 0 }
+ set_variable = { name = wj_ty_role value = 2 }
+ remove_variable = wj_ty_lobby
+ if = { limit = { exists = var:wj_ty_seat_2 } set_variable = { name = wj_ty_lobby value = var:wj_ty_seat_2 } }
+ WJ_ty_invalidate = yes
+}

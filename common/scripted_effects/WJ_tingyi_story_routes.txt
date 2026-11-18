@@ -1,0 +1,191 @@
+# ROOT is the character choosing a story option. These entries only prepare a draft.
+WJ_ty_story_appoint_draft = {
+    if = {
+        limit = { WJ_ty_inner = yes WJ_ty_can_open = yes exists = $TASK$ exists = $CANDIDATE$ }
+        clear_saved_scope = wj_ty_native_court_type
+        clear_saved_scope = wj_ty_native_incumbent
+        $OWNER$ = { save_scope_as = wj_ty_native_owner }
+        $TASK$ = { save_scope_as = wj_ty_native_task }
+        $CANDIDATE$ = { save_scope_as = wj_ty_native_candidate }
+        WJ_ty_native_appoint_effect = yes
+    }
+}
+
+WJ_ty_story_dismiss_draft = {
+    if = {
+        limit = {
+            WJ_ty_inner = yes WJ_ty_can_open = yes
+            $OWNER$ = { WJ_ty_managed_appointment_employer = yes }
+            $MINISTER$ = title:e_WJ_minister_cheng_xiang.holder
+            $MINISTER$ = { is_councillor_of = $OWNER$ }
+        }
+        WJ_ty_open = yes
+        WJ_ty_prepare_chancellor_dismissal = yes
+    }
+    else_if = {
+        limit = { WJ_ty_inner = yes WJ_ty_can_open = yes $MINISTER$ = { is_councillor_of = $OWNER$ } }
+        clear_saved_scope = wj_ty_native_court_type
+        $OWNER$ = { save_scope_as = wj_ty_native_owner }
+        $MINISTER$ = { save_scope_as = wj_ty_native_incumbent }
+        $MINISTER$.council_task = { save_scope_as = wj_ty_native_task }
+        WJ_ty_native_dismiss_effect = yes
+    }
+}
+
+# The petition has already chosen a job flag. Preserve that job and nominee.
+WJ_ty_story_petition_draft = {
+    switch = {
+        trigger = $JOB$
+        flag:chancellor = { WJ_ty_story_appoint_draft = { OWNER = $OWNER$ TASK = $OWNER$.council_task:councillor_chancellor CANDIDATE = $CANDIDATE$ } }
+        flag:marshal = { WJ_ty_story_appoint_draft = { OWNER = $OWNER$ TASK = $OWNER$.council_task:councillor_marshal CANDIDATE = $CANDIDATE$ } }
+        flag:steward = { WJ_ty_story_appoint_draft = { OWNER = $OWNER$ TASK = $OWNER$.council_task:councillor_steward CANDIDATE = $CANDIDATE$ } }
+        flag:spymaster = { WJ_ty_story_appoint_draft = { OWNER = $OWNER$ TASK = $OWNER$.council_task:councillor_spymaster CANDIDATE = $CANDIDATE$ } }
+        flag:court_chaplain = { WJ_ty_story_appoint_draft = { OWNER = $OWNER$ TASK = $OWNER$.council_task:councillor_court_chaplain CANDIDATE = $CANDIDATE$ } }
+    }
+}
+
+WJ_ty_story_inner_dismiss_draft = {
+    if = {
+        limit = { WJ_ty_can_open = yes WJ_ty_inner = yes }
+        clear_saved_scope = wj_ty_native_task
+        $OWNER$ = { save_scope_as = wj_ty_native_owner }
+        $TYPE$ = { save_scope_as = wj_ty_native_court_type }
+        $HOLDER$ = { save_scope_as = wj_ty_native_incumbent }
+        WJ_ty_native_dismiss_effect = yes
+    }
+}
+
+# The story options open the draft. A pending/random native hire must not open a player window.
+court_position_grant_effect = {
+	if = {
+		limit = { NOT = { WJ_ty_native_court_slot = { OWNER = $EMPLOYER$ TYPE = court_position_type:$POS$_court_position } } }
+	 # Give position, and revoke old holder's if they exist
+		if = { #Multi-slot court positions - we replace the worst one
+			limit = {
+				$EMPLOYER$ = {
+					NOT = { can_employ_court_position_type = $POS$_court_position }
+					any_court_position_holder = {
+						type = $POS$_court_position
+						count >= 2
+					}
+				}
+			}
+			$EMPLOYER$ = {
+				ordered_court_position_holder = {
+					type = $POS$_court_position
+					order_by = {
+						value = aptitude:$POS$_court_position
+						multiply = -1
+					}
+					save_scope_as = old_holder #Should be the one with worst aptitude
+				}
+			}
+		}
+		else_if = {
+			limit = {
+				$EMPLOYER$.court_position:$POS$_court_position ?= { has_court_position = $POS$_court_position }
+			}
+			$EMPLOYER$.court_position:$POS$_court_position = { save_scope_as = old_holder }
+		}
+		$CANDIDATE$ = {
+			save_scope_as = candidate
+			if = {
+				limit = {
+					NOR = {
+						is_vassal_of = $EMPLOYER$
+						is_courtier_of = $EMPLOYER$
+						employer = $EMPLOYER$
+					}
+				}
+				hidden_effect = { set_employer = $EMPLOYER$ }
+			}
+		}
+		$EMPLOYER$ = {
+			if = {
+				limit = {
+					scope:old_holder ?= {
+						has_court_position = $POS$_court_position
+					}
+				}
+				send_interface_toast = {
+					title = move_and_grant_court_position_effect_tooltip
+					left_icon = $CANDIDATE$
+					right_icon = scope:old_holder
+					replace_court_position = {
+						recipient = $CANDIDATE$
+						holder = scope:old_holder
+						court_position = $POS$_court_position
+					}
+				}
+			}
+			else = {
+				send_interface_toast = {
+					title = move_and_grant_court_position_effect_tooltip
+					left_icon = $CANDIDATE$
+					appoint_court_position = {
+						recipient = $CANDIDATE$
+						court_position = $POS$_court_position
+					}
+				}
+			}
+		}
+		$CANDIDATE$ = {
+			$EMPLOYER$ = {
+				save_scope_as = liege
+				if = {
+					limit = { exists = scope:old_holder }
+					custom_tooltip = $POS$_old_holder_aptitude_tooltip
+				}
+				else = { custom_tooltip = $POS$_aptitude_tooltip }
+			}
+		}
+		#LAAMPs don't pay salaries
+		if = {
+			limit = {
+				$EMPLOYER$ = { is_landless_adventurer = no }
+			}
+			custom_tooltip = $POS$_salary_tooltip
+		}
+	}
+}
+
+# Pending legacy request: nominate at a real empty post; do not move the seeker
+# into court, grant merit exemptions, or award a mark of favour before the vote.
+WJ_ty_story_merit_draft = {
+    if = {
+        limit = { WJ_ty_can_open = yes WJ_ty_inner = yes WJ_ty_managed_appointment_employer = yes }
+        clear_saved_scope = wj_ty_requested_task
+        if = {
+            limit = { NOT = { exists = cp:councillor_chancellor } $CANDIDATE$ = { diplomacy >= stewardship diplomacy >= martial diplomacy >= intrigue } }
+            council_task:councillor_chancellor = { save_scope_as = wj_ty_requested_task }
+        }
+        else_if = {
+            limit = { NOT = { exists = cp:councillor_steward } $CANDIDATE$ = { stewardship >= martial stewardship >= intrigue } }
+            council_task:councillor_steward = { save_scope_as = wj_ty_requested_task }
+        }
+        else_if = {
+            limit = { NOT = { exists = cp:councillor_marshal } $CANDIDATE$ = { martial >= intrigue } }
+            council_task:councillor_marshal = { save_scope_as = wj_ty_requested_task }
+        }
+        else_if = {
+            limit = { NOT = { exists = cp:councillor_spymaster } }
+            council_task:councillor_spymaster = { save_scope_as = wj_ty_requested_task }
+        }
+        else_if = {
+            limit = { NOT = { exists = cp:councillor_chancellor } }
+            council_task:councillor_chancellor = { save_scope_as = wj_ty_requested_task }
+        }
+        else_if = {
+            limit = { NOT = { exists = cp:councillor_steward } }
+            council_task:councillor_steward = { save_scope_as = wj_ty_requested_task }
+        }
+        else_if = {
+            limit = { NOT = { exists = cp:councillor_marshal } }
+            council_task:councillor_marshal = { save_scope_as = wj_ty_requested_task }
+        }
+        if = {
+            limit = { exists = scope:wj_ty_requested_task }
+            WJ_ty_story_appoint_draft = { OWNER = this TASK = scope:wj_ty_requested_task CANDIDATE = $CANDIDATE$ }
+        }
+    }
+}
