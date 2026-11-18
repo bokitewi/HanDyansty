@@ -65,7 +65,7 @@ e = runner({effects:{...life,...petition}, triggers:gates, values:{...values,WJ_
  if(n.key==='add_title_law'){c.laws=[n.value];c.awards=(c.awards||0)+1;return true;}
 }});
 function setup(){
- const emperor={traits:['WJ_lost_imperial_authority'],vars:{},is_alive:true,is_adult:true,is_incapable:false,is_ai:false,highest_held_title_tier:6,law:'WJ_grand_chengxiang_law',diarchy_swing:60};
+ const emperor={traits:[],vars:{},is_alive:true,is_adult:true,is_incapable:false,is_ai:false,highest_held_title_tier:6,law:'WJ_grand_chengxiang_law',diarchy_swing:60};
  emperor.top_liege=emperor;
  const han={holder:emperor,vars:{}},title={vars:{},laws:['WJ_chancellor_life_law']};
  const c={vars:{wj_cx_court:han},flags:[],titles:[title],is_alive:true,is_adult:true,is_imprisoned:false,is_incapable:false,prestige_level:4,governmentFlags:["government_is_celestial"],highest_held_title_tier:5,top_liege:emperor,position:'WJ_minister_cheng_xiang',councilLiege:emperor,modifiers:[],vassals:[],militaryPower:true};
@@ -95,13 +95,13 @@ function setup(){
  const f=setup();f.title.holder={};f.c.titles=[];delete f.c.position;
  e.run('WJ_cx_abolish',f.c,f.s);
  assert.equal(f.emperor.law,'WJ_grand_chengxiang_law','late old-holder cleanup cannot change a new office holder law');
- assert.deepEqual(f.emperor.traits,['WJ_lost_imperial_authority']);
+ assert.deepEqual(f.emperor.traits,[]);
 }
 for(const eligible of [true,false]){
  const f=setup();f.title.laws=['noble_family_succession_law'];f.title.current_heir={eligible};
  e.run('WJ_cx_before_death',f.c,f.s);
  assert.equal(f.c.destroyed,eligible?undefined:1);
- assert.deepEqual(f.emperor.traits,eligible?['WJ_lost_imperial_authority']:[]);
+ assert.deepEqual(f.emperor.traits,[]);
  assert.equal(f.title.vars.wj_cx_successor,eligible?f.title.current_heir:undefined);
 }
 // The actual leave button enters on_leave_council with the emperor as root.
@@ -123,25 +123,25 @@ for(const eligible of [true,false]){
   assert(!e.check(one(actions.WJ_cx_resigned,'trigger').children,f.emperor,s),'duplicate resignation is inert');
  }
 }
-// Automatic consent is gated by the actual emperor trait, item and applicant.
-for(const kind of ['duke','hereditary','king','abdicate'])for(const marked of [true,false]){
- const f=setup();if(!marked)f.emperor.traits=[];
+// Automatic consent checks the actual emperor, item and applicant.
+for(const kind of ['duke','hereditary','king','abdicate']){
+ const f=setup();
  Object.assign(f.c,{qualified:true,dukeEligible:true,hereditaryEligible:true,kingEligible:true,abdicateEligible:true});
  e.run('WJ_pr_begin',f.c,f.s,{KIND:kind});
- assert.equal((kind==='hereditary'?f.title.awards:f.c.awards)||0,marked?1:0);
+ assert.equal((kind==='hereditary'?f.title.awards:f.c.awards)||0,1);
  assert.equal(f.emperor.vars.wj_pr_petitioner,undefined);
  assert.equal(f.c.vars.wj_pr_authorized_emperor,undefined);
  assert.equal(f.emperor.diarchy_swing,60,'automatic consent does not roll or change swing');
  assert.equal(f.emperor.events,undefined,'no emperor-facing window');
  assert.equal(f.c.events,undefined,'no resistance callback');
  e.run('WJ_pr_resolve',f.c,f.s);
- assert.equal((kind==='hereditary'?f.title.awards:f.c.awards)||0,marked?1:0,'queued callback cannot award twice');
+ assert.equal((kind==='hereditary'?f.title.awards:f.c.awards)||0,1,'queued callback cannot award twice');
 }
-for(const invalid of ['trait','item']){
+for(const invalid of ['dead','item']){
  const f=setup();Object.assign(f.c,{qualified:true,dukeEligible:true});
  Object.assign(f.c.vars,{wj_pr_emperor:f.emperor,wj_pr_kind:'flag:duke',wj_pr_ticket:1});
  f.emperor.vars.wj_pr_petitioner=f.c;f.s.wj_pr_ticket=1;
- if(invalid==='trait')f.emperor.traits=[];else f.c.dukeEligible=false;
+ if(invalid==='dead')f.emperor.is_alive=false;else f.c.dukeEligible=false;
  e.run('WJ_pr_resolve',f.c,f.s);
  assert.equal(f.c.awards,undefined);assert.equal(f.emperor.vars.wj_pr_petitioner,undefined);
 }
@@ -149,7 +149,7 @@ for(const invalid of ['trait','item']){
  const f=setup();f.emperor.traits=[];
  e.run('WJ_cx_finish_appointment',f.c,f.s);
  e.run('WJ_cx_finish_appointment',f.c,f.s);
- assert.deepEqual(f.emperor.traits,['WJ_lost_imperial_authority']);
+ assert.deepEqual(f.emperor.traits,[]);
  const events=defs('events/WJ_regent_petition_events.txt');
  for(const id of [1,11,12,31])assert.equal(one(events['WJ_regent_petition.'+id],'hidden').value,'yes');
 }
@@ -232,4 +232,4 @@ assert(read('localization/simp_chinese/council/WJ_council_l_simp_chinese.yml').i
 assert(!defs('common/customizable_localization/WJ_name_offices.txt').WJ_ChancellorName);
 // Parse all new production files, including event wiring, with the repository parser.
 for(const dir of ['common/scripted_effects','common/scripted_triggers','common/script_values','common/on_action','events'])for(const file of fs.readdirSync(dir))if(/^WJ_(chancellor|regent_petition)/.test(file))parse(read(dir+'/'+file));
-console.log('PASS: ordinary/exact-heir death, nearest de-jure return, empty situ law, duplicate cleanup, four trait-gated automatic one-use petitions, no windows/random resistance, stale/invalid recheck and appointment trait grant. Native callback ordering still requires game acceptance.');
+console.log('PASS: ordinary/exact-heir death, nearest de-jure return, empty situ law, duplicate cleanup, four qualified automatic one-use petitions, no windows/random resistance, stale/invalid recheck and appointment without an extra authority trait. Native callback ordering still requires game acceptance.');

@@ -2,14 +2,19 @@
 WJ_tuiyi_gongqing_interaction = {
  category = interaction_category_vassal common_interaction = yes interface_priority = 119 icon = council
  desc = WJ_tuiyi_gongqing_desc
- is_shown = { WJ_recommendation_visible = yes }
+ is_shown = { OR = { WJ_recommendation_visible = yes WJ_rec_can_draft = yes } }
  is_valid_showing_failures_only = {
- scope:recipient = { OR = { this = scope:actor.top_liege WJ_appointment_nominee_range = { RECOMMENDER = scope:actor EMPLOYER = scope:actor.top_liege } } }
+ OR = { WJ_rec_can_draft = yes WJ_rec_legacy_addressee = yes }
  }
  send_options_exclusive = yes
- send_option = { flag = wj_rec_council localization = WJ_rec_category_council }
- send_option = { flag = wj_rec_court localization = WJ_rec_category_court starts_enabled = { scope:actor = { is_ai = yes } } }
- can_send = { OR = { scope:wj_rec_council = yes scope:wj_rec_court = yes } }
+ send_option = { flag = wj_rec_deliberate localization = WJ_ty_catalog_TY23 is_shown = { WJ_rec_can_draft = yes } }
+ send_option = { flag = wj_rec_council localization = WJ_rec_category_council is_shown = { WJ_rec_legacy_addressee = yes scope:actor.top_liege = { WJ_ty_managed_appointment_employer = no } } }
+ send_option = { flag = wj_rec_court localization = WJ_rec_category_court is_shown = { WJ_rec_legacy_addressee = yes } starts_enabled = { scope:actor = { is_ai = yes } } }
+ can_send = { OR = {
+  AND = { scope:wj_rec_deliberate = yes WJ_rec_can_draft = yes }
+  AND = { scope:wj_rec_council = yes WJ_rec_legacy_addressee = yes scope:actor.top_liege = { WJ_ty_managed_appointment_employer = no } }
+  AND = { scope:wj_rec_court = yes WJ_rec_legacy_addressee = yes }
+ } }
  auto_accept = yes
  ai_frequency = 12
  ai_targets = { ai_recipients = self }
@@ -17,13 +22,15 @@ WJ_tuiyi_gongqing_interaction = {
  on_accept = {
  scope:recipient = { save_scope_as = wj_rec_nominee }
  if = { limit = { scope:recipient = scope:actor.top_liege } scope:actor = { save_scope_as = wj_rec_nominee } }
- if = { limit = { scope:actor = { is_ai = yes } }
+ if = { limit = { scope:wj_rec_deliberate = yes WJ_rec_can_draft = yes }
+ scope:actor = { WJ_ty_prepare_legacy_nomination = { OFFICE = 2 NOMINEE = scope:wj_rec_nominee } }
+ } else_if = { limit = { WJ_rec_legacy_addressee = yes scope:actor = { is_ai = yes } }
  run_interaction = { interaction = WJ_rec_court_request actor = scope:actor recipient = scope:actor.top_liege secondary_recipient = scope:actor send_threshold = accept }
- } else = {
- if = { limit = { scope:wj_rec_council = yes }
+ } else_if = { limit = { WJ_rec_legacy_addressee = yes scope:actor = { is_ai = no } }
+ if = { limit = { scope:wj_rec_council = yes scope:actor.top_liege = { WJ_ty_managed_appointment_employer = no } }
  open_interaction_window = { interaction = WJ_rec_council_request actor = scope:actor recipient = scope:actor.top_liege secondary_recipient = scope:wj_rec_nominee }
  }
- else = { open_interaction_window = { interaction = WJ_rec_court_request actor = scope:actor recipient = scope:actor.top_liege secondary_recipient = scope:wj_rec_nominee } }
+ else_if = { limit = { scope:wj_rec_court = yes } open_interaction_window = { interaction = WJ_rec_court_request actor = scope:actor recipient = scope:actor.top_liege secondary_recipient = scope:wj_rec_nominee } }
  
  }
 }
@@ -32,9 +39,9 @@ WJ_rec_council_request = {
  hidden = yes category = interaction_category_vassal icon = council
  desc = WJ_rec_request_desc notification_text = WJ_rec_request_proposal
  popup_on_receive = yes pause_on_receive = yes ai_maybe = no can_send_despite_rejection = yes
- is_shown = { WJ_rec_participants = yes }
+ is_shown = { WJ_rec_participants = yes scope:recipient = { WJ_ty_managed_appointment_employer = no } }
  is_valid_showing_failures_only = { WJ_rec_participants = yes }
- can_send = { WJ_rec_participants = yes WJ_rec_options_valid = yes WJ_rec_selected_valid = yes }
+ can_send = { scope:recipient = { WJ_ty_managed_appointment_employer = no } WJ_rec_participants = yes WJ_rec_options_valid = yes WJ_rec_selected_valid = yes }
  send_options_exclusive = no
   send_option = { flag = wj_rec_councillor_chancellor localization = WJ_rec_label_councillor_chancellor
  is_shown = { scope:recipient = { exists = council_task:councillor_chancellor } }
@@ -138,7 +145,8 @@ modifier = {
  on_accept = {
  hidden_effect = {
  WJ_rec_find_current = yes
- if = { limit = { WJ_rec_pending_valid = yes WJ_rec_selected_valid = yes }
+ if = { limit = { scope:recipient = { WJ_ty_managed_appointment_employer = yes } } WJ_rec_finish = { RESULT = court_deliberation } }
+ else_if = { limit = { WJ_rec_pending_valid = yes WJ_rec_selected_valid = yes }
  save_scope_value_as = { name = wj_rec_consumed value = yes }
  save_scope_value_as = { name = wj_rec_success value = no }
   if = { limit = { scope:wj_rec_councillor_chancellor = yes }
@@ -177,18 +185,6 @@ modifier = {
  scope:recipient = { assign_council_task = { target = scope:secondary_recipient council_task = scope:recipient.council_task:minister_grand_marshal } }
  if = { limit = { scope:secondary_recipient.council_task = scope:recipient.council_task:minister_grand_marshal } save_scope_value_as = { name = wj_rec_success value = yes } }
  }
- if = { limit = {  }
- scope:recipient = { assign_council_task = { target = scope:secondary_recipient  } }
- 
- }
- if = { limit = {  }
- scope:recipient = { assign_council_task = { target = scope:secondary_recipient  } }
- 
- }
- if = { limit = {  }
- scope:recipient = { assign_council_task = { target = scope:secondary_recipient  } }
- 
- }
 
  if = { limit = { scope:wj_rec_success = yes } WJ_settle_recommendation_movement_options_effect = yes WJ_rec_finish = { RESULT = appointed } }
  else = { WJ_rec_finish = { RESULT = expired } }
@@ -203,7 +199,7 @@ WJ_rec_court_request = {
  popup_on_receive = yes pause_on_receive = yes ai_maybe = no can_send_despite_rejection = yes
  is_shown = { WJ_rec_participants = yes }
  is_valid_showing_failures_only = { WJ_rec_participants = yes }
- can_send = { WJ_rec_participants = yes WJ_rec_options_valid = yes WJ_rec_selected_valid = yes }
+ can_send = { NOT = { WJ_rec_protected_court_choice = yes } WJ_rec_participants = yes WJ_rec_options_valid = yes WJ_rec_selected_valid = yes }
  send_options_exclusive = no
   send_option = { flag = wj_rec_grand_preceptor_court_position localization = WJ_rec_label_grand_preceptor_court_position
  is_shown = { scope:recipient = { 
@@ -258,7 +254,7 @@ WJ_rec_court_request = {
  
  }
  send_option = { flag = wj_rec_favored_minister_court_position localization = WJ_rec_label_favored_minister_court_position
- is_shown = { scope:recipient = { 
+ is_shown = { scope:recipient = { WJ_ty_managed_appointment_employer = no
 		WJ_cp_emperor = yes
 		government_has_flag = government_is_celestial
 	
@@ -426,7 +422,7 @@ WJ_rec_court_request = {
  
  }
  send_option = { flag = wj_rec_chief_eunuch_court_position localization = WJ_rec_label_chief_eunuch_court_position
- is_shown = { scope:recipient = { 
+ is_shown = { scope:recipient = { WJ_ty_managed_appointment_employer = no
 		WJ_cp_private_palace_allowed = yes
 		OR = {
 			is_landed_or_landless_administrative = yes
@@ -899,6 +895,7 @@ WJ_rec_court_request = {
  
  }
  send_option = { flag = wj_rec_dasima localization = WJ_rec_label_dasima
+ is_shown = { scope:recipient = { WJ_ty_managed_appointment_employer = no } }
  is_valid = { OR = { WJ_rec_selected_count = 0 scope:wj_rec_dasima = yes } WJ_rec_valid_dasima = yes }
  starts_enabled = { scope:actor = { is_ai = yes } NOT = { scope:wj_rec_favored_minister_court_position = yes } NOT = { exists = scope:recipient.var:wj_dasima_holder } WJ_rec_valid_dasima = yes }
  }
@@ -965,7 +962,8 @@ modifier = {
  on_accept = {
  hidden_effect = {
  WJ_rec_find_current = yes
- if = { limit = { WJ_rec_pending_valid = yes WJ_rec_selected_valid = yes }
+ if = { limit = { WJ_rec_protected_court_choice = yes } WJ_rec_finish = { RESULT = court_deliberation } }
+ else_if = { limit = { WJ_rec_pending_valid = yes WJ_rec_selected_valid = yes }
  save_scope_value_as = { name = wj_rec_consumed value = yes }
  save_scope_value_as = { name = wj_rec_success value = no }
   if = { limit = { scope:wj_rec_grand_preceptor_court_position = yes }

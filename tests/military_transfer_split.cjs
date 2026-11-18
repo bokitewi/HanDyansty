@@ -26,6 +26,7 @@ engine=runner({effects,triggers,values,primitives:{
  vassal_contract_has_flag:(c,s,n)=>c.contracts.includes(n.value),
  is_at_war_with:()=>false,
  has_trait:(c,s,n)=>c.traits.includes(n.value),
+ has_realm_law:(c,s,n)=>(c.laws||[]).includes(n.value),
  ...Object.fromEntries(['best_friend','friend','disciple','rival','nemesis'].map(k=>['has_relation_'+k,()=>false])),
  is_target_in_variable_list:(c,s,n,p)=>(c.lists[one(n,'name').value]||[]).includes(engine.resolve(one(n,'target').value,c,s,p)),
  variable_list_size:(c,s,n,p)=>{
@@ -63,11 +64,11 @@ engine=runner({effects,triggers,values,primitives:{
  return false;
 }});
 function character(tier=4){
- const c={is_alive:true,is_ai:false,is_landed:true,is_at_war:false,governmentFlags:['government_is_celestial'],
+ const c={is_alive:true,is_ai:false,is_landed:true,is_at_war:false,martial:0,governmentFlags:['government_is_celestial'],
   highest_held_title_tier:tier,min_title_maa_tier:3,vars:{},lists:{},traits:[],contracts:[],regiments:[],gold:0,treasury:1000,
   'vassal_contract_obligation_level:WJ_sanjie':3,'vassal_contract_obligation_level:celestial_ministry_obligations':0,
   'title:e_minister_grand_marshal':{}};
- c.primary_title={tier,is_noble_family_title:false,holder:c,vars:{}};c.titles=[c.primary_title];return c;
+ c.primary_title={tier,is_noble_family_title:false,holder:c,vars:{},'title:e_minister_grand_marshal':c['title:e_minister_grand_marshal']};c.titles=[c.primary_title];return c;
 }
 function realm(){
  const emperor=character(6);emperor.emperor=true;emperor.top_liege=emperor;emperor.taken=true;
@@ -157,16 +158,45 @@ op.zhongwai=false;op.local=true;emperor.taken=false;op.contracts=['WJ_shichijie'
 assert(check('WJ_mt_source_person_allowed',other,s,{OP:op}));other.district={};assert(!check('WJ_mt_source_person_allowed',other,s,{OP:op}));
 console.log('PASS: locked directions/source types, title/private reception, unchanged fees and copy rollback; stale pair/office/contract/raised rejection; Dasima old-range source restriction, local/native permission separation');
 
-// Shared acceptance: both source types, no 95% hard cap, no bonus for another source.
+// Shared acceptance: both source types, deleted lost-authority trait has no effect.
 for(const mode of [1,2]){
  const r=realm();open(r,false,mode,true);
- r.emperor.traits=["WJ_lost_imperial_authority"];
- assert.equal(engine.number(values.WJ_mt_crown_score,r.op,r.s),1000);
- assert.equal(engine.number(values.WJ_mt_acceptance,r.op,r.s),100);
+ r.emperor.traits=[];
+ assert.equal(engine.number(values.WJ_mt_crown_score,r.op,r.s),0);
+ const before=engine.number(values.WJ_mt_acceptance,r.op,r.s);r.emperor.traits=[];
+ assert.equal(engine.number(values.WJ_mt_acceptance,r.op,r.s),before);
  r.emperor.traits=["loyal","content","generous","humble"];
  assert.equal(engine.number(values.WJ_mt_crown_score,r.op,r.s),0);
  assert.equal(engine.number(values.WJ_mt_acceptance,r.op,r.s),100);
- r.other.traits=["WJ_lost_imperial_authority"];r.op.vars.wj_mt_a=r.other;
+ r.other.traits=[];r.op.vars.wj_mt_a=r.other;
  assert.equal(engine.number(values.WJ_mt_crown_score,r.op,r.s),0);
 }
-console.log("PASS: title/private emperor transfer +1000, global 100% cap, unrelated sources unchanged.");
+console.log("PASS: both source types use current willingness, 100% cap and no deleted-trait bonus.");
+
+// The exact office is protected at candidates, title selection and final commit.
+for(const sourceOffice of [false,true]){
+ const r=realm(),{op,emperor,other,s}=r;
+ op.zhongwai=false;op.dasimaValid=true;emperor.vars.wj_dasima_holder=op;
+ const office=other['title:e_minister_grand_marshal'];
+ Object.assign(office,{tier:5,is_noble_family_title:false,holder:other,vars:{},'title:e_minister_grand_marshal':office});
+ other.titles.push(office);
+ const official=regiment(other,office),ordinary=regiment(other,other.primary_title),privateUnit=regiment(other,null);
+ op.vars.wj_mt_title_source=other;op.vars.wj_mt_title_receiver=emperor;
+ engine.run('WJ_mt_open',op,s,{MODE:1});
+ assert(!op.lists.wj_mt_titles_a.includes(office));assert(op.lists.wj_mt_titles_a.includes(other.primary_title));
+ op.vars.wj_mt_title_a=sourceOffice?office:other.primary_title;op.vars.wj_mt_title_b=emperor.primary_title;
+ if(sourceOffice){
+  op.lists.wj_mt_pending=[official];op.vars.wj_mt_count=1;
+  assert(!check('WJ_mt_order_valid',op,s));engine.run('WJ_mt_commit',op,s);assert(!official.destroyed);
+ }else{
+  engine.run('WJ_mt_preview_all',op,s);assert(check('WJ_mt_order_valid',op,s));
+  engine.run('WJ_mt_commit',op,s);assert(ordinary.destroyed);assert(!official.destroyed);
+ }
+ assert(!privateUnit.destroyed);
+ op.vars.wj_mt_private_source=other;op.vars.wj_mt_private_receiver=emperor;
+ engine.run('WJ_mt_open',op,s,{MODE:2});op.vars.wj_mt_title_b=emperor.primary_title;engine.run('WJ_mt_preview_all',op,s);
+ assert(op.lists.wj_mt_pending.includes(privateUnit));assert(!op.lists.wj_mt_pending.includes(official));
+ assert(check('WJ_mt_order_valid',op,s));engine.run('WJ_mt_commit',op,s);
+ assert(privateUnit.destroyed);assert(!official.destroyed);
+}
+console.log('PASS: exact Grand Marshal office protected; same person keeps transferable other title troops and private troops.');

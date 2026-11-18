@@ -29,6 +29,8 @@ engine=runner({effects,triggers,values:{},primitives:{
 },onEffect(n,c,s,p){
  const resolve=x=>engine.resolve(x,c,s,p);
  if(n.key==='add_gold'){c.gold+=Number(n.value);return true;}
+ // Native resource primitive: fixture models balance, not the engine AI budget buckets.
+ if(n.key==='remove_short_term_gold'){assert(Number(n.value)>=0);c.gold-=Number(n.value);return true;}
  if(n.key==='add_prestige'){c.prestige+=Number(n.value);return true;}
  if(n.key==='create_title_and_vassal_change'){s.WJ_capital_title_change={};return true;}
  if(n.key==='change_liege'){s.WJ_capital_title_change.liege=resolve(one(n,'liege').value);return true;}

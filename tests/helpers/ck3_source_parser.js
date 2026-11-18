@@ -28,8 +28,10 @@ function parse(source) {
         node.op = tokens[cursor++].text;
         const value = tokens[cursor++];
         assert.ok(value && value.text !== '}', 'Missing statement value');
-        if (value.text === '{') {
-          node.openEnd = value.end;
+        const colorBlock = ['hsv', 'hsv360', 'rgb', 'rgba'].includes(value.text) && tokens[cursor]?.text === '{';
+        if (value.text === '{' || colorBlock) {
+          if (colorBlock) node.prefix = value.text;
+          node.openEnd = colorBlock ? tokens[cursor++].end : value.end;
           node.children = entries(true);
           const close = tokens[cursor++];
           node.closeStart = close.start;

@@ -1,0 +1,158 @@
+# Choose one petition from this character's own affairs. No poll, world list or player GUI.
+WJ_ty_reward_ai_consider = {
+ if = {
+  limit = {
+   is_ai = yes
+   NOT = { has_variable = wj_ty_open }
+   OR = {
+    WJ_ty_reward_ai_can_open = yes
+    AND = { NOT = { has_variable = wj_ty_memorial_cooldown } WJ_ty_memorial_can_open = yes }
+   }
+  }
+  clear_saved_scope = wj_ty_ai_governor
+  clear_saved_scope = wj_ty_ai_beneficiary
+  clear_saved_scope = wj_ty_ai_paid
+  save_scope_as = wj_ty_ai_author
+  if = { limit = { WJ_ty_memorial_can_open = yes highest_held_title_tier >= tier_empire prestige >= 50 }
+   random_vassal = {
+    limit = {
+     WJ_ty_memorial_local_eligible = { AUTHOR = scope:wj_ty_ai_author }
+     NOT = { has_variable = wj_ty_local_cooldown }
+     OR = {
+      has_relation_rival = scope:wj_ty_ai_author
+      AND = { has_variable = wj_kaoke_last_date has_variable = wj_kaoke_last_grade
+       var:wj_kaoke_last_date >= { value = current_date subtract = 365 } var:wj_kaoke_last_grade = 1 }
+     }
+    }
+    save_scope_as = wj_ty_ai_governor
+   }
+  }
+  if = { limit = { exists = scope:wj_ty_ai_governor }
+   WJ_ty_memorial_open = yes
+   WJ_ty_memorial_prepare_local = yes
+   set_variable = { name = wj_ty_target value = scope:wj_ty_ai_governor }
+   WJ_ty_removal_snapshot = yes
+  }
+  else_if = {
+   limit = {
+    WJ_ty_reward_ai_beneficiary = yes
+    OR = {
+     WJ_ty_reward_ai_recent_service = yes
+     AND = { has_trait = greedy gold < 500 }
+     AND = { has_trait = ambitious gold < 100 }
+    }
+   }
+   save_scope_as = wj_ty_ai_beneficiary
+  }
+  else = {
+   # A patron may seek rewards for a disciple, close relative, friend or deserving retainer.
+   random_relation = {
+    type = disciple
+    limit = { WJ_ty_reward_ai_beneficiary = yes }
+    save_scope_as = wj_ty_ai_beneficiary
+   }
+   if = {
+    limit = { NOT = { exists = scope:wj_ty_ai_beneficiary } }
+    random_close_family_member = {
+     limit = {
+      WJ_ty_reward_ai_beneficiary = yes
+      scope:wj_ty_ai_author = { opinion = { target = prev value >= 30 } }
+     }
+     save_scope_as = wj_ty_ai_beneficiary
+    }
+   }
+   if = {
+    limit = { NOT = { exists = scope:wj_ty_ai_beneficiary } }
+    random_relation = {
+     type = friend
+     limit = { WJ_ty_reward_ai_beneficiary = yes }
+     save_scope_as = wj_ty_ai_beneficiary
+    }
+   }
+   if = {
+    limit = { NOT = { exists = scope:wj_ty_ai_beneficiary } is_landed = yes }
+    random_courtier = {
+     limit = { WJ_ty_reward_ai_beneficiary = yes WJ_ty_reward_ai_recent_service = yes }
+     save_scope_as = wj_ty_ai_beneficiary
+    }
+   }
+   if = {
+    limit = { NOT = { exists = scope:wj_ty_ai_beneficiary } is_landed = yes }
+    random_vassal = {
+     limit = {
+      WJ_ty_reward_ai_beneficiary = yes
+      is_powerful_vassal = yes
+      opinion = { target = scope:wj_ty_ai_author value < 0 }
+     }
+     save_scope_as = wj_ty_ai_beneficiary
+    }
+   }
+  }
+  if = {
+   limit = { exists = scope:wj_ty_ai_beneficiary }
+   if = { limit = { WJ_ty_reward_ai_can_open = yes } WJ_ty_reward_ai_open = yes }
+   else = { WJ_ty_memorial_open = yes }
+   set_variable = { name = wj_ty_target value = scope:wj_ty_ai_beneficiary }
+  }
+  if = { limit = { OR = { exists = scope:wj_ty_ai_beneficiary exists = scope:wj_ty_ai_governor } }
+   if = {
+    limit = { WJ_ty_memorial_can_submit = yes }
+    if = { limit = { NOT = { WJ_ty_manager_ready = yes } }
+     if = { limit = { var:wj_ty_topic = 4 } WJ_ty_reward_ai_lobby_seat = { SEAT = 2 } }
+     else = { WJ_ty_reward_ai_lobby_seat = { SEAT = 5 } }
+    }
+    else_if = {
+     limit = { WJ_ty_total < WJ_ty_threshold }
+     # Try the ruler and then the regent; make at most one deal on this modest reward.
+     WJ_ty_reward_ai_lobby_seat = { SEAT = 0 }
+     if = { limit = { NOT = { exists = scope:wj_ty_ai_paid } } WJ_ty_reward_ai_lobby_seat = { SEAT = 1 } }
+    }
+    WJ_ty_memorial_submit = yes
+   }
+   # Submission closes its own draft. Pre-filing failures still need cleanup.
+   if = { limit = { OR = { has_variable = wj_ty_memorial has_variable = wj_ty_reward_ai } } WJ_ty_memorial_cleanup = yes }
+  }
+ }
+}
+
+WJ_ty_reward_ai_lobby_seat = {
+ if = {
+  limit = { exists = var:wj_ty_seat_$SEAT$ var:wj_ty_seat_$SEAT$ = { is_imprisoned = no } }
+  var:wj_ty_seat_$SEAT$ = { save_scope_as = wj_ty_observer }
+  set_variable = { name = wj_ty_lobby value = scope:wj_ty_observer }
+  if = {
+   limit = { WJ_ty_row_mode = 4 }
+   set_variable = { name = wj_ty_lobby value = scope:wj_ty_observer.puppeteer }
+  }
+  save_scope_value_as = { name = wj_ty_ai_attitude value = WJ_ty_agreement_$SEAT$ }
+  if = {
+   limit = {
+    scope:wj_ty_ai_attitude < 25
+    WJ_ty_lobby_hook_valid = yes
+   }
+   WJ_ty_pay_hook = yes
+   save_scope_as = wj_ty_ai_paid
+  }
+  else_if = {
+   limit = {
+    trigger_if = { limit = { var:wj_ty_topic = 4 } gold >= 300 }
+    trigger_else = { gold >= 310 }
+    OR = { NOT = { this = var:wj_ty_emperor } WJ_ty_gold_available >= 810 }
+    WJ_ty_reward_ai_can_gain_vote = { GAIN = WJ_ty_chip_gain_gold }
+    WJ_ty_lobby_gold_valid = yes
+   }
+   WJ_ty_pay_gold = yes
+   save_scope_as = wj_ty_ai_paid
+  }
+  else_if = {
+   limit = {
+    prestige >= 320
+    trigger_if = { limit = { var:wj_ty_topic = 4 } prestige >= 350 }
+    WJ_ty_reward_ai_can_gain_vote = { GAIN = WJ_ty_chip_gain_prestige }
+    WJ_ty_lobby_prestige_valid = yes
+   }
+   WJ_ty_pay_prestige = yes
+   save_scope_as = wj_ty_ai_paid
+  }
+ }
+}

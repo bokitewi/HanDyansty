@@ -150,13 +150,13 @@ test('actual emperor, authorized minister and puppet operator use existing openi
   if(role==='emperor'){w.op=w.emp;w.s.root=w.op;}else if(role==='minister')w.op.council_task={owner:w.emp,position:'minister_personnel'};else w.emp.puppeteer=w.op;
   assert(check('WJ_ty_native_appoint_valid',w),role);action('WJ_ty_native_appoint',w);assert.equal(w.op.vars.wj_ty_proposer,role==='puppeteer'?w.emp:w.op);
  }
- const w=world();w.op=w.emp;w.s.root=w.op;w.emp.traits.push('WJ_lost_imperial_authority');assert(!check('WJ_ty_native_appoint_valid',w));
+ const w=world();w.op=w.emp;w.s.root=w.op;w.emp.puppeteer=w.candidate;assert(!check('WJ_ty_native_appoint_valid',w));
 });
 test('dismiss routes capture actual holder and only open topic4 kind1; chancellor cannot be reassigned',()=>{
  for(const id of [...Object.keys(offices),...Object.keys(court)].map(Number).filter(id=>id!==1)){
   const w=world(id),before=identity(w);w.op.vars.wj_ty_confirmed=1;w.op.vars.wj_ty_target=w.candidate;
   assert(check('WJ_ty_native_dismiss_valid',w));action('WJ_ty_native_dismiss',w);
-  assert.equal(w.op.vars.wj_ty_topic,4);assert.equal(w.op.vars.wj_ty_dismiss_kind,1);assert.equal(w.op.vars.wj_ty_role,2);
+  assert.equal(w.op.vars.wj_ty_topic,4);assert.equal(w.op.vars.wj_ty_dismiss_kind,1);assert.equal(w.op.vars.wj_ty_role,0);
   assert.equal(w.op.vars.wj_ty_office,id);assert.equal(w.op.vars.wj_ty_target,w.holder);assert(!w.op.vars.wj_ty_confirmed);assert(!w.op.vars.wj_ty_catalog);
   assert.equal(w.op.vars.wj_ty_rm_snapshot,1);assert.equal(w.op.vars.wj_ty_rm_target,w.holder);assert.equal(w.op.vars.wj_ty_rm_employer,w.emp);
   assert.equal(w.op.vars.wj_ty_rm_had_task,offices[id]?1:0);if(offices[id])assert.equal(w.op.vars.wj_ty_rm_task,w.s.wj_ty_native_task);
@@ -259,10 +259,10 @@ test('native candidate pages contain only original actions and independent tenur
 test('all appointment jobs share an independent chooser while the main window stays visible',()=>{
  const source=read('gui/WJ_tingyi.gui'),tree=guiTree(source),nodes=walk(tree);
  const named=name=>{const hit=nodes.find(({n})=>n.children?.some(x=>x.key==='name'&&x.value===`"${name}"`));assert(hit,name);return hit.n;};
- const main=named('WJ_tingyi_window'),picker=named('WJ_tingyi_candidate_window'),button=named('WJ_ty_appointment_picker');
+ const main=named('WJ_tingyi_window'),picker=named('WJ_tingyi_candidate_window'),button=named('WJ_ty_fixed_picker');
  assert.equal(main.key,'window');assert.equal(picker.key,'window');
  assert(tree.children.includes(main)&&tree.children.includes(picker),'chooser is a separate window over the deliberation');
- assert(!button.children.some(n=>n.key==='visible'),'one chooser entry covers council and all three court offices');
+ assert(one(button,'visible').value.includes('wj_ty_target'),'only an empty fixed card can choose another person');
  const clicks=button.children.filter(x=>x.key==='onclick');assert.equal(clicks.length,1);
  assert(clicks[0].value.includes("GetScriptedGui('WJ_ty_gui_picker').Execute"));
  assert(one(button,'enabled').value.includes("WJ_ty_gui_picker').IsValid"));
@@ -291,7 +291,9 @@ test('all appointment jobs share an independent chooser while the main window st
  assert(select.n.value.includes("AddScope('candidate', Scope.Char.MakeScope)"),'select the actual displayed candidate');
  assert(one(named('WJ_ty_picker_close'),'onclick').value.includes('WJ_ty_gui_cancel_picker'));
  const gui=defs('common/scripted_guis/WJ_tingyi_guis.txt');
- assert.deepEqual(one(gui.WJ_ty_gui_picker,'effect').children.map(n=>n.key),['WJ_ty_candidates']);
+ const guarded=one(one(gui.WJ_ty_gui_picker,'effect'),'if');
+ assert(one(guarded,'limit').children.some(n=>n.key==='WJ_ty_topic_selected'));
+ assert(guarded.children.some(n=>n.key==='WJ_ty_candidates'),'the guarded picker still uses the established roster builder');
  assert(!JSON.stringify(one(gui.WJ_ty_gui_cancel_picker,'effect')).includes('WJ_ty_close'),'closing child preserves deliberation');
 });
 
@@ -331,7 +333,7 @@ test('complete entry gate expressions select Han routes and retain non-Han nativ
  for(const file of paths)for(const {n}of walk(guiTree(read('gui/'+file)))){
   if(!['visible','enabled'].includes(n.key)||!n.value?.includes("WJ_ty_native_appoint').IsShown("))continue;
   const isCouncil=n.value.includes('ActiveCouncilTask'),inverse=n.value.includes("Not(GetScriptedGui('WJ_ty_native_appoint').IsShown(");
-  for(const han of [true,false]){
+  for(const han of [true,false])for(const canDeliberate of [true,false]){
    const w=world(isCouncil?2:8,false),owner=han?w.emp:w.foreign;
    const character={MakeScope:owner,EmploysCourtPositionType:()=>false};
    const type={MakeScope:w.emp['court_position_type:'+court[8]],Self:'type'};
@@ -340,9 +342,9 @@ test('complete entry gate expressions select Han routes and retain non-Han nativ
     CouncilWindow:{GetCharacter:character},GuiCouncilPosition:{CanPotentiallySelectCouncillor:true},
     ActiveCouncilTask:{GetCourtOwner:character,MakeScope:w.s.wj_ty_native_task},CourtPositionType:type,
     CourtPositionItem:{GetCourtOwner:character,GetType:type,IsAllowed:true,IsEnabled:true},IsValidCommand:()=>true,
-    GetScriptedGui(id){assert.equal(id,'WJ_ty_native_appoint');return{IsShown(s){assert.equal(s.wj_ty_native_owner,owner);return r.check(one(sg[id],'is_shown').children,s.root,s);}};},
+    GetScriptedGui(id){if(id==='WJ_ty_gui_open_empty')return{IsValid:()=>canDeliberate};assert.equal(id,'WJ_ty_native_appoint');return{IsShown(s){assert.equal(s.wj_ty_native_owner,owner);return r.check(one(sg[id],'is_shown').children,s.root,s);}};},
    };
-   assert.equal(vm.runInNewContext(n.value.slice(2,-2),context),inverse?!han:han,file+': '+n.value);
+   assert.equal(vm.runInNewContext(n.value.slice(2,-2),context),inverse?!han:(han&&(!n.value.includes('WJ_ty_gui_open_empty')||canDeliberate)),file+': '+n.value);
   }
   checked++;
  }
@@ -451,6 +453,93 @@ test('remaining court result comparisons terminate Promote with a real Function'
  assert(main.includes('ObjectsEqual(CourtPosition.GetPositionType.Self, GetCourtPositionType('));
  assert(!main.includes('ObjectsEqual(CourtPosition.GetPositionType,'));
  assert(!main.includes('ObjectsEqual(CourtPosition.GetEmployee,'));
+});
+test('army and inner-office cards pass the displayed court and slot into the same draft',()=>{
+ const shared=guiTree(read('gui/hd_baiguan_window.gui'));
+ const buttons=walk(shared).find(({n})=>n.key==='WJ_ty_council_change_entry').n.children.filter(n=>n.key==='button_round');
+ assert.equal(buttons.length,2);
+ const [ordinary,routed]=buttons;
+ assert(one(ordinary,'visible').value.includes("Not(GetScriptedGui('WJ_ty_native_appoint').IsShown"));
+ assert(one(ordinary,'onclick').value.includes('GuiCouncilPosition.SelectCouncillor'));
+ assert(one(routed,'visible').value.includes(".IsShown"));
+ assert(one(routed,'enabled').value.includes(".IsValid"));
+ assert(routed.children.find(n=>n.key==='onclick').value.includes("Execute(GuiScope.SetRoot(GetPlayer.MakeScope).AddScope('wj_ty_native_owner', CouncilWindow.GetCharacter.MakeScope).AddScope('wj_ty_native_task', GuiCouncilPosition.GetActiveCouncilTask.MakeScope).End)"));
+ for(const file of ['hd_central_army_secondary.gui','WJ_central_army.gui','hd_baiguan_window.gui']){
+  assert(read('gui/'+file).includes('WJ_ty_council_change_entry = {'));
+  const armyGui=read('gui/'+file);
+  assert(!armyGui.includes("'wj_ty_native_owner', GetPlayer.MakeScope"));
+  if(file!=='hd_baiguan_window.gui')assert(!armyGui.includes('GuiCouncilPosition.SelectCouncillor'));
+ }
+});
+test('pending native invites and requests can only prepare eligible player drafts',()=>{
+ const vassals=defs('common/character_interactions/00_vassal_interactions.txt');
+ const invitation=vassals.invite_to_council_position_interaction;
+ const requests=[vassals.force_onto_council,defs('common/character_interactions/zzzz_WJ_district_acceptance_06_ep3_interactions.txt').request_council_interaction];
+ for(const def of [invitation,...requests])for(const ai of [false,true]){
+  const w=world(2,true);
+  const op=def===invitation?w.emp:w.op;
+  op.is_ai=ai;
+  const s={root:op,actor:op,recipient:def===invitation?w.candidate:w.emp,target:w.s.wj_ty_native_task};
+  const before=identity(w);
+  const gate=one(def,def===invitation?'is_valid_showing_failures_only':'has_valid_target_showing_failures_only');
+  assert(!r.check([gate.children.find(n=>n.key==='NOT')],op,s));
+  r.execute(one(def,'on_accept').children,op,s);
+  assert.deepEqual(identity(w),before);
+  if(!ai){assert.equal(op.vars.wj_ty_office,2);assert.equal(op.vars.wj_ty_topic,3);assert(!op.vars.wj_ty_confirmed);}
+  else assert(!op.vars.wj_ty_open);
+ }
+});
+test('protected AI seats neither hire nor dismiss by score; the original thresholds and other employers survive',()=>{
+ const limits=defs('common/defines/ai/00_ai.txt').NCourtPositions;
+ assert.equal(one(limits,'MIN_SCORE_TO_HIRE_COURT_POSITION').value,'0');
+ assert.equal(one(limits,'MAX_SCORE_TO_FIRE_COURT_POSITION').value,'-50');
+ const dasima=defs('common/court_positions/types/WJ_dasima_court_position.txt').WJ_dasima_court_position;
+ assert.equal(one(one(dasima,'ai_position_score'),'value').value,'0');
+ for(const [file,id] of [['00_court_positions',9],['00_celestial_court_positions',8]]){
+  const pos=defs('common/court_positions/types/'+file+'.txt')[court[id]];
+  const w=world(id);
+  for(const key of ['ai_position_score','ai_candidate_score']){
+   const guard=one(pos,key).children.at(-1);
+   assert.equal(guard.key,'if');assert.equal(one(guard,'value').value,'0');
+   for(const firing of [false,true])for(const owner of [w.emp,w.foreign]){
+    assert.equal(r.check(one(guard,'limit').children,owner,{liege:owner,firing_court_position:firing}),owner===w.emp);
+   }
+  }
+ }
+});
+test('palace vacancies cannot nominate an heir; the same living grand marshal may continue',()=>{
+ for(const [file,id] of [['00_celestial_court_positions',8],['00_court_positions',9]]){
+  const pos=defs('common/court_positions/types/'+file+'.txt')[court[id]];
+  const vacancy=one(pos,'on_court_position_vacated');
+  assert.equal(vacancy.children.length,1);
+  assert.equal(one(one(vacancy,'court_position_vacated_event_effect'),'COURT_POSITION_TYPE').value,court[id]);
+ }
+ const pos=defs('common/court_positions/types/WJ_dasima_court_position.txt')[court[7]];
+ for(const key of ['on_court_position_vacated','on_court_position_invalidated']){
+  const effect=one(one(pos,key),'scope:employee');
+  assert.deepEqual(effect.children.map(n=>n.key),['WJ_dasima_clear_effect']);
+ }
+ const actions=defs('common/on_action/WJ_inner_court_on_actions.txt');
+ assert.deepEqual(one(actions.WJ_inner_member_died,'effect').children.map(n=>n.key),['WJ_dasima_clear_effect']);
+ assert.equal(one(one(actions.WJ_inner_holder_check,'trigger'),'has_variable').value,'wj_dasima_emperor');
+ const reconcile=defs('common/scripted_effects/WJ_inner_court_effects.txt').WJ_dasima_reconcile_effect;
+ const keep=walk(reconcile).filter(({n})=>n.key==='appoint_court_position');
+ assert.equal(keep.length,1);
+ assert.equal(one(keep[0].n,'recipient').value,'scope:wj_continuing_dasima');
+ const eligible=keep[0].p.find(n=>n.key==='if'&&one(n,'limit')?.children.some(x=>x.key==='WJ_dasima_retention_trigger'));
+ assert.equal(one(eligible,'save_scope_as').value,'wj_continuing_dasima');
+ assert(!walk(reconcile).some(({n})=>/heir|ordered_court_position_candidate/.test(n.key)));
+});
+test('nine minister title holders and the designated hereditary chancellor retain their title-gain paths',()=>{
+ const normal=defs('common/on_action/WJ_court_ministry_on_actions.txt').WJ_court_minister_title_gain;
+ assert.equal(one(one(normal,'trigger'),'scope:title.holder').value,'root');
+ const appointments=walk(one(normal,'effect')).filter(({n})=>n.key==='got_minister_position_effect').map(({n})=>one(n,'MINISTER_POSITION').value);
+ assert.deepEqual(appointments.sort(),Object.entries(offices).filter(([id])=>id!=='1').map(([,office])=>office).sort());
+ const special=defs('common/on_action/WJ_chengxiang_ministry_on_actions.txt').WJ_cheng_xiang_title_gain;
+ assert.equal(one(one(special,'trigger'),'scope:title.holder').value,'root');
+ assert(walk(special).some(({n})=>n.key==='scope:title.var:wj_cx_successor'&&n.value==='root'));
+ assert(walk(special).some(({n})=>n.key==='got_minister_position_effect'&&one(n,'MINISTER_POSITION').value===offices[1]));
+ for(const hook of [normal,special])assert(!walk(hook).some(({n})=>n.key.startsWith('WJ_ty_native_')||n.key==='WJ_ty_managed_appointment_employer'));
 });
 console.log('PASS: '+cases+' native-route AST/GUI groups; independent candidate window and restored native pages, protected entry pairs, 3 right-click interactions, player automation and real removal snapshots.');
 console.log('LIVE ENGINE/GUI: NOT RUN. Candidate job qualification and real appointment chain remain covered separately by tingyi_appointments.cjs.');

@@ -11,9 +11,9 @@ const fixedAgreements=new Map();
 // Deliberately isolate presentation/weights from the independently tested attitude model.
 for(let i=0;i<7;i++)values['WJ_ty_agreement_'+i]=()=>fixedAgreements.get(i)??0;
 const setAgreement=(seat,value)=>fixedAgreements.set(seat,value);
-const selectors={...defs('common/customizable_localization/WJ_merit_flavor_loc.txt'),...defs('common/customizable_localization/WJ_tingyi_tooltips.txt'),WJ_PeerRank:defs('common/customizable_localization/WJ_peerage_names.txt').WJ_PeerRank};
+const selectors={...defs('common/customizable_localization/WJ_ty_seated_master.txt'),...defs('common/customizable_localization/WJ_merit_flavor_loc.txt'),...defs('common/customizable_localization/WJ_tingyi_tooltips.txt'),WJ_PeerRank:defs('common/customizable_localization/WJ_peerage_names.txt').WJ_PeerRank};
 const triggers={...defs('common/scripted_triggers/WJ_tingyi_triggers.txt'),...defs('common/scripted_triggers/WJ_tingyi_appointment_triggers.txt'),...defs('common/scripted_triggers/WJ_han_jin_office_triggers.txt')};
-const text=read('localization/simp_chinese/WJ_tingyi_l_simp_chinese.yml'),loc={};
+const text=read('localization/simp_chinese/WJ_tingyi_l_simp_chinese.yml')+'\n'+read('localization/simp_chinese/WJ_ty_memorial_scores_l_simp_chinese.yml'),loc={};
 for(const line of (text+'\n'+read('localization/simp_chinese/mechanisms/WJ_office_and_assessment_l_simp_chinese.yml')+'\n'+read('localization/simp_chinese/custom_localization/WJ_names_l_simp_chinese.yml').split(/\r?\n/).filter(line=>/^ WJ_peer_rank_[1-5]:/.test(line)).join('\n')).split(/\r?\n/)){
  const m=/^\s+(\w+):\d*\s+(".*")\s*$/.exec(line);if(!m)continue;
  assert(!Object.hasOwn(loc,m[1]),'Duplicate localization '+m[1]);loc[m[1]]=JSON.parse(m[2]);
@@ -36,7 +36,7 @@ const primitives={
 };
 for(const rel of ['friend','best_friend','disciple','rival','nemesis'])primitives['has_relation_'+rel]=(c,s,n,p)=>(c[rel]||[]).includes(r.resolve(n.value,c,s,p));
 r=runner({effects:{},triggers,values,primitives});
-const char=name=>({name,is_alive:true,age:40,diplomacy:0,stewardship:0,intrigue:0,vars:{},traits:[],laws:[],diarchy_swing:0,family:[],lists:{},expiry:{},opinions:new Map(),house:{},dynasty:{},modifiers:[],merit:0,gold:0,treasury:0,opinionEffects:[],hooks:[],titles:[],minister:false});
+const char=name=>({name,is_ai:true,is_imprisoned:false,is_alive:true,age:40,diplomacy:0,stewardship:0,intrigue:0,vars:{},traits:[],laws:[],diarchy_swing:0,family:[],lists:{},expiry:{},opinions:new Map(),house:{},dynasty:{},modifiers:[],merit:0,gold:0,treasury:0,opinionEffects:[],hooks:[],titles:[],minister:false});
 function setup(seat=2){
  clock=0;fixedAgreements.clear();player=char('操作者');const proposer=char('提议者'),member=char('议臣'),target=char('受益者'),emperor=char('天子');
  player.vars={wj_ty_proposer:proposer,wj_ty_emperor:emperor,wj_ty_target:target,wj_ty_topic:1,wj_ty_office:8,wj_ty_tier:1};
@@ -118,7 +118,7 @@ function render(key,character=player){
   const value=vm.runInNewContext(expr,{
    GetModifier:key=>{assert(lobbyModifiers[key],'Missing actual modifier '+key);return {GetNameWithTooltip:render(key,character)};},
    GetCourtPositionType:key=>({GetName:({WJ_dasima_court_position:'大司马',favored_minister_court_position:'侍中',chief_eunuch_court_position:'中常侍'})[key]||assert.fail('Unknown court position '+key)}),
-   TopScope:{GetValue:key=>{assert.equal(key,'wj_ty_row_group');return uiGroup;},sCharacter:key=>{assert.equal(key,'wj_ty_detail_subject');return wrap(uiSubject);},ScriptValue:key=>{assert.equal(key,'WJ_ty_row_mode');return uiMode;}},
+   TopScope:{GetValue:key=>{assert.equal(key,'wj_ty_row_group');return uiGroup;},sCharacter:key=>{assert(['wj_ty_detail_subject','wj_ty_observer'].includes(key));return wrap(uiSubject);},ScriptValue:key=>{assert.equal(key,'WJ_ty_row_mode');return uiMode;}},
    Scope:{CourtPositionType:{GetName:uiPost},Trait:{GetName:()=>uiTrait}},
    GetPrestigeLevelName:()=> '高贵之人',GetPietyLevelName:()=> '虔诚',
    GetPlayer:wrap(player),Character:wrap(character),Localize:k=>render(k,character),SelectLocalization:(yes,a,b)=>yes?render(a,character):(b?render(b,character):''),
@@ -145,8 +145,11 @@ for(const node of Object.values(attitudeAst))walk(node,n=>{
 });
 // Every surviving source is checked above; deleting a mechanic may reduce the count.
 assert(!gui.includes('GetScriptValueBreakdown('),'A nested native tree must not gate or hide the explicit tooltip');
-assert(display.includes('text = "[TopScope.ScriptValue(\'WJ_ty_row_value\')|=+2]"'));
-assert(display.includes("visible = \"[Not(EqualTo_CFixedPoint(TopScope.ScriptValue('WJ_ty_row_value'), '(CFixedPoint)0'))]\""));
+// 1.21 rejects rebinding TopScope from itself. Score and zero filtering share each source projection.
+const projectedScores=[...display.matchAll(/blockoverride "row_score" \{ text = "\[([^"\r\n]+)\.ScriptValue\('WJ_ty_row_value'\)\|=\+2\]"/g)].map(m=>m[1]);
+const projectedVisibility=[...display.matchAll(/blockoverride "row_visible" \{ visible = "\[Not\(EqualTo_CFixedPoint\(([^"\r\n]+)\.ScriptValue\('WJ_ty_row_value'\), '\(CFixedPoint\)0'\)\)\]"/g)].map(m=>m[1]);
+assert.equal(projectedScores.length,91);assert.deepEqual(projectedScores,projectedVisibility);
+assert(!/datacontext = "\[TopScope\.AddScope/.test(display));
 assert(!display.includes('scrollarea'),'Opinion tooltip follows content height, without a fixed-height scroll viewport');
 assert(display.includes('margin = { 8 8 }')&&display.includes('spacing = 2'));
 assert(display.includes('using = GeneralTooltipSetup using = DefaultTooltipBackground'));
@@ -214,21 +217,23 @@ for(const name of ['被撤者甲','原任乙','拟任丙','你']){
  for(const key of sourceKeys)if(!['WJ_ty_bd_empty','WJ_ty_bd_self','WJ_ty_bd_follow_regent'].includes(key)){
   const shown=render('WJ_ty_row_'+key.slice(9));assert(!/ERROR|wj_ty_subject|wj_ty_job/.test(shown));
   // Real changing job/rank names must not be truncated to meet a static-label limit.
-  if(key!=='WJ_ty_bd_controlled'&&!key.startsWith('WJ_ty_bd_lobby_')&&!['council_job','court_job','rank'].some(k=>key==='WJ_ty_bd_'+k))assert([...shown.replace(/[：:]/g,'')].length<=7,'Source name too long: '+key+' / '+shown);
+  if(key!=='WJ_ty_bd_controlled'&&!key.startsWith('WJ_ty_bd_lobby_')&&!['council_job','court_job','rank','merit'].some(k=>key==='WJ_ty_bd_'+k))assert([...shown.replace(/[：:]/g,'')].length<=7,'Source name too long: '+key+' / '+shown);
   if(key!=='WJ_ty_bd_controlled')assert(!/提议者|受益者|受损者|原任者/.test(shown),'No repeated role prefix in the main list');cases++;
  }
  assert(render('WJ_ty_row_source_person').includes(uiSubject.name),'The original source person must remain accessible');
  assert.equal(render('WJ_ty_row_selected_court'),'涉及侍中变动：');
  assert.equal(render('WJ_ty_row_selected_rank'),'涉及镇军将军变动：');cases+=3;
+ assert.equal(render('WJ_ty_row_merit'),(name==='你'?'你':name)+'的贤望：');cases++;
  assert.equal(render('WJ_ty_row_diplomacy'),(name==='你'?'你的':'')+'外交能力：');
  assert.equal(render('WJ_ty_row_prestige'),(name==='你'?'你的':'')+'高贵之人：');cases+=2;
  assert.equal(render('WJ_ty_row_status_council'),(name==='你'?'你':name)+'是公卿：');
  assert.equal(render('WJ_ty_row_council_job'),'涉及太尉变动：');cases+=2;
 }
 uiSubject.is_female=true;assert.equal(render('WJ_ty_row_relation_parent'),'母亲：');cases++;
-for(const [mode,cause]of [[1,'席位空缺：#P +100#!'],[2,'是提议者本人：#P +100#!'],[4,'随录尚书事']]){uiMode=mode;assert.equal(render('WJ_ty_row_forced'),cause);cases++;}
+uiSubject=setup().member;uiSubject.puppeteer=player.vars.wj_ty_seat_3;
+for(const [mode,cause]of [[1,'席位空缺：#P +100#!'],[2,'是提议者本人：#P +100#!'],[4,uiSubject.name+'是'+uiSubject.puppeteer.name+'的puppet，态度随其同步'],[5,'身在狱中，以缺席计：#P +100#!'],[6,'受hook所制，本议至少支持：#P +25#!']]){uiMode=mode;assert.equal(render('WJ_ty_row_forced'),cause);cases++;}
 uiMode=0;
-assert.equal((display.match(/MakeScopeFlag\('WJ_ty_bd_support'\)/g)||[]).length,1,'Single paid-support total');
+assert.equal(flat(uiTree).filter(n=>n.key==='WJ_ty_attitude_row'&&flat(n).some(c=>c.key==='text'&&c.value?.includes("MakeScopeFlag('WJ_ty_bd_support')"))).length,1,'Single paid-support row; its visibility and score read the same projection');
 assert(!display.includes('text = WJ_ty_lobby_heading'),'No repeated heading above the single total');
 assert.equal(render('WJ_ty_row_support'),'换取支持：');assert(loc.WJ_ty_row_controlled.includes('[puppet|E]'));assert(render('WJ_ty_row_controlled').includes(player.vars.wj_ty_proposer.name));
 assert.equal(loc.WJ_ty_lobby_confirm,'换取支持');assert(loc.WJ_ty_lobby_target.startsWith('换取支持'));
@@ -237,7 +242,7 @@ function visibleInMode(node,mode){
  const expression=JSON.parse(one(node,'visible').value).slice(1,-1);
  return vm.runInNewContext(expression,{TopScope:{ScriptValue:key=>{assert.equal(key,'WJ_ty_row_mode');return mode;}},Not:x=>!x,And:(a,b)=>a&&b,Or:(a,b)=>a||b,EqualTo_CFixedPoint:(a,b)=>a===Number(b.replace('(CFixedPoint)',''))});
 }
-for(const mode of [0,1,2,3,4]){assert.equal(visibleInMode(normalBody,mode),mode===0||mode===3);assert.equal(visibleInMode(forcedLabel,mode),mode!==0&&mode!==3);cases++;}
+for(const mode of [0,1,2,3,4,5,6]){assert.equal(visibleInMode(normalBody,mode),mode===0||mode===3);assert.equal(visibleInMode(forcedLabel,mode),mode!==0&&mode!==3);cases++;}
 // Contribution breakdown: read the actual tooltip and reconcile each displayed
 // weight with production contribution/total, including the separately counted army.
 function contribution(seat){
@@ -297,9 +302,9 @@ for(const topic of [1,2,3,4])for(const office of [1,8])for(const regent of [true
  player.vars.wj_ty_seat_2=w.proposer;w.proposer.traits.push('WJ_zhongwai');assert.equal(contribution(2).total,200);
  player.vars.wj_ty_seat_0.traits.push('WJ_zhongwai');assert.equal(contribution(0).military,100);assert.equal(contribution(2).military,0);
 }
-for(const loss of ['trait','other controller']){
+for(const loss of ['other controller']){
  const w=setup(0);w.emperor.traits=['WJ_zhongwai'];
- if(loss==='trait')w.emperor.traits.push('WJ_lost_imperial_authority');else w.emperor.puppeteer=char('另一控制者');
+ w.emperor.puppeteer=char('另一控制者');
  setAgreement(0,-50);
  assert.equal(contribution(0).total,-125);
 }
@@ -354,7 +359,7 @@ for(const stance of [-1,-0.5,0,0.5,1]){
  delete player.vars.wj_ty_appointment_source_task;delete player.vars.wj_ty_appointment_destination_task;
  assert.equal(render('WJ_ty_appointment_summary'),loc.WJ_ty_transfer_summary);cases++;
 }
-const removalGui=read('gui/WJ_tingyi.gui').split('name = "WJ_ty_dismiss_pane"')[1].split('widget = { position = { 834 350 }')[0];
+const removalGui=read('gui/WJ_tingyi.gui').split('name = "WJ_ty_dismiss_pane"')[1].split('name = "WJ_ty_lobby_pane"')[0];
 assert(removalGui.includes("GetList('wj_ty_selected_court_positions')"));
 assert(!removalGui.includes('button_checkbox'));
 assert(removalGui.includes("GetScriptedGui('WJ_ty_gui_removal_result').BuildTooltip(GuiScope.SetRoot(GetPlayer.MakeScope).End)"));
@@ -422,22 +427,25 @@ setup();setAgreement(2,51.8);assert(render('WJ_ty_attitude_label_2').includes('+
 assert.equal(number('WJ_ty_agreement_2'),51.8);
 // Preview vs actual settlement branch. Eligibility/GUI/events are outside this
 // fixture; run the existing reward branch itself, with native effect primitives.
-const commit=one(defs('common/scripted_effects/WJ_tingyi_effects.txt').WJ_ty_commit,'if');
-const rewardBranch=topic=>commit.children.find(n=>['if','else_if'].includes(n.key)&&one(n,'limit').children.some(x=>x.key==='var:wj_ty_topic'&&x.value===String(topic)));
+const runtimeEffects=defs('common/scripted_effects/WJ_tingyi_effects.txt');
+const commit=one(runtimeEffects.WJ_ty_commit,'if');
+const rewardBranch=topic=>commit.children.find(n=>['if','else_if'].includes(n.key)&&one(n,'limit').children.length===1&&one(n,'limit').children.some(x=>x.key==='var:wj_ty_topic'&&x.value===String(topic)));
 const topicGuis=defs('common/scripted_guis/WJ_tingyi_guis.txt');
 for(const [id,label,wrong,effect]of [[1,'拔擢','赏赐','change_merit'],[2,'赏赐','拔擢','add_gold']]){
  setup();const effectNode=one(topicGuis['WJ_ty_gui_topic_'+id],'effect');
- const actual=effectNode.children.find(n=>n.key==='set_variable'&&one(n,'name').value==='wj_ty_topic');assert(actual);
+ const actual=flat(effectNode).find(n=>n.key==='set_variable'&&one(n,'name').value==='wj_ty_topic');assert(actual);
  const topic=Number(one(actual,'value').value);player.vars.wj_ty_topic=topic;player.vars.wj_ty_tier=3;
- assert(flat(rewardBranch(topic)).some(n=>n.key===effect),'Label must agree with the actual reward settlement');
+ const actualBranch=rewardBranch(topic);
+ if(topic===2)assert(flat(actualBranch).some(n=>n.key==='WJ_ty_reward_gold_deliver'));
+ assert(flat(topic===2?runtimeEffects.WJ_ty_reward_gold_deliver:actualBranch).some(n=>n.key===effect),'Label must agree with the actual reward settlement');
  for(const key of ['WJ_ty_row_reward_scale','WJ_ty_row_reward_excess']){const shown=render(key);assert(shown.includes(label)&&!shown.includes(wrong),'Actual topic/settlement/attitude label mismatch: '+shown);cases++;}
 }
-const rewardRelations=commit.children.find(n=>n.key==='if'&&one(n,'limit').children.some(x=>x.key==='scope:wj_ty_target'));
+const rewardRelations=commit.children.find(n=>n.key==='if'&&n.children.some(x=>x.key==='WJ_ty_reward_favor'));
 assert(rewardRelations,'Shared reward relationship settlement must be exercised');
 const rewardModifiers=defs('common/modifiers/WJ_tingyi_modifiers.txt');
 const opinionModifiers=defs('common/opinion_modifiers/WJ_tingyi_opinions.txt');
 const cap=c=>c.modifiers.reduce((sum,key)=>sum+Number(one(rewardModifiers[key],'character_max_merit_level_add').value),0);
-const settle=runner({effects:{},values,triggers,primitives,onEffect:(n,c,s)=>{
+const settle=runner({effects:runtimeEffects,values,triggers,primitives,onEffect:(n,c,s)=>{
  if(n.key==='add_character_modifier'){const key=one(n,'modifier').value;if(!c.modifiers.includes(key))c.modifiers.push(key);return true;}
  if(n.key==='remove_character_modifier'){c.modifiers=c.modifiers.filter(key=>key!==n.value);return true;}
  if(['change_merit','add_gold','remove_short_term_gold','remove_treasury'].includes(n.key)){
@@ -449,7 +457,10 @@ const settle=runner({effects:{},values,triggers,primitives,onEffect:(n,c,s)=>{
  return false;
 }});
 function settleReward(topic){
- settle.execute([...rewardBranch(topic).children.filter(n=>n.key!=='limit'),rewardRelations],player,{root:player,current_date:0,wj_ty_target:player.vars.wj_ty_target,wj_ty_proposer:player.vars.wj_ty_proposer,wj_ty_emperor:player.vars.wj_ty_emperor});
+ // Both routes have already passed the funding check. Exercise the actual economy
+ // and favor code without dispatching a second session or opening result UI.
+ const effects=topic===2?runtimeEffects.WJ_ty_reward_gold_deliver.children:[...rewardBranch(topic).children.filter(n=>n.key!=='limit'),rewardRelations];
+ settle.execute(effects,player,{root:player,current_date:0,wj_ty_target:player.vars.wj_ty_target,wj_ty_proposer:player.vars.wj_ty_proposer,wj_ty_emperor:player.vars.wj_ty_emperor});
 }
 function checkRewardRelations(shown,target,proposer,tier){
  const self=target===proposer,hook=!self&&tier===3;

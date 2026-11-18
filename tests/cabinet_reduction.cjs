@@ -89,6 +89,41 @@ for(const hasChancellor of [false,true])for(const hasDiarch of [false,true]){
 
 const personnel=named('WJ_hanjin_personnel_row');assert.equal(personnel.children.filter(n=>n.key==='widget_councillor_item').length,1);
 assert(one(named('WJ_hanjin_shangshuling'),'layoutpolicy_horizontal').value==='expanding');
+// Full-width cards must retain the same left edge as the ordinary half-width cards.
+let cardTemplate;walk(tree,n=>{if(n.key==='widget_councillor_item'&&n.children?.some(c=>c.key==='state'))cardTemplate=n;});
+const header=one(cardTemplate,'vbox'),bar=one(header,'hbox');
+assert.equal(one(header,'parentanchor').value,'top|left');
+assert.equal(one(header,'layoutpolicy_horizontal').value,'expanding');
+// The outer row may grow, but title/actions must keep the same left offsets.
+// Do not emulate the engine's automatic hbox sizing: verify explicit child geometry.
+const titleRow=one(one(bar,'vbox'),'widget');
+assert.equal(one(titleRow,'layoutpolicy_horizontal').value,'expanding');
+assert.equal(one(titleRow,'layoutpolicy_vertical').value,'fixed');
+assert.deepEqual(one(titleRow,'size').children.map(n=>n.key),['-1','26']);
+const title=one(titleRow,'text_single'),actions=named('wj_ty_entry_actions');
+assert.equal(actions.key,'widget','automatic hbox distribution must not separate the controls on wide cards');
+const pair=(n,key)=>one(n,key).children.map(c=>Number(c.key));
+const leftFixed=(n,x,width)=>{
+ assert.equal(one(n,'parentanchor').value,'top|left');
+ assert.equal(one(n,'layoutpolicy_horizontal').value,'fixed');
+ assert.deepEqual(pair(n,'position'),[x,0]);assert.deepEqual(pair(n,'size'),[width,26]);
+};
+leftFixed(title,0,58);assert.equal(one(title,'align').value,'left|nobaseline');
+leftFixed(actions,58,108);
+leftFixed(named('wj_ty_entry_appoint'),0,52);leftFixed(named('wj_ty_entry_dismiss'),56,52);
+// Anchored controls stay within both native 260px cards and the 530px full row.
+// This is source geometry, not evidence of CK3 rendering or click delivery.
+const actionX=pair(actions,'position')[0];
+const slots=[{x:pair(title,'position')[0],w:pair(title,'size')[0]},
+ ...['wj_ty_entry_appoint','wj_ty_entry_dismiss'].map(name=>{const n=named(name);return {x:actionX+pair(n,'position')[0],w:pair(n,'size')[0]};})];
+for(const width of [260,530]){
+ assert(slots.every(s=>s.x+s.w<=width-6-42));
+ assert(slots.every((s,i)=>i===0||s.x>=slots[i-1].x+slots[i-1].w));
+}
+for(const text of regent.children.filter(n=>n.key==='text_single'&&n.children.some(c=>c.key==='parentanchor'&&c.value==='top|left')))
+ assert.equal(one(text,'align').value,'left|nobaseline');
+const titleLoc=read('localization/replace/simp_chinese/uuii_dm_barony_missing_l_simp_chinese.yml');
+assert.match(titleLoc,/^ e_minister_of_personnel: "尚书台"\r?$/m);
 const preset=read('events/WJ_chancellor_events.txt'),names=read('common/customizable_localization/WJ_name_memorial.txt');
 assert(preset.includes('WJ_cx_name_taifu'));assert(names.includes('WJ_cx_name_taifu'));assert(!preset.includes('WJ_cx_name_dachengxiang'));
 const loc=read('localization/simp_chinese/council/WJ_chancellor_l_simp_chinese.yml');

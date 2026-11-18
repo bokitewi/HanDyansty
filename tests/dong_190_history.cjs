@@ -154,6 +154,33 @@ console.log(`PASS: merged ${files('history/titles').length} title histories; Don
 // Execute the production branches. Native wars/appointments, scheduled events,
 // story bookkeeping and building/purge effects are boundary fixtures, not CK3.
 const {runner, byName} = require('./helpers/ck3_effect_harness');
+
+// The two existing military-rank holders receive real land from dated history,
+// not a roster exception or a startup grant. The 190 table must not erase 189.
+const before189=snapshot(1881231),in189=snapshot(1890101),after190=snapshot(1900101),in218=snapshot(2180101);
+const militaryLevel=one(contract,'obligation_levels').children[3];
+assert.equal(militaryLevel.key,'celestial_province_military');
+assert(militaryLevel.children.some(n=>n.key==='flag'&&n.value==='celestial_military_appointment'));
+const historyEngine=runner({effects:{},triggers:{},values:{},onEffect(n,c){
+ if(n.key!=='vassal_contract_set_obligation_level')return false;
+ c.contract={type:one(n,'type').value,level:one(n,'level').value};return true;
+}});
+for(const [id,county,trait]of [['huang_fu_song','c_uuii_p_896','WJ_mr_zhonglang_zuo'],['lu_zhi','c_uuii_p_898','WJ_mr_zhonglang_bei']]){
+ assert.equal(before189[county].holder,'wj_184_county_'+county,'earlier history unchanged');
+ for(const state of [in189,after190]){
+  assert.equal(state[county].holder,id,'dated grant survives the later 190 table');
+  assert.equal(state[county].government,'celestial_government');assert.equal(state[county].liege,'k_uuii_sili');
+ }
+ assert.equal(in218[county].holder,'cao_cao','later bookmark ownership remains');assert.equal(in218[county].liege,'d_shiping');
+ assert(characters[id].children.some(n=>n.key==='trait'&&n.value===trait),'existing military trait retained');
+ const title={},c={titles:[title],['title:'+county]:title};
+ const effect=one(one(characters[id],'189.1.1'),'effect');assert(effect,'contract is in character history');
+ assert(!contains(effect,'change_title_holder'),'history owns the dated grant');
+ historyEngine.execute(effect.children,c,{root:c});assert.deepEqual(c.contract,{type:'celestial_provinces',level:'3'});
+ delete c.contract;c.titles=[];historyEngine.execute(effect.children,c,{root:c});assert(!c.contract,'contract guard respects later loss of the county');
+}
+console.log('PASS: 189 Huangfu Song/Lu Zhi county history, real military contract, 190 retention, pre-189/later-218 boundaries and title-loss guard; no startup grant. Engine not run.');
+
 const scriptFiles = ['zz_hd_190_startup_effects', 'zz_hd_palace_crisis_effects', 'zz_hd_anti_regent_lifecycle_effects'];
 const effects = Object.assign({}, ...scriptFiles.map(f => byName(parse(read(`common/scripted_effects/${f}.txt`)))));
 function setupChain() {

@@ -6,12 +6,12 @@ const assert=require('node:assert/strict'),fs=require('node:fs');
 const {read,parse,byName,one,runner}=require('./helpers/ck3_effect_harness');
 const defs=p=>{const text=read(p);assert(text,'Missing production definitions: '+p);return byName(parse(text));};
 const merge=(...files)=>Object.assign({},...files.map(defs));
-const effects=merge('common/scripted_effects/WJ_inner_court_effects.txt','common/scripted_effects/WJ_tingyi_effects.txt','common/scripted_effects/WJ_tingyi_appointment_effects.txt','common/scripted_effects/WJ_tingyi_picker_effects.txt','common/scripted_effects/WJ_tingyi_removal_effects.txt');
-const triggers=merge('common/scripted_triggers/WJ_tingyi_triggers.txt','common/scripted_triggers/WJ_kaoke_triggers.txt','common/scripted_triggers/WJ_real_fief_triggers.txt','common/scripted_triggers/WJ_tingyi_appointment_triggers.txt','common/scripted_triggers/WJ_tingyi_removal_triggers.txt','common/scripted_triggers/WJ_tingyi_court_position_triggers.txt',
+const effects=merge('common/scripted_effects/WJ_ty_reward_ai_effects.txt','common/scripted_effects/WJ_tingyi_memorial_effects.txt','common/scripted_effects/WJ_inner_court_effects.txt','common/scripted_effects/WJ_tingyi_effects.txt','common/scripted_effects/WJ_tingyi_appointment_effects.txt','common/scripted_effects/WJ_tingyi_picker_effects.txt','common/scripted_effects/WJ_tingyi_local_picker_effects.txt','common/scripted_effects/WJ_tingyi_removal_effects.txt');
+const triggers=merge('common/scripted_triggers/WJ_ty_reward_ai_triggers.txt','common/scripted_triggers/WJ_tingyi_memorial_triggers.txt','common/scripted_triggers/WJ_tingyi_triggers.txt','common/scripted_triggers/WJ_kaoke_triggers.txt','common/scripted_triggers/WJ_real_fief_triggers.txt','common/scripted_triggers/WJ_tingyi_appointment_triggers.txt','common/scripted_triggers/WJ_tingyi_removal_triggers.txt','common/scripted_triggers/WJ_tingyi_court_position_triggers.txt',
  'common/scripted_triggers/WJ_inner_court_triggers.txt','common/scripted_triggers/WJ_court_context_triggers.txt',
  'common/scripted_triggers/zz_WJ_chinese_coronation_triggers.txt','common/scripted_triggers/10_tgp_triggers.txt','common/scripted_triggers/WJ_mufu_triggers.txt','common/scripted_triggers/WJ_district_military_triggers.txt');
 const values=merge('common/script_values/WJ_tingyi_values.txt','common/script_values/WJ_tingyi_attitude_social_values.txt','common/script_values/WJ_tingyi_attitude_values.txt');
-const sg=merge('common/scripted_guis/WJ_tingyi_guis.txt','common/scripted_guis/WJ_tingyi_picker_guis.txt','common/scripted_guis/WJ_tingyi_local_picker_guis.txt','common/scripted_guis/WJ_tingyi_removal_guis.txt','common/scripted_guis/WJ_tingyi_native_picker_guis.txt','common/scripted_guis/WJ_tingyi_native_routes.txt','common/scripted_guis/WJ_relation_display.txt'),opinions=defs('common/opinion_modifiers/WJ_tingyi_opinions.txt');
+const sg=merge('common/scripted_guis/WJ_tingyi_guis.txt','common/scripted_guis/WJ_ty_memorial_guis.txt','common/scripted_guis/WJ_tingyi_picker_guis.txt','common/scripted_guis/WJ_tingyi_local_picker_guis.txt','common/scripted_guis/WJ_tingyi_removal_guis.txt','common/scripted_guis/WJ_tingyi_native_picker_guis.txt','common/scripted_guis/WJ_tingyi_native_routes.txt','common/scripted_guis/WJ_relation_display.txt'),opinions=defs('common/opinion_modifiers/WJ_tingyi_opinions.txt');
 const entry=defs('common/character_interactions/WJ_tingyi_interactions.txt').WJ_tingyi_interaction;
 // Native type constants exist for the whole dispatch even when nobody holds them.
 // Supply the same effective type set as the route/removal suites, not four samples.
@@ -19,8 +19,9 @@ const courtTypeIds=[...new Set([...read('common/scripted_triggers/WJ_tingyi_cour
 let r;
 const member=(n,k)=>n.children?.find(x=>x.key===k);
 const primitive={
- is_courtier_of:(c,s,n)=>(r.resolve(n.value,c,s)?.every_courtier||[]).includes(c),
- is_vassal_or_below_of:(c,s,n)=>(r.resolve(n.value,c,s)?.every_vassal_or_below||[]).includes(c),
+ is_courtier_of:(c,s,n,p)=>(r.resolve(n.value,c,s,p)?.every_courtier||[]).includes(c),
+ hd_is_any_ministry_title_trigger:(c,s,n)=>Boolean(c.ministerTitle)===(n.value==='yes'),
+ is_vassal_or_below_of:(c,s,n,p)=>(r.resolve(n.value,c,s,p)?.every_vassal_or_below||[]).includes(c),
  is_clergy:(c,s,n)=>Boolean(c.clergy)===(n.value==='yes'),
  has_doctrine_parameter:(c,s,n)=>(c.parameters||[]).includes(n.value),
  is_child_of:(c,s,n)=>(c.parents||[]).includes(r.resolve(n.value,c,s)),
@@ -65,6 +66,18 @@ const primitive={
 for(const rel of ['friend','best_friend','blood_brother','rival','nemesis','lover','soulmate','disciple','elder','mentor','student','guardian','ward'])primitive['has_relation_'+rel]=(c,s,n)=>(c[rel]||[]).includes(r.resolve(n.value,c,s));
 r=runner({effects,triggers,values,primitives:primitive,onEffect(n,c,s,p){
  const k=n.key;
+ if(k==='every_player'){
+  for(const player of (c['title:h_china'].holder.fixtureRealm||[]).filter(person=>!person.is_ai)){
+   const previous=s.prev;s.prev=c;
+   if(r.check(one(n,'limit').children,player,s,p))r.execute(n.children.filter(x=>x.key!=='limit'),player,s,p);
+   s.prev=previous;
+  }
+  return true;
+ }
+ if(['send_interface_message','send_interface_toast','send_interface_popup'].includes(k)){
+  const field={send_interface_message:'messages',send_interface_toast:'toasts',send_interface_popup:'popups'}[k];
+  (c[field]||=[]).push({title:one(n,'title').value.replace(/\$RESULT\$/g,p.RESULT),target:s.wj_ty_target,payer:s.wj_ty_payer,score:s.wj_ty_final_score});return true;
+ }
  if(k==='clear_saved_scope'){delete s[n.value];return true;}
  if(k==='consume_revoke_title_reason'){const target=r.resolve(n.value,c,s,p);assert((c.reasons||[]).includes(target));c.reasons=c.reasons.filter(x=>x!==target);return true;}
  if(k==='revoke_court_position'){
@@ -116,10 +129,10 @@ r=runner({effects,triggers,values,primitives:primitive,onEffect(n,c,s,p){
   for(const target of pool){const prev=s.prev;s.prev=c;const limit=member(n,'limit');if(!limit||r.check(limit.children,target,s,p))r.execute(n.children.filter(x=>!['limit','variable'].includes(x.key)),target,s,p);s.prev=prev;}return true;
  }
 }});
-function world(){
+function world(empty=false){
  const title={tier:6},all=[];
  // High native-opinion fixture inputs isolate approval/settlement flows; balancing uses attitude suite.
- function char(name){const c={name,is_alive:true,age:40,is_adult:true,is_landed:false,is_ai:true,is_imprisoned:false,governmentFlags:[],highest_held_title_tier:0,
+ function char(name){const c={name,is_alive:true,age:40,is_adult:true,is_landed:false,is_independent_ruler:false,is_ai:true,is_imprisoned:false,governmentFlags:[],highest_held_title_tier:0,
   diplomacy:10,martial:10,stewardship:10,intrigue:10,learning:10,faith:{parameters:[]},culture:'han',prestige_level:1,piety_level:1,merit_level:0,'define:NCharacter|SKILL_MODIFIER_OFFSET':-8,'define:NCharacterOpinion|SKILL_DIPLOMACY_MULT':1,
   vars:{},lists:{},laws:[],titles:[],traits:[],positions:{},council:[],family:[],modifiers:[],marks:[],hooks:[],events:[],opinions:new Map(),gold:3000,treasury:0,prestige:2000,influence:1000,merit:0,strongHookEligible:true,'title:h_china':title};
   for(const name of ['WJ_sanjie','WJ_huangyue','WJ_kaifu','WJ_kaifu_office','WJ_zhoumu'])c['vassal_contract_obligation_level:'+name]=0;
@@ -128,14 +141,16 @@ function world(){
  const courtTypes=Object.fromEntries(courtTypeIds.map(name=>[name,{name}]));
  for(const type of Object.values(courtTypes))for(const [key,value]of Object.entries(courtTypes))type['court_position_type:'+key]=value;
  const emperor=char('帝'),regent=char('录'),shangshu=char('尚书'),dasima=char('司马'),marshal=char('将军'),shizhong=char('侍中'),eunuch=char('常侍'),target=char('受益者');
- title.holder=emperor;emperor.titles=[title];emperor.top_liege=emperor;emperor.diarch=regent;emperor.diarchy_swing=80;emperor.puppeteer=regent;
+ emperor.fixtureRealm=all;title.holder=emperor;emperor.titles=[title];emperor.top_liege=emperor;emperor.diarch=regent;emperor.diarchy_swing=80;emperor.puppeteer=regent;
  emperor.governmentFlags=['government_is_celestial'];emperor.highest_held_title_tier=6;emperor.is_landed=true;
  emperor['cp:minister_personnel']=shangshu;shangshu.job='minister_personnel';emperor['cp:minister_grand_marshal']=marshal;marshal.job='minister_grand_marshal';emperor.council=[shangshu,marshal];
  emperor.vars.wj_dasima_holder=dasima;emperor.positions.WJ_dasima_court_position=dasima;emperor.positions.favored_minister_court_position=shizhong;emperor.positions.chief_eunuch_court_position=eunuch;
  regent.is_ai=false;regent.traits=['WJ_zhongwai'];
  for(const c of all){c.top_liege=emperor;c.opinions.set(regent,1000);if(![regent,emperor].includes(c))c.disciple=[regent];}
  const scopes={root:regent,actor:regent,recipient:target,current_date:0};
- r.run('WJ_ty_open',regent,scopes);
+ // Right-click is the only generic route that carries the recipient.
+ r.execute(one(entry,'on_accept').children,regent,scopes);
+ if(!empty)r.execute(one(sg.WJ_ty_gui_topic_1,'effect').children,regent,scopes);
  return{all,title,emperor,regent,shangshu,dasima,marshal,shizhong,eunuch,target,scopes,char};
 }
 const check=(id,w)=>r.check(triggers[id].children,w.regent,w.scopes);
@@ -144,11 +159,10 @@ function action(id,w){const d=sg[id];if(member(d,'is_valid')&&!r.check(one(d,'is
 let w=world();assert(check('WJ_ty_session',w));assert.equal(value('WJ_ty_total',w),1115);assert.equal(value('WJ_ty_max',w),1115);
 // Production refresh computes capital command from the entire represented realm,
 // including a commander's presence outside the seven meeting seats.
-for(const mode of ['free','puppet','lost-authority','court-commander','vassal-commander','vassal-court-commander']){
+for(const mode of ['free','puppet','court-commander','vassal-commander','vassal-court-commander']){
  const t=world();delete t.emperor.puppeteer;t.regent.traits=[];
  const outside=t.char('席外都督');outside.traits=['WJ_zhongwai'];outside.top_liege=t.emperor;
  if(mode==='puppet')t.emperor.puppeteer=t.regent;
- if(mode==='lost-authority')t.emperor.traits=['WJ_lost_imperial_authority'];
  if(mode==='court-commander')t.emperor.every_courtier_or_guest=[outside];
  if(mode==='vassal-commander')t.emperor.every_vassal_or_below=[outside];
  if(mode==='vassal-court-commander'){t.emperor.every_vassal_or_below=[t.target];t.target.every_courtier_or_guest=[outside];}
@@ -188,9 +202,9 @@ assert(w.regent.lists.wj_ty_picker_candidates.includes(w.target));assert.deepEqu
 w.scopes.candidate=w.target;assert(action('WJ_ty_gui_target',w));assert.equal(w.target.merit,0);assert(action('WJ_ty_gui_confirm',w));assert.equal(w.target.merit,0);
 assert(!w.regent.vars.wj_ty_picker);assert.deepEqual(w.regent.lists.wj_ty_picker_candidates,[]);assert.deepEqual(w.regent.lists.wj_ty_picker_filter_options,[]);
 assert(action('WJ_ty_gui_execute',w));assert.equal(w.target.merit,2000);assert.deepEqual(w.target.modifiers,['WJ_ty_merit_1']);assert.equal(w.regent.events.length,1);assert(w.target.vars.wj_ty_merit_cooldown);assert(!w.regent.vars.wj_ty_cooldown);assert(!action('WJ_ty_gui_execute',w));assert.equal(w.target.merit,2000);
-delete w.regent.vars.wj_ty_cooldown;r.run('WJ_ty_open',w.regent,w.scopes);assert(!check('WJ_ty_draft_valid',w),'one-year target cooldown');delete w.target.vars.wj_ty_merit_cooldown;
+delete w.regent.vars.wj_ty_cooldown;r.execute(one(entry,'on_accept').children,w.regent,w.scopes);action('WJ_ty_gui_topic_1',w);assert(!check('WJ_ty_draft_valid',w),'one-year target cooldown');delete w.target.vars.wj_ty_merit_cooldown;
 action('WJ_ty_gui_tier_3',w);action('WJ_ty_gui_confirm',w);action('WJ_ty_gui_execute',w);assert.deepEqual(w.target.modifiers,['WJ_ty_merit_3']);
-delete w.regent.vars.wj_ty_cooldown;delete w.target.vars.wj_ty_merit_cooldown;r.run('WJ_ty_open',w.regent,w.scopes);action('WJ_ty_gui_confirm',w);action('WJ_ty_gui_execute',w);assert.deepEqual(w.target.modifiers,['WJ_ty_merit_3'],'lower reward cannot downgrade or stack cap');
+delete w.regent.vars.wj_ty_cooldown;delete w.target.vars.wj_ty_merit_cooldown;r.execute(one(entry,'on_accept').children,w.regent,w.scopes);action('WJ_ty_gui_topic_1',w);action('WJ_ty_gui_confirm',w);action('WJ_ty_gui_execute',w);assert.deepEqual(w.target.modifiers,['WJ_ty_merit_3'],'lower reward cannot downgrade or stack cap');
 // Treasury then imperial private funds; proxy benefit belongs to the proposer, no double cost.
 w=world();w.emperor.treasury=350;w.emperor.gold=150;const before=w.target.gold;action('WJ_ty_gui_topic_2',w);assert(check('WJ_ty_draft_valid',w));action('WJ_ty_gui_confirm',w);action('WJ_ty_gui_execute',w);assert.equal(w.emperor.treasury,0);assert.equal(w.emperor.gold,0);assert.equal(w.target.gold,before+500);assert(!w.regent.hooks.includes(w.target));assert(!w.emperor.hooks.includes(w.target));assert(w.target.marks.some(m=>m.target===w.regent&&m.key==='WJ_ty_reward_small_favor'));
 w=world();w.emperor.treasury=300;w.emperor.gold=199;action('WJ_ty_gui_topic_2',w);assert(!check('WJ_ty_draft_valid',w));r.run('WJ_ty_commit',w.regent,w.scopes);assert.equal(w.emperor.treasury,300);
@@ -230,21 +244,21 @@ for(const topic of [1,2])for(const tier of [1,2,3])for(const self of [false,true
 w=world();action('WJ_ty_gui_confirm',w);w.title.holder=w.target;r.run('WJ_ty_commit',w.regent,w.scopes);assert.equal(w.target.merit,0);
 // Non-office controller represents emperor; office controller remains himself.
 w=world();const outside=w.char('无官控制者');outside.is_ai=false;outside.top_liege=outside;w.emperor.puppeteer=outside;const os={root:outside,actor:outside,recipient:w.target};r.run('WJ_ty_open',outside,os);assert.equal(outside.vars.wj_ty_proposer,w.emperor);assert(r.check(triggers.WJ_ty_session.children,outside,os));
-w=world();w.emperor.traits.push('WJ_lost_imperial_authority');w.emperor.puppeteer=null;w.regent.vars.wj_ty_proposer=w.dasima;w.shizhong.opinions.set(w.dasima,100);w.regent.opinions.set(w.dasima,-100);assert.equal(value('WJ_ty_agreement_0',w),value('WJ_ty_agreement_1',w),'powerless emperor follows actual regent');
+w=world();w.emperor.puppeteer=w.regent;w.regent.vars.wj_ty_proposer=w.dasima;w.shizhong.opinions.set(w.dasima,100);w.regent.opinions.set(w.dasima,-100);assert.equal(value('WJ_ty_agreement_0',w),value('WJ_ty_agreement_1',w),'powerless emperor follows actual regent');
 
 // Exercise the actual menu/on_accept route before any topic choices or resources exist.
-for(const actorType of ['regent','emperor','outside']){
+for(const actorType of ['regent','emperor','outside'])for(const recipientType of ['target','emperor']){
  w=world();r.run('WJ_ty_close',w.regent,w.scopes);
  let actor=w[actorType];
  if(actorType==='emperor'){w.emperor.puppeteer=null;actor.is_ai=false;}
  if(actorType==='outside'){actor=w.char('无官操作者');actor.is_ai=false;actor.top_liege=actor;w.emperor.puppeteer=actor;}
- const scopes={root:actor,actor,recipient:w.target,current_date:0};actor.gold=0;actor.influence=0;
+ const scopes={root:actor,actor,recipient:w[recipientType],current_date:0};actor.gold=0;actor.influence=0;
  assert(r.check(one(entry,'is_shown').children,actor,scopes));
  assert(r.check(one(entry,'is_valid_showing_failures_only').children,actor,scopes));
  assert(!r.check(one(entry,'needs_confirmation').children,actor,scopes),'no empty native confirmation');
  assert.equal(one(entry,'auto_accept').value,'yes');
  r.execute(one(entry,'on_accept').children,actor,scopes);
- assert.equal(actor.vars.wj_ty_open,1);assert.equal(actor.vars.wj_ty_target,w.target);
+ assert.equal(actor.vars.wj_ty_open,1);assert.equal(actor.vars.wj_ty_target,recipientType==='target'?w.target:undefined,'emperor entry opens an empty card');
  assert.equal(w.target.merit,0);assert.equal(actor.gold,0);assert(!actor.vars.wj_ty_confirmed);
 }
 // Missing optional office is false, never an unconditional authorization.
@@ -261,6 +275,7 @@ w.scopes.current_date=365;assert.equal(value('WJ_ty_lobby_score_5',w),0);assert(
 // separately exercises all ministries and native transfer/rollback fixtures.
 const resources=w=>w.all.map(c=>[c.name,c.gold,c.treasury,c.prestige,c.influence,c.merit]);
 function selectCourtNominee(w){
+ assert(action('WJ_ty_gui_remove_target',w));
  assert(action('WJ_ty_gui_office_8',w));assert(!check('WJ_ty_draft_valid',w),'no nominee cannot confirm');
  w.emperor.every_vassal_or_below=[w.target,w.shangshu];w.regent.every_courtier_or_guest=[w.shangshu];
  assert(action('WJ_ty_gui_picker',w));
@@ -280,16 +295,21 @@ for(const occupied of [false,true]){
  assert.deepEqual(resources(w),before);assert(check('WJ_ty_execute_valid',w));
  assert(action('WJ_ty_gui_execute',w));assert.equal(w.emperor.positions.favored_minister_court_position,w.shangshu);
  assert.deepEqual(resources(w),before,'appointment does not fall through to merit/gold rewards');
- assert(w.shangshu.vars.wj_ty_appoint_cooldown);assert(!w.regent.vars.wj_ty_cooldown);assert.equal(w.regent.events.length,1);assert(!w.regent.vars.wj_ty_open);
+ assert(w.shangshu.vars.wj_ty_appoint_cooldown);assert(!w.regent.vars.wj_ty_cooldown);assert.equal(w.regent.events.length,1);assert(w.regent.vars.wj_ty_open);assert.equal(w.regent.vars.wj_ty_topic,0);assert.equal(w.regent.vars.wj_ty_target,w.shangshu);
  assert(!w.regent.vars.wj_ty_appointment_snapshot);assert(!action('WJ_ty_gui_execute',w));
 }
-// Confirm, browse/cancel picker, then close the draft: no resources or office change.
+// Browsing is free; formally filing the five-hundred-gold request costs the proposer once.
 for(const topic of [1,2,3]){
  w=world();const before=resources(w),incumbent=w.emperor.positions.favored_minister_court_position;
  if(topic===3)selectCourtNominee(w);else assert(action('WJ_ty_gui_topic_'+topic,w));
  const target=w.regent.vars.wj_ty_target;
- assert(action('WJ_ty_gui_choice_gold',w));assert(action('WJ_ty_gui_confirm',w));assert.deepEqual(resources(w),before);
- assert(action('WJ_ty_gui_picker',w));assert(action('WJ_ty_gui_cancel_picker',w));
+ assert(action('WJ_ty_gui_choice_gold',w));assert.deepEqual(resources(w),before);
+ assert(action('WJ_ty_gui_confirm',w));
+ if(topic===2){const payer=before.find(row=>row[0]===w.regent.name);payer[1]-=10;payer[3]-=20;}
+ assert.deepEqual(resources(w),before);assert(action('WJ_ty_gui_confirm',w));assert.deepEqual(resources(w),before);
+ assert(!action('WJ_ty_gui_picker',w),'locked target must be explicitly removed first');
+ // Projection/cancel helpers remain read-only even if called with a reviewed target.
+ r.run('WJ_ty_candidates',w.regent,w.scopes);assert(action('WJ_ty_gui_cancel_picker',w));
  assert.equal(w.regent.vars.wj_ty_target,target);assert(w.regent.vars.wj_ty_confirmed);
  assert.deepEqual(w.regent.lists.wj_ty_candidates,[]);assert.deepEqual(w.regent.lists.wj_ty_picker_candidates,[]);assert.deepEqual(w.regent.lists.wj_ty_picker_filter_options,[]);
  assert(action('WJ_ty_gui_close',w));assert.deepEqual(resources(w),before);
@@ -326,7 +346,7 @@ assert.equal(w.shangshu.council_task,sourceChangedTo,'court co-office preserves 
 assert.equal(w.regent.events.length,1);assert(w.shangshu.vars.wj_ty_appoint_cooldown);assert(!w.regent.vars.wj_ty_cooldown);
 
 // GUI callbacks and localizations must exist across parent and picker definitions.
-const gui=read('gui/WJ_tingyi.gui'),loc=read('localization/simp_chinese/WJ_tingyi_l_simp_chinese.yml')+'\n'+read('localization/simp_chinese/WJ_tingyi_picker_l_simp_chinese.yml');
+const gui=read('gui/WJ_tingyi.gui'),loc=read('localization/simp_chinese/WJ_tingyi_l_simp_chinese.yml')+'\n'+read('localization/simp_chinese/WJ_tingyi_picker_l_simp_chinese.yml')+'\n'+read('localization/simp_chinese/WJ_ty_memorial_ui_l_simp_chinese.yml');
 // A standalone GUI is never instantiated without scripted_widgets registration.
 const windows=['WJ_tingyi_window','WJ_tingyi_candidate_window','WJ_tingyi_catalog_window'];
 const registrations=fs.readdirSync('gui/scripted_widgets').filter(f=>f.endsWith('.txt'))
@@ -345,7 +365,7 @@ assert(!/^ enabled = "\[And\(Not\(GetPlayer\.MakeScope\.Var\('wj_ty_picker'\)/m.
 assert.equal((gui.match(/button_checkbox =/g)||[]).length,6,'only the six lobbying choices remain checkboxes');
 assert(gui.includes('checked = "[Or('),'checkbox state reads selected or already paid');
 // Navigation must neither award rewards nor strand the user behind a disabled root.
-w=world();const beforeNavigation=w.target.merit;
+w=world();const beforeNavigation=w.target.merit;assert(action('WJ_ty_gui_remove_target',w));
 assert(action('WJ_ty_gui_topic_2',w));assert.equal(w.regent.vars.wj_ty_topic,2);
 assert(action('WJ_ty_gui_catalog',w));assert(w.regent.vars.wj_ty_catalog);
 assert(action('WJ_ty_gui_catalog',w));assert(!w.regent.vars.wj_ty_catalog);
@@ -375,8 +395,8 @@ assert(!gui.includes('appoint_councillor'));assert(gui.includes('dropdown_menu_s
 assert.equal(one(one(entry,'ai_will_do'),'base').value,'0');
 
 // Visual regression: the modal lists must not reuse the seven-seat main composition.
-assert.equal((gui.match(/WJ_tingyi\/surface\.dds/g)||[]).length,1);
-for(const [name,texture] of [['candidate','candidate'],['catalog','dialog']]){
+// Main art now uses clipped pieces of the same DDS; modal panels stay independent.
+for(const [name,texture] of [['candidate','court_secondary_panel'],['catalog','court_secondary_panel']]){
  const section=gui.split('name = "WJ_tingyi_'+name+'_window"')[1];
  assert(section?.slice(0,2000).includes('/'+texture+'.dds'),name+' needs its own unsegmented background');
 }
@@ -426,7 +446,7 @@ for(const kind of [1,2,3]){
  assert.equal(guiValue(localResults,'visible',fixture),kind===1,'local lines now come from the existing read-only native description');
 }
 
-const officeScroller=walk(guiTree).find(n=>member(n,'name')?.value==='"WJ_ty_appointment_offices"'),officeGrid=named(one(officeScroller,'blockoverride_scrollbox_content'),'WJ_ty_appointment_office_grid');
+const officeChooser=walk(guiTree).find(n=>member(n,'name')?.value==='"WJ_ty_appointment_offices"'),officeGrid=named(officeChooser,'WJ_ty_appointment_office_grid');
 const officeButtons=officeGrid.children.filter(n=>n.key==='WJ_ty_button');
 const officeOrder=[2,3,4,6,10,13,14,15,16,8,7,9];assert.equal(officeButtons.length,officeOrder.length);
 for(const [i,button] of officeButtons.entries()){
@@ -438,23 +458,26 @@ for(const [i,button] of officeButtons.entries()){
 }
 
 const root=guiTree.children.find(n=>member(n,'name')?.value==='"WJ_tingyi_window"'),main=named(root,'WJ_ty_main_page'),shield=named(root,'WJ_ty_child_input_shield'),footer=named(main,'WJ_ty_vote_footer');
-assert.deepEqual(dimensions(root),[1200,800]);assert.deepEqual(dimensions(main),[1200,800]);
+assert.deepEqual(dimensions(root),[1310,1020]);assert.deepEqual(dimensions(main),[1310,1020]);
 // Native council main is windows_layer, its chooser is middle. Reversing these
 // layers put the Tingyi main in front of its still-clickable child window.
-assert.equal(one(root,'layer').value,'windows_layer');
+assert.equal(one(root,'layer').value,'middle');
 assert(!member(main,'visible'),'child pages must keep the main art visible');
 assert(!member(main,'enabled'),'the input shield handles child-page input');
 assert(!/wj_ty_(picker|catalog|topic)/.test(one(root,'visible').value),'root stays visible for all topics and child pages');
-assert(one(one(main,'background'),'texture').value.includes('/surface.dds'));
-assert(!member(one(main,'background'),'visible'));
-assert.deepEqual(dimensions(shield),[1200,800]);assert(root.children.indexOf(main)<root.children.indexOf(shield));
+const surface=named(root,'WJ_ty_court_surface');
+assert(!member(surface,'visible')&&!member(surface,'enabled'),'main art remains visible behind modal pages');
+assert(root.children.indexOf(surface)<root.children.indexOf(main),'art is painted before all live controls');
+assert(walk(surface).some(n=>n.key==='texture'&&n.value.includes('/court_shell_baiguan.dds')));
+assert.equal(walk(surface).filter(n=>n.key==='texture').length,6);
+assert.deepEqual(dimensions(shield),[1310,740]);assert.deepEqual(one(shield,'position').children.map(n=>Number(n.key)),[0,280]);assert(root.children.indexOf(main)<root.children.indexOf(shield));
 assert(!member(shield,'texture')&&!member(shield,'background'),'input shield must not paint over the main art');
 for(const variable of ['picker','catalog'])assert(one(shield,'visible').value.includes(`wj_ty_${variable}`));
 for(const name of ['candidate','catalog']){
  const modal=guiTree.children.find(n=>n.key==='window'&&member(n,'name')?.value===`"WJ_tingyi_${name}_window"`),[width,height]=dimensions(modal);
  assert(width>0&&width<=1120&&height>0&&height<=720,name+' modal fits the root');
  assert(guiTree.children.indexOf(root)<guiTree.children.indexOf(modal),name+' is registered after the main window');
- assert.equal(one(modal,'layer').value,'middle',name+' must use the native secondary-window layer');
+ assert.equal(one(modal,'layer').value,'top',name+' must be above the Tingyi main');
  if(name==='candidate'){
   assert.deepEqual([width,height],[740,720]);
   const close=named(modal,'WJ_ty_picker_close');
@@ -482,17 +505,26 @@ for(const [i,g]of groups.entries()){
 // Evaluate only these GUI expressions with native boolean/variable fixtures.
 // Hidden ancestors suppress shortcuts in this offline model; engine input timing
 // still needs a game test. Scripted callbacks execute the real production SGs.
-const uiVars=new Set();
+const uiVars=new Set(),tingyiGameViews=new Set();
 function guiValue(node,key,w){
  const text=JSON.parse(one(node,key).value);
  if(!text.startsWith('['))return text;
  return require('node:vm').runInNewContext(text.slice(1,-1),{
-   Select_CString:(condition,yes,no)=>condition?yes:no,Or:(a,b)=>a||b,And:(a,b)=>a&&b,Not:a=>!a,
+   IsGameViewOpen:key=>tingyiGameViews.has(key),Select_CString:(condition,yes,no)=>condition?yes:no,Or:(a,b)=>a||b,And:(a,b)=>a&&b,Not:a=>!a,
    EqualTo_CFixedPoint:(a,b)=>a===Number(b.replace('(CFixedPoint)','')),
    GetPlayer:{MakeScope:{Var:key=>({IsSet:Object.hasOwn(w.regent.vars,key),GetValue:w.regent.vars[key]})}},
-  GetVariableSystem:{Exists:key=>uiVars.has(key),HasValue:(key,value)=>value==='yes'&&uiVars.has(key),Clear:key=>uiVars.delete(key)},
+  GetVariableSystem:{Exists:key=>uiVars.has(key),HasValue:(key,value)=>['yes','true'].includes(value)&&uiVars.has(key),Clear:key=>uiVars.delete(key)},
  });
 }
+// Latest user decision: Baiguan and Tingyi remain mutually exclusive.
+const coexistGuard=named(root,'WJ_ty_other_window_guard');
+for(const [council,baiguan]of [[true,false],[false,true],[true,true]]){
+ const z=world();uiVars.add('wj_ty_view_ready');if(council)tingyiGameViews.add('council_window');if(baiguan)uiVars.add('hd_baiguan_visibility');
+ assert.equal(guiValue(coexistGuard,'visible',z),true);tingyiGameViews.clear();uiVars.clear();
+}
+uiVars.add('wj_ty_view_ready');tingyiGameViews.add('military');assert(guiValue(coexistGuard,'visible',world()));uiVars.clear();tingyiGameViews.clear();
+assert(walk(root).some(n=>n.key==='on_start'&&n.value.includes("CloseGameView('council_window')")));
+assert(walk(root).some(n=>n.key==='on_start'&&n.value.includes("Clear('hd_baiguan_visibility')")));
 function clickScripted(node,w){
  const match=/^"\[GetScriptedGui\('([^']+)'\)\.Execute\(GuiScope.SetRoot\(GetPlayer.MakeScope\).End\)\]"$/.exec(one(node,'onclick').value);
  assert(match,'Expected a player-root scripted GUI click');return action(match[1],w);
@@ -527,7 +559,7 @@ for(const open of [false,true])for(const catalog of [false,true])for(const picki
 for(const sorting of [false,true]){
  w=world();uiVars.clear();w.emperor.every_vassal_or_below=[w.target];
  assert(action('WJ_ty_gui_confirm',w));assert(action('WJ_ty_gui_choice_gold',w));
- assert(action('WJ_ty_gui_picker',w));assert(action('WJ_ty_gui_catalog',w));
+ assert(action('WJ_ty_gui_remove_target',w));assert(action('WJ_ty_gui_picker',w));assert(action('WJ_ty_gui_catalog',w));
  if(sorting)uiVars.add('wj_ty_picker_sort_menu');
  const beforeEscape=resources(w),draft={...w.regent.vars},lists=Object.fromEntries(Object.entries(w.regent.lists).map(([key,list])=>[key,[...list]]));
  const noPayment=()=>{assert.deepEqual(resources(w),beforeEscape);assert(w.all.every(c=>c.events.length===0));assert(!w.regent.vars.wj_ty_cooldown);};
@@ -577,7 +609,7 @@ for(let seat=0;seat<7;seat++){
 }
 assert.deepEqual(resources(w),beforeCards);
 // Regression: fixed native portrait children must not be squeezed into 48/64px boxes.
-for(const name of ['WJ_ty_reward_target_card','WJ_ty_appointment_target_card']){
+for(const name of ['WJ_ty_shared_target_card']){
  const target=walk(main).find(n=>n.children&&member(n,'name')?.value===`"${name}"`);
  assert(target);const portrait=one(target,'portrait_head_small');
  assert(!member(portrait,'size')&&!member(portrait,'onclick'),'use native 85x90 portrait and character click');
@@ -598,7 +630,7 @@ for(const name of ['WJ_ty_reward_target_card','WJ_ty_appointment_target_card']){
   assert(x>=100&&y>=0&&width>0&&height>0&&x+width<=tw&&y+height<=th,name+': '+child.key+' fits beside the portrait');
  }
  const aptitudes=target.children.filter(n=>member(n,'text')?.value.includes('GetCourtPositionAptitude'));
- assert.equal(aptitudes.length,name==='WJ_ty_appointment_target_card'?3:0);
+ assert.equal(aptitudes.length,3);
  if(aptitudes.length){
   assert(!JSON.stringify(target).includes('GetTraitIndices'),'Selected appointment card no longer has the right-hand trait bar');
   assert.equal(walk(target).filter(n=>n.key==='WJ_luzhi_badge').length,1,'One shared Han-rank badge remains in the background row');
@@ -631,7 +663,7 @@ for(const name of ['WJ_ty_reward_target_card','WJ_ty_appointment_target_card']){
    const matching=aptitudes.filter(n=>one(n,'text').value.includes(`GetCourtPositionType('${position}')`));
    assert.equal(matching.length,1);return [office,matching[0]];
   }));
-  w=world();for(let office=1;office<=16;office++){
+  w=world();w.regent.vars.wj_ty_topic=3;for(let office=1;office<=16;office++){
    w.regent.vars.wj_ty_office=office;
    assert.deepEqual(aptitudes.filter(n=>guiValue(n,'visible',w)),byOffice.has(office)?[byOffice.get(office)]:[],'only the matching court-position aptitude is visible');
   }
@@ -668,17 +700,17 @@ console.log('PASS: GUI/localization layout checks, persistent main background, m
 // New GUI callbacks must resolve real conditions too, not just SG names.
 for(const m of (gui+'\n'+loc).matchAll(/GetScriptedGui\('([^']+)'\)/g))assert(sg[m[1]],'Missing production scripted GUI: '+m[1]);
 for(const kind of [1,2]){
- w=world();const before=resources(w),target=w.regent.vars.wj_ty_target;
+ w=world();const before=resources(w);assert(action('WJ_ty_gui_remove_target',w));
  assert(action('WJ_ty_gui_dismiss_preview_'+kind,w));
  assert.equal(w.regent.vars.wj_ty_topic,4);assert.equal(w.regent.vars.wj_ty_dismiss_kind,kind);
- assert.equal(w.regent.vars.wj_ty_target,undefined,'switching removal topic clears the prior target');assert.deepEqual(resources(w),before);
+ assert.equal(w.regent.vars.wj_ty_target,undefined,'empty-person topic selection keeps the person empty');assert.deepEqual(resources(w),before);
 }
 console.log('PASS: all merged GUI/localization SG references and both dismissal preview callbacks use real definitions.');
 // Shared confirmation/commit gates use the real target picker and selected posts.
 for(const fail of [false,true]){
  w=world();for(const c of w.all)c.opinions.set(w.regent,2000); // Strong proposer support sustains the deliberately unjust removal.
  w.emperor.council.push(w.shizhong);w.shizhong.job='councillor_chancellor';w.shizhong.council_task={can_fire_position:true,owner:w.emperor}; // Favored minister really holds a central office.
- const before=resources(w);assert(action('WJ_ty_gui_dismiss_preview_1',w));
+ const before=resources(w);assert(action('WJ_ty_gui_remove_target',w));assert(action('WJ_ty_gui_dismiss_preview_1',w));
  assert(!action('WJ_ty_gui_confirm',w),'a target must be selected first');
  w.scopes.candidate=w.shizhong;assert(action('WJ_ty_gui_target',w));
  assert.equal(w.regent.vars.wj_ty_target,w.shizhong);assert(action('WJ_ty_gui_removal_mode_2',w));
@@ -698,14 +730,287 @@ for(const fail of [false,true]){
  assert(!action('WJ_ty_gui_execute',w),'completed or refused edict requires a fresh draft');
 }
 for(const role of ['dasima','eunuch']){
- const z=world();assert(action('WJ_ty_gui_dismiss_preview_1',z));z.scopes.candidate=z[role];assert(action('WJ_ty_gui_target',z));assert.equal(z.regent.vars.wj_ty_removal_mode,2,'palace-only holder defaults to actual inner dismissal');assert.equal(z.regent.lists.wj_ty_selected_court_positions.length,1);assert(action('WJ_ty_gui_confirm',z),'actual palace-only holder needs no post-selection step');
+ const z=world();assert(action('WJ_ty_gui_remove_target',z));assert(action('WJ_ty_gui_dismiss_preview_1',z));z.scopes.candidate=z[role];assert(action('WJ_ty_gui_target',z));assert.equal(z.regent.vars.wj_ty_removal_mode,2,'palace-only holder defaults to actual inner dismissal');assert.equal(z.regent.lists.wj_ty_selected_court_positions.length,1);assert(action('WJ_ty_gui_confirm',z),'actual palace-only holder needs no post-selection step');
 }
-w=world();assert(action('WJ_ty_gui_dismiss_preview_2',w));w.scopes.candidate=w.shizhong;
+w=world();assert(action('WJ_ty_gui_remove_target',w));assert(action('WJ_ty_gui_dismiss_preview_2',w));w.scopes.candidate=w.shizhong;
 assert(!action('WJ_ty_gui_target',w),'landless court holder is outside the assessment roster');
 for(let office=1;office<=17;office++)assert(!action('WJ_ty_gui_removal_office_'+office,w),'retired single-office controls stay unavailable');
 assert(!action('WJ_ty_gui_removal_peerage',w));
 for(const office of [2,3,4,6,10,13,14,15,16]){
- w=world();w.regent.vars.wj_ty_topic=3;w.regent.vars.wj_ty_office=office;
+ w=world();assert(action('WJ_ty_gui_remove_target',w));w.regent.vars.wj_ty_topic=3;w.regent.vars.wj_ty_office=office;
  assert(action('WJ_ty_gui_picker',w));assert.equal(w.regent.vars.wj_ty_picker,1,'all nine ordinary council offices open the independent picker, including empty rosters');assert(!w.regent.vars.wj_ty_native_picker);
 }
 console.log('PASS: all-post inner dismissal parent commit and native refusal, no repeated completion; mandatory target selection, automatic complete post set, optional criminal reason, no collateral office removal, retired peerage/office controls; nine ordinary council jobs open the independent picker without a native chooser.');
+
+// New pinned-object lifecycle: run the real generic entries, not the reward-ready fixture.
+w=world(true);
+assert.equal(w.regent.vars.wj_ty_topic,0);assert.equal(w.regent.vars.wj_ty_role,0);
+assert.equal(w.regent.vars.wj_ty_target,w.target,'right-click carries only its explicit recipient');
+assert(!action('WJ_ty_gui_confirm',w));assert(!action('WJ_ty_gui_execute',w));
+w.scopes.candidate=w.target;assert(!action('WJ_ty_gui_target',w),'an old candidate row cannot select before a matter is chosen');
+assert(action('WJ_ty_gui_open_empty',w));
+assert.equal(w.regent.vars.wj_ty_topic,0);assert.equal(w.regent.vars.wj_ty_role,0);
+assert(!w.regent.vars.wj_ty_target,'Baiguan ignores a stale recipient scope');
+assert(!action('WJ_ty_gui_picker',w),'select a matter before opening its roster');
+assert(action('WJ_ty_gui_topic_2',w));assert(action('WJ_ty_gui_picker',w));
+assert(!w.regent.vars.wj_ty_confirmed);
+
+w=world();w.regent.vars.wj_ty_office=8;w.regent.vars.wj_ty_tier=3;
+w.regent.vars.wj_ty_appointment_mode=2;w.regent.vars.wj_ty_removal_mode=2;
+w.regent.vars.wj_ty_confirmed=1;w.regent.vars.wj_ty_appointment_target=w.target;
+w.regent.vars.wj_ty_rm_target=w.target;w.regent.vars.wj_ty_choice_influence=1;
+const beforeRemove=resources(w),keptLobby=w.regent.vars.wj_ty_lobby;
+w.shizhong.lists.WJ_ty_lobby_gold=[w.regent];
+assert(action('WJ_ty_gui_remove_target',w));
+for(const [key,v] of Object.entries({wj_ty_topic:1,wj_ty_office:8,wj_ty_tier:3,wj_ty_appointment_mode:2,wj_ty_removal_mode:2,wj_ty_choice_influence:1}))assert.equal(w.regent.vars[key],v,key);
+for(const key of ['wj_ty_target','wj_ty_confirmed','wj_ty_appointment_target','wj_ty_rm_target'])assert(!w.regent.vars[key],key+' must not survive removal');
+assert.equal(w.regent.vars.wj_ty_lobby,keptLobby);assert.deepEqual(w.shizhong.lists.WJ_ty_lobby_gold,[w.regent]);assert.deepEqual(resources(w),beforeRemove);
+assert(!action('WJ_ty_gui_confirm',w));assert(!action('WJ_ty_gui_execute',w));
+assert(action('WJ_ty_gui_topic_2',w));assert.equal(w.regent.vars.wj_ty_tier,3);
+
+w=world();const locked={...w.regent.vars},lockedResources=resources(w);
+for(const id of ['WJ_ty_gui_dismiss_preview_1','WJ_ty_gui_dismiss_preview_2']){
+ assert(!action(id,w),'incompatible subject disables '+id);
+ r.execute(one(sg[id],'effect').children,w.regent,w.scopes);
+ assert.deepEqual(w.regent.vars,locked,'a direct stale callback cannot clear/replace the pinned subject');
+}
+assert.deepEqual(resources(w),lockedResources);
+assert(action('WJ_ty_gui_topic_2',w));assert.equal(w.regent.vars.wj_ty_target,w.target);
+w=world();selectCourtNominee(w);const pinnedNominee=w.regent.vars.wj_ty_target;
+assert(action('WJ_ty_gui_topic_2',w));assert.equal(w.regent.vars.wj_ty_target,pinnedNominee);
+assert(action('WJ_ty_gui_office_8',w));assert.equal(w.regent.vars.wj_ty_target,pinnedNominee);
+assert(w.regent.vars.wj_ty_appointment_snapshot,'compatible office selection recaptures the same nominee');
+
+// The fixed card is a sibling of every matter pane, never inside a scrolling result list.
+const fixed=named(main,'WJ_ty_fixed_object');assert.deepEqual(one(fixed,'position').children.map(n=>Number(n.key)),[316,518]);
+assert.equal(walk(main).filter(n=>member(n,'name')?.value==='"WJ_ty_shared_target_card"').length,1);
+assert(!gui.includes('WJ_ty_reward_target_card')&&!gui.includes('WJ_ty_removal_target_card'));
+assert(one(named(fixed,'WJ_ty_fixed_remove'),'onclick').value.includes('WJ_ty_gui_remove_target'));
+for(const file of ['gui/hd_baiguan_window.gui','gui/hd_baiguan_dragon_window.gui'])assert(read(file).includes("GetScriptedGui('WJ_ty_gui_open_empty').Execute"),file);
+console.log('PASS: generic/right-click empty entries, emperor default, stale-recipient isolation, locked qualification guards, compatible cross-topic/office retention, explicit remove preserves independent selections and paid support while invalidating reviewed target snapshots; one fixed native card and both Baiguan presentations.');
+
+w=world(true);
+const incumbentTitle={holder:w.regent};for(const c of w.all)c['title:e_WJ_minister_cheng_xiang']=incumbentTitle;
+assert(!action('WJ_ty_gui_dismiss_preview_3',w),'a different locked person must not be replaced by the incumbent');
+assert.equal(w.regent.vars.wj_ty_target,w.target);
+assert(action('WJ_ty_gui_remove_target',w));assert(action('WJ_ty_gui_dismiss_preview_3',w));
+assert.equal(w.regent.vars.wj_ty_target,w.regent);assert.equal(w.regent.vars.wj_ty_role,0);
+assert(action('WJ_ty_gui_remove_target',w));r.run('WJ_ty_refresh_seats',w.regent,w.scopes);
+assert(!w.regent.vars.wj_ty_target,'refresh never repopulates a removed unique target');
+assert.equal(w.regent.vars.wj_ty_dismiss_kind,3);assert(action('WJ_ty_gui_dismiss_preview_3',w));
+assert.equal(w.regent.vars.wj_ty_target,w.regent,'only explicitly selecting the unique matter fills it again');
+console.log('PASS: chancellor unique-target selection, incompatible pinned person, manual removal stays empty through refresh, and explicit reselection.');
+
+w=world();const originalPerson=w.regent.vars.wj_ty_target;w.scopes.candidate=w.shangshu;
+assert(!action('WJ_ty_gui_target',w),'a stale candidate row cannot replace a different pinned person');
+r.execute(one(sg.WJ_ty_gui_target,'effect').children,w.regent,w.scopes);assert.equal(w.regent.vars.wj_ty_target,originalPerson);
+assert(action('WJ_ty_gui_remove_target',w));assert(action('WJ_ty_gui_dismiss_preview_1',w));
+assert(action('WJ_ty_gui_removal_mode_2',w));w.emperor.council.push(w.shizhong);w.shizhong.job='councillor_chancellor';w.scopes.candidate=w.shizhong;
+assert(action('WJ_ty_gui_target',w));assert.equal(w.regent.vars.wj_ty_removal_mode,2,'choosing a person retains the selected inner-dismissal mode');
+assert(action('WJ_ty_gui_remove_target',w));assert.equal(w.regent.vars.wj_ty_removal_mode,2);
+console.log('PASS: stale candidate callbacks cannot overwrite a pinned character; empty-person inner-dismissal selection survives picking and removal.');
+
+// Empty-seat portraits are a separate native button path from the office grid.
+for(const [seat,office]of [[3,7],[4,6],[5,8],[6,9]]){
+ const card=named(main,'WJ_ty_seat_card_'+seat);
+ const empty=named(card,'WJ_ty_vacancy_'+seat);
+ assert.equal(one(empty,'visible').value,`"[And(Not(GetPlayer.MakeScope.Var('wj_ty_memorial').IsSet), Not(GetPlayer.MakeScope.Var('wj_ty_seat_${seat}').IsSet))]"`);
+ assert(empty,'the actual empty-seat portrait wrapper');const plus=one(empty,'button');
+ const callback=`WJ_ty_gui_office_${office}`;
+ assert.equal(one(plus,'enabled').value,`"[GetScriptedGui('${callback}').IsValid(GuiScope.SetRoot(GetPlayer.MakeScope).End)]"`);
+ assert.equal(one(empty,'filter_mouse').value,'all');assert.equal(one(empty,'alwaystransparent').value,'no','disabled portrait area must not pass input to the full-card role selector');
+ assert(one(empty,'tooltip').value.includes(`GetScriptedGui('${callback}').BuildTooltip`));
+ assert(!member(plus,'tooltip'),'the old unconditional clickable hint is removed');
+ const clicks=plus.children.filter(n=>n.key==='onclick');assert.equal(clicks.length,2);
+ assert(clicks[0].value.includes(`WJ_ty_gui_role_${seat}`));assert(clicks[1].value.includes(callback));
+ for(const allowed of [false,true]){
+  const calls=[],ctx={Select_float:(ok,a,b)=>parseFloat((ok?a:b).replace('(float)','')),
+   GetPlayer:{MakeScope:{}},GuiScope:{SetRoot:root=>({End:{root}})},
+   GetScriptedGui:id=>{assert.equal(id,callback);return{IsValid:()=>allowed,Execute:()=>calls.push(id)}}};
+  const evalField=(n,key)=>require('node:vm').runInNewContext(JSON.parse(one(n,key).value).slice(1,-1),ctx);
+  assert.equal(evalField(plus,'enabled'),allowed);assert.equal(evalField(empty,'alpha'),allowed?1:.4);
+  if(evalField(plus,'enabled'))require('node:vm').runInNewContext(JSON.parse(clicks[1].value).slice(1,-1),ctx);
+  assert.equal(calls.length,allowed?1:0,'invalid portrait dispatches no appointment');
+ }
+}
+console.log('PASS: all four actual empty-seat portrait buttons bind their matching appointment IsValid, disabled appearance and failure tooltip; disabled input does not dispatch while role-title browsing remains separate. Engine mouse hit-testing still pending.');
+
+// A missing person is an explicit allowed branch, never an inverted conditional.
+for(const id of ['WJ_ty_pinned_office_allowed','WJ_ty_pinned_reward_allowed','WJ_ty_pinned_appointment_allowed',...['1','2','3'].map(n=>'WJ_ty_pinned_dismiss_'+n+'_allowed')]){
+ const def=triggers[id];assert(def);
+ assert.equal(one(one(def,'trigger_else'),'always').value,'yes',id+' explicitly allows an empty card');
+ for(const n of walk(def).filter(n=>n.key==='NOT'))assert(!walk(n).some(x=>x.key==='trigger_if'),id+' must not invert a conditional block');
+}
+for(const choose of ['WJ_ty_gui_appointment','WJ_ty_gui_topic_1','WJ_ty_gui_topic_2','WJ_ty_gui_dismiss_preview_1','WJ_ty_gui_dismiss_preview_2']){
+ w=world(true);assert(action('WJ_ty_gui_open_empty',w));assert.equal(w.regent.vars.wj_ty_target,undefined);
+ assert(action(choose,w),'no person must not block choosing '+choose);
+ assert(w.regent.vars.wj_ty_topic>0);assert(action('WJ_ty_gui_picker',w),'choosing the matter unlocks its roster');
+ assert(!action('WJ_ty_gui_confirm',w),'empty subject still cannot confirm');
+}
+w=world(true);assert(action('WJ_ty_gui_open_empty',w));assert(action('WJ_ty_gui_topic_2',w));
+w.emperor.every_vassal_or_below=[w.target];assert(action('WJ_ty_gui_picker',w));
+w.scopes.candidate=w.target;assert(action('WJ_ty_gui_target',w));assert.equal(w.regent.vars.wj_ty_target,w.target);
+console.log('PASS: all six eligibility helpers explicitly admit an empty card; fresh Baiguan entry can choose each ordinary matter, then open its roster, then select a person without a circular lock.');
+
+// Successful enactment keeps the same window/person and resets the completed draft.
+w=world();action('WJ_ty_gui_topic_2',w);action('WJ_ty_gui_choice_gold',w);action('WJ_ty_gui_lobby_confirm',w);
+const prepaid=w.regent.gold,paidUntil=w.shizhong.listExpiry.WJ_ty_lobby_gold.get(w.regent);
+assert(!JSON.stringify(effects.WJ_ty_clear_draft).includes('wj_ty_open'),'draft cleanup cannot hide the window');
+assert(!JSON.stringify(effects.WJ_ty_open).includes('WJ_ty_close'),'open/refresh does not pulse the open flag');
+assert(action('WJ_ty_gui_confirm',w));assert(action('WJ_ty_gui_execute',w));
+assert.equal(w.regent.vars.wj_ty_open,1);assert.equal(w.regent.vars.wj_ty_topic,0);assert.equal(w.regent.vars.wj_ty_role,0);assert.equal(w.regent.vars.wj_ty_target,w.target);
+assert(!w.regent.vars.wj_ty_confirmed);assert(!w.regent.vars.wj_ty_picker);assert(!w.regent.vars.wj_ty_catalog);assert.equal(w.regent.gold,prepaid-10);assert.equal(w.shizhong.listExpiry.WJ_ty_lobby_gold.get(w.regent),paidUntil);
+const enactedResources=resources(w);assert(!action('WJ_ty_gui_execute',w));assert.deepEqual(resources(w),enactedResources);assert.equal(w.regent.events.length,1);
+assert(action('WJ_ty_gui_topic_2',w));assert(!action('WJ_ty_gui_confirm',w),'existing target cooldown remains');
+assert(action('WJ_ty_gui_topic_1',w));assert(action('WJ_ty_gui_confirm',w));assert(action('WJ_ty_gui_execute',w));assert.equal(w.regent.events.length,2);assert(w.regent.vars.wj_ty_open);assert.equal(w.regent.gold,prepaid-10);
+const denied=world();denied.target.is_ai=false;const deniedScopes={root:denied.target,actor:denied.target,recipient:denied.emperor};assert(!r.check(one(entry,'is_shown').children,denied.target,deniedScopes));r.execute(one(entry,'on_accept').children,denied.target,deniedScopes);assert(!denied.target.vars.wj_ty_open);
+console.log('PASS: emperor right-click entry, Baiguan mutual-exclusion guards, persistent post-enactment window/person, fresh confirmation and unchanged payment/cooldown protections. Engine stacking/dragging remains pending.');
+
+// First public memorial. The same AST drives players, landed and landless AI.
+function petitionFixture({support=true, background=false, landless=false}={}){
+ const w=world(true), author=w.target;
+ Object.assign(author,{is_ai:background,is_landed:!landless,court_owner:w.emperor,gold:1000,prestige:600});
+ author.governmentFlags=['government_is_celestial'];
+ if (landless) {
+  w.emperor.council.push(author);
+  author.titles.push({tier:5,is_landless_type_title:true,ministerTitle:true,vars:{}});
+ }
+ else {
+  author.highest_held_title_tier=3;author.is_governor=true;
+  author.titles.push({tier:3, is_landless_type_title:false, is_noble_family_title:false, ministerTitle:false, vars:{}});
+ }
+ w.emperor.treasury=350;w.emperor.gold=150;
+ w.shizhong.is_ai=false;
+ const local=w.char('同朝旁观者');local.is_ai=false;local.top_liege=w.emperor;
+ const foreign=w.char('外廷旁观者');foreign.is_ai=false;foreign.top_liege=foreign;
+ for(const seat of [w.regent,w.shangshu,w.dasima,w.marshal,w.shizhong,w.eunuch,w.emperor])
+  seat.opinions.set(author,support?1000:-1000);
+ const scopes={root:author,actor:author,current_date:0};
+ const run=name=>r.run(name,author,scopes);
+ const valid=name=>r.check(triggers[name].children,author,scopes);
+ return {...w,author,local,foreign,scopes,run,valid};
+}
+{
+ const p=petitionFixture();
+ p.run('WJ_ty_memorial_open');
+ p.author.vars.wj_ty_topic=4;
+ p.local.top_liege=p.local;
+ const audience=one(one(effects.WJ_ty_reward_broadcast,'every_player'),'limit').children;
+ const scopes={...p.scopes,wj_ty_operator:p.author,wj_ty_target:p.local};
+ assert(r.check(audience,p.local,scopes),'former Han governor still sees the result of their own retirement');
+ assert(!r.check(audience,p.foreign,scopes),'a foreign bystander is never added');
+}
+{
+ const p=petitionFixture();
+ assert(p.valid('WJ_ty_memorial_can_open'));p.run('WJ_ty_memorial_open');
+ assert.equal(p.author.vars.wj_ty_target,p.author);assert.equal(p.author.vars.wj_ty_proposer,p.author);
+ assert(p.valid('WJ_ty_memorial_can_submit'));assert(!p.valid('WJ_ty_execute_valid'));
+ assert.equal(p.author.gold,1000);assert(!p.author.vars.wj_ty_memorial_cooldown);
+ // Existing closed or forged topics cannot use the edict path for the memorial.
+ p.author.vars.wj_ty_tier=2;assert(!p.valid('WJ_ty_memorial_can_submit'));assert(!p.valid('WJ_ty_execute_valid'));p.author.vars.wj_ty_tier=1;
+ p.emperor.gold=149;assert(!p.valid('WJ_ty_memorial_can_submit'));p.run('WJ_ty_memorial_submit');
+ assert.equal(p.author.gold,1000);assert(!p.author.vars.wj_ty_memorial_cooldown);p.emperor.gold=150;
+ p.shizhong.is_imprisoned=true;assert(!p.valid('WJ_ty_memorial_can_submit'));p.shizhong.is_imprisoned=false;
+ p.run('WJ_ty_memorial_submit');p.run('WJ_ty_memorial_submit');
+ assert.equal(p.author.gold,1490);assert.equal(p.author.prestige,580);
+ assert.equal(p.emperor.treasury+p.emperor.gold,0);assert(p.author.vars.wj_ty_gold_cooldown&&p.author.vars.wj_ty_memorial_cooldown);
+ for(const player of [p.author,p.local,p.shizhong,p.regent])assert.deepEqual(player.messages.map(m=>m.title),['WJ_ty_mem_granted_title']);
+ assert(!p.foreign.messages);assert(!p.local.toasts);assert.equal(p.author.toasts.length,2);
+ p.run('WJ_ty_memorial_open');assert(!p.valid('WJ_ty_memorial_can_submit'));
+}
+{
+ const p=petitionFixture({support:false});
+ p.emperor.puppeteer=p.author; // Baiguan must never turn self-petition into a proxy.
+ p.run('WJ_ty_memorial_open');assert.equal(p.author.vars.wj_ty_proposer,p.author);
+ p.run('WJ_ty_memorial_submit');
+ assert.equal(p.author.gold,990);assert.equal(p.author.prestige,580);assert(p.author.vars.wj_ty_memorial_cooldown);
+ assert(!p.author.vars.wj_ty_gold_cooldown);assert.equal(p.emperor.treasury+p.emperor.gold,500);
+ assert.equal(p.local.messages[0].title,'WJ_ty_mem_manager_refused_title');
+}
+{
+ const p=petitionFixture({support:false});p.shizhong.opinions.set(p.author,1000);p.run('WJ_ty_memorial_open');
+ p.run('WJ_ty_memorial_submit');assert.equal(p.local.messages[0].title,'WJ_ty_mem_votes_refused_title');assert.equal(p.author.gold,990);
+}
+{
+ const p=petitionFixture({background:true,landless:true});
+ p.author.top_liege=p.author; // The character belongs to a Han employer.
+ p.author.traits=['greedy'];p.author.gold=400;
+ assert(p.valid('WJ_ty_memorial_can_open'));p.run('WJ_ty_reward_ai_consider');
+ assert.equal(p.author.gold,890);assert.equal(p.author.prestige,580);assert(!p.author.vars.wj_ty_open);
+ assert.equal(p.local.messages[0].title,'WJ_ty_mem_granted_title');assert(p.regent.vars.wj_ty_open);
+ p.author.is_independent_ruler=true;assert(!p.valid('WJ_ty_memorial_can_open'));p.author.is_independent_ruler=false;
+ p.author.court_owner=p.foreign;assert(!p.valid('WJ_ty_memorial_can_open'));
+ p.emperor.positions.favored_minister_court_position=p.author;p.author.court_owner=p.emperor;
+ assert(!p.valid('WJ_ty_memorial_can_open'));assert(p.valid('WJ_ty_reward_ai_can_open'));
+}
+{
+ const p=petitionFixture();const member=p.regent;
+ member.vars.wj_ty_topic=2;member.vars.wj_ty_target=p.author;
+ assert(action('WJ_ty_gui_confirm',p));assert.equal(member.gold,2990);
+ p.emperor.gold=149;assert(action('WJ_ty_gui_execute',p));assert(!action('WJ_ty_gui_execute',p));
+ assert.equal(p.local.messages[0].title,'WJ_ty_mem_unfunded_title');assert.equal(p.author.gold,1000);
+ assert(!p.author.vars.wj_ty_gold_cooldown);assert.equal(p.emperor.treasury+p.emperor.gold,499);
+}
+console.log('PASS: production memorial dispatch, filed fee, self and proxy, refusal, shortage, actual payment, one notice per local player, landless AI.');
+
+// The seated steward's AI intent reaches the real approval, treasury and cleanup scripts.
+{
+ const p=petitionFixture(), steward=p.shizhong;
+ Object.assign(steward,{is_ai:true,gold:400,prestige:100,traits:['greedy']});
+ for(const seat of p.all) seat.opinions.set(steward,1000);
+ r.run('WJ_ty_reward_ai_consider',steward,{root:steward,current_date:0});
+ assert.equal(steward.gold,890);
+ assert.equal(steward.prestige,80);
+ assert(steward.vars.wj_ty_gold_cooldown);
+ assert(!steward.vars.wj_ty_memorial_cooldown);
+ assert(!steward.vars.wj_ty_open);
+ assert.equal(p.emperor.treasury+p.emperor.gold,0);
+ assert.deepEqual(p.local.messages.map(m=>m.title),['WJ_ty_mem_granted_title']);
+ assert(p.regent.vars.wj_ty_open);
+}
+{
+ const p=petitionFixture({support:false}), player=p.shizhong;
+ p.author.hooks=[player];
+ p.run('WJ_ty_memorial_open');
+ assert(r.number(values.WJ_ty_agreement_5,p.author,p.scopes)<25);
+ p.run('WJ_ty_pay_hook');
+ assert(!p.author.hooks.includes(player));
+ assert.equal(player.popups.length,1);
+ assert.equal(player.popups[0].payer,p.author);
+ assert.equal(r.number(values.WJ_ty_agreement_5,p.author,p.scopes),25);
+ // Even an existing reusable hook must not be charged twice for the same case.
+ p.author.hooks=[player];
+ p.run('WJ_ty_pay_hook');
+ assert.equal(player.popups.length,1);
+ assert(p.author.hooks.includes(player));
+ const draft={regent:p.author,scopes:p.scopes};
+ assert(action('WJ_ty_gui_remove_target',draft));
+ p.emperor.every_vassal_or_below=[p.local];
+ assert(action('WJ_ty_gui_picker',draft));
+ p.scopes.candidate=p.local;
+ assert(action('WJ_ty_gui_target',draft));
+ assert(p.author.vars.wj_ty_target===p.local);
+ assert(!p.author.vars.wj_ty_hook_target);
+ assert(r.number(values.WJ_ty_agreement_5,p.author,p.scopes)<25);
+}
+{
+ const p=petitionFixture(), player=p.shizhong;
+ p.author.hooks=[player];
+ p.run('WJ_ty_memorial_open');
+ player.opinions.set(p.author,100);
+ Object.assign(p.author,{diplomacy:30,prestige_level:5,merit_level:4});
+ p.run('WJ_ty_pay_prestige');
+ const before=r.number(values.WJ_ty_agreement_5,p.author,p.scopes);
+ assert(before>=45 && before<75);
+ const prevGold=player.gold;
+ p.author.vars.wj_ty_choice_gold=1;
+ p.author.vars.wj_ty_choice_hook=1;
+ assert(p.valid('WJ_ty_lobby_batch_valid'));
+ r.execute(one(sg.WJ_ty_gui_lobby_confirm,'effect').children,p.author,p.scopes);
+ assert.equal(player.gold,prevGold+300);
+ assert(r.number(values.WJ_ty_agreement_5,p.author,p.scopes)>=75);
+ assert(p.author.hooks.includes(player));
+ assert(!player.popups);
+ assert(!p.valid('WJ_ty_lobby_hook_valid'));
+}
+console.log('PASS: seated AI own fee and actual award; case-bound forced support, one popup, changed target, and voluntary gift sparing the hook.');

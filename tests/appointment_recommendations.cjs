@@ -5,6 +5,7 @@ const {read,parse,byName,one,runner}=require('./helpers/ck3_effect_harness');
 const defs=f=>byName(parse(read(f)));
 const interactions=defs('common/character_interactions/WJ_appointment_recommendations.txt');
 const triggers=defs('common/scripted_triggers/WJ_appointment_recommendation_triggers.txt');
+triggers.WJ_ty_managed_appointment_employer=defs('common/scripted_triggers/WJ_tingyi_native_routes.txt').WJ_ty_managed_appointment_employer;
 const effects={...defs('common/scripted_effects/WJ_appointment_recommendation_effects.txt'),...defs('common/scripted_effects/WJ_office_roads_effects.txt')};
 const values={...defs('common/script_values/WJ_appointment_recommendation_values.txt'),...defs('common/script_values/WJ_recommendation_values.txt')};
 let e;
@@ -36,7 +37,7 @@ e=runner({triggers,effects,values,primitives:{
  if(n.key==='send_interface_toast'){s.messages=(s.messages||0)+1;return true;}
 }});
 const request=interactions.WJ_rec_council_request;
-for(const place of ['direct-emperor','under-recommender','under-other-vassal'])for(const failure of ['', 'new-incumbent','new-emperor','foreign','lost-relation','low-merit','protected-incumbent','unaffordable','not-sent','duplicate']){
+for(const place of ['direct-emperor','under-recommender','under-other-vassal'])for(const failure of ['', 'new-incumbent','new-emperor','foreign','lost-relation','low-merit','protected-incumbent','unaffordable','not-sent','duplicate','han-on-reply']){
  const emperor={is_alive:true,emperor:true,secretariat:true,highest_held_title_tier:6,has_council:true,grants:0,titles:[],governmentFlags:[]};emperor.top_liege=emperor;
  const actor={is_alive:true,is_ai:false,top_liege:emperor,regentOf:emperor,disciples:[],gold:0,influence:0,prestige:0,titles:[]};
  const nominee={is_alive:true,is_adult:true,is_landed:true,eligible:true,council_task:null,months_from_game_start:2,merit_level:7,top_liege:emperor,titles:[]};
@@ -50,6 +51,7 @@ for(const place of ['direct-emperor','under-recommender','under-other-vassal'])f
  s.wj_rec_minister_justice=true;assert(!e.check(one(request,"can_send").children,actor,s),"multiple roles");s.wj_rec_minister_justice=false;
  assert(e.check(one(request,'can_send').children,actor,s),place);
  if(failure!=='not-sent')e.execute(one(request,'on_send').children,actor,s);
+ if(failure==='han-on-reply'){emperor['title:h_china']={holder:emperor};emperor.titles=[emperor['title:h_china']];}
  if(failure==='new-incumbent')task.councillor={};
  if(failure==='new-emperor')actor.top_liege={};
  if(failure==='foreign')nominee.top_liege={};
@@ -66,6 +68,23 @@ assert(!read('common/character_interactions/WJ_appointment_recommendations.txt')
 assert(!Object.keys(interactions).some(x=>x.startsWith('WJ_recommend_')),'old three top-level entries removed');
 const court=interactions.WJ_rec_court_request;
 for(const flag of ['wj_rec_favored_minister_court_position','wj_rec_dasima'])assert(court.children.some(n=>n.key==='send_option'&&one(n,'flag').value===flag));
+// The old palace request can still recommend an unregulated office. Pending
+// Han invitations to the three protected offices cannot assign or pay the offer.
+for (const managed of [false,true]) {
+ const title={},emperor={emperor:true,titles:managed?[title]:[],'title:h_china':title,vars:{}};
+ title.holder=managed ? emperor : {};
+ const recipientScope={recipient:emperor};
+ for(const flag of ['wj_rec_chief_eunuch_court_position','wj_rec_favored_minister_court_position','wj_rec_dasima','wj_rec_bodyguard_court_position']) {
+  const scopes={...recipientScope,[flag]:true};
+  assert.equal(e.check(triggers.WJ_rec_protected_court_choice.children,{},scopes),managed && flag!=='wj_rec_bodyguard_court_position');
+  if(managed && flag!=='wj_rec_bodyguard_court_position'){
+   const h=one(court,'on_accept').children[0].children;
+   const early=h.find(node=>node.key==='if');
+   assert(e.check(one(early,'limit').children,{},scopes));
+   assert.equal(one(one(early,'WJ_rec_finish'),'RESULT').value,'court_deliberation');
+  }
+ }
+}
 console.log('PASS: emperor/direct/indirect nominee scopes; empty/multiple selection, merit, protection, lost relation, foreign court, changed incumbent/emperor, absent submission, resources and duplicate commit; no native invitation gate; Shizhong/Dasima options exist. Native eligibility primitives and UI require engine QA.');
 
 // All concurrent recommending identities stack; emperor control is another +1000.
@@ -81,3 +100,26 @@ for(let mask=0;mask<8;mask++)for(const controlled of [false,true]){
  assert.equal(score,(mask&1?50:0)+(mask&2?20:0)+(mask&4?30:0)+(controlled?1000:0));
 }
 console.log('PASS: all eight identity combinations stack 50/20/30, native puppeteer relation adds 1000.');
+
+// Annual personnel talent selection: leave ordinary vacancies in the priority
+// list and protect the employer move as well as the appointment at settlement.
+const manage=defs('common/on_action/dlc/tgp/tgp_china_minister_on_action.txt').tgp_minister_manage_talent_on_action;
+function descendants(node,key){ return (node.children||[]).flatMap(n=>[...(n.key===key?[n]:[]),...descendants(n,key)]); }
+const talentChoices=descendants(manage,'else_if');
+const chief=talentChoices.find(n=>descendants(one(n,'limit'),'can_employ_court_position_type').some(k=>k.value==='chief_eunuch_court_position'));
+assert.equal(one(one(chief,'limit'),'WJ_ty_managed_appointment_employer').value,'no');
+const other=talentChoices.find(n=>descendants(one(n,'limit'),'can_employ_court_position_type').some(k=>k.value==='royal_architect_court_position'));
+assert(!descendants(one(other,'limit'),'WJ_ty_managed_appointment_employer').length);
+const finalHire=descendants(manage,'if').find(n=>n.children.some(c=>c.key==='send_interface_toast'));
+assert(descendants(one(finalHire,'limit'),'WJ_ty_native_court_slot').length);
+assert.equal(descendants(finalHire,'set_employer').length,1);
+assert.equal(descendants(finalHire,'appoint_court_position').length,1);
+const vacancies=defs('events/court_position_management_events.txt');
+for (const event of ['court_position_management_event.0001','court_position_management_event.0002']) {
+ const opts=vacancies[event].children.filter(n=>n.key==='option');
+ for (const opt of opts.filter(n=>descendants(n,'appoint_court_position').length || descendants(n,'open_view_data').length)) {
+  assert(one(opt,'trigger').children.some(n=>n.key==='NOT' && descendants(n,'WJ_ty_native_court_slot').length),event+' stale direct appointment');
+ }
+ assert.equal(opts.filter(n=>descendants(n,'WJ_ty_native_court_appoint').length).length,2);
+}
+console.log('PASS: annual personnel talent excludes Han chief eunuch; both native vacancy offers protect stale appointments.');

@@ -3,7 +3,7 @@
 const assert=require('node:assert/strict');
 const {read,parse,byName,one,runner}=require('./helpers/ck3_effect_harness');
 const defs=p=>byName(parse(read(p)));
-const triggers={...defs('common/scripted_triggers/WJ_regency_manual_triggers.txt'),...defs('common/scripted_triggers/WJ_name_triggers.txt'),...defs('common/scripted_triggers/WJ_tenure_triggers.txt'),...defs('common/scripted_triggers/WJ_inner_court_triggers.txt')};
+const triggers={...defs('common/scripted_triggers/WJ_tingyi_native_routes.txt'),...defs('common/scripted_triggers/WJ_regency_manual_triggers.txt'),...defs('common/scripted_triggers/WJ_name_triggers.txt'),...defs('common/scripted_triggers/WJ_tenure_triggers.txt'),...defs('common/scripted_triggers/WJ_inner_court_triggers.txt')};
 let engine;
 engine=runner({triggers,primitives:{
  custom_tooltip:(c,s,n,p)=>engine.check(n.children.filter(x=>x.key!=='text'),c,s,p),
@@ -36,7 +36,7 @@ const fire=defs('common/scripted_rules/00_rules.txt').can_fire_councillor;
 const invite=defs('common/character_interactions/00_vassal_interactions.txt').invite_to_council_position_interaction;
 const gui=defs('common/scripted_guis/WJ_tenure_gui.txt').WJ_tenure_mark_council;
 for(let level=1;level<=4;level++){
- const f=fixture(level),allowed=level>=3;
+ const f=fixture(level),allowed=false;
  assert.equal(gate(f.regent,f.emperor),allowed);assert.equal(gate(f.other,f.emperor),allowed);
  assert.equal(engine.check(fire.children,f.emperor,{root:f.emperor,councillor:f.regent}),allowed);
  assert.equal(engine.check(fire.children,f.emperor,{root:f.emperor,councillor:f.other}),allowed);
@@ -44,7 +44,7 @@ for(let level=1;level<=4;level++){
  for(const law of activeLaws){
   const pass=one(law,'can_pass'),s={root:f.emperor};
   const office=pass.children.find(x=>x.key==='exists').value.split('.')[0];f.emperor[office]={holder:f.other};
-  assert.equal(engine.check(pass.children,f.emperor,s),allowed);
+  assert.equal(engine.check(pass.children,f.emperor,s),level>=3);
   assert(!JSON.stringify(one(law,'on_pass')).includes('WJ_regency_authority_three'),'automatic law effects must stay ungated');
  }
  for(const moving of [true,false]){
@@ -70,8 +70,11 @@ assert.equal(lines.length,7);assert(lines.filter(x=>!x.includes('.IsShown(')).ev
 assert.equal(one(invite,'is_valid_showing_failures_only').children.filter(x=>x.key==='WJ_regency_manual_invitation_allowed').length,1);
 assert.equal(read('localization/simp_chinese/mechanisms/WJ_regency_manual_l_simp_chinese.yml').charCodeAt(0),0xfeff);
 for(let level=1;level<=4;level++){
- const f=fixture(level); f.emperor.traits=['WJ_lost_imperial_authority'];
+ const f=fixture(level); f.emperor.traits=[];
  assert(!gate(f.regent,f.emperor)); assert(!gate(f.other,f.emperor));
+ f.emperor.is_ai=false;
+ assert(gate(f.regent,f.emperor),'player gate is independent of authority and lost-authority');
+ assert(gate(f.other,f.emperor));
  // Filling an empty post is not dismissing an incumbent.
  assert(gate(f.candidate,f.emperor));
  for(const person of [f.regent,f.candidate]){
@@ -80,4 +83,4 @@ for(let level=1;level<=4;level++){
   assert(!engine.check(one(gui,'is_shown').children,f.emperor,{recipient:person}));
  }
 }
-console.log('PASS: authority 1–4, lost-authority veto, all incumbent manual changes, empty posts, chancellor exclusion and delayed recheck; ordinary foreign rulers and four ordinary regency laws and the chancellor law retain automatic installation. Engine UI pending.');
+console.log('PASS: AI imperial incumbent changes blocked at all authority levels; player operations, foreign rulers, original law rules and chancellor guard preserved.');

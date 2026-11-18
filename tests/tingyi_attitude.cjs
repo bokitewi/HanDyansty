@@ -14,6 +14,7 @@ const coreText=read('common/script_values/WJ_tingyi_attitude_values.txt');
 const values={...defs('common/script_values/WJ_tingyi_values.txt'),...defs('common/script_values/WJ_tingyi_attitude_social_values.txt'),...(coreText?byName(parse(coreText)):{})};
 const mufu=defs('common/scripted_triggers/WJ_mufu_triggers.txt');
 const triggers=Object.fromEntries(['WJ_mufu_member_valid','WJ_mufu_owner_eligible','WJ_mufu_same_realm'].map(k=>[k,mufu[k]]));
+triggers.WJ_ty_case_support = defs('common/scripted_triggers/WJ_tingyi_memorial_triggers.txt').WJ_ty_case_support;
 let r,activeRowTrace;
 const primitives={
  custom_description:(c,s,n,p)=>r.check(n.children.filter(x=>x.key!=='text'),c,s,p),
@@ -128,6 +129,8 @@ Object.assign(primitives,{
  has_diarchy_active_parameter:(c,s,n)=>c.diarchyActiveParameters.includes(n.value),
  regency_for_personal_reasons_trigger:(c,s,n)=>c.personalRegency===(n.value==='yes'),
  tgp_is_ceremonial_liege_trigger:(c,s,n)=>c.ceremonialLiege===(n.value==='yes'),
+ // 1.21 is_diarch_valid_trigger reads the engine primitive directly.
+ is_ceremonial_liege:(c,s,n)=>c.ceremonialLiege===(n.value==='yes'),
  is_at_war_with:(c,s,n)=>c.wars.includes(r.resolve(n.value,c,s)),
  NAND:(c,s,n,p)=>!r.check(n.children,c,s,p),
  has_realm_law:(c,s,n)=>c.laws.includes(n.value),
@@ -138,14 +141,14 @@ Object.assign(primitives,{
  has_imprisonment_reason:(c,s,n)=>c.prisonReasons.includes(r.resolve(n.value,c,s)),
  is_target_in_variable_list:(c,s,n)=>{
   const key=one(n,'name').value,target=r.resolve(one(n,'target').value,c,s);
-  return (c.lists[key]||[]).includes(target)&&(c.expiry[key]?.get(target)??Infinity)>(s.current_date??0);
+  return (c.lists[key]||[]).includes(target)&&(c.expiry?.[key]?.get(target)??Infinity)>(s.current_date??0);
  },
 });
 function world(){
  const all=[];
  const types=Object.fromEntries(['favored_minister_court_position','WJ_dasima_court_position','chief_eunuch_court_position','royal_architect_court_position'].map(name=>[name,{name}]));
  const titles={h_china:{name:'h_china'},e_minister_chancellor:{name:'e_minister_chancellor'}};
- const fill=c=>{Object.assign(c,{traits:[],laws:[],age:40,stewardship:8,intrigue:8,diarchy_swing:0,courtPositions:new Map(),revokeReasons:[],prisonReasons:[],subjectContractGroups:[],lists:{},expiry:{},council_task:undefined,'vassal_contract_obligation_level:WJ_huangyue':0,titles:[],governmentFlags:[],dlcFeatures:[],diarchyParameters:[],diarchyActiveParameters:[],personalRegency:false,ceremonialLiege:false,is_adult:true,is_ai:true,is_travelling:false,wars:[]});for(const[name,type]of Object.entries(types))c['court_position_type:'+name]=type;for(const[name,title]of Object.entries(titles))c['title:'+name]=title;all.push(c);return c;};
+ const fill=c=>{Object.assign(c,{traits:[],laws:[],is_imprisoned:false,age:40,stewardship:8,intrigue:8,diarchy_swing:0,courtPositions:new Map(),revokeReasons:[],prisonReasons:[],subjectContractGroups:[],lists:{},expiry:{},council_task:undefined,'vassal_contract_obligation_level:WJ_huangyue':0,titles:[],governmentFlags:[],dlcFeatures:[],diarchyParameters:[],diarchyActiveParameters:[],personalRegency:false,ceremonialLiege:false,is_adult:true,is_ai:true,is_travelling:false,wars:[]});for(const[name,type]of Object.entries(types))c['court_position_type:'+name]=type;for(const[name,title]of Object.entries(titles))c['title:'+name]=title;all.push(c);return c;};
  for(const type of Object.values(types))for(const[name,other]of Object.entries(types))type['court_position_type:'+name]=other;
  const make=name=>fill(character(name)),emperor=make('emperor'),proposer=make('proposer'),observer=make('observer'),target=make('target'),incumbent=make('incumbent');
  operator.vars={wj_ty_emperor:emperor,wj_ty_proposer:proposer,wj_ty_target:target,wj_ty_topic:4,wj_ty_dismiss_kind:1,wj_ty_removal_mode:2,wj_ty_office:0,wj_ty_tier:1};
@@ -331,8 +334,8 @@ scopes.current_date=365;expect(agreement(2),0,'expired support removed');scopes.
 operator.vars.wj_ty_proposer=w.incumbent;expect(agreement(2),0,'support cannot be used by a different proposer');
 operator.vars.wj_ty_proposer=w.observer;expect(agreement(2),100,'proposer self override');delete operator.vars.wj_ty_seat_5;expect(agreement(5),100,'absent seat ignores prior temporary observer');
 operator.vars.wj_ty_proposer=w.proposer;w.emperor.puppeteer=w.proposer;expect(agreement(0),1000,'actual controlled emperor adds a bonus alongside normal sources');
-delete w.emperor.puppeteer;w.emperor.traits=['WJ_lost_imperial_authority'];operator.vars.wj_ty_seat_1=w.observer;
-expect(agreement(0),agreement(1),'lost emperor follows actual regent through nonrecursive path');
+w.emperor.puppeteer=w.observer;operator.vars.wj_ty_seat_1=w.observer;
+expect(agreement(0),agreement(1),'puppet emperor follows actual regent through nonrecursive path');
 for(let i=0;i<7;i++)expect(core('WJ_ty_tt_total_'+i),core('WJ_ty_contribution_'+i)+(core('WJ_ty_tt_military_seat')===i?core('WJ_ty_military_score'):0),'seat contribution remains one sum');
 expect(core('WJ_ty_total'),Array.from({length:7},(_,i)=>core('WJ_ty_tt_total_'+i)).reduce((a,b)=>a+b,0),'total sums real seat contributions');
 
@@ -434,12 +437,12 @@ for(const topic of [1,2]){
  w=world();operator.vars.wj_ty_topic=topic;Object.assign(w.target,{merit_level:3,diplomacy:20,prestige_level:4});
  w.observer.opinions.set(w.target,60);w.observer.relations.friend=[w.target];w.observer.opinions.set(w.proposer,50);w.observer.lists.WJ_ty_lobby_gold=[w.proposer];
  for(const[tier,scale,excess,total]of [[1,0,0,59],[2,11.8,-4,66.8],[3,23.6,-16,66.6]]){
-  operator.vars.wj_ty_tier=tier;expect(row(2,'reward_scale'),scale,'tier '+tier+' recipient intensity '+topic);expect(row(2,'reward_excess'),excess,'tier '+tier+' independent qualification concern '+topic);
-  expect(section(1),45,'tier does not scale proposer opinion15 or paid lobbying30');expect(section(2),total,'tier-specific recipient judgment '+topic);expect(agreement(2),45+total,'live tier total '+topic);
+  operator.vars.wj_ty_tier=tier;const opinionDifference=topic===2?6:0;const extraScale=opinionDifference*[0,0,.2,.4][tier];expect(row(2,'reward_scale'),scale+extraScale,'tier '+tier+' recipient intensity '+topic);expect(row(2,'reward_excess'),excess,'tier '+tier+' independent qualification concern '+topic);
+  const proposerScore=topic===2?50:45;expect(section(1),proposerScore,'tier does not scale proposer opinion or paid lobbying');expect(section(2),total+opinionDifference+extraScale,'tier-specific recipient judgment '+topic);expect(agreement(2),proposerScore+total+opinionDifference+extraScale,'live tier total '+topic);
  }
- w.target.merit_level=7;expect(row(2,'reward_excess'),0,'qualified high-tier recipient has no automatic penalty');expect(row(2,'reward_scale'),28.4,'high-tier intensity follows real recipient judgment71');
+ w.target.merit_level=7;expect(row(2,'reward_excess'),0,'qualified high-tier recipient has no automatic penalty');expect(row(2,'reward_scale'),topic===2?30.8:28.4,'high-tier intensity follows real recipient judgment71');
  w.observer.relations={};w.observer.opinions.set(w.target,-100);Object.assign(w.target,{merit_level:0,diplomacy:0,prestige_level:1});
- expect(row(2,'reward_scale'),-12,'larger reward strengthens existing opposition, not universal support');expect(row(2,'reward_excess'),-28,'high reward for rank0 has explicit independent concern');checkProjectedRows('opposed high-tier '+topic);
+ expect(row(2,'reward_scale'),topic===2?-16:-12,'larger reward strengthens existing opposition, not universal support');expect(row(2,'reward_excess'),-28,'high reward for rank0 has explicit independent concern');checkProjectedRows('opposed high-tier '+topic);
  // The candidate and proposer inputs remain unchanged when tiers are revisited.
  operator.vars.wj_ty_tier=1;expect(row(2,'reward_scale'),0,'return to low tier clears intensity');expect(row(2,'reward_excess'),0,'return to low tier clears high-tier concern');
 }
@@ -475,8 +478,80 @@ delete operator.vars.wj_ty_seat_2;trace=emitted();expect(agreement(2),100,'empty
 // User example: high-tier intensity2.60 and concern-14 become5.20 and-28.
 for(const topic of [1,2]){
  w=world();Object.assign(operator.vars,{wj_ty_topic:topic,wj_ty_tier:3});w.target.diplomacy=23;w.observer.opinions.set(w.target,5);
- expect(row(2,'reward_scale'),5.2,'screenshot recipient intensity doubled '+topic);expect(row(2,'reward_excess'),-28,'screenshot excess doubled '+topic);expect(agreement(2),-9.8,'doubled reward effects reconcile '+topic);
+ expect(row(2,'reward_scale'),topic===2?5.4:5.2,'screenshot recipient intensity doubled '+topic);expect(row(2,'reward_excess'),-28,'screenshot excess doubled '+topic);expect(agreement(2),topic===2?-9.1:-9.8,'doubled reward effects reconcile '+topic);
 }
+
+// Petition, real controller and absence are shared by every seating arrangement.
+w=world();Object.assign(operator.vars,{wj_ty_memorial:1,wj_ty_topic:2,wj_ty_target:w.proposer});
+w.observer.opinions.set(w.proposer,-100);
+expect(agreement(2),-90,'self-petition counts opinion once at 40%, then -50 once');
+w.emperor.puppeteer=w.observer;
+expect(agreement(0),-90,'emperor follows the actual participating controller outside the regent seat');
+operator.vars.wj_ty_capital_command=1;
+expect(core('WJ_ty_tt_military_seat'),-1,'an old draft cannot keep the capital force after control changes');
+delete w.emperor.puppeteer;
+expect(core('WJ_ty_tt_military_seat'),0,'released emperor may regain the capital force while the draft stays open');
+w.emperor.vars.wj_zw_holder=w.target;w.target.traits.push('WJ_zhongwai');
+expect(core('WJ_ty_tt_military_seat'),-1,'a live commander outside the seats controls the capital force');
+w.target.is_alive=false;
+expect(core('WJ_ty_tt_military_seat'),0,'an expired command pointer does not mask imperial command');
+w.target.is_alive=true;w.target.traits=[];delete w.emperor.vars.wj_zw_holder;
+delete operator.vars.wj_ty_capital_command;
+w.emperor.puppeteer=w.observer;
+operator.vars.wj_ty_seat_1=w.proposer;
+expect(agreement(0),-90,'a different regent does not acquire control');
+w.observer.is_imprisoned=true;
+expect(agreement(0),-50,'free emperor considers the case independently');
+expect(agreement(2),100,'imprisoned controller contributes as absent');
+w.observer.is_imprisoned=false;w.emperor.is_ai=false;
+expect(agreement(0),-50,'a human character never follows a controller');
+w.emperor.is_ai=true;
+operator.vars.wj_ty_lobby=w.observer;
+operator.vars.wj_ty_choice_hook=1;
+expect(core('WJ_ty_lobby_selected'),115,'hook preview raises -90 to +25');
+operator.vars.wj_ty_choice_gold=1;
+expect(core('WJ_ty_lobby_selected'),115,'the same payment below the floor does not stack over it');
+delete operator.vars.wj_ty_choice_hook;delete operator.vars.wj_ty_choice_gold;
+operator.vars.wj_ty_hook_target=w.proposer;operator.vars.wj_ty_hook_tier=1;
+operator.lists.wj_ty_memorial_hooks=[w.observer];
+operator.vars.wj_ty_choice_gold=1;
+expect(core('WJ_ty_lobby_selected'),0,'a new gift below the previously paid floor has no visible net gain');
+delete operator.vars.wj_ty_choice_gold;
+expect(agreement(2),25,'a real hook secures at least support for the same case');
+expect(agreement(0),25,'a puppet follows the final position after a hook');
+operator.vars.wj_ty_target=w.target;expect(agreement(2),-90,'a changed beneficiary releases the floor');
+operator.vars.wj_ty_target=w.proposer;operator.vars.wj_ty_tier=2;
+expect(core('WJ_ty_has_case_hook'),0,'a changed tier releases the floor');
+operator.vars.wj_ty_tier=1;delete operator.vars.wj_ty_memorial;
+operator.vars.wj_ty_reward_ai=1;operator.vars.wj_ty_seat_5=w.proposer;
+const aiMax=core('WJ_ty_max'),aiTotal=core('WJ_ty_total');
+expect(core('WJ_ty_ai_reward_supervision'),150,'the active AI supervisor receives the one score bonus');
+delete operator.vars.wj_ty_reward_ai;
+expect(core('WJ_ty_total'),aiTotal-150,'the supervisor share goes into the actual total once');
+expect(core('WJ_ty_max'),aiMax,'the theoretical maximum is unchanged');
+operator.vars.wj_ty_reward_ai=1;operator.vars.wj_ty_memorial=1;
+expect(core('WJ_ty_ai_reward_supervision'),0,'a petitioner cannot claim the supervisor bonus');
+
+// Imperial proposals meet resistance only when the actual chancellor is present.
+w=world();Object.assign(operator.vars,{wj_ty_topic:2,wj_ty_proposer:w.emperor,wj_ty_seat_1:w.incumbent,wj_ty_seat_4:w.incumbent});
+const chancellorTitle={holder:w.incumbent};
+operator['title:e_WJ_minister_cheng_xiang']=chancellorTitle;
+const ordinaryRoyal=agreement(2);
+expect(row(1,'seated_chancellor'),0,'a title alone does not give chancellor authority');
+w.emperor['cp:WJ_minister_cheng_xiang']=w.incumbent;
+expect(agreement(2),ordinaryRoyal-200,'a real chancellor in two seats resists imperial sponsorship only once per person');
+expect(row(1,'seated_chancellor'),-200,'imperial resistance is listed under the proposer');
+expect(agreement(0),100,'the proposing emperor supports the proposal');
+w.target.puppeteer=w.observer;operator.vars.wj_ty_seat_3=w.target;
+expect(agreement(3),agreement(2),'a follower copies the already reduced score');
+w.target.is_imprisoned=true;expect(agreement(3),100,'a jailed follower ignores royal proposal resistance');
+w.incumbent.is_imprisoned=true;expect(agreement(2),ordinaryRoyal,'a jailed chancellor cannot suppress imperial proposals');
+w.incumbent.is_imprisoned=false;operator.vars.wj_ty_proposer=w.proposer;operator.vars.wj_ty_memorial=1;
+expect(row(1,'seated_chancellor'),0,'a governor signing a petition avoids the imperial proposal restriction');
+operator.vars.wj_ty_proposer=w.emperor;delete operator.vars.wj_ty_memorial;
+delete operator.vars.wj_ty_seat_1;delete operator.vars.wj_ty_seat_4;
+expect(agreement(2),ordinaryRoyal,'an actual chancellor outside the seven seats cannot suppress a vote');
+delete operator['title:e_WJ_minister_cheng_xiang'];
 
 // Native row renders its value separately: a format containing VALUE duplicates it.
 function walk(node){return[node,...(node.children||[]).flatMap(walk)];}

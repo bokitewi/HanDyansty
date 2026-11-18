@@ -10,15 +10,18 @@ const {read,parse,byName,one,runner}=require('./helpers/ck3_effect_harness');
 const defs=p=>byName(parse(read(p)));
 const effects=defs('common/scripted_effects/WJ_tingyi_appointment_effects.txt');
 const parentEffects=defs('common/scripted_effects/WJ_tingyi_effects.txt');
-for(const name of ['WJ_ty_invalidate','WJ_ty_candidates','WJ_ty_add_candidate','WJ_ty_refresh_seats','WJ_ty_commit_success','WJ_ty_close','WJ_ty_commit'])effects[name]=parentEffects[name];
+effects.WJ_ty_party_appointment_reward=defs('common/scripted_effects/hd_party_effects.txt').WJ_ty_party_appointment_reward;
+effects.hd_party_add_var_effect=defs('common/scripted_effects/hd_party_action_effects.txt').hd_party_add_var_effect;
+for(const name of ['WJ_ty_invalidate','WJ_ty_candidates','WJ_ty_add_candidate','WJ_ty_refresh_seats','WJ_ty_commit_success','WJ_ty_close','WJ_ty_clear_draft','WJ_ty_open','WJ_ty_commit','WJ_ty_remove_target'])effects[name]=parentEffects[name];
 Object.assign(effects,defs('common/scripted_effects/WJ_tingyi_removal_effects.txt'));
 effects.WJ_ty_picker_clear=defs('common/scripted_effects/WJ_tingyi_picker_effects.txt').WJ_ty_picker_clear;
 effects.WJ_ty_local_picker_clear=defs('common/scripted_effects/WJ_tingyi_picker_effects.txt').WJ_ty_local_picker_clear;
 const sg={...defs('common/scripted_guis/WJ_tingyi_guis.txt'),...defs('common/scripted_guis/WJ_tingyi_native_picker_guis.txt')};
-const triggers={...defs('common/scripted_triggers/WJ_tingyi_triggers.txt'),...defs('common/scripted_triggers/WJ_tingyi_appointment_triggers.txt')};
+const triggers={...defs('common/scripted_triggers/WJ_tingyi_memorial_triggers.txt'),...defs('common/scripted_triggers/WJ_tingyi_triggers.txt'),...defs('common/scripted_triggers/WJ_tingyi_appointment_triggers.txt')};
 triggers.WJ_ty_removal_can_dismiss_council=defs('common/scripted_triggers/WJ_tingyi_removal_triggers.txt').WJ_ty_removal_can_dismiss_council;
 triggers.WJ_tenure_can_dismiss=defs('common/scripted_triggers/WJ_tenure_triggers.txt').WJ_tenure_can_dismiss;
-const values=defs('common/script_values/WJ_tingyi_values.txt');
+const values={...defs('common/script_values/WJ_tingyi_values.txt'),...defs('common/script_values/WJ_tingyi_attitude_values.txt')};
+values.appointment_timeout_days=c=>c.appointment_timeout_days??0; // Native primitive supplied by the fixture.
 const native='E:/SteamLibrary/steamapps/common/Crusader Kings III/game/';
 const councilDefs=Object.assign({},...['00_council_positions','01_ministry_positions','WJ_ministry_positions'].map(f=>defs('common/council_positions/'+f+'.txt')));
 const titleActions=defs('common/on_action/WJ_court_ministry_on_actions.txt');
@@ -39,6 +42,7 @@ effects.got_minister_position_effect=defs('common/scripted_effects/WJ_ministry_o
 effects.fired_minister_position_effect=defs('common/scripted_effects/WJ_ministry_override_effects.txt').fired_minister_position_effect;
 Object.assign(effects,defs('common/scripted_effects/zz_hd_minister_handoff_effects.txt'));
 for(const name of ['WJ_dasima_revoke_effect','WJ_dasima_clear_effect'])effects[name]=defs('common/scripted_effects/WJ_inner_court_effects.txt')[name];
+const dasimaDefinition=defs('common/court_positions/types/WJ_dasima_court_position.txt').WJ_dasima_court_position;
 effects.fired_from_council_position_effect=defs(native+'common/scripted_effects/00_councillor_effects.txt').fired_from_council_position_effect;
 effects.got_council_position_effect=defs(native+'common/scripted_effects/00_councillor_effects.txt').got_council_position_effect;
 const handoffEvent=defs('events/zz_hd_minister_handoff_events.txt')['hd_cp_handoff.0001'];
@@ -159,7 +163,8 @@ r=runner({effects,triggers,values,primitives:external,onEffect(n,c,s,p){
  if(k==='set_location_to_default')return true;
  if(k==='add_manual_participant'){r.resolve(n.value,c,s,p).inCycle=true;return true;}
  if(k==='vassal_contract_set_obligation_level'){c['vassal_contract_obligation_level:'+one(n,'type').value]=Number(one(n,'level').value);return true;}
- if(k==='debug_log'){s.logs.push(n.value.replace(/^"|"$/g,''));return true;}
+ if(k==='error_log_scopes'){s.errorScopes={...s};return true;}
+ if(k==='error_log'||k==='debug_log'){s.logs.push(n.value.replace(/^"|"$/g,''));return true;}
  if(k==='debug_log_scopes')return true;
  if(k==='add_character_flag'){c.flags.push(n.children?one(n,'flag').value:n.value);return true;}
  if(k==='remove_character_flag'){c.flags=c.flags.filter(x=>x!==n.value);return true;}
@@ -241,7 +246,21 @@ r=runner({effects,triggers,values,primitives:external,onEffect(n,c,s,p){
   const fire=n.children.find(x=>x.key==='fire_on_actions');assert(!fire||fire.value==='yes');
   nativeAssign(arg(n,'target',c,s,p),c,c['council_task:'+arg(n,'type',c,s,p)],s);return true;
  }
- if(k==='appoint_court_position'||k==='replace_court_position'){const pos=arg(n,'court_position',c,s,p),target=arg(n,'recipient',c,s,p);if(k==='replace_court_position'){const old=arg(n,'holder',c,s,p);assert.equal(c.courtHolders[pos],old);delete old.court[pos];}else assert(!c.courtHolders[pos]);c.courtHolders[pos]=target;target.court[pos]=c;if(pos===positions[7]){c.vars.wj_dasima_holder=target;target.vars.wj_dasima_emperor=c;}s.calls.push(k+':'+pos);return true;}
+ if(k==='appoint_court_position'||k==='replace_court_position'){
+  // Native assignment itself remains a fixture; run Dasima's real lifecycle hooks.
+  const pos=arg(n,'court_position',c,s,p),target=arg(n,'recipient',c,s,p);
+  if(k==='replace_court_position'){
+   const old=arg(n,'holder',c,s,p);assert.equal(c.courtHolders[pos],old);
+   if(s.rejectBeforeRevocation)return true;
+   delete old.court[pos];delete c.courtHolders[pos];
+   if(pos===positions[7])r.execute(one(dasimaDefinition,'on_court_position_revoked').children,old,{...s,employee:old,liege:c});
+   if(s.rejectAfterRevocation)return true;
+   if(s.requireCourtLiege&&target.liege!==c)return true;
+  }else assert(!c.courtHolders[pos]);
+  c.courtHolders[pos]=target;target.court[pos]=c;
+  if(pos===positions[7])r.execute(one(dasimaDefinition,'on_court_position_received').children,target,{...s,employee:target,liege:c});
+  s.calls.push(k+':'+pos);return true;
+ }
  if(k==='revoke_court_position'){const pos=arg(n,'court_position',c,s,p),target=arg(n,'recipient',c,s,p);assert.equal(target.court[pos],c);assert.equal(c.courtHolders[pos],target);if(s.failRevoke)return true;delete target.court[pos];delete c.courtHolders[pos];if(pos===positions[7]){delete c.vars.wj_dasima_holder;delete target.vars.wj_dasima_emperor;(target.opinionEvents||=[]).push({modifier:'WJ_dasima_removed_opinion'});}s.calls.push('revoke:'+pos);return true;}
  if(k==='WJ_dasima_appoint_effect'){assert(r.check(triggers.WJ_dasima_candidate_trigger.children,s.candidate,{...s,wj_inner_emperor:c}));c.vars.wj_dasima_holder=s.candidate;s.calls.push('dasima');return true;}
  if(k==='WJ_zw_clear'){assert.equal(c,s.wj_ty_operator.vars.wj_ty_appointment_zhongwai);if(s.wj_ty_emperor.vars.wj_zw_holder===c)delete s.wj_ty_emperor.vars.wj_zw_holder;s.calls.push('clear:zhongwai');return true;}
@@ -258,8 +277,11 @@ function world(id=2,occupied=false){
  const s={root:op,actor:op,current_date:1000,globals:['hd190_after_lobby_done'],calls:[],logs:[],transactions:[],moves:[],effectCalls:[],pending:[],destroyed:[]};
  if(id===8)assign(target,emp,positions[13],s);if(id===9)target.eunuch=true;
  if(occupied){if(id===7||id===8||id===9){emp.courtHolders[positions[id]]=old;old.court[positions[id]]=emp;}else assign(old,emp,positions[id],s);}
- // Use the actual entry (including TY38), then the real candidate recapture.
+ // The operator is an admitted human diarch; use the actual entry, then candidate recapture.
+ op.is_ai=false;op.vars.wj_ty_open=1;emp.diarch=op;
  r.execute(one(sg['WJ_ty_gui_office_'+id],'effect').children,op,s);op.vars.wj_ty_target=target;
+ // Settlement/tenure fixtures retain their original AI boundary; entry tests explicitly admit a human below.
+ op.is_ai=true;emp.diarch=regent;
  s.calls=[];r.run('WJ_ty_appointment_snapshot',op,s);op.vars.wj_ty_confirmed=1;return{emp,op,target,old,regent,s,char,all,cx};
 }
 const valid=w=>r.check(triggers.WJ_ty_appointment_valid.children,w.op,w.s);
@@ -269,6 +291,32 @@ const commit=w=>r.run('WJ_ty_appointment_commit',w.op,w.s);
 // Fixture setup precedes review, just as actual selection captures the source.
 const review=w=>{r.run('WJ_ty_appointment_snapshot',w.op,w.s);w.op.vars.wj_ty_confirmed=1;};
 let cases=0;const test=(name,fn)=>{fn();cases++;};
+test('production macro calls never pass an unused argument rejected by the engine',()=>{
+ const definitions={},trees=[];
+ for(const dir of ['scripted_triggers','scripted_effects','scripted_guis'])for(const file of require('node:fs').readdirSync('common/'+dir).filter(f=>/^WJ_tingyi.*\.txt$/.test(f))){
+  const tree=parse(read('common/'+dir+'/'+file));Object.assign(definitions,byName(tree));trees.push(tree);
+ }
+ const traverse=n=>[n,...(n.children||[]).flatMap(traverse)];
+ for(const tree of trees)for(const n of traverse(tree))if(definitions[n.key]&&definitions[n.key]!==n&&n.children){
+  const used=new Set([...JSON.stringify(definitions[n.key]).matchAll(/\$([A-Z_]+)\$/g)].map(m=>m[1]));
+  for(const arg of n.children.filter(a=>/^[A-Z_]+$/.test(a.key)))assert(used.has(arg.key),n.key+' rejects unused argument '+arg.key);
+ }
+ const cooldownBranches=definitions.WJ_ty_character_cooldown_ready.children.filter(n=>n.key.startsWith('trigger_'));
+ assert.equal(cooldownBranches.at(-1).key,'trigger_else','engine requires the shared cooldown else-if chain to end with an else');
+ assert.equal(one(cooldownBranches.at(-1),'always').value,'yes','the fallback does not add a new cooldown');
+});
+test('confirmation reports source job and employer changes as distinct production checks',()=>{
+ const fields=['identity','source_job','employer','incumbent','military'];
+ for(const field of fields){const hint=triggers.WJ_ty_appointment_valid.children.find(n=>n.key==='trigger_if').children.find(n=>n.key==='custom_tooltip'&&n.children.some(c=>c.key==='WJ_ty_appointment_snapshot_'+field));assert(hint,field+' has its own condition text');}
+ for(const kind of ['source_job','employer']){
+  const w=world(2,true);assign(w.target,w.emp,positions[13],w.s);review(w);assert(valid(w));
+  if(kind==='source_job')release(w.target,w.s);else w.target.liege_or_court_owner=w.regent;
+  assert(!r.check(triggers['WJ_ty_appointment_snapshot_'+kind].children,w.op,w.s));assert(!valid(w));
+ }
+ const present=one(triggers.WJ_ty_manager_seat_ready,'custom_tooltip');
+ assert.equal(one(present,'text').value,'WJ_ty_manager_present_$SEAT$');
+ assert(!JSON.stringify(triggers.WJ_ty_manager_ready).includes('WJ_ty_manager_present"'),'generic manager prose is not the eligibility diagnosis');
+});
 test('missing hire-ban variable is never dereferenced; destination ban still blocks',()=>{
  for(const ban of ['absent','other','emperor']){
   const w=world();if(ban!=='absent')w.target.vars.block_hire_councillor=ban==='emperor'?w.emp:w.old;
@@ -323,9 +371,9 @@ test('TY23 legacy office 1 cannot enter the pool, validate, recapture or commit'
  assert.equal(w.s.effectCalls.length,0);assert.equal(w.s.calls.length,0);assert.equal(w.s.transactions.length,0);
  r.run('WJ_ty_appointment_snapshot',w.op,w.s);assert(!w.op.vars.wj_ty_appointment_snapshot);assert(!valid(w));
 });
-test('TY23 and every ordinary office clear TY38 intent, target and confirmation',()=>{
+test('With an empty person, TY23 and every ordinary office leave TY38 intent and confirmation',()=>{
  for(const name of ['WJ_ty_gui_appointment',...Object.keys(positions).map(Number).filter(id=>id!==1).map(id=>'WJ_ty_gui_office_'+id)]){
-  const w=world(1);w.op.vars.wj_ty_appointment_failed=1;
+  const w=world(1);w.op.is_ai=false;w.emp.diarch=w.op;delete w.op.vars.wj_ty_target;w.op.vars.wj_ty_appointment_failed=1;
   r.execute(one(sg[name],'effect').children,w.op,w.s);
   assert.equal(w.op.vars.wj_ty_office,name==='WJ_ty_gui_appointment'?2:Number(name.split('_').at(-1)));
   for(const key of ['wj_ty_appointment_ty38','wj_ty_target','wj_ty_appointment_target','wj_ty_confirmed','wj_ty_appointment_failed'])assert(!w.op.vars[key],name+':'+key);
@@ -336,16 +384,43 @@ test('TY23 and every ordinary office clear TY38 intent, target and confirmation'
  }
 });
 test('TY38 entry survives candidate capture, clears on exit, and retains full chancellor dispatch',()=>{
- const w=world();r.execute(one(sg.WJ_ty_gui_office_1,'effect').children,w.op,w.s);
- assert.equal(w.op.vars.wj_ty_appointment_ty38,1);assert(!w.op.vars.wj_ty_target);assert(!w.op.vars.wj_ty_confirmed);
+ const w=world();w.op.is_ai=false;w.emp.diarch=w.op;r.execute(one(sg.WJ_ty_gui_office_1,'effect').children,w.op,w.s);
+ assert.equal(w.op.vars.wj_ty_appointment_ty38,1);assert.equal(w.op.vars.wj_ty_target,w.target,'entering TY38 preserves the qualified pinned nominee');assert(!w.op.vars.wj_ty_confirmed);
  r.run('WJ_ty_add_candidate',w.target,w.s);assert.deepEqual(w.op.lists.wj_ty_candidates,[w.target]);
  w.op.vars.wj_ty_target=w.target;r.run('WJ_ty_appointment_snapshot',w.op,w.s);w.op.vars.wj_ty_confirmed=1;
  assert(valid(w));assert.equal(value('WJ_ty_threshold',w),800);commit(w);assert.equal(w.s.wj_ty_appointment_success,true);assert(w.s.calls.includes('full:chancellor'));
  assert.equal(w.target.council_task.owner,w.emp);assert.equal(w.cx.holder,w.target);
  for(const name of ['WJ_ty_gui_topic_1','WJ_ty_gui_topic_2']){
-  const z=world(1);r.execute(one(sg[name],'effect').children,z.op,z.s);assert(!z.op.vars.wj_ty_appointment_ty38);assert(!valid(z));
+  const z=world(1);z.op.is_ai=false;z.emp.diarch=z.op;r.execute(one(sg[name],'effect').children,z.op,z.s);assert(!z.op.vars.wj_ty_appointment_ty38);assert(!valid(z));
  }
  const z=world(1);r.run('WJ_ty_appointment_clear',z.op,z.s);assert(!z.op.vars.wj_ty_appointment_ty38);assert(!candidate(z));
+});
+test('party event rewards only its own successful chief eunuch decree',()=>{
+ const event=defs('events/hd_party_events.txt')['hd_party_chain.11'];
+ const opts=event.children.filter(n=>n.key==='option');
+ const direct=opts.find(n=>one(n,'name').value==='hd_party_chain.11.a');
+ const proposal=opts.find(n=>one(n,'name').value==='hd_party_chain.11.nominate');
+ assert.equal(one(one(direct,'trigger'),'WJ_ty_managed_appointment_employer').value,'no');
+ assert.equal(one(one(proposal,'trigger'),'WJ_ty_managed_appointment_employer').value,'yes');
+ assert.equal(one(one(proposal,'WJ_ty_prepare_legacy_nomination'),'OFFICE').value,'9');
+ assert(!JSON.stringify(proposal).includes('WJ_ty_party_appointment_reward'));
+ for(const kind of ['approved','other-nominee','not-confirmed','ordinary','changed-leader','already-settled']){
+  const w=world(9);
+  w.emp.vars.hd_party_favored='flag:huanguan';
+  w.emp.vars.hd_party_huanguan_leader=kind==='changed-leader'?w.old:w.target;
+  if(kind!=='ordinary')w.op.vars.wj_ty_party_nominee=kind==='other-nominee'?w.old:w.target;
+  if(kind==='not-confirmed')delete w.op.vars.wj_ty_confirmed;
+  if(kind==='already-settled')w.emp.vars.hd_party_huanguan_chain_stage=1;
+  commit(w);
+  assert.equal(w.emp.vars.hd_party_huanguan_sat_mod,kind==='approved'?15:undefined,kind);
+  assert.equal(w.emp.vars.hd_party_huanguan_power_mod,kind==='approved'?50:undefined,kind);
+  if(kind==='approved'){
+   assert.equal(w.emp.courtHolders.chief_eunuch_court_position,w.target);
+   assert.equal(w.emp.vars.hd_party_huanguan_chain_stage,1);
+   commit(w);
+   assert.equal(w.emp.vars.hd_party_huanguan_power_mod,50,'one payout');
+  }
+ }
 });
 test('13 surviving offices and all lawful replacement branches',()=>{for(const id of Object.keys(positions).map(Number))for(const occupied of [false,true]){if(id===1&&occupied)continue;const w=world(id,occupied);assert(candidate(w),'candidate '+id);assert(valid(w),'valid '+id);assert.equal(value('WJ_ty_threshold',w),id===1?800:occupied?700:650);commit(w);assert.equal(w.s.wj_ty_appointment_success,true,'commit '+id);if(id===7)assert.equal(w.emp.vars.wj_dasima_holder,w.target);else if(id===8||id===9)assert.equal(w.emp.courtHolders[positions[id]],w.target);else assert.equal(w.target.council_task.position,positions[id]);assert(!w.op.vars.wj_ty_confirmed);const calls=w.s.calls.length;commit(w);assert.equal(w.s.calls.length,calls,'cannot replay');}});
 test('occupied council destinations exchange both exact offices and titles',()=>{
@@ -379,18 +454,32 @@ test('production picker traverses emperor courtiers and all vassals, never propo
 test('leaving imperial candidate range invalidates both selection and final assignment',()=>{
  for(const id of [2,3,6,7,8,9,10,16]){const w=world(id,true);review(w);w.target.liege=w.regent;w.target.liege_or_court_owner=w.regent;w.target.top_liege=w.regent;w.regent.liege=w.regent;assert(!candidate(w));assert(!valid(w));w.s.calls=[];commit(w);assert.equal(w.s.calls.length,0);assert.equal(w.s.transactions.length,0);}
 });
-test('candidate job gates and current-holder removal guards',()=>{for(const [field,v]of [['merit_level',6],['is_adult',false],['is_imprisoned',true],['is_incapable',true],['refuses',true],['hermit',true],['officeBanned',true],['scenarioBlocked',true],['startupBlocked',true],['tenure',true]]){const w=world();w.target[field]=v;assert(!candidate(w),field);commit(w);assert.equal(w.s.calls.length,0,field);}for(const who of ['old','target'])for(const reason of ['blocked','tenure','task']){const w=world(2,true);if(who==='target')assign(w.target,w.emp,positions[13],w.s);review(w);assert(valid(w),who+reason+' initial');if(reason==='task'){w.emp.is_ai=false;w[who].council_task.can_fire_position=false;}else if(reason==='blocked')w[who].vars.block_fire_councillor=w[who].liege_or_court_owner;else w[who][reason]=true;w.s.calls=[];assert(!valid(w),who+reason);commit(w);assert.equal(w.s.calls.length,0);} });
+test('candidate job gates and current-holder removal guards',()=>{for(const [field,v]of [['is_adult',false],['is_imprisoned',true],['is_incapable',true],['refuses',true],['hermit',true],['officeBanned',true],['scenarioBlocked',true],['startupBlocked',true],['tenure',true]]){const w=world();w.target[field]=v;assert(!candidate(w),field);commit(w);assert.equal(w.s.calls.length,0,field);}for(const who of ['old','target'])for(const reason of ['blocked','tenure','task']){const w=world(2,true);if(who==='target')assign(w.target,w.emp,positions[13],w.s);review(w);assert(valid(w),who+reason+' initial');if(reason==='task'){w.emp.is_ai=false;w[who].council_task.can_fire_position=false;}else if(reason==='blocked')w[who].vars.block_fire_councillor=w[who].liege_or_court_owner;else w[who][reason]=true;w.s.calls=[];assert(!valid(w),who+reason);commit(w);assert.equal(w.s.calls.length,0);} });
 test('Dasima real shared qualification admits king-plus realm vassals and retains an indirect holder',()=>{
  for(const indirect of [false,true])for(const tier of [3,4,5]){
   const w=world(7);w.target.highest_held_title_tier=tier;if(indirect)w.target.liege=w.old;
   assert.equal(candidate(w),tier>=4,'king floor and imperial realm, not court employment');
-  if(tier>=4){review(w);commit(w);assert.equal(w.emp.courtHolders[positions[7]],w.target);assert.equal(w.target.liege,indirect?w.old:w.emp,'court appointment keeps territorial liege');}
+  if(tier>=4){review(w);commit(w);assert.equal(w.emp.courtHolders[positions[7]],w.target);assert.equal(w.target.liege,w.emp,'Dasima appointment enters direct imperial service');}
  }
  const w=world(7);w.target.liege=w.old;w.emp.vars.wj_dasima_holder=w.target;w.target.vars.wj_dasima_emperor=w.emp;
  assert(r.check(triggers.WJ_dasima_retention_trigger.children,w.target,w.s),'indirect vassal must not lose appointment on reconciliation');
  w.target.top_liege=w.other;assert(!r.check(triggers.WJ_dasima_retention_trigger.children,w.target,w.s));
 });
 test('court-specific prerequisites and real military-gender gate',()=>{let w=world(8);release(w.target,w.s);assert(!candidate(w));w=world(9);w.target.eunuch=false;assert(!candidate(w));w=world(6);w.target.combatGenderAllowed=false;assert(!candidate(w));w=world(7);w.target.highest_held_title_tier=3;assert(!candidate(w));});
+test('empty-seat shortcut eligibility and jump preserve the selected person for all four offices',()=>{
+ for(const [id,invalidate]of [[6,w=>w.target.combatGenderAllowed=false],[7,w=>w.target.highest_held_title_tier=3],[8,w=>release(w.target,w.s)],[9,w=>w.target.eunuch=false]]){
+  const admit=w=>{w.op.is_ai=false;w.emp.diarch=w.op;w.op.vars.wj_ty_topic=2;};
+  const allowed=w=>r.check(one(sg['WJ_ty_gui_office_'+id],'is_valid').children,w.op,w.s);
+  const go=w=>r.execute(one(sg['WJ_ty_gui_office_'+id],'effect').children,w.op,w.s);
+  const w=world(id);admit(w);const source=w.target.council_task,held=[...w.target.titles];
+  assert(allowed(w),'qualified nominee '+id);go(w);
+  assert.equal(w.op.vars.wj_ty_topic,3);assert.equal(w.op.vars.wj_ty_office,id);assert.equal(w.op.vars.wj_ty_target,w.target);
+  assert.equal(w.target.council_task,source);assert.deepEqual(w.target.titles,held,'jump never appoints before edict');
+  const z=world(id);admit(z);invalidate(z);const before={...z.op.vars};
+  assert(!allowed(z),'unqualified nominee '+id);go(z);assert.deepEqual(z.op.vars,before,'even a stale callback cannot jump');
+  delete z.op.vars.wj_ty_target;assert(allowed(z),'empty card may open the office to choose a person');
+ }
+});
 test('chancellor cannot be moved or replaced by ordinary appointment',()=>{let w=world(2);assign(w.target,w.emp,positions[1],w.s);assert(!candidate(w));w=world(1,true);assert(!candidate(w));for(const id of [2,3,4,6,10,13,14,15,16]){w=world(id,true);w.old.titles.push(w.cx);assert(candidate(w),'protected incumbent must not empty pool');assert(!valid(w));}});
 test('chancellor uses full script and reviewed military handoff',()=>{const w=world(1);w.target.merit_level=7;w.emp.vars.wj_zw_holder=w.old;r.run('WJ_ty_appointment_snapshot',w.op,w.s);w.op.vars.wj_ty_confirmed=1;assert(valid(w));commit(w);assert(w.s.calls.indexOf('clear:zhongwai')>w.s.calls.indexOf('full:chancellor'));assert(w.s.calls.includes('full:chancellor'));assert(w.s.effectCalls.some(x=>x.name==='WJ_cx_finish_appointment'&&x.character===w.target));for(const phase of ['recovery','collapse']){const z=world(1);z.target.phase=phase;assert(!candidate(z));}const z=world(1);z.target.phase='standoff';assert(candidate(z));});
 test('vacant/occupied/holder/emperor/target/office snapshots never silently refresh',()=>{for(const change of ['fill','vacate','replace','dead','emperor','target','office']){const w=world(2,change!=='fill');if(change==='fill')assign(w.old,w.emp,positions[2],w.s);if(change==='vacate')release(w.old,w.s);if(change==='replace')assign(w.regent,w.emp,positions[2],w.s);if(change==='dead')w.old.is_alive=false;if(change==='emperor')w.op['title:h_china'].holder=w.old;if(change==='target')w.op.vars.wj_ty_target=w.old;if(change==='office')w.op.vars.wj_ty_office=3;w.s.calls=[];assert(!valid(w),change);commit(w);assert.equal(w.s.calls.length,0,change);}const w=world(1);w.emp.vars.wj_zw_holder=w.old;assert(!valid(w));});
@@ -531,6 +620,31 @@ test('all ordinary jobs match imperial native qualifications regardless of sourc
   for(const root of [w.op,w.emp,w.target]){w.s.root=root;assert.equal(listingJobValid(w),expected,id+':local='+local+':root='+root.name);}
  }
 });
+test('ordinary low-merit landed and imperial courtier nominees can be listed and actually appointed',()=>{
+ for(const id of normalOffices)for(const merit of [0,6])for(const courtier of [false,true]){
+  const w=world(id);w.target.merit_level=merit;
+  if(courtier){w.target.is_ruler=false;w.target.is_landed=false;delete w.target.liege;}
+  assert(nativeJobValid(w),'native '+id);assert(candidate(w),'list '+id);review(w);assert(valid(w),'confirm '+id);commit(w);
+  assert(w.s.wj_ty_appointment_success,'commit '+id);assert.equal(w.target.council_task.position,positions[id]);assert.equal(w.target['title:'+titles[id]].holder,w.target);
+ }
+ const w=world(1);w.target.merit_level=6;assert(!candidate(w),'custom chancellor keeps its separate qualification');assert(!valid(w));
+});
+test('unchanged native low-merit catalyst runs once, only for the actual eligible phase and imperial ministry',()=>{
+ const walk=nodes=>nodes.flatMap(n=>[n,...walk(n.children||[])]);
+ const branch=path=>{const found=walk(parse(read(path)).children).filter(n=>n.key==='if'&&['tgp_is_minister_title','has_appointment_level_for_title'].every(k=>JSON.stringify(n.children.find(c=>c.key==='limit')||{}).includes(k)));assert.equal(found.length,1);return found[0];};
+ const penalty=branch('common/on_action/title_on_actions.txt');
+ const canonical=n=>JSON.stringify(n,(k,v)=>['start','end','openEnd','closeStart'].includes(k)?undefined:v);
+ assert.equal(canonical(penalty),canonical(branch(native+'common/on_action/title_on_actions.txt')),'native penalty is retained verbatim');
+ let e; e=runner({effects:{},triggers:{tgp_is_minister_title:triggers.tgp_is_minister_title},values:{},primitives:{
+  has_appointment_level_for_title:c=>c.merit_level>=7,
+  situation_top_has_catalyst:c=>c.enabled,
+ },onEffect(n,c,s){if(n.key==='trigger_situation_catalyst'){s.catalysts.push(one(n,'catalyst').value);assert.equal(e.resolve(one(n,'character').value,c,s),s.root);return true;}return false;}});
+ for(const id of normalOffices)for(const [merit,enabled,foreign,want]of [[6,true,false,1],[7,true,false,0],[6,false,false,0],[6,true,true,0]]){
+  const w=world(id),title=w.target['title:'+titles[id]];w.target.merit_level=merit;w.target['situation:dynastic_cycle']={enabled};if(foreign)title.de_jure_liege={};
+  const s={root:w.target,title,catalysts:[]};e.execute([penalty],w.target,s);assert.equal(s.catalysts.length,want,id+':'+merit+':'+enabled+':'+foreign);
+ }
+});
+
 test('Taifu and Sikong keep their candidate pools when a source or destination cannot be fired',()=>{
  for(const id of [3,10])for(const who of ['old','target'])for(const reason of ['task','blocked']){
   const w=world(id,true);if(who==='target')assign(w.target,w.emp,positions[13],w.s);
@@ -539,8 +653,8 @@ test('Taifu and Sikong keep their candidate pools when a source or destination c
   assert(!valid(w));w.s.calls=[];commit(w);assert.equal(w.s.calls.length,0);assert.equal(w.s.moves.length,0);assert.equal(w.s.transactions.length,0);assert.equal(w.s.wj_ty_appointment_success,false);
  }
 });
-test('imperial merit and destination laws bind list and execution',()=>{
- for(const id of [3,10])for(const change of [w=>w.target.merit_level=6,w=>w.emp.laws=['female_only_law'],w=>w.target.vars.block_hire_councillor=w.emp,w=>w.target.wars=[w.emp]]){
+test('destination laws and other qualifications still bind list and execution',()=>{
+ for(const id of [3,10])for(const change of [w=>w.emp.laws=['female_only_law'],w=>w.target.vars.block_hire_councillor=w.emp,w=>w.target.wars=[w.emp]]){
    const w=world(id);w.target.liege=w.regent;w.target.liege_or_court_owner=w.regent;review(w);change(w);
   assert(!candidate(w));assert(!valid(w));commit(w);
   assert.equal(w.s.moves.length,0);assert.equal(w.s.transactions.length,0);assert.equal(w.s.calls.length,0);
@@ -619,7 +733,7 @@ test('single honor dismissal preserves chancellor and every other office',()=>{
 });
 test('ordinary removal retains chancellor, tenure, native firing and actual-employer guards',()=>{
  for(const change of [w=>w.op.vars.wj_ty_office=1,w=>w.old.titles.push(w.cx),w=>w.old.tenure=true,w=>w.old.vars.block_fire_councillor=w.emp,w=>{w.emp.is_ai=false;w.old.council_task.can_fire_position=false},w=>w.old.council_task.owner=w.regent,w=>w.op.vars.wj_ty_dismiss_kind=2,w=>w.old.is_alive=false]){
-  const w=dismissal();change(w);assert(!dismissValid(w));dismiss(w);assert.equal(w.s.wj_ty_commit_ok,false);assert.equal(w.s.destroyed.length,0);assert.equal(w.s.calls.length,0);
+  const w=dismissal();change(w);assert(!dismissValid(w),change.toString());dismiss(w);assert.equal(w.s.wj_ty_commit_ok,false);assert.equal(w.s.destroyed.length,0);assert.equal(w.s.calls.length,0);
  }
  const w=dismissal(8);w.old.court.favored_minister_court_position=w.regent;assert(!dismissValid(w));dismiss(w);assert.equal(w.s.calls.length,0);
 });
@@ -640,6 +754,100 @@ function nativeWorld(){
 }
 const guiRun=(name,w)=>r.execute(one(sg[name],'effect').children,w.op,w.s);
 const guiValid=(name,w)=>r.check(one(sg[name],'is_valid').children,w.op,w.s);
+test('a human can confirm and enact the same Dasima succession as incumbent or as a third party',()=>{
+ const position=positions[7];
+ // Use the real confirmation and execution gates here. Attitudes and total votes are fixture inputs.
+ const actualExecute=defs('common/scripted_triggers/WJ_tingyi_triggers.txt').WJ_ty_execute_valid;
+ const total=values.WJ_ty_total;
+ triggers.WJ_ty_execute_valid=actualExecute;
+ values.WJ_ty_total=operator=>operator.score;
+ try {
+  for(const self of [true,false]){
+   const w=world(7,true);
+   w.op.is_ai=false;
+   w.emp.diarch=w.op;
+   if(self){
+    delete w.old.court[position];
+    w.old=w.op;
+    w.emp.courtHolders[position]=w.op;
+    w.op.court[position]=w.emp;
+   }
+   w.old.vars.wj_dasima_emperor=w.emp;
+   w.old.vars.wj_dasima_realm=w.emp.primary_title;
+   w.emp.vars.wj_dasima_holder=w.old;
+   r.run('WJ_ty_refresh_seats',w.op,w.s);
+   r.run('WJ_ty_appointment_snapshot',w.op,w.s);
+   assert.equal(w.op.vars.wj_ty_incumbent,w.old);
+   assert(!guiValid('WJ_ty_gui_execute',w));
+   assert(guiValid('WJ_ty_gui_confirm',w));
+   guiRun('WJ_ty_gui_confirm',w);
+   assert(guiValid('WJ_ty_gui_execute',w));
+   guiRun('WJ_ty_gui_execute',w);
+   assert.equal(w.emp.courtHolders[position],w.target);
+   assert.equal(w.emp.vars.wj_dasima_holder,w.target);
+   assert.equal(w.target.court[position],w.emp);
+   assert.equal(w.target.vars.wj_dasima_emperor,w.emp);
+   assert.equal(w.old.vars.wj_dasima_emperor,undefined);
+   assert.equal(w.old.court[position],undefined);
+   assert(!w.op.vars.wj_ty_appointment_failed);
+   assert(!w.s.logs.some(line=>line.includes('WJ_TY_DASIMA')));
+   assert.equal(w.op.vars.wj_ty_target,w.target);
+   assert.equal(w.s.calls.filter(call=>call==='notification:success').length,1);
+  }
+ } finally {
+  delete triggers.WJ_ty_execute_valid;
+  values.WJ_ty_total=total;
+ }
+});
+test('Dasima replacement reports which real seat survived a native refusal',()=>{
+ for(const failure of ['rejectBeforeRevocation','rejectAfterRevocation']){
+  const w=world(7,true);
+  w.target.liege=w.op;
+  w.target.liege_or_court_owner=w.op;
+  w.old.vars.wj_dasima_emperor=w.emp;
+  w.emp.vars.wj_dasima_holder=w.old;
+  review(w);
+  w.s[failure]=true;
+  guiRun('WJ_ty_gui_execute',w);
+  assert.equal(w.op.vars.wj_ty_appointment_failed,1);
+  assert(!w.s.calls.includes('notification:success'));
+  assert(!w.target.vars.wj_ty_appoint_cooldown);
+  assert(w.s.logs.some(line=>line.includes('after replace')));
+  assert.equal(w.s.errorScopes.wj_ty_reviewed_dasima,w.old);
+  assert.equal(w.s.errorScopes.wj_ty_successor_liege,w.op);
+  assert.equal(w.s.errorScopes.wj_ty_actual_dasima,w.old);
+ }
+ const stale=world(7,true);
+ delete stale.op.vars.wj_ty_confirmed;
+ commit(stale);
+ assert(stale.s.logs.some(line=>line.includes('before replace')));
+ assert.equal(stale.emp.courtHolders[positions[7]],stale.old);
+});
+test('Dasima moves an indirect vassal before native assignment and compensates failures',()=>{
+ for(const occupied of [false,true])for(const failure of [null,'transfer','assignment']){
+  const w=world(7,occupied),position=positions[7];
+  w.target.liege=w.op;w.target.liege_or_court_owner=w.op;
+  w.op.vassals.push(w.target);
+  w.s.requireCourtLiege=true;
+  if(failure==='transfer')w.s.failTransfer='appointment';
+  if(failure==='assignment')w.s.rejectAfterRevocation=true;
+  w.old.vars.wj_dasima_emperor=w.emp;w.emp.vars.wj_dasima_holder=occupied?w.old:undefined;
+  const titles=[...w.target.titles];
+  review(w);commit(w);
+  assert.deepEqual(w.target.titles,titles);
+  if(!failure||failure==='assignment'&&!occupied){
+   assert.equal(w.target.liege,w.emp);
+   assert.equal(w.target.court[position],w.emp);
+   assert.equal(w.s.wj_ty_appointment_success,true);
+  }else{
+   assert.equal(w.target.liege,w.op);
+   assert(!w.target.court[position]);
+   assert.equal(w.emp.courtHolders[position],occupied?w.old:undefined);
+   assert.equal(w.s.wj_ty_appointment_success,false);
+   assert(!w.target.vars.wj_ty_appoint_cooldown);
+  }
+ }
+});
 function selectSwap(w){guiRun('WJ_ty_native_picker_open',w);w.s.candidate=w.target;assert(guiValid('WJ_ty_native_candidate_swap',w));guiRun('WJ_ty_native_candidate_swap',w);guiRun('WJ_ty_native_picker_close',w);w.op.vars.wj_ty_confirmed=1;}
 test('real provider opener binds exact owner and job without refreshing the reviewed draft',()=>{
  const w=nativeWorld(),before=w.op.vars.wj_ty_appointment_snapshot;
@@ -691,7 +899,7 @@ test('real native swap callback exchanges only ministry titles and completion co
  for(const person of [w.target,w.old])r.run('hd_minister_settle_effect',person,{...w.s,councillor_liege:w.emp});
  assert.equal(src.councillor,w.old);assert.equal(dst.councillor,w.target,'any delayed handoff must keep the already exchanged jobs');
  assert(r.check(triggers.WJ_ty_native_swap_result.children,w.op,w.s));guiRun('WJ_ty_native_swap_finish',w);
- assert.equal(w.s.calls.filter(x=>x==='notification:success').length,1);assert(!w.op.vars.wj_ty_native_swap_authorized);assert(!w.op.vars.wj_ty_open);assert(!w.op.vars.wj_ty_cooldown);assert(w.target.vars.wj_ty_appoint_cooldown);assert(w.old.vars.wj_ty_appoint_cooldown);
+ assert.equal(w.s.calls.filter(x=>x==='notification:success').length,1);assert(!w.op.vars.wj_ty_native_swap_authorized);assert(w.op.vars.wj_ty_open);assert.equal(w.op.vars.wj_ty_topic,0);assert.equal(w.op.vars.wj_ty_target,w.target);assert(!w.op.vars.wj_ty_cooldown);assert(w.target.vars.wj_ty_appoint_cooldown);assert(w.old.vars.wj_ty_appoint_cooldown);
  guiRun('WJ_ty_native_swap_finish',w);assert.equal(w.s.calls.filter(x=>x==='notification:success').length,1);
 });
 test('a partial swap or missing title callback is not published as a completed appointment',()=>{
@@ -755,7 +963,7 @@ test('reciprocal confirmation checks the former incumbent against the actual sou
  const z=nativeWorld();z.old.refuses=true;review(z);assert(!valid(z));commit(z);assert.equal(z.s.pairWrites,undefined);
 });
 test('the AI-hegemon rule cannot block an approved reciprocal pair or broaden ordinary position permissions',()=>{
- const gov=read('common/governments/zz_WJ_celestial_government.txt');assert.match(gov,/ai_can_reassign_council_positions\s*=\s*\{\s*primary_title != title:h_china/);
+ const gov=read('common/governments/zz_WJ_celestial_government.txt');assert.match(gov,/ai_can_reassign_council_positions\s*=\s*\{\s*primary_title != title:h_china\s*WJ_ty_managed_appointment_employer = no/);
  const foreign=nativeWorld();foreign.emp.primary_title={holder:foreign.emp};foreign.target.council_task.can_fire_position=false;foreign.old.council_task.can_fire_position=false;assert(!valid(foreign),'the exception requires the exact AI primary-title ban');
  const w=nativeWorld();w.target.council_task.can_fire_position=false;w.old.council_task.can_fire_position=false;
  assert(valid(w));commit(w);assert(w.s.wj_ty_appointment_success);assert.equal(w.target.council_task.position,positions[2]);assert.equal(w.old.council_task.position,positions[13]);
@@ -766,8 +974,9 @@ test('the AI-hegemon rule cannot block an approved reciprocal pair or broaden or
 });
 test('a participating player may swap out of an inner seat and still settle the approved result once',()=>{
  const w=nativeWorld();assign(w.op,w.emp,positions[10],w.s);w.emp.diarch=w.regent;r.run('WJ_ty_refresh_seats',w.op,w.s);
- w.s.candidate=w.op;assert(guiValid('WJ_ty_gui_target',w));guiRun('WJ_ty_gui_target',w);w.op.vars.wj_ty_confirmed=1;assert(guiValid('WJ_ty_gui_execute',w));guiRun('WJ_ty_gui_execute',w);
+ guiRun('WJ_ty_gui_remove_target',w);w.s.candidate=w.op;assert(guiValid('WJ_ty_gui_target',w));guiRun('WJ_ty_gui_target',w);w.op.vars.wj_ty_confirmed=1;assert(guiValid('WJ_ty_gui_execute',w));guiRun('WJ_ty_gui_execute',w);
  assert.equal(w.op.council_task.position,positions[2]);assert.equal(w.old.council_task.position,positions[10]);assert.equal(w.s.calls.filter(x=>x==='notification:success').length,1);
+ assert(w.op.vars.wj_ty_open);assert.equal(w.op.vars.wj_ty_target,w.op);assert.equal(w.op.vars.wj_ty_topic,0);assert(!guiValid('WJ_ty_gui_execute',w),'losing the final inner role cannot grant further execution');
 });
 test('project callback guards prevent retirement even if quiet position hooks leak through',()=>{
  const w=nativeWorld();w.s.leakyPairCallbacks=true;w.s.titleCallbacks=true;commit(w);assert(w.s.wj_ty_appointment_success);
@@ -802,10 +1011,10 @@ test('native chooser content is separate from deliberation; independent picker o
 // silently broaden to forced retirement / criminal removal.
 const source=read('common/scripted_effects/WJ_tingyi_appointment_effects.txt');
 const qualification=read('common/scripted_triggers/WJ_tingyi_appointment_triggers.txt');
-assert(!/change_liege|swap_councillor|add_treasury\s*=|force_step_down/.test(source));
+assert(!/swap_councillor|add_treasury\s*=|force_step_down/.test(source));
 const outsideExplicit=JSON.stringify(Object.fromEntries(Object.entries(defs('common/scripted_effects/WJ_tingyi_appointment_effects.txt')).filter(([key])=>!['WJ_ty_appointment_swap_apply','WJ_ty_appointment_release_ministry'].includes(key))));
 assert(!/always_fire_councillor/.test(outsideExplicit),'no unguarded rule bypass outside explicit approved exits');
-const noPair=JSON.stringify(Object.fromEntries(Object.entries(defs('common/scripted_effects/WJ_tingyi_appointment_effects.txt')).filter(([key])=>key!=='WJ_ty_appointment_swap_apply')));
+const noPair=JSON.stringify(Object.fromEntries(Object.entries(defs('common/scripted_effects/WJ_tingyi_appointment_effects.txt')).filter(([key])=>!['WJ_ty_appointment_swap_apply','WJ_ty_appointment_assign_court'].includes(key))));
 assert(!/change_title_holder|create_title_and_vassal_change/.test(noPair),'direct title changes exist only in the reviewed pair operation');
 const pairSource=source.slice(source.indexOf('WJ_ty_appointment_swap_apply ='),source.indexOf('WJ_ty_appointment_commit ='));
 assert.equal((pairSource.match(/change_title_holder =/g)||[]).length,4,'two reviewed title writes and their exact restoration');

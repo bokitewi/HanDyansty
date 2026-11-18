@@ -89,48 +89,18 @@ for (const contract of Object.values(contracts)) for (const level of one(contrac
 }
 assert.deepEqual(enabled.sort(), ['WJ_chijie', 'WJ_huangyue_grant', 'WJ_shichijie']);
 for (const name of enabled) assert(read('localization/simp_chinese/mechanisms/WJ_laws_and_contracts_l_simp_chinese.yml').split('\n').some(line => line.includes(name + '_desc:') && line.includes('原生契约宣战权')));
-// Restored decision: the displayed requirements and click-time guard must agree.
+// An eligible self-nomination starts TY38. Existing TY38 appointment tests
+// exercise the office requirements and actual grant through the ordinary decree.
 const decision = defs('common/decisions/WJ_chengxiang_decision.txt').wj_create_cheng_xiang_decision;
-const qualifications = defs('common/scripted_triggers/WJ_ministry_refusal_triggers.txt');
-const tenure = defs('common/scripted_triggers/WJ_tenure_triggers.txt');
-const merit = defs('common/scripted_triggers/zz_hd_minister_gate_triggers.txt');
-const hermit = defs('common/scripted_triggers/WJ_yinshi_triggers.txt');
-assert(!decision.children.some(n => n.key === 'is_valid_showing_failures_only'));
-assert.equal(one(one(decision, 'is_valid'), 'WJ_chengxiang_decision_qualification').value, 'yes');
-assert.equal(one(one(one(one(decision, 'effect'), 'if'), 'limit'), 'WJ_chengxiang_decision_qualification').value, 'yes');
-assert(!one(decision, 'is_shown').children.some(n => n.key === 'always'));
-let gate;
-gate = runner({ effects: {}, triggers: { ...qualifications, WJ_tenure_free: tenure.WJ_tenure_free,
-  hd_minister_merit_gate_trigger: merit.hd_minister_merit_gate_trigger, WJ_yinshi_not_hermit_trigger: hermit.WJ_yinshi_not_hermit_trigger }, values: {WJ_cx_support_seats: c => c.support}, primitives: {
-  tgp_has_access_to_ministry_trigger: flag('access'), has_tgp_dlc_trigger: flag('dlc'),
-  custom_tooltip: (c, s, n, p) => gate.check(n.children.filter(x => x.key !== 'text'), c, s, p),
-  has_trait: (c, s, n) => c.traits.includes(n.value),
-  tgp_can_be_a_minister_trigger: c => c.nativeEligible, // Native eligibility is a CK3 primitive in this fixture.
-  has_council_position: () => false,
-  is_diarch_of_target: (c, s, n, p) => gate.resolve(n.value,c,s,p)?.diarch === c,
-  has_diarchy_type: c => c.hasSecretariat,
-  has_realm_law: (c,s,n) => c.law === n.value,
-  WJ_rf_has_fief: (c,s,n) => !!c.fief === (n.value === "yes"),
-  hd184r_governor_freeze_active_trigger: flag('freeze'), hd184r_freeze_exempt_trigger: flag('freezeExempt'),
-  hd184r_holds_kingdom_land_trigger: flag('localKingdom'),
-}});
-for (const fail of ['', 'wrong-government', 'not-regent', 'weak-swing', 'real-fief', 'strong-crown', 'support', 'army-floor', 'army-ratio', 'independent', 'foreign', 'no-emperor', 'no-court', 'occupied', 'no-dlc', 'dead', 'young', 'prison', 'incapable', 'hermit', 'refusal', 'tenure', 'native', 'merit', 'freeze']) {
-  const han = { holder: { access: fail !== 'no-court', hasSecretariat:true, diarchy_swing: fail === 'weak-swing' ? 59 : 60, law:fail === 'strong-crown' ? 'celestial_bureaucracy_1' : 'celestial_bureaucracy_0', one_and_a_half_times_current_military_strength: fail === 'army-ratio' ? 3001 : 3000 } }, office = { is_title_created: fail === 'occupied' };
-  const c = { 'title:h_china': han, 'title:e_WJ_minister_cheng_xiang': office, titles: [],
-    governmentFlags: fail === 'wrong-government' ? [] : ['government_is_celestial'],
-    highest_held_title_tier: fail === 'duke' ? 3 : fail === 'empire' ? 5 : 4,
-    top_liege: fail === 'foreign' ? {} : han.holder, liege_or_court_owner: han.holder,
-    current_military_strength: fail === 'army-floor' ? 2999 : 3000, support:fail === 'support' ? 2 : 3, fief:fail === 'real-fief',
-    dlc: fail !== 'no-dlc', is_alive: fail !== 'dead', is_adult: fail !== 'young',
-    is_imprisoned: fail === 'prison', is_incapable: fail === 'incapable',
-    traits: fail === 'hermit' ? ['WJ_yangwang_trait'] : [], flags: fail === 'refusal' ? ['wj_refuses_ministry_appointments'] : [],
-    modifiers: fail === 'tenure' ? ['WJ_tenure_modifier'] : [], nativeEligible: fail !== 'native',
-    months_from_game_start: 2, merit_level: fail === 'merit' ? 6 : 7, freeze: fail === 'freeze', localKingdom: true };
-  han.holder.diarch = fail === 'not-regent' ? {} : c;
-  if (fail === 'independent') c.top_liege = c;
-  if (fail === 'no-emperor') delete han.holder;
-  const s = { root: c };
-  assert.equal(gate.check(one(decision, 'is_valid').children, c, s), !fail, fail);
-  assert.equal(gate.check(one(one(one(decision, 'effect'), 'if'), 'limit').children, c, s), !fail, 'click/' + fail);
-}
-console.log('PASS: fief-to-cabinet restoration removed; chancellor vassal/seat guards; legal/invalid capital back/retry; three native war-right grants; restored decision guards. Engine callbacks remain untested.');
+const checkOnClick = one(one(decision,'effect'),'if');
+assert.equal(one(one(decision,'is_valid'),'WJ_ty_self_chancellor_proposal').value,'yes');
+assert.equal(one(one(checkOnClick,'limit'),'WJ_ty_self_chancellor_proposal').value,'yes');
+assert.equal(one(one(checkOnClick,'WJ_ty_prepare_legacy_nomination'),'OFFICE').value,'1');
+assert.equal(one(one(checkOnClick,'WJ_ty_prepare_legacy_nomination'),'NOMINEE').value,'this');
+assert.equal(one(decision,'ai_check_interval').value,'0');
+const qualifications=defs('common/scripted_triggers/WJ_appointment_recommendation_triggers.txt').WJ_ty_self_chancellor_proposal;
+assert.equal(one(qualifications,'WJ_ty_inner').value,'yes');
+assert.equal(one(qualifications,'WJ_ty_can_open').value,'yes');
+assert.equal(one(one(qualifications,'WJ_ty_appointment_chancellor'),'EXECUTE').value,'no');
+assert(!JSON.stringify(decision).includes('got_minister_position_effect'));
+console.log('PASS: fief-to-cabinet, chancellor vassal/seat protections, capital retry, native war rights and TY38 decision route. Engine callbacks require in-game QA.');

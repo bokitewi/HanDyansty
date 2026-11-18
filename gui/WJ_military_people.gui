@@ -1,0 +1,471 @@
+types WJMilitaryPeopleTypes {
+ type WJ_mt_gold_portrait = portrait_head_small {
+  allow_outside = yes
+  # Keep the complete native portrait/status/CoA chain. Reserve the corner for the interaction.
+  blockoverride "opinion_box" {
+   widget = { size = { 45 18 } allow_outside = yes scissor = no
+    portrait_opinion_small = { parentanchor = left|vcenter widgetanchor = left|vcenter position = { -3 -8 } }
+   }
+  }
+ }
+ type WJ_mt_small_person = widget {
+  size = { 85 90 } allow_outside = yes scissor = no
+  WJ_mt_gold_portrait = {}
+  # A circle centred on this corner has one quarter inside the portrait.
+  WJ_mt_menu_button = { block "small_person_menu_layout" { position = { 85 90 } size = { 24 24 } } widgetanchor = center }
+ }
+ type WJ_mt_bright_button = button_standard {
+  # Native button state atlas: the disabled frame has no hover glow.
+  highlight_icon = {
+   size = { 100% 100% } alwaystransparent = yes
+   texture = "gfx/interface/buttons/button_mouseover.dds" framesize = { 238 63 }
+   spriteType = Corneredstretched spriteborder = { 20 20 }
+   gfxtype = togglepushbuttongfx effectname = "NoHighlight"
+   upframe = 1 uphoverframe = 2 uppressedframe = 2
+   downframe = 1 downhoverframe = 2 downpressedframe = 2 disableframe = 1
+   color = { 1 0.78 0.3 1 } alpha = 1
+  }
+ }
+ type WJ_mt_people_frame = widget {
+  size = { 907.5 646 } alwaystransparent = yes
+  # The approved preview uses one continuous image, without nine-slice paper seams.
+  icon = { size = { 907.5 646 } texture = "gfx/interface/hd_baiguan/wj_military_people_frame_v1.png" alwaystransparent = yes }
+ }
+
+ type WJ_mt_halfbody = widget {
+  size = { 176.8 216 }
+  portrait_button = {
+   block "halfbody_portrait_layout" { position = { 0 0 } size = { 176.8 204 } }
+   using = portrait_base
+   portrait_texture = "[Character.GetAnimatedPortrait('environment_torso', 'camera_torso', 'idle', PdxGetWidgetScreenSize(PdxGuiWidget.Self))]"
+   mask = "gfx/portraits/portrait_mask_torso.dds" effectname = "NoHighlight"
+  }
+
+  portrait_status_icons_small = {
+   name = "WJ_mt_status_icons"
+   block "halfbody_status_layout" { position = { 0 98 } scale = 1.25 }
+  }
+  portrait_opinion = {
+   name = "WJ_mt_halfbody_opinion"
+   parentanchor = bottom|hcenter widgetanchor = bottom|hcenter
+   block "halfbody_opinion_layout" { position = { 0 -2 } }
+  }
+  coa_realm_small_crown = {
+   visible = "[Character.HasLandedTitles]"
+   parentanchor = bottom|right widgetanchor = bottom|right
+   block "halfbody_coa_layout" { position = { -3 -12 } scale = 0.9 }
+  }
+ }
+ type WJ_mt_name_age = hbox {
+  parentanchor = top|left widgetanchor = top|left position = { 0 0 }
+  block "name_age_layout" { size = { 232 44 } }
+  layoutpolicy_horizontal = fixed layoutpolicy_vertical = fixed spacing = 6
+  text_single = {
+   block "name_age_text_layout" { size = { 152 44 } maximumsize = { 152 44 } max_width = 152 fontsize = 19 }
+   block "name_age_text" { text = WJ_mt_primary_name }
+   tooltip = "[Character.Custom('WJ_GetUIName')]"
+   multiline = yes fontsize_min = 16 autoresize = no default_format = "#hd_black" align = left|vcenter
+   layoutpolicy_horizontal = fixed layoutpolicy_vertical = fixed
+  }
+  widget = { size = { 38.4 17 } layoutpolicy_horizontal = fixed layoutpolicy_vertical = fixed widget = { size = { 64 28 } scale = 0.6 parentanchor = center widgetanchor = center character_age_health = {} } }
+  expand = {}
+ }
+
+ # Reuse the realm's actual CharacterListItem, matched to this card's Character.
+ # ponytail: this hover lookup scans the native vassal/court pools; a direct per-character
+ # factory would remove the lookup and cover characters outside these native pools.
+ type WJ_mt_detail_text = text_multi {
+  using = DefaultTooltipText
+  size = { 356 0 } minimumsize = { 356 1 } max_width = 356
+  layoutpolicy_horizontal = fixed layoutpolicy_vertical = growing
+ }
+ type WJ_mt_native_detail_tooltip = widget {
+  size = { 380 0 } layoutpolicy_horizontal = fixed layoutpolicy_vertical = growing
+  using = DefaultTooltipBackground using = GeneralTooltipSetup
+  vbox = {
+   set_parent_size_to_minimum = yes margin = { 12 10 } size = { 356 0 }
+   layoutpolicy_horizontal = fixed layoutpolicy_vertical = growing ignoreinvisible = yes
+  widget = {
+   visible = "[ObjectsEqual(Character.Self, GetPlayer)]"
+   size = { 356 0 } layoutpolicy_horizontal = fixed layoutpolicy_vertical = growing
+   block "native_self_detail" {
+    WJ_mt_detail_text = { datacontext = "[GetPlayerArmyComposition]" text = "[ArmyComposition.GetArmyCompositionTooltip]" }
+   }
+  }
+  vbox = {
+   datacontext = "[AccessMyRealmWindow.GetPowerfulVassals]"
+   datamodel = "[CharacterSelectionList.GetList]"
+   size = { 356 0 } layoutpolicy_horizontal = fixed layoutpolicy_vertical = growing ignoreinvisible = yes
+   item = { vbox = {
+    visible = "[And(Not(ObjectsEqual(Character.Self, GetPlayer)), ObjectsEqual(CharacterListItem.GetCharacter, Character.Self))]"
+    size = { 356 0 } layoutpolicy_horizontal = fixed layoutpolicy_vertical = growing ignoreinvisible = yes
+    block "native_powerful_detail" { WJ_mt_detail_text = { text = "[CharacterListItem.GetMilitaryStrengthTooltip]" } }
+   } }
+  }
+  vbox = {
+   datacontext = "[AccessMyRealmWindow.GetRegularVassals]"
+   visible = "[StringIsEmpty(DataModelJoinList(AccessMyRealmWindow.GetPowerfulVassals.GetList, 'WJ_mt_native_detail_match', 'WJ_mt_native_detail_separator'))]"
+   datamodel = "[CharacterSelectionList.GetList]"
+   size = { 356 0 } layoutpolicy_horizontal = fixed layoutpolicy_vertical = growing ignoreinvisible = yes
+   item = { vbox = {
+    visible = "[And(Not(ObjectsEqual(Character.Self, GetPlayer)), ObjectsEqual(CharacterListItem.GetCharacter, Character.Self))]"
+    size = { 356 0 } layoutpolicy_horizontal = fixed layoutpolicy_vertical = growing ignoreinvisible = yes
+    block "native_regular_detail" { WJ_mt_detail_text = { text = "[CharacterListItem.GetMilitaryStrengthTooltip]" } }
+   } }
+  }
+  vbox = {
+   datacontext = "[AccessCourtWindow.GetCourt]"
+   visible = "[And(StringIsEmpty(DataModelJoinList(AccessMyRealmWindow.GetPowerfulVassals.GetList, 'WJ_mt_native_detail_match', 'WJ_mt_native_detail_separator')), StringIsEmpty(DataModelJoinList(AccessMyRealmWindow.GetRegularVassals.GetList, 'WJ_mt_native_detail_match', 'WJ_mt_native_detail_separator')))]"
+   datamodel = "[CharacterSelectionList.GetList]"
+   size = { 356 0 } layoutpolicy_horizontal = fixed layoutpolicy_vertical = growing ignoreinvisible = yes
+   item = { vbox = {
+    visible = "[And(Not(ObjectsEqual(Character.Self, GetPlayer)), ObjectsEqual(CharacterListItem.GetCharacter, Character.Self))]"
+    size = { 356 0 } layoutpolicy_horizontal = fixed layoutpolicy_vertical = growing ignoreinvisible = yes
+    block "native_court_detail" { WJ_mt_detail_text = { text = "[CharacterListItem.GetMilitaryStrengthTooltip]" } }
+   } }
+  }
+  vbox = {
+   visible = "[And(Not(ObjectsEqual(Character.Self, GetPlayer)), And(And(StringIsEmpty(DataModelJoinList(AccessMyRealmWindow.GetPowerfulVassals.GetList, 'WJ_mt_native_detail_match', 'WJ_mt_native_detail_separator')), StringIsEmpty(DataModelJoinList(AccessMyRealmWindow.GetRegularVassals.GetList, 'WJ_mt_native_detail_match', 'WJ_mt_native_detail_separator'))), StringIsEmpty(DataModelJoinList(AccessCourtWindow.GetCourt.GetList, 'WJ_mt_native_detail_match', 'WJ_mt_native_detail_separator'))))]"
+   size = { 356 0 } layoutpolicy_horizontal = fixed layoutpolicy_vertical = growing
+   block "native_missing_detail" { WJ_mt_detail_text = { text = WJ_mt_military_detail_unavailable } }
+  }
+  }
+ }
+ type WJ_mt_diplomacy_detail_tooltip = WJ_mt_native_detail_tooltip {
+  blockoverride "native_self_detail" { WJ_mt_detail_text = { text = WJ_mt_diplomacy_direct_detail } }
+  blockoverride "native_powerful_detail" { WJ_mt_detail_text = { datacontext = "[CharacterListItem.GetDiplomacySkill]" text = "SKILL_ITEM_TOOLTIP" } }
+  blockoverride "native_regular_detail" { WJ_mt_detail_text = { datacontext = "[CharacterListItem.GetDiplomacySkill]" text = "SKILL_ITEM_TOOLTIP" } }
+  blockoverride "native_court_detail" { WJ_mt_detail_text = { datacontext = "[CharacterListItem.GetDiplomacySkill]" text = "SKILL_ITEM_TOOLTIP" } }
+  blockoverride "native_missing_detail" { WJ_mt_detail_text = { text = WJ_mt_diplomacy_direct_detail } }
+ }
+ type WJ_mt_martial_detail_tooltip = WJ_mt_native_detail_tooltip {
+  blockoverride "native_self_detail" { WJ_mt_detail_text = { text = WJ_mt_martial_direct_detail } }
+  blockoverride "native_powerful_detail" { WJ_mt_detail_text = { datacontext = "[CharacterListItem.GetMartialSkill]" text = "SKILL_ITEM_TOOLTIP" } }
+  blockoverride "native_regular_detail" { WJ_mt_detail_text = { datacontext = "[CharacterListItem.GetMartialSkill]" text = "SKILL_ITEM_TOOLTIP" } }
+  blockoverride "native_court_detail" { WJ_mt_detail_text = { datacontext = "[CharacterListItem.GetMartialSkill]" text = "SKILL_ITEM_TOOLTIP" } }
+  blockoverride "native_missing_detail" { WJ_mt_detail_text = { text = WJ_mt_martial_direct_detail } }
+ }
+ type WJ_mt_stewardship_detail_tooltip = WJ_mt_native_detail_tooltip {
+  blockoverride "native_self_detail" { WJ_mt_detail_text = { text = WJ_mt_stewardship_direct_detail } }
+  blockoverride "native_powerful_detail" { WJ_mt_detail_text = { datacontext = "[CharacterListItem.GetStewardshipSkill]" text = "SKILL_ITEM_TOOLTIP" } }
+  blockoverride "native_regular_detail" { WJ_mt_detail_text = { datacontext = "[CharacterListItem.GetStewardshipSkill]" text = "SKILL_ITEM_TOOLTIP" } }
+  blockoverride "native_court_detail" { WJ_mt_detail_text = { datacontext = "[CharacterListItem.GetStewardshipSkill]" text = "SKILL_ITEM_TOOLTIP" } }
+  blockoverride "native_missing_detail" { WJ_mt_detail_text = { text = WJ_mt_stewardship_direct_detail } }
+ }
+ type WJ_mt_intrigue_detail_tooltip = WJ_mt_native_detail_tooltip {
+  blockoverride "native_self_detail" { WJ_mt_detail_text = { text = WJ_mt_intrigue_direct_detail } }
+  blockoverride "native_powerful_detail" { WJ_mt_detail_text = { datacontext = "[CharacterListItem.GetIntrigueSkill]" text = "SKILL_ITEM_TOOLTIP" } }
+  blockoverride "native_regular_detail" { WJ_mt_detail_text = { datacontext = "[CharacterListItem.GetIntrigueSkill]" text = "SKILL_ITEM_TOOLTIP" } }
+  blockoverride "native_court_detail" { WJ_mt_detail_text = { datacontext = "[CharacterListItem.GetIntrigueSkill]" text = "SKILL_ITEM_TOOLTIP" } }
+  blockoverride "native_missing_detail" { WJ_mt_detail_text = { text = WJ_mt_intrigue_direct_detail } }
+ }
+ type WJ_mt_learning_detail_tooltip = WJ_mt_native_detail_tooltip {
+  blockoverride "native_self_detail" { WJ_mt_detail_text = { text = WJ_mt_learning_direct_detail } }
+  blockoverride "native_powerful_detail" { WJ_mt_detail_text = { datacontext = "[CharacterListItem.GetLearningSkill]" text = "SKILL_ITEM_TOOLTIP" } }
+  blockoverride "native_regular_detail" { WJ_mt_detail_text = { datacontext = "[CharacterListItem.GetLearningSkill]" text = "SKILL_ITEM_TOOLTIP" } }
+  blockoverride "native_court_detail" { WJ_mt_detail_text = { datacontext = "[CharacterListItem.GetLearningSkill]" text = "SKILL_ITEM_TOOLTIP" } }
+  blockoverride "native_missing_detail" { WJ_mt_detail_text = { text = WJ_mt_learning_direct_detail } }
+ }
+
+ type WJ_mt_skills_strip = widget {
+  size = { 198 25 }
+  background = { texture = "gfx/interface/colors/white.dds" color = { 0.161 0.204 0.184 0.91 } }
+  background = { using = Background_Frame color = { 0.43 0.47 0.42 0.47 } }
+  hbox_skills_grid_character_model = {
+   size = { 160 25 } parentanchor = top|left widgetanchor = top|left position = { 0 0 }
+   blockoverride "wj_mt_skill_diplomacy_style" {
+    fontsize = 14 default_format = "#wj_mt_skill_value" tooltip = ""
+    tooltipwidget = { WJ_mt_diplomacy_detail_tooltip = {} }
+   }
+   blockoverride "wj_mt_skill_martial_style" {
+    fontsize = 14 default_format = "#wj_mt_skill_value" tooltip = ""
+    tooltipwidget = { WJ_mt_martial_detail_tooltip = {} }
+   }
+   blockoverride "wj_mt_skill_stewardship_style" {
+    fontsize = 14 default_format = "#wj_mt_skill_value" tooltip = ""
+    tooltipwidget = { WJ_mt_stewardship_detail_tooltip = {} }
+   }
+   blockoverride "wj_mt_skill_intrigue_style" {
+    fontsize = 14 default_format = "#wj_mt_skill_value" tooltip = ""
+    tooltipwidget = { WJ_mt_intrigue_detail_tooltip = {} }
+   }
+   blockoverride "wj_mt_skill_learning_style" {
+    fontsize = 14 default_format = "#wj_mt_skill_value" tooltip = ""
+    tooltipwidget = { WJ_mt_learning_detail_tooltip = {} }
+   }
+  }
+  # Prowess has a native character-scoped breakdown, independent of the selected window.
+  widget = {
+   name = "WJ_mt_prowess" position = { 163 0 } size = { 35 25 }
+   tooltip = "CHARACTER_PROWESS_TOOLTIP" using = tooltip_ne
+   icon = { position = { 0 4 } size = { 17 17 } texture = "gfx/interface/icons/icon_prowess.dds" alwaystransparent = yes }
+   text_single = { position = { 17 0 } size = { 18 25 } text = "CHARACTER_PROWESS" fontsize = 14 align = center autoresize = no default_format = "#wj_mt_skill_value" alwaystransparent = yes }
+  }
+ }
+
+ type WJ_mt_full_name = text_multi {
+  block "full_name_layout" { size = { 229.55 44 } minimumsize = { 229.55 44 } maximumsize = { 229.55 44 } max_width = 229.55 }
+  multiline = yes text = "[Character.Custom('WJ_GetUIName')]" tooltip = "[Character.Custom('WJ_GetUIName')]"
+  fontsize = 12 fontsize_min = 10 autoresize = no align = center default_format = "#wj_mt_muted"
+ }
+
+ type WJ_mt_family = widget {
+  size = { 100% 22 }
+  hbox = {
+   size = { 100% 100% } position = { 0 0 } parentanchor = top|left widgetanchor = top|left
+   layoutpolicy_horizontal = fixed layoutpolicy_vertical = fixed spacing = 7
+   expand = {}
+   widget = { size = { 21 22 } layoutpolicy_horizontal = fixed
+    coa_house_tiny = { parentanchor = center widgetanchor = center scale = 0.4375 datacontext = "[Character.GetHouse]" }
+   }
+   text_single = { max_width = 170 fontsize = 13 font = StandardGameFont autoresize = yes default_format = "#wj_mt_muted" align = center
+    text = "[Character.GetHouse.GetNameNoTooltip]" tooltip = "[Character.GetHouse.GetNameNoTooltip]"
+   }
+   expand = {}
+  }
+ }
+ type WJ_mt_strength_actions = hbox {
+  parentanchor = top|left widgetanchor = top|left position = { 0 0 }
+  block "strength_row_layout" { size = { 121 28 } }
+  layoutpolicy_horizontal = fixed layoutpolicy_vertical = fixed spacing = 8 ignoreinvisible = yes
+  WJ_mt_military_strength = {
+   blockoverride "compact_strength_value_style" {
+    block "strength_text_layout" { max_width = 42 fontsize = 14 }
+    fontsize_min = 11 autoresize = yes layoutpolicy_horizontal = growing default_format = "#wj_mt_ink" alwaystransparent = yes
+   }
+  }
+  WJ_mt_menu_button = { block "strength_menu_layout" { size = { 24 24 } } layoutpolicy_horizontal = fixed layoutpolicy_vertical = fixed }
+  block "strength_extra_actions" {}
+  expand = {}
+ }
+
+ type WJ_mt_military_strength = hbox_compact_vassal_military_strength {
+  blockoverride "compact_strength_layout" {
+   size = { 0 23 } layoutpolicy_horizontal = growing layoutpolicy_vertical = fixed spacing = 4 margin = { 0 0 } margin_bottom = 0
+   visible = "[Character.HasLandedTitles]"
+  }
+  tooltipwidget = { WJ_mt_native_detail_tooltip = {} }
+  blockoverride "compact_strength_tooltip" {
+   tooltip = ""
+   tooltipwidget = { WJ_mt_native_detail_tooltip = {} }
+  }
+  blockoverride "compact_strength_icon_style" { alwaystransparent = yes }
+  blockoverride "compact_strength_value_style" { max_width = 64 fontsize = 13 fontsize_min = 11 autoresize = yes layoutpolicy_horizontal = growing default_format = "#wj_mt_ink" alwaystransparent = yes }
+ }
+ type WJ_mt_profile_header = widget {
+  size = { 100% 36 } parentanchor = top|left widgetanchor = top|left position = { 0 0 }
+  # Bound the flow container to this header, never the full portrait card.
+  hbox = {
+   size = { 100% 100% } parentanchor = top|left widgetanchor = top|left position = { 0 0 }
+   layoutpolicy_horizontal = fixed layoutpolicy_vertical = fixed spacing = 6
+   expand = {}
+   text_multi = {
+    block "profile_header_text_layout" { size = { 167 36 } maximumsize = { 167 36 } max_width = 167 fontsize = 19 }
+    text = WJ_mt_primary_name tooltip = "[Character.Custom('WJ_GetUIName')]" font = StandardGameFont
+    multiline = yes autoresize = no fontsize_min = 16 align = center default_format = "#wj_mt_ink"
+   }
+   widget = { size = { 38.4 17 } layoutpolicy_horizontal = fixed
+    widget = { size = { 64 28 } scale = 0.6 parentanchor = center widgetanchor = center character_age_health = { blockoverride "wj_mt_age_value_style" { fontsize = 18 default_format = "#wj_mt_note" } } }
+   }
+   expand = {}
+  }
+ }
+ type WJ_mt_profile_card = widget {
+  block "profile_card_size" { size = { 233.55 326 } }
+  visible = "[And(Character.IsValid, Character.IsAlive)]"
+  WJ_mt_profile_header = { block "profile_header_layout" { position = { 2 0 } size = { 229.55 36 } } }
+  WJ_mt_skills_strip = { parentanchor = top|hcenter widgetanchor = top|hcenter position = { 0 39 } }
+  WJ_mt_halfbody = {
+   parentanchor = top|hcenter widgetanchor = top|hcenter
+   block "profile_figure_layout" { position = { 0 67 } size = { 154 156 } }
+   blockoverride "halfbody_portrait_layout" { position = { 2 0 } size = { 150 156 } }
+   blockoverride "halfbody_status_layout" { position = { 0 77 } scale = 1.25 }
+   blockoverride "halfbody_coa_layout" { position = { 0 -4 } scale = 0.65 }
+   blockoverride "halfbody_opinion_layout" { position = { 0 0 } scale = 0.85 }
+  }
+  WJ_mt_full_name = {
+   parentanchor = top|hcenter widgetanchor = top|hcenter
+   block "profile_full_name_position" { position = { 0 226 } }
+  }
+  WJ_mt_family = { parentanchor = top|left widgetanchor = top|left block "profile_family_position" { position = { 2 273 } size = { 229.55 22 } } }
+  icon = { block "profile_actions_divider_position" { position = { 2 298 } size = { 229.55 1 } } texture = "gfx/interface/colors/white.dds" color = { 0.67 0.57 0.38 0.24 } alwaystransparent = yes }
+  widget = {
+   name = "WJ_mt_profile_strength_actions" parentanchor = top|left widgetanchor = top|left
+   block "profile_actions_layout" { position = { 2 298 } size = { 229.55 28 } }
+   hbox = {
+    size = { 100% 100% } position = { 0 0 } parentanchor = top|left widgetanchor = top|left
+    layoutpolicy_horizontal = fixed layoutpolicy_vertical = fixed spacing = 13
+    expand = {}
+    hbox = { size = { 0 23 } layoutpolicy_horizontal = growing spacing = 4
+     text_single = { text = WJ_mt_strength_caption font = StandardGameFont fontsize = 12 autoresize = yes default_format = "#wj_mt_note" }
+     WJ_mt_military_strength = {}
+    }
+    WJ_mt_menu_button = { size = { 25 25 } layoutpolicy_horizontal = fixed layoutpolicy_vertical = fixed }
+    expand = {}
+   }
+  }
+ }
+ type WJ_mt_primary_card = WJ_mt_profile_card {}
+ type WJ_mt_general_card = widget {
+  size = { 248 294 } visible = "[And(Character.IsValid, Character.IsAlive)]"
+  background = { texture = "gfx/interface/colors/white.dds" color = { 0.99 0.97 0.91 0.15 } }
+  background = { using = Background_Frame color = { 0.69 0.61 0.46 0.33 } }
+  WJ_mt_profile_card = {
+   position = { 6 6 }
+   blockoverride "profile_card_size" { size = { 236 280 } }
+   blockoverride "profile_header_layout" { position = { 0 0 } size = { 236 36 } }
+   blockoverride "profile_header_text_layout" { size = { 173.5 36 } maximumsize = { 173.5 36 } max_width = 173.5 fontsize = 18 }
+   blockoverride "profile_figure_layout" { position = { 0 67 } size = { 107.8 109.2 } }
+   blockoverride "halfbody_portrait_layout" { position = { 1.4 0 } size = { 105 109.2 } }
+   blockoverride "halfbody_status_layout" { position = { 0 54 } scale = 0.875 }
+   blockoverride "profile_full_name_position" { position = { 0 180 } }
+   blockoverride "full_name_layout" { size = { 232 44 } minimumsize = { 232 44 } maximumsize = { 232 44 } max_width = 232 }
+   blockoverride "profile_family_position" { position = { 0 227 } size = { 236 22 } }
+   blockoverride "profile_actions_layout" { position = { 0 252 } size = { 236 28 } }
+   blockoverride "profile_actions_divider_position" { position = { 0 252 } size = { 236 1 } }
+   blockoverride "halfbody_coa_layout" { position = { 0 -4 } scale = 0.455 }
+   blockoverride "halfbody_opinion_layout" { position = { 0 0 } scale = 0.7 }
+  }
+ }
+ type WJ_mt_officer_tile = widget {
+  size = { 123.75 163 } minimumsize = { 123.75 163 } allow_outside = yes
+  visible = "[And(Character.IsValid, Character.IsAlive)]"
+  button = {
+   name = "WJ_mt_officer_background" size = { 100% 100% }
+   onclick = "[DefaultOnCharacterClick(Character.GetID)]"
+   background = { texture = "gfx/interface/colors/white.dds" color = { 0.98 0.96 0.90 0.16 } }
+   background = { texture = "gfx/interface/hd_baiguan/seat_dark_pattern_v1.png" spriteType = Corneredtiled spriteborder = { 0 0 } texture_density = 8.36 alpha = 0.035 }
+   background = { using = Background_Frame color = { 0.67 0.58 0.43 0.33 } }
+   highlight_icon = {
+    size = { 100% 100% } texture = "gfx/interface/buttons/button_mouseover.dds" framesize = { 238 63 }
+    spriteType = Corneredstretched spriteborder = { 20 20 } gfxtype = togglepushbuttongfx effectname = "NoHighlight"
+    upframe = 1 uphoverframe = 2 uppressedframe = 2 downframe = 1 downhoverframe = 2 downpressedframe = 2 disableframe = 1
+    color = { 0.73 0.61 0.42 0.45 } alwaystransparent = yes
+   }
+  }
+  textbox = {
+   name = "WJ_mt_officer_vertical_title" position = { 5 8 } size = { 19 144 } max_width = 19 maximumsize = { 19 144 }
+   font = MapFont multiline = yes align = top|hcenter fontsize = 16 fontsize_min = 16 autoresize = no default_format = "#wj_mt_muted"
+   text = "[Character.GetPrimaryTitle.GetNameNoTooltip]" tooltip = "[Character.GetPrimaryTitle.GetNameNoTooltip]"
+  }
+  WJ_mt_small_person = {
+   position = { 29 7 }
+   blockoverride "small_person_menu_layout" { position = { 81 93 } size = { 24 24 } }
+   blockoverride "menu_counter_layout" { parentanchor = bottom|hcenter widgetanchor = bottom|hcenter position = { 0 -1 } size = { 14 10 } fontsize = 8 fontsize_min = 8 align = center }
+  }
+  widget = {
+   name = "WJ_mt_officer_name_age" position = { 8 116 } size = { 108 19 }
+   hbox = {
+    size = { 100% 100% } position = { 0 0 } parentanchor = top|left widgetanchor = top|left
+    layoutpolicy_horizontal = fixed layoutpolicy_vertical = fixed spacing = 4
+    expand = {}
+    text_single = { max_width = 65 text = "[Character.GetFirstNameNoTooltip]" font = StandardGameFont fontsize = 14 fontsize_min = 12 align = center autoresize = yes default_format = "#wj_mt_ink" }
+    widget = { size = { 32 14 } layoutpolicy_horizontal = fixed
+     widget = { size = { 64 28 } scale = 0.5 parentanchor = center widgetanchor = center character_age_health = { blockoverride "wj_mt_age_value_style" { fontsize = 18 default_format = "#wj_mt_note" } } }
+    }
+    expand = {}
+   }
+  }
+  widget = {
+   name = "WJ_mt_officer_footer" position = { 0 138 } size = { 123.75 25 }
+   background = { texture = "gfx/interface/colors/white.dds" color = { 0.85 0.80 0.70 0.23 } }
+   icon = { size = { 100% 1 } texture = "gfx/interface/colors/white.dds" color = { 0.69 0.61 0.46 0.33 } alwaystransparent = yes }
+   widget = {
+    name = "WJ_mt_officer_strength" position = { 6 1 } size = { 58 23 }
+    WJ_mt_military_strength = {
+     blockoverride "compact_strength_value_style" { max_width = 37 fontsize = 11 fontsize_min = 10 autoresize = yes layoutpolicy_horizontal = growing default_format = "#wj_mt_ink" alwaystransparent = yes }
+    }
+   }
+   text_multi = { name = "WJ_mt_officer_rank" position = { 67 2 } size = { 51 21 } max_width = 51 maximumsize = { 51 21 } multiline = yes text = "[Character.Custom('WJMRName')]" tooltip = "[Character.Custom('WJ_GetUIName')]" font = StandardGameFont fontsize = 10 fontsize_min = 9 align = center autoresize = no default_format = "#wj_mt_muted" }
+  }
+ }
+
+ type WJ_mt_people_layout = widget {
+  name = "WJ_military_people_body" position = { 40 65 } size = { 828.5 523 } alwaystransparent = yes
+  widget = {
+   name = "WJ_military_left_fixed" size = { 248.75 523 } parentanchor = top|left widgetanchor = top|left position = { 0 0 }
+   text_single = { size = { 233.55 31 } text = WJ_mt_people_left_title font = MapFont align = center fontsize = 24 default_format = "#wj_mt_ink" autoresize = no alwaystransparent = yes }
+   text_single = { position = { 0 32 } size = { 233.55 15.4 } text = WJ_mt_people_left_note align = center fontsize = 11 default_format = "#wj_mt_note" autoresize = no alwaystransparent = yes }
+   widget = {
+    name = "WJ_military_transfer_fixed" position = { 0 56.4 } size = { 233.55 108 }
+    WJ_mt_entries = {
+     blockoverride "transfer_visible" { visible = yes }
+     blockoverride "transfer_size" { size = { 233.55 108 } }
+     blockoverride "title_group_layout" { position = { 0 0 } size = { 233.55 50 } }
+     blockoverride "title_source_layout" { position = { 0 0 } size = { 64 92 } scale = 0.54 }
+     blockoverride "title_button_layout" { position = { 41.56 20 } size = { 150.43 29 } }
+     blockoverride "title_receiver_layout" { position = { 198.99 0 } size = { 64 92 } scale = 0.54 }
+     blockoverride "private_group_layout" { position = { 0 58 } size = { 233.55 50 } }
+     blockoverride "private_source_layout" { position = { 0 0 } size = { 64 92 } scale = 0.54 }
+     blockoverride "private_button_layout" { position = { 41.56 20 } size = { 150.43 29 } }
+     blockoverride "private_receiver_layout" { position = { 198.99 0 } size = { 64 92 } scale = 0.54 }
+     blockoverride "title_source_caption" { fontsize = 17 default_format = "#wj_mt_note" }
+     blockoverride "title_receiver_caption" { fontsize = 17 default_format = "#wj_mt_note" }
+     blockoverride "private_source_caption" { fontsize = 17 default_format = "#wj_mt_note" }
+     blockoverride "private_receiver_caption" { fontsize = 17 default_format = "#wj_mt_note" }
+     blockoverride "title_button_text" { buttonText = { text_single = { size = { 100% 100% } margin = { 3 0 } font = MapFont fontsize = 15 align = center|nobaseline autoresize = no default_format = "#clickable" alwaystransparent = yes } } }
+     blockoverride "private_button_text" { buttonText = { text_single = { size = { 100% 100% } margin = { 3 0 } font = MapFont fontsize = 15 align = center|nobaseline autoresize = no default_format = "#clickable" alwaystransparent = yes } } }
+    }
+   }
+   icon = { position = { 0 174.4 } size = { 233.55 1 } texture = "gfx/interface/colors/white.dds" color = { 0.64 0.55 0.38 0.33 } alwaystransparent = yes }
+   widget = { name = "WJ_military_primary" position = { 0 182.4 } size = { 233.55 326 } WJ_mt_primary_card = {} }
+   icon = { position = { 247.75 0 } size = { 1 523 } texture = "gfx/interface/colors/white.dds" color = { 0.61 0.54 0.42 0.36 } alwaystransparent = yes }
+  }
+  widget = {
+   name = "WJ_military_roster_heading" position = { 270.75 0 } size = { 520 69 }
+   text_multi = { position = { 0 0 } size = { 520 44 } maximumsize = { 520 44 } max_width = 520 multiline = yes text = WJ_mt_people_roster_title tooltip = "[Character.Custom('WJ_GetUIName')]" font = MapFont fontsize = 23 fontsize_min = 20 autoresize = no align = center default_format = "#wj_mt_ink" alwaystransparent = yes }
+   text_single = { position = { 0 47 } size = { 520 20 } text = "[Character.GetPrimaryTitle.GetNameNoTooltip]" tooltip = "[Character.GetPrimaryTitle.GetNameNoTooltip]" font = MapFont align = center fontsize = 12 default_format = "#wj_mt_note" autoresize = no alwaystransparent = yes }
+  }
+  scrollbox = {
+   name = "WJ_military_people_scroll" position = { 270.75 74 } size = { 550.75 420 } scissor = yes
+   blockoverride "scrollbox_background" {}
+   blockoverride "scrollbox_background_fade" {}
+   blockoverride "scrollbox_margins" { margin_top = 7 margin_bottom = 12 margin_left = 1 margin_right = 1 }
+   blockoverride "scrollbox_content" {
+    vbox = {
+     layoutpolicy_horizontal = fixed layoutpolicy_vertical = growing size = { 520 0 } spacing = 14 ignoreinvisible = yes
+     text_multi = {
+      size = { 520 100 } text = hd_secondary_no_officials align = center font = MapFont fontsize = 18 default_format = "#wj_mt_muted"
+      block "people_empty" { visible = "[And(IsDataModelEmpty(GetPlayer.MakeScope.GetList('wj_mt_subordinate_generals')), IsDataModelEmpty(GetPlayer.MakeScope.GetList('wj_mt_subordinate_officers')))]" }
+     }
+     vbox = {
+      name = "WJ_military_general_cards" size = { 520 0 } layoutpolicy_horizontal = fixed layoutpolicy_vertical = growing spacing = 11 ignoreinvisible = yes
+      block "general_visible" { visible = "[Not(IsDataModelEmpty(GetPlayer.MakeScope.GetList('wj_mt_subordinate_generals')))]" }
+      WJ_mt_rank_group_heading = { blockoverride "rank_group_heading_text" { text = WJ_mt_generals } }
+      fixedgridbox = {
+       block "general_model" { datamodel = "[GetPlayer.MakeScope.GetList('wj_mt_subordinate_generals')]" }
+       size = { 520 0 } layoutpolicy_horizontal = fixed layoutpolicy_vertical = growing
+       datamodel_wrap = 2 flipdirection = yes addcolumn = 260 addrow = 306
+       item = { WJ_mt_general_card = { datacontext = "[Scope.Char]" } }
+      }
+     }
+     vbox = {
+      name = "WJ_military_officer_tiles" size = { 520 0 } layoutpolicy_horizontal = fixed layoutpolicy_vertical = growing spacing = 11 ignoreinvisible = yes
+      block "officer_visible" { visible = "[Not(IsDataModelEmpty(GetPlayer.MakeScope.GetList('wj_mt_subordinate_officers')))]" }
+      WJ_mt_rank_group_heading = { blockoverride "rank_group_heading_text" { text = WJ_mt_other_officers } }
+      fixedgridbox = {
+       block "officer_model" { datamodel = "[GetPlayer.MakeScope.GetList('wj_mt_subordinate_officers')]" }
+       size = { 520 0 } layoutpolicy_horizontal = fixed layoutpolicy_vertical = growing
+       datamodel_wrap = 4 flipdirection = yes addcolumn = 130 addrow = 172
+       item = { WJ_mt_officer_tile = { datacontext = "[Scope.Char]" } }
+      }
+     }
+    }
+   }
+  }
+ }
+ type WJ_mt_rank_group_heading = hbox {
+  size = { 520 24 } spacing = 11 layoutpolicy_horizontal = fixed layoutpolicy_vertical = fixed
+  icon = { size = { 0 1 } layoutpolicy_horizontal = expanding texture = "gfx/interface/colors/white.dds" color = { 0.64 0.53 0.30 0.24 } alwaystransparent = yes }
+  text_single = { block "rank_group_heading_text" { text = WJ_mt_generals } font = MapFont fontsize = 17 autoresize = yes align = center default_format = "#wj_mt_muted" alwaystransparent = yes }
+  icon = { size = { 0 1 } layoutpolicy_horizontal = expanding texture = "gfx/interface/colors/white.dds" color = { 0.64 0.53 0.30 0.24 } alwaystransparent = yes }
+ }
+
+}
+
+textformatting = {
+ format = { name = wj_mt_ink format = "color:{0.286,0.208,0.129}" }
+ format = { name = wj_mt_muted format = "color:{0.482,0.400,0.298}" }
+ format = { name = wj_mt_note format = "color:{0.565,0.478,0.345}" }
+ format = { name = wj_mt_skill_value format = "color:{0.894,0.871,0.804}" }
+}

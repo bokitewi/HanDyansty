@@ -245,8 +245,7 @@ const localizations=read(files.loc)+read('localization/simp_chinese/WJ_tingyi_l_
 const locKeys=new Set([...localizations.matchAll(/^\s+(WJ_\w+):/gm)].map(m=>m[1]));
 for(const m of gui.matchAll(/(?:text|tooltip) = (WJ_\w+)/g))assert(locKeys.has(m[1]),'Localization '+m[1]);
 const parentGuiDefs=byName(parse(read('common/scripted_guis/WJ_tingyi_guis.txt')));
-for(const m of gui.matchAll(/'(WJ_ty_(?:picker_\w+|gui_target|gui_cancel_picker))'/g)) {
-  if(m[1].endsWith('sort_menu'))continue;
+for(const m of gui.matchAll(/GetScriptedGui\('(WJ_ty_(?:picker_\w+|gui_target|gui_cancel_picker))'\)/g)) {
   assert(guis[m[1]]||parentGuiDefs[m[1]],'Resolved scripted GUI '+m[1]);
 }
 for(const m of gui.matchAll(/texture = "(gfx\/[^"\[]+)"/g)) {

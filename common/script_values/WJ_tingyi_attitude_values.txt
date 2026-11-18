@@ -74,7 +74,10 @@ WJ_ty_described_impact_person = {
  # A transfer's source loss and a swap's return post do not repeat the same
  # person's relationships or public standing. Their actual self-interest remains.
  if = { limit = { NOT = { AND = { var:wj_ty_topic = 3 OR = { scope:wj_ty_row_current_group = 3 scope:wj_ty_row_current_group = 5 } } } }
- value = WJ_ty_described_social
+ # Count social ties once when the petitioner is also the beneficiary.
+ if = { limit = { NOT = { AND = { var:wj_ty_topic = 2 scope:wj_ty_subject = var:wj_ty_proposer scope:wj_ty_direction > 0 } } }
+  value = WJ_ty_described_social
+ }
  # In appointments/removals the actual post already supplies the political stake.
  if = { limit = { WJ_ty_subject_status = 30 NOR = { var:wj_ty_topic = 3 var:wj_ty_topic = 4 } } if = { limit = { OR = { NOT = { exists = scope:wj_ty_row_source } AND = { scope:wj_ty_row_source = flag:WJ_ty_bd_status_council scope:wj_ty_row_group = scope:wj_ty_row_current_group } } }
  add = { value = 30 multiply = scope:wj_ty_direction if = { limit = { exists = scope:wj_ty_row_absolute scope:wj_ty_row_absolute = 1 } abs = yes } desc = WJ_ty_bd_status_council }
@@ -358,7 +361,7 @@ WJ_ty_paid_support = {
    if = { limit = { is_target_in_variable_list = { name = WJ_ty_lobby_influence target = scope:wj_ty_operator.var:wj_ty_proposer } } add = WJ_ty_chip_gain_influence }
    if = { limit = { is_target_in_variable_list = { name = WJ_ty_lobby_weak target = scope:wj_ty_operator.var:wj_ty_proposer } } add = WJ_ty_chip_gain_weak }
    if = { limit = { is_target_in_variable_list = { name = WJ_ty_lobby_strong target = scope:wj_ty_operator.var:wj_ty_proposer } } add = WJ_ty_chip_gain_strong }
-   if = { limit = { is_target_in_variable_list = { name = WJ_ty_lobby_hook target = scope:wj_ty_operator.var:wj_ty_proposer } } add = WJ_ty_chip_gain_hook }
+   if = { limit = { scope:wj_ty_operator = { WJ_ty_case_support = no } is_target_in_variable_list = { name = WJ_ty_lobby_hook target = scope:wj_ty_operator.var:wj_ty_proposer } } add = WJ_ty_chip_gain_hook }
   }
  }
 }
@@ -381,8 +384,31 @@ WJ_ty_independent_agreement = {
    add = { value = 1 save_temporary_value_as = wj_ty_row_current_group value = 0 }
    add = { value = 1 save_temporary_value_as = wj_ty_direction value = WJ_ty_described_social }
    if = { limit = {
+    var:wj_ty_topic = 2
+    var:wj_ty_proposer = var:wj_ty_emperor
+    OR = { NOT = { exists = scope:wj_ty_row_group } scope:wj_ty_row_group = 1 }
+    OR = { NOT = { exists = scope:wj_ty_row_source } scope:wj_ty_row_source = flag:WJ_ty_bd_seated_chancellor }
+    exists = title:e_WJ_minister_cheng_xiang.holder
+    var:wj_ty_emperor.cp:WJ_minister_cheng_xiang = title:e_WJ_minister_cheng_xiang.holder
+    title:e_WJ_minister_cheng_xiang.holder = { is_alive = yes is_imprisoned = no }
+    OR = {
+     var:wj_ty_seat_1 = title:e_WJ_minister_cheng_xiang.holder
+     var:wj_ty_seat_2 = title:e_WJ_minister_cheng_xiang.holder
+     var:wj_ty_seat_3 = title:e_WJ_minister_cheng_xiang.holder
+     var:wj_ty_seat_4 = title:e_WJ_minister_cheng_xiang.holder
+     var:wj_ty_seat_5 = title:e_WJ_minister_cheng_xiang.holder
+     var:wj_ty_seat_6 = title:e_WJ_minister_cheng_xiang.holder
+    }
+   } add = { value = -200 if = { limit = { exists = scope:wj_ty_row_absolute scope:wj_ty_row_absolute = 1 } abs = yes } desc = WJ_ty_bd_seated_chancellor } }
+   if = { limit = { has_variable = wj_ty_memorial
+    OR = { NOT = { exists = scope:wj_ty_row_group } scope:wj_ty_row_group = 1 }
+    OR = { NOT = { exists = scope:wj_ty_row_source } scope:wj_ty_row_source = flag:WJ_ty_bd_memorial }
+   }
+    add = { value = -50 if = { limit = { exists = scope:wj_ty_row_absolute scope:wj_ty_row_absolute = 1 } abs = yes } desc = WJ_ty_bd_memorial }
+   }
+   if = { limit = {
     scope:wj_ty_observer = var:wj_ty_emperor
-    var:wj_ty_emperor = { exists = puppeteer puppeteer = scope:wj_ty_operator.var:wj_ty_proposer }
+    var:wj_ty_emperor = { is_ai = yes exists = puppeteer puppeteer = scope:wj_ty_operator.var:wj_ty_proposer }
     OR = { NOT = { exists = scope:wj_ty_row_group } scope:wj_ty_row_group = 1 }
     OR = { NOT = { exists = scope:wj_ty_row_source } scope:wj_ty_row_source = flag:WJ_ty_bd_controlled }
    }
@@ -393,30 +419,63 @@ WJ_ty_independent_agreement = {
   if = { limit = { OR = { NOT = { exists = scope:wj_ty_row_section } scope:wj_ty_row_section = 1 } } add = WJ_ty_described_lobby }
  }
 }
-WJ_ty_member_agreement = {
- # The real observer is supplied by the caller; hover source filters are transient.
- value = 0
- if = { limit = { NOT = { exists = scope:wj_ty_observer } } add = { value = 100 if = { limit = { exists = scope:wj_ty_row_absolute scope:wj_ty_row_absolute = 1 } abs = yes } desc = WJ_ty_bd_empty } }
- else_if = { limit = {
-  scope:wj_ty_observer = var:wj_ty_emperor
+# The real controller must be able to attend one of the seven seats.
+WJ_ty_controller_seat = {
+ value = -1
+ if = { limit = {
+  exists = scope:wj_ty_observer.puppeteer
+  scope:wj_ty_observer = { is_ai = yes is_imprisoned = no }
+  scope:wj_ty_observer.puppeteer = { is_imprisoned = no }
   NOT = { scope:wj_ty_observer = var:wj_ty_proposer }
-  NOT = { var:wj_ty_emperor = { exists = puppeteer puppeteer = scope:wj_ty_operator.var:wj_ty_proposer } }
-  exists = var:wj_ty_seat_1 NOT = { var:wj_ty_seat_1 = var:wj_ty_emperor }
-  var:wj_ty_emperor = { OR = { has_trait = WJ_lost_imperial_authority exists = puppeteer } }
  }
-  add = { var:wj_ty_seat_1 = { save_temporary_scope_as = wj_ty_observer } value = WJ_ty_independent_agreement if = { limit = { exists = scope:wj_ty_row_absolute scope:wj_ty_row_absolute = 1 } abs = yes } desc = WJ_ty_bd_follow_regent }
+  if = { limit = { scope:wj_ty_observer.puppeteer = var:wj_ty_seat_0 } value = 0 }
+  else_if = { limit = { scope:wj_ty_observer.puppeteer = var:wj_ty_seat_1 } value = 1 }
+  else_if = { limit = { scope:wj_ty_observer.puppeteer = var:wj_ty_seat_2 } value = 2 }
+  else_if = { limit = { scope:wj_ty_observer.puppeteer = var:wj_ty_seat_3 } value = 3 }
+  else_if = { limit = { scope:wj_ty_observer.puppeteer = var:wj_ty_seat_4 } value = 4 }
+  else_if = { limit = { scope:wj_ty_observer.puppeteer = var:wj_ty_seat_5 } value = 5 }
+  else_if = { limit = { scope:wj_ty_observer.puppeteer = var:wj_ty_seat_6 } value = 6 }
  }
- else = { value = WJ_ty_independent_agreement }
 }
-
-# Display mode is independent of the numeric score: ordinary zero is not an empty seat.
+WJ_ty_has_case_hook = {
+ value = 0
+ if = { limit = {
+  WJ_ty_case_support = yes
+  exists = var:wj_ty_hook_target
+  var:wj_ty_hook_target = var:wj_ty_target
+  var:wj_ty_hook_tier = var:wj_ty_tier
+  is_target_in_variable_list = { name = wj_ty_memorial_hooks target = scope:wj_ty_observer }
+ } value = 1 }
+}
+WJ_ty_effective_independent_agreement = {
+ value = WJ_ty_independent_agreement
+ if = { limit = {
+  NOT = { exists = scope:wj_ty_row_section }
+  NOT = { exists = scope:wj_ty_row_group }
+  WJ_ty_has_case_hook = 1
+ } min = 25 }
+}
+WJ_ty_member_agreement = {
+ if = { limit = { NOT = { exists = scope:wj_ty_observer } } add = { value = 100 desc = WJ_ty_bd_empty } }
+ else_if = { limit = { scope:wj_ty_observer = { is_imprisoned = yes } } add = { value = 100 desc = WJ_ty_bd_empty } }
+ else_if = { limit = { WJ_ty_controller_seat >= 0 }
+  add = {
+   scope:wj_ty_observer.puppeteer = { save_temporary_scope_as = wj_ty_observer }
+   value = WJ_ty_effective_independent_agreement
+   desc = WJ_ty_bd_follow_regent
+  }
+ }
+ else = { value = WJ_ty_effective_independent_agreement }
+}
 WJ_ty_row_mode = {
  save_temporary_scope_as = wj_ty_operator
  value = 0
  if = { limit = { NOT = { exists = scope:wj_ty_observer } } value = 1 }
+ else_if = { limit = { scope:wj_ty_observer = { is_imprisoned = yes } } value = 5 }
  else_if = { limit = { scope:wj_ty_observer = var:wj_ty_proposer } value = 2 }
- else_if = { limit = { scope:wj_ty_observer = var:wj_ty_emperor var:wj_ty_emperor = { exists = puppeteer puppeteer = scope:wj_ty_operator.var:wj_ty_proposer } } value = 3 }
- else_if = { limit = { scope:wj_ty_observer = var:wj_ty_emperor exists = var:wj_ty_seat_1 NOT = { var:wj_ty_seat_1 = var:wj_ty_emperor } var:wj_ty_emperor = { OR = { has_trait = WJ_lost_imperial_authority exists = puppeteer } } } value = 4 }
+ else_if = { limit = { WJ_ty_controller_seat >= 0 } value = 4 }
+ else_if = { limit = { WJ_ty_has_case_hook = 1 WJ_ty_independent_agreement < 25 } value = 6 }
+ else_if = { limit = { scope:wj_ty_observer = var:wj_ty_emperor exists = scope:wj_ty_observer.puppeteer scope:wj_ty_observer = { is_ai = yes } scope:wj_ty_observer.puppeteer = var:wj_ty_proposer } value = 3 }
 }
 WJ_ty_row_value = {
  save_temporary_scope_as = wj_ty_operator

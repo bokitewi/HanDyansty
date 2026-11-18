@@ -23,6 +23,7 @@ engine = runner({effects, triggers, values:{activity_general_ai_will_do_value:c=
  has_trait:(c,s,e)=>(c.traits||[]).includes(e.value),
  has_activity_type:(c,s,e)=>c.activityType===e.value,
 }, onEffect:(e,c,s,p)=>{
+ if(e.key==='send_interface_toast'){engine.execute(e.children.filter(n=>!['title','type','left_icon','right_icon'].includes(n.key)),c,s,p);return true;}
  if(e.key==='change_merit'){c.merit=(c.merit||0)+engine.number(e,c,s,p);return true;}
  if(e.key==='add_prestige')return true; // Native prestige is unchanged in this batch.
  // Native laws of one group replace each other; no custom law mirror in production.
@@ -133,11 +134,12 @@ for(const [effect,ai,want] of [['WJ_qingyi_host_reward_effect',true,180],['WJ_qi
 for(const [traits,want] of [[[],200],[['ambitious'],250]])assert.equal(engine.number(one(intents.qingyi_yuedan_intent,'ai_will_do'),{traits}),want,'AI Yuedan intent tendency');
 for(const [id,event] of Object.entries(capacityEvents).filter(([id])=>id!=='namespace')){
  const c={is_alive:true,is_imprisoned:false,is_incapable:false,traits:['WJ_yangwang_trait'],flags:[],modifiers:[]};
- const s={activity};
+ const s={activity,root:c};
  assert(engine.check(one(event,'trigger').children,c,s),id+' unavailable to a non-official');
+ if(id.startsWith('WJ_yinshi.'))engine.execute(one(event,'immediate').children,c,s);
  const option=event.children.find(n=>n.key==='option');
  assert(Number(one(one(option,'ai_chance'),'base').value)>0,id+' cap choice disabled for AI');
- engine.execute(option.children.filter(n=>!['name','ai_chance'].includes(n.key)),c,s);
+ engine.execute(option.children.filter(n=>!['name','ai_chance','trigger','show_as_unavailable','trait'].includes(n.key)),c,s);
  assert.equal(c.modifiers.length,1);assert.equal(Number(one(modifiers[c.modifiers[0]],'character_max_merit_level_add').value),1);
  assert(!engine.check(one(event,'trigger').children,c,s),id+' can repeat its permanent bonus');
  for(const entry of all(event).filter(n=>['title','desc','name'].includes(n.key)&&n.value?.startsWith(id)))assert(meritLoc.includes(' '+entry.value+':0'),entry.value+' missing localization');

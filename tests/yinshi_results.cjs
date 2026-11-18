@@ -28,12 +28,16 @@ engine = runner({effects, values, primitives: {
   const notice = {recipient:c, title:one(e,'title').value, results:[]};
   if (!c.is_ai) notices.push(notice);
   const old = s.notice; s.notice = notice;
-  engine.execute(e.children.filter(n => !['type','title','left_icon','right_icon'].includes(n.key)), c,s,p);
+  for (const node of e.children.filter(n => !['type','title','left_icon','right_icon'].includes(n.key))) {
+    // The shared execution harness correctly skips display-only effects. Here we
+    // also inspect their displayed contents without applying them a second time.
+    if (node.key === 'show_as_tooltip') {
+      const oldPreview=preview; preview=true;
+      engine.execute(node.children,c,s,p); preview=oldPreview;
+    } else engine.execute([node],c,s,p);
+  }
   s.notice = old;
   return true;
- }
- if (e.key === 'show_as_tooltip') {
-  const old=preview; preview=true; engine.execute(e.children,c,s,p); preview=old; return true;
  }
  if (/^(change_merit|add_stress|add_prestige|add_(learning|diplomacy|stewardship)(_lifestyle_xp|_skill))$/.test(e.key)) {
   const amount=engine.number(e,c,s,p);
@@ -98,10 +102,11 @@ for(const skill of ['learning','diplomacy']) {
  assert.equal(c.change_merit,100);assert.equal(c['add_'+skill+'_lifestyle_xp'],200);
  assert.equal(c.add_stress,-10);assert.equal(notices.length,1);
 }
+// Scene-specific rewards and click-time guards are executed by story_samples.cjs.
 for(let n=4001;n<=4008;n++) {
  const options=events['WJ_yinshi.'+n].children.filter(n=>n.key==='option');
- assert(walk(options[0]).some(n=>n.key==='WJ_yinshi_safe_friend_effect'));
- assert(walk(options[1]).some(n=>n.key==='WJ_yinshi_friend_risk_effect'));
+ assert(walk(options[0]).some(n=>n.key==='send_interface_toast'));
+ assert(walk(options[1]).some(n=>n.key==='random_list'));
 }
 const risk=one(effects.WJ_yinshi_friend_risk_effect,'random_list');
 assert.equal(one(one(risk.children[0],'modifier'),'add').value,'WJ_yinshi_chance_diplomacy_value');
@@ -114,7 +119,7 @@ assert.equal(loc.charCodeAt(0),0xFEFF);
 for(const name of ['WJ_yinshi_safe_friend_effect','WJ_yinshi_trait_option_effect','WJ_yinshi_friend_risk_effect','WJ_yinshi_friend_success_effect','WJ_yinshi_friend_feedback_effect']) {
  for(const n of walk(effects[name]).filter(n=>n.key==='title'))assert(loc.includes(' '+n.value+':0'),n.value);
 }
-console.log('PASS: eight friend-event paths, actual random outcomes, unchanged rewards, one notice per affected player, preview does not execute');
+console.log('PASS: shared friend result effects and all eight scene result routes; full pool executed by story_samples.cjs; preview does not execute');
 
 
 // New deterministic leaves: exactly one actual notification, unchanged gains.
@@ -137,6 +142,8 @@ for(const skill of ['learning','stewardship','diplomacy']){
  }
 }
 assert.equal(outcome('WJ_yinshi_safe_local_effect',[]).c.add_prestige,50);
+const inquiryLottery=walk(effects.WJ_yinshi_inquiry_risk_effect).find(n=>n.key==='random_list'&&n.children.some(x=>x.key==='15'));
+assert.deepEqual(inquiryLottery.children.map(n=>Number(n.key)),[15,85]);
 for(const reward of [0,1])for(const mingshi of [0,1]){
  const r=outcome('WJ_yinshi_inquiry_risk_effect',[0,reward,mingshi],{SKILL:'learning',TRAIT:'lifestyle_scholar'});
  assert.equal(r.c.change_merit,150);

@@ -34,13 +34,12 @@ for(const alive of [true,false]){
  const data={wj_peer_rank:1,wj_peer_retired_emperor:true};
  assert.equal(icon({alive,vars:alive?data:{},dead:alive?{}:data}),high);
 }
-const assets=[...Object.values(icons),'WJ_peer_marquis.dds','WJ_peer_king.dds','WJ_lost_authority.dds','WJ_zhongwai.dds'];
+const assets=[...Object.values(icons),'WJ_peer_marquis.dds','WJ_peer_king.dds','WJ_zhongwai.dds'];
 for(const file of [...assets.map(x=>'gfx/interface/icons/traits/'+x),'gfx/interface/icons/WJ_han_seals/WJ_jade_dragon.dds']){
  const b=fs.readFileSync(path.join(mod,file)),size=file.includes('jade_dragon')?70:120;
  assert.equal(b.subarray(0,4).toString(),'DDS ');
  assert.equal(b.readUInt32LE(12),size);assert.equal(b.readUInt32LE(16),size);
 }
-assert.equal(one(defs('common/traits/WJ_imperial_authority_traits.txt').WJ_lost_imperial_authority,'icon').value,'WJ_lost_authority.dds');
 assert.equal(JSON.parse(one(defs('common/traits/WJ_zhongwai_traits.txt').WJ_zhongwai,'icon').value),'WJ_zhongwai.dds');
 assert(read('gui/WJ_baiguan_sidebar.gui').includes('gfx/interface/icons/WJ_han_seals/WJ_jade_dragon.dds'));
 console.log('PASS: 282 military mappings, peer ranks/princess/deceased/no-root icon selection, eight DDS sizes and sidebar reference. In-game rendering remains to be tested.');

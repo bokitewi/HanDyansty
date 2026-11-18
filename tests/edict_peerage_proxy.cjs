@@ -28,7 +28,7 @@ e=runner({triggers,effects,values,primitives:{
  if(resource){c[resource]+=e.number(n,c,s,p);return true;}return false;
 }});
 function setup(){
- const crown={is_alive:true,emperor:true,traits:['WJ_lost_imperial_authority'],titles:[],vars:{},position:'',law:'celestial_bureaucracy_0'};
+ const crown={is_alive:true,emperor:true,traits:[],titles:[],vars:{},position:'',law:'celestial_bureaucracy_0'};
  crown.top_liege=crown;const office={};
  const op={is_alive:true,traits:[],titles:[office],position:'WJ_minister_cheng_xiang',top_liege:crown,vars:{}};
  // Shared peerage authority: the chancellor must also be this crown's native puppeteer.
@@ -59,7 +59,7 @@ for(const res of resources)for(const cost of [50,100,200,300,500,800])for(const 
  crown.puppeteer={is_alive:true,traits:[],titles:[],vars:{}};
  assert(!valid(),'a different native controller cannot authorize this actor');
  crown.puppeteer=op;assert(valid(),'restoring the actual controller restores shared peerage authority');
- op.position='';assert(!valid());op.position='WJ_minister_cheng_xiang';
+ op.position='';assert(valid(),'actual native puppet controller retains its ordinary authority');op.position='WJ_minister_cheng_xiang';
  s.actor=crown;assert(!valid());crown.traits=[];assert(!valid());crown.law='celestial_bureaucracy_1';assert(valid());
  peer.top_liege={};assert(!valid());peer.top_liege=crown;peer.is_alive=false;assert(!valid());
 }

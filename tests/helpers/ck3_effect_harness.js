@@ -18,7 +18,7 @@ function runner({ effects, triggers, values, primitives = {}, onEffect, onValueS
   triggers ||= byName(parse(read('common/scripted_triggers/WJ_kaoke_triggers.txt')));
   values ||= byName(parse(read('common/script_values/WJ_kaoke_values.txt')));
   const expand = (token, params) => typeof token === 'string'
-    ? token.replace(/\$([A-Z_]+)\$/g, (whole, key) => typeof params[key] === 'string' ? params[key] : whole) : token;
+    ? token.replace(/\$([A-Z_]+)\$/g, (whole, key) => ['string','number'].includes(typeof params[key]) ? String(params[key]) : whole) : token;
   function resolve(token, ctx, scopes = {}, params = {}) {
     if (token === undefined) return undefined;
     const opinion = /^"opinion\(scope:([^)]*)\)"$/.exec(token);
@@ -132,6 +132,7 @@ function runner({ effects, triggers, values, primitives = {}, onEffect, onValueS
       if (k === 'OR') return e.children.some(n => check([n], ctx, scopes, params));
       if (k === 'NOT' || k === 'NOR') return !e.children.some(n => check([n], ctx, scopes, params));
       if (k === 'save_temporary_scope_as') { scopes[e.value] = ctx; return true; }
+      if (k === 'save_temporary_scope_value_as') { scopes[expand(one(e, 'name').value, params)] = number(one(e, 'value'), ctx, scopes, params); return true; }
       if (triggers[k]) {
         const args = e.children ? Object.fromEntries(e.children.map(n => [n.key, resolve(n.value, ctx, scopes, params) ?? n.value])) : params;
         return check(triggers[k].children, ctx, scopes, args) === (e.children ? true : resolve(e.value, ctx, scopes, params));
